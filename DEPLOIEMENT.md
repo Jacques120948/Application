@@ -69,7 +69,50 @@ essai. Vercel vous donnera une adresse du type `application-xxxx.vercel.app` : r
 alors dans **Settings**, puis **Environment Variables**, ajoutez `APP_URL` avec cette
 adresse complète, précédée de `https://`, et relancez le déploiement avec **Redeploy**.
 
-### 4. Ce que la mise en ligne fait toute seule
+### 4. Créer le rôle de connexion de l'application
+
+**Cette étape est obligatoire avec Supabase.** Le rôle `postgres` que Supabase vous
+fournit a le droit de passer outre le cloisonnement entre comptes. Si l'application se
+connectait avec lui, chaque créateur verrait les données de tous les autres, sans la
+moindre erreur visible. La mise en ligne le détecte et s'interrompt.
+
+On crée donc un rôle dédié, qui n'a que les droits nécessaires.
+
+1. Dans Supabase, menu de gauche, **SQL Editor**, puis **New query**.
+2. Collez le texte ci-dessous, en remplaçant `MOT_DE_PASSE_ICI` par une trentaine de
+   lettres et de chiffres au hasard, sans caractère spécial. Notez-le.
+
+```sql
+create role evoliia_app with login password 'MOT_DE_PASSE_ICI';
+
+grant usage on schema public to evoliia_app;
+grant select, insert, update, delete on all tables in schema public to evoliia_app;
+grant usage, select on all sequences in schema public to evoliia_app;
+
+alter default privileges in schema public
+  grant select, insert, update, delete on tables to evoliia_app;
+alter default privileges in schema public
+  grant usage, select on sequences to evoliia_app;
+```
+
+3. Cliquez sur **Run**.
+4. Retournez dans Vercel et modifiez **`DATABASE_URL` uniquement** :
+   - remplacez `postgres.` par `evoliia_app.` juste après les deux barres obliques ;
+   - remplacez le mot de passe par celui que vous venez de choisir.
+
+   Vous obtenez une adresse de cette forme :
+
+```
+postgresql://evoliia_app.VOTRE-PROJET:MOT_DE_PASSE_ICI@aws-1-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true
+```
+
+5. **Ne touchez pas à `DIRECT_DATABASE_URL`.** Elle sert à créer les tables, ce qui demande
+   des droits que le rôle applicatif n'a volontairement pas.
+
+Les tables créées par les futures mises à jour seront automatiquement accessibles à ce
+rôle : c'est le rôle des deux dernières lignes du texte ci-dessus.
+
+### 5. Ce que la mise en ligne fait toute seule
 
 Vous n'avez aucune commande à taper. La construction prépare la base de données, insère
 vos quatre formules, puis **vérifie que le cloisonnement des données fonctionne
@@ -135,7 +178,8 @@ Deux messages ont un sens précis :
 
 - **« MISE EN LIGNE INTERROMPUE : le cloisonnement des données n'est pas garanti »** — la
   base ne protège pas les comptes les uns des autres. C'est volontaire : mieux vaut pas de
-  site qu'un site qui laisse fuiter les données de vos clients. Envoyez-moi le détail.
+  site qu'un site qui laisse fuiter les données de vos clients. Si le message parle de
+  `BYPASSRLS`, c'est le cas classique de Supabase : reprenez l'étape 4 ci-dessus.
 - **« Can't reach database server »** — l'adresse de connexion est mauvaise, ou le mot de
   passe n'a pas été remplacé dans l'adresse.
 
