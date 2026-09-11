@@ -60,3 +60,30 @@ export async function recordVisit(projectId: string, path: string): Promise<void
 export async function countPublishedApps(): Promise<number> {
   return prisma.project.count({ where: { publishedAt: { not: null }, deletedAt: null } })
 }
+
+/** Type d'événement enregistré à chaque réponse de l'assistant d'une application. */
+export const ASSISTANT_EVENT = 'assistant'
+
+/**
+ * Nombre de réponses données aujourd'hui par l'assistant d'une application.
+ *
+ * Sert de plafond journalier, indépendant du serveur qui traite la requête. Le compteur en
+ * mémoire ne suffirait pas : une application servie par plusieurs instances aurait autant
+ * de compteurs que d'instances.
+ */
+export async function countAssistantAnswersToday(projectId: string): Promise<number> {
+  const since = new Date()
+  since.setUTCHours(0, 0, 0, 0)
+  return withRuntimeScope(projectId, (tx) =>
+    tx.appEvent.count({
+      where: { projectId, type: ASSISTANT_EVENT, createdAt: { gte: since } },
+    }),
+  )
+}
+
+/** Journalise une réponse, pour le plafond journalier et pour les statistiques du créateur. */
+export async function recordAssistantAnswer(projectId: string): Promise<void> {
+  await withRuntimeScope(projectId, (tx) =>
+    tx.appEvent.create({ data: { projectId, type: ASSISTANT_EVENT } }),
+  ).catch(() => undefined)
+}

@@ -140,8 +140,24 @@ function readColor(spec: AppSpec, path: string): string {
 // ───────────────────────────── Fonctionnalités ───────────────────────────────
 
 export function FeaturesPanel({ spec, send }: { spec: AppSpec; send: PatchSender }) {
+  const hasAssistant = spec.pages.some((page) =>
+    page.blocks.some((block) => block.type === 'assistant'),
+  )
   return (
     <div className="grid gap-5">
+      {/*
+        Le créateur doit savoir qu'une section coûte de l'argent avant de la publier, pas
+        en découvrant son solde. C'est la seule section dont l'usage est déclenché par ses
+        visiteurs et facturé sur ses crédits.
+      */}
+      {hasAssistant ? (
+        <Notice tone="caution" title="Votre application contient un assistant IA">
+          Chaque réponse donnée à un visiteur consomme vos crédits, environ un par question.
+          L’assistant répond au maximum deux cents fois par jour, puis se met en pause
+          jusqu’au lendemain. Si votre solde tombe à zéro, il se tait poliment au lieu de
+          continuer.
+        </Notice>
+      ) : null}
       {spec.pages.map((page, pageIndex) => (
         <Card key={page.id}>
           <CardBody>
@@ -219,6 +235,7 @@ function blockLabel(type: string): string {
     recordForm: 'Formulaire',
     recordList: 'Liste de données',
     auth: 'Connexion',
+    assistant: 'Assistant IA',
   }
   return labels[type] ?? type
 }

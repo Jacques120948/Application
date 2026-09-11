@@ -25,6 +25,8 @@ export type CreditedOperation =
   | 'blueprint'
   | 'generate'
   | 'edit'
+  /** Réponse de l'assistant intégré à une application, payée par son créateur. */
+  | 'assistant'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -34,6 +36,7 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   blueprint: 2,
   generate: 20,
   edit: 2,
+  assistant: 1,
 }
 
 /**

@@ -219,6 +219,25 @@ export const authBlockSchema = z
   })
   .strict()
 
+/**
+ * Assistant conversationnel intégré à l'application créée.
+ *
+ * Le créateur décrit le rôle confié à l'assistant ; ce texte devient une consigne, jamais
+ * du code. Les questions des visiteurs sont traitées comme des données non fiables, et
+ * chaque réponse est débitée des crédits du créateur, pas de ceux de la plateforme.
+ */
+export const assistantBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('assistant'),
+    title: shortText,
+    intro: mediumText.optional(),
+    /** Rôle et périmètre de l'assistant, écrits par le créateur. */
+    role: z.string().min(20).max(2000),
+    placeholder: shortText,
+  })
+  .strict()
+
 export const blockSchema = z.discriminatedUnion('type', [
   heroBlockSchema,
   richTextBlockSchema,
@@ -230,6 +249,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   recordFormBlockSchema,
   recordListBlockSchema,
   authBlockSchema,
+  assistantBlockSchema,
 ])
 
 export const BLOCK_TYPES = [
@@ -243,6 +263,7 @@ export const BLOCK_TYPES = [
   'recordForm',
   'recordList',
   'auth',
+  'assistant',
 ] as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]

@@ -16,6 +16,7 @@ import { assembleSpec } from '@/server/spec/assemble'
 import { getAnthropic, isAiAvailable } from './client'
 import { costMicros, GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
 import {
+  appAssistantSystem,
   asUserData,
   BLUEPRINT_SYSTEM,
   EDIT_SYSTEM,
@@ -585,4 +586,92 @@ export async function validateIdea(
       'Examine cette idée et rends ton verdict.',
     ].join('\n\n'),
   })
+}
+
+/**
+ * Réponse de l'assistant intégré à une application créée.
+ *
+ * Différence essentielle avec les autres appels : ce n'est pas le créateur qui écrit, c'est
+ * un visiteur de son application. La question est donc traitée comme une donnée, et le coût
+ * est débité du portefeuille du créateur — jamais de celui de la plateforme.
+ *
+ * Appel en texte libre, sans schéma de sortie : on attend une phrase, pas une structure.
+ */
+export async function answerAsAppAssistant(params: {
+  ownerId: string
+  projectId: string
+  appName: string
+  role: string
+  question: string
+  locale: string
+}): Promise<{ answer: string; creditsSpent: number }> {
+  const accounting: Accounting = {
+    userId: params.ownerId,
+    projectId: params.projectId,
+    operation: 'assistant',
+  }
+  await beforeCalls(accounting)
+  const profile = OPERATION_PROFILES.assistant
+  const startedAt = Date.now()
+
+  try {
+    const response = await getAnthropic().messages.create({
+      model: profile.model,
+      max_tokens: profile.maxTokens,
+      system: [
+        {
+          type: 'text',
+          text: appAssistantSystem({
+            appName: params.appName,
+            role: params.role,
+            locale: params.locale,
+          }),
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      messages: [
+        { role: 'user', content: asUserData('question_du_visiteur', params.question) },
+      ],
+    })
+
+    const usage: TokenUsage = {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cachedTokens: response.usage.cache_read_input_tokens ?? 0,
+    }
+    const cost = await recordCall(
+      accounting,
+      'assistant',
+      { model: profile.model, usage, latencyMs: Date.now() - startedAt },
+      true,
+    )
+    const spent = await afterCalls(accounting, cost)
+
+    const answer = response.content
+      .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim()
+
+    if (answer === '') {
+      throw new AppError(
+        'AI_REFUSED',
+        "L'assistant n'a pas pu répondre à cette question. Reformulez-la.",
+      )
+    }
+    return { answer, creditsSpent: spent.creditsSpent }
+  } catch (error) {
+    await recordCall(
+      accounting,
+      'assistant',
+      {
+        model: profile.model,
+        usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
+        latencyMs: Date.now() - startedAt,
+      },
+      false,
+      error instanceof AppError ? error.code : 'inconnu',
+    )
+    throw toPublicFailure(error, { projectId: params.projectId })
+  }
 }

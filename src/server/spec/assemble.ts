@@ -228,6 +228,7 @@ function repairBlock(block: Block, context: RepairContext): Block | null {
     case 'stats':
     case 'pricing':
     case 'auth':
+    case 'assistant':
       return { ...block, id }
   }
 }

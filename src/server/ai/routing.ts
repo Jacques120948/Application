@@ -12,6 +12,13 @@ export const MODELS = {
   reasoning: 'claude-opus-5',
   /** Opérations fréquentes et cadrées par le schéma. */
   fast: 'claude-sonnet-5',
+  /**
+   * Réponses courtes et nombreuses : l'assistant intégré aux applications créées.
+   *
+   * Ce sont les visiteurs du créateur qui déclenchent ces appels, et c'est le créateur qui
+   * les paie. Le modèle le moins cher est donc le bon choix par défaut.
+   */
+  economical: 'claude-haiku-4-5',
 } as const
 
 export type ModelId = (typeof MODELS)[keyof typeof MODELS]
@@ -20,6 +27,7 @@ export type ModelId = (typeof MODELS)[keyof typeof MODELS]
 const PRICING: Record<ModelId, { input: number; output: number; cacheRead: number }> = {
   'claude-opus-5': { input: 5, output: 25, cacheRead: 0.5 },
   'claude-sonnet-5': { input: 2, output: 10, cacheRead: 0.2 },
+  'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1 },
 }
 
 export type OperationProfile = {
@@ -51,6 +59,8 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   blueprint: { model: MODELS.fast, maxTokens: 3_000, effort: 'medium' },
   generate: { model: MODELS.reasoning, maxTokens: 16_000, effort: 'high' },
   edit: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
+  // Réponse courte à un visiteur. Volume potentiellement élevé, enjeu faible par réponse.
+  assistant: { model: MODELS.economical, maxTokens: 700, effort: 'low' },
 }
 
 export type TokenUsage = {

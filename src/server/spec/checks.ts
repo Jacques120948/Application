@@ -52,6 +52,8 @@ function blockText(block: Block): string[] {
       return [block.title ?? '', block.emptyText]
     case 'auth':
       return [block.title, block.body ?? '']
+    case 'assistant':
+      return [block.title, block.intro ?? '', block.role, block.placeholder]
   }
 }
 

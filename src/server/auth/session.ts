@@ -52,9 +52,23 @@ export async function createSession(
 }
 
 /** Résout la session portée par le cookie, ou `null`. Ne lève jamais. */
+/**
+ * Lit le cookie de session, s'il y en a un.
+ *
+ * Hors du traitement d'une requête — dans un script, une tâche planifiée, un test — il n'y
+ * a pas de cookie du tout. Next signale ce cas par une exception ; ce n'est pas une erreur
+ * ici, simplement l'absence de session.
+ */
+async function readSessionToken(): Promise<string | undefined> {
+  try {
+    return (await cookies()).get(SESSION_COOKIE)?.value
+  } catch {
+    return undefined
+  }
+}
+
 export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
-  const store = await cookies()
-  const token = store.get(SESSION_COOKIE)?.value
+  const token = await readSessionToken()
   if (!token) return null
 
   const session = await prisma.session.findUnique({

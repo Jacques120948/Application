@@ -6,6 +6,7 @@ import { themeStyle } from './theme'
 import { RecordForm } from './RecordForm'
 import { RecordList } from './RecordList'
 import { AuthPanel } from './AuthPanel'
+import { AssistantPanel } from './AssistantPanel'
 
 /**
  * Rendu d'une page d'application générée.
@@ -341,6 +342,19 @@ function BlockView({
             projectId={context.projectId}
             currentEmail={context.endUserEmail}
             allowSignup={spec.auth.allowSignup}
+          />
+        </section>
+      )
+
+    case 'assistant':
+      return (
+        <section className="py-8">
+          <h2 className="mb-2 text-xl font-semibold">{block.title}</h2>
+          {block.intro !== undefined ? <p className="mb-4 opacity-80">{block.intro}</p> : null}
+          <AssistantPanel
+            projectId={context.projectId}
+            blockId={block.id}
+            placeholder={block.placeholder}
           />
         </section>
       )

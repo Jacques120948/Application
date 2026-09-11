@@ -28,6 +28,8 @@ export const RULES = {
   passwordReset: { limit: 5, windowMs: 60 * 60_000, blockMs: 30 * 60_000 },
   aiOperation: { limit: 30, windowMs: 60_000 },
   appWrite: { limit: 60, windowMs: 60_000 },
+  /** Questions à l'assistant d'une application, par visiteur. */
+  appAssistant: { limit: 10, windowMs: 5 * 60_000, blockMs: 10 * 60_000 },
 } as const satisfies Record<string, RateLimitRule>
 
 function prune(now: number): void {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTemplate, chooseTemplate, TEMPLATE_KINDS } from '@/server/spec/templates'
-import { appSpecSchema } from '@/server/spec/schema'
+import { appSpecSchema, blockSchema } from '@/server/spec/schema'
 import { checkIntegrity, parseAppSpec } from '@/server/spec/validate'
 import { AppError } from '@/lib/errors'
 
@@ -77,5 +77,31 @@ describe('validation du schéma', () => {
     const spec = structuredClone(buildTemplate('content', options))
     spec.pages[0]!.path = 'ailleurs'
     expect(checkIntegrity(spec).some((issue) => issue.path === 'pages')).toBe(true)
+  })
+})
+
+describe('assistant intégré à une application', () => {
+  const block = {
+    id: 'aide',
+    type: 'assistant' as const,
+    title: 'Une question ?',
+    role: "Tu réponds uniquement aux questions sur la livraison et les délais.",
+    placeholder: 'Posez votre question',
+  }
+
+  it('accepte une section assistant complète', () => {
+    expect(() => blockSchema.parse(block)).not.toThrow()
+  })
+
+  it('exige un rôle assez précis pour cadrer les réponses', () => {
+    expect(() => blockSchema.parse({ ...block, role: 'aide' })).toThrow()
+  })
+
+  it('borne la longueur du rôle', () => {
+    expect(() => blockSchema.parse({ ...block, role: 'a'.repeat(2_001) })).toThrow()
+  })
+
+  it("n'accepte aucun champ inconnu", () => {
+    expect(() => blockSchema.parse({ ...block, apiKey: 'secret' })).toThrow()
   })
 })

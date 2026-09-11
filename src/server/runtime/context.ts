@@ -19,6 +19,8 @@ export type RuntimeSpecContext = {
   projectId: string
   slug: string
   spec: AppSpec
+  /** Propriétaire du projet. C'est lui qui paie ce que l'application consomme. */
+  ownerId: string
   isOwnerPreview: boolean
 }
 
@@ -29,7 +31,7 @@ export async function resolveRuntimeSpec(projectId: string): Promise<RuntimeSpec
     const owned = await withUserScope(user.id, (tx) =>
       tx.project.findFirst({
         where: { id: projectId, ownerId: user.id, deletedAt: null },
-        select: { id: true, slug: true, draftSpec: true },
+        select: { id: true, slug: true, draftSpec: true, ownerId: true },
       }),
     )
     if (owned) {
@@ -37,6 +39,7 @@ export async function resolveRuntimeSpec(projectId: string): Promise<RuntimeSpec
         projectId: owned.id,
         slug: owned.slug,
         spec: parseAppSpec(owned.draftSpec),
+        ownerId: owned.ownerId,
         isOwnerPreview: true,
       }
     }
@@ -44,7 +47,7 @@ export async function resolveRuntimeSpec(projectId: string): Promise<RuntimeSpec
 
   const project = await prisma.project.findFirst({
     where: { id: projectId, publishedAt: { not: null }, deletedAt: null },
-    select: { id: true, slug: true, publishedVersionId: true },
+    select: { id: true, slug: true, publishedVersionId: true, ownerId: true },
   })
   if (!project || project.publishedVersionId === null) {
     throw notFound("Cette application n'existe pas ou n'est plus en ligne.")
@@ -62,6 +65,7 @@ export async function resolveRuntimeSpec(projectId: string): Promise<RuntimeSpec
     projectId: project.id,
     slug: project.slug,
     spec: parseAppSpec(version.spec),
+    ownerId: project.ownerId,
     isOwnerPreview: false,
   }
 }
