@@ -219,6 +219,9 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.finalCta': 'Start for free',
   'landing.footerTagline':
     'Evoliia helps people build extra income without knowing how to code.',
+  'landing.footerLegal': 'Legal notice',
+  'landing.footerTerms': 'Terms of use',
+  'landing.footerPrivacy': 'Privacy',
   'landing.footerRights': 'All rights reserved.',
 
   'auth.registerTitle': 'Create your account',

@@ -5,6 +5,11 @@ import { getCurrentUser } from '@/server/auth/session'
 import { logger } from '@/server/observability/logger'
 import { FREE_PLAN_ID, PLANNED_PLAN_CAPABILITIES } from '@/server/billing/plans'
 import { countPublishedApps } from '@/server/runtime/published'
+import {
+  getLegalIdentity,
+  legalIdentityInput,
+  saveLegalIdentity,
+} from '@/server/settings/legal'
 
 /**
  * Back-office.
@@ -163,4 +168,21 @@ export async function getAdminOverview() {
     prisma.plan.count({ where: { isActive: true } }),
   ])
   return { users, subscriptions, publishedApps, activePlans }
+}
+
+// ──────────────────────────── Identité légale ────────────────────────────────
+
+export { legalIdentityInput }
+
+export async function readLegalIdentity() {
+  await requireAdmin()
+  return getLegalIdentity()
+}
+
+export async function updateLegalIdentity(
+  input: Parameters<typeof saveLegalIdentity>[0],
+): Promise<void> {
+  const admin = await requireAdmin()
+  await saveLegalIdentity(input)
+  logger.info('identité légale enregistrée', { adminId: admin.id })
 }

@@ -2,10 +2,21 @@ import { notFound, redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
-import { getAdminOverview, listPlans, listUsers } from '@/server/admin/service'
+import {
+  getAdminOverview,
+  listPlans,
+  listUsers,
+  readLegalIdentity,
+} from '@/server/admin/service'
 import { Shell } from '@/components/studio/Shell'
 import { Card, CardBody } from '@/components/ui'
-import { AdminPlan, AdminUser, PlanEditor, UserTable } from '@/components/studio/AdminPanels'
+import {
+  AdminPlan,
+  AdminUser,
+  LegalIdentityForm,
+  PlanEditor,
+  UserTable,
+} from '@/components/studio/AdminPanels'
 
 /**
  * Back-office.
@@ -23,10 +34,11 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
   if (user.role !== 'ADMIN') notFound()
 
   const t = getTranslator(locale)
-  const [overview, plans, users, wallet] = await Promise.all([
+  const [overview, plans, users, identity, wallet] = await Promise.all([
     getAdminOverview(),
     listPlans(),
     listUsers({ query: '', take: 50 }),
+    readLegalIdentity(),
     getWallet(user.id),
   ])
 
@@ -58,7 +70,15 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
           ))}
         </div>
 
-        <h2 className="mb-1 text-lg font-semibold">Les offres</h2>
+        <h2 className="mb-1 text-lg font-semibold">Votre identité</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Ces informations apparaissent sur les mentions légales, les conditions
+          d’utilisation et la politique de confidentialité. Elles sont obligatoires dès
+          que vous collectez des adresses e-mail.
+        </p>
+        <LegalIdentityForm identity={identity} />
+
+        <h2 className="mt-12 mb-1 text-lg font-semibold">Les offres</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
           Ce que vous changez ici s’applique immédiatement, sans redéploiement. L’export du
           code et la préparation pour mobile n’apparaissent pas : ils ne sont pas encore

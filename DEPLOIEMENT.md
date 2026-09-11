@@ -63,6 +63,8 @@ personne, y compris dans une conversation.
 | `ANTHROPIC_API_KEY` | Votre nouvelle clé, celle qui commence par `sk-ant-` |
 | `SIGNUP_CODE` | Un mot de passe de votre choix, sans lui n'importe qui pourrait créer un compte |
 | `ADMIN_EMAIL` | Votre adresse e-mail, celle du compte qui pourra ouvrir l'administration |
+| `RESEND_API_KEY` | Facultative. Sans elle, la réinitialisation de mot de passe reste indisponible |
+| `EMAIL_FROM` | Facultative. L'expéditeur des e-mails, par exemple `Evoliia <bonjour@evoliia.com>` |
 | `APP_URL` | À remplir après le premier déploiement, voir juste en dessous |
 
 `APP_URL` ne peut être connue qu'une fois le site déployé. Laissez-la vide au premier

@@ -219,6 +219,9 @@ export const fr = {
   'landing.finalCta': 'Commencer gratuitement',
   'landing.footerTagline':
     "Evoliia accompagne les personnes qui veulent créer un revenu complémentaire sans savoir coder.",
+  'landing.footerLegal': 'Mentions légales',
+  'landing.footerTerms': 'Conditions d’utilisation',
+  'landing.footerPrivacy': 'Confidentialité',
   'landing.footerRights': 'Tous droits réservés.',
 
   'auth.registerTitle': 'Créer votre compte',

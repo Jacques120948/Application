@@ -756,7 +756,18 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           <p className="max-w-md text-sm text-[var(--color-ink-soft)]">
             {t('landing.footerTagline')}
           </p>
-          <p className="ml-auto text-xs text-[var(--color-ink-faint)]">
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-5 border-t border-[var(--color-line)] pt-6 text-sm text-[var(--color-ink-soft)]">
+          <a href={`/${locale}/mentions-legales`} className="no-underline">
+            {t('landing.footerLegal')}
+          </a>
+          <a href={`/${locale}/conditions`} className="no-underline">
+            {t('landing.footerTerms')}
+          </a>
+          <a href={`/${locale}/confidentialite`} className="no-underline">
+            {t('landing.footerPrivacy')}
+          </a>
+          <p className="m-0 ml-auto text-xs text-[var(--color-ink-faint)]">
             © {new Date().getFullYear()} Evoliia. {t('landing.footerRights')}
           </p>
         </div>

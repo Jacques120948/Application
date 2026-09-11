@@ -32,6 +32,11 @@ export default async function LoginPage({ params }: { params: Promise<{ locale: 
         </CardBody>
       </Card>
       <p className="mt-5 text-center text-sm text-[var(--color-ink-soft)]">
+        <a href={`/${locale}/mot-de-passe-oublie`} className="text-[var(--color-brand)]">
+          Mot de passe oublié ?
+        </a>
+      </p>
+      <p className="mt-2 text-center text-sm text-[var(--color-ink-soft)]">
         {t('auth.noAccount')}{' '}
         <a href={`/${locale}/inscription`} className="text-[var(--color-brand)]">
           {t('nav.register')}

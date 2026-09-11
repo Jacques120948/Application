@@ -286,3 +286,100 @@ export function UserTable({ users, plans }: { users: AdminUser[]; plans: AdminPl
     </div>
   )
 }
+
+export type LegalIdentity = {
+  entity: string
+  address: string
+  email: string
+  country: string
+  registration: string
+  complete: boolean
+}
+
+/**
+ * Identité affichée sur les pages légales.
+ *
+ * Tant qu'elle est incomplète, les mentions légales le disent publiquement : mieux vaut
+ * une page qui reconnaît son état qu'une page qui invente une raison sociale.
+ */
+export function LegalIdentityForm({ identity }: { identity: LegalIdentity }) {
+  const [state, setState] = useState<'idle' | 'busy' | 'saved'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setState('busy')
+    setError(null)
+    const form = new FormData(event.currentTarget)
+    const response = await fetch('/api/admin/identite', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        entity: String(form.get('entity') ?? ''),
+        address: String(form.get('address') ?? ''),
+        email: String(form.get('email') ?? ''),
+        country: String(form.get('country') ?? ''),
+        registration: String(form.get('registration') ?? ''),
+      }),
+    })
+    const body = (await response.json()) as { message?: string }
+    if (!response.ok) {
+      setError(body.message ?? "L'enregistrement n'a pas abouti.")
+      setState('idle')
+      return
+    }
+    setState('saved')
+  }
+
+  return (
+    <Card>
+      <CardBody>
+        <form onSubmit={submit} className="grid gap-4">
+          {!identity.complete ? (
+            <Notice tone="caution" title="Identité incomplète">
+              Les pages légales affichent aujourd’hui un avertissement à la place de vos
+              coordonnées. Remplissez au moins la raison sociale, l’adresse, le pays et
+              l’adresse de contact.
+            </Notice>
+          ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Raison sociale ou nom" hint="Ce qui apparaîtra sur les mentions légales.">
+              <Input name="entity" maxLength={120} defaultValue={identity.entity} />
+            </Field>
+            <Field label="Adresse de contact" hint="Celle à laquelle vos utilisateurs peuvent écrire.">
+              <Input type="email" name="email" maxLength={200} defaultValue={identity.email} />
+            </Field>
+          </div>
+
+          <Field label="Adresse postale">
+            <Textarea name="address" maxLength={300} defaultValue={identity.address} />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Pays">
+              <Input name="country" maxLength={80} defaultValue={identity.country} />
+            </Field>
+            <Field
+              label="Numéro d’entreprise ou de TVA"
+              hint="Facultatif. Laissez vide si vous n’en avez pas."
+            >
+              <Input name="registration" maxLength={120} defaultValue={identity.registration} />
+            </Field>
+          </div>
+
+          {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+          {state === 'saved' ? (
+            <Notice tone="positive">Enregistré. Les pages légales sont à jour.</Notice>
+          ) : null}
+
+          <div>
+            <Button type="submit" disabled={state === 'busy'}>
+              {state === 'busy' ? 'Enregistrement…' : 'Enregistrer l’identité'}
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
+  )
+}

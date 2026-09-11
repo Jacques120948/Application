@@ -58,6 +58,14 @@ export const env = {
     const value = read('ADMIN_EMAIL')
     return value?.trim().toLowerCase()
   },
+  /** Clé du fournisseur d'e-mails. Absente, la plateforme n'envoie aucun message. */
+  get resendApiKey(): string | undefined {
+    return read('RESEND_API_KEY')
+  },
+  /** Expéditeur des messages, par exemple « Evoliia <bonjour@evoliia.com> ». */
+  get emailFrom(): string | undefined {
+    return read('EMAIL_FROM')
+  },
   get appUrl(): string {
     return read('APP_URL') ?? 'http://localhost:3000'
   },

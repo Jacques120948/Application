@@ -83,6 +83,14 @@ model VerificationToken {
 }
 
 /// Offre commerciale de la plateforme. Modifiable depuis l'administration (exigence 34).
+/// Réglages de l'installation, modifiables depuis le back-office sans redéploiement.
+/// Table clé/valeur volontairement simple : les réglages sont rares et hétérogènes.
+model SiteSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 model Plan {
   id                String   @id
   name              String

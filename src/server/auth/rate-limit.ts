@@ -25,6 +25,7 @@ export type RateLimitRule = {
 export const RULES = {
   login: { limit: 8, windowMs: 10 * 60_000, blockMs: 10 * 60_000 },
   register: { limit: 5, windowMs: 60 * 60_000, blockMs: 30 * 60_000 },
+  passwordReset: { limit: 5, windowMs: 60 * 60_000, blockMs: 30 * 60_000 },
   aiOperation: { limit: 30, windowMs: 60_000 },
   appWrite: { limit: 60, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitRule>

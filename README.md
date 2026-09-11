@@ -56,6 +56,8 @@ npm run dev
 | `APP_URL` | Adresse publique de la plateforme |
 | `SIGNUP_CODE` | Code exigé à l'inscription. **Facultative** — sans elle, l'inscription est ouverte |
 | `ADMIN_EMAIL` | Compte promu administrateur à chaque mise en ligne. **Facultative** |
+| `RESEND_API_KEY` | Envoi des e-mails transactionnels. **Facultative** — sans elle, aucun message n'est envoyé |
+| `EMAIL_FROM` | Expéditeur des e-mails, par exemple `Evoliia <bonjour@evoliia.com>` |
 
 ### Coûts observés
 
