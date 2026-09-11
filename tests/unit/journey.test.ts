@@ -86,4 +86,36 @@ describe('parcours du créateur', () => {
     expect(journey.progress).toBe(100)
     expect(journey.next).toBeNull()
   })
+
+  /*
+   * Le créateur qui entre par « je sais ce que je veux créer » n'a pas de profil. Son
+   * parcours doit rester lisible : l'objectif lui est proposé, jamais imposé, et les
+   * étapes liées aux idées proposées n'ont pas de sens pour lui.
+   */
+  it('reste cohérent pour un créateur entré par le chemin direct', () => {
+    const journey = computeJourney({
+      locale: 'fr',
+      hasProfile: false,
+      guidedPath: false,
+      hasIdea: true,
+      ideaValidated: false,
+      specSheetReady: false,
+      projectId: 'p1',
+      hasBuild: true,
+      testedWithoutError: false,
+      monetizationDecided: false,
+      published: false,
+    })
+
+    const skipped = journey.steps.filter((step) => step.skipped).map((step) => step.id)
+    expect(skipped).toContain('idee')
+    expect(skipped).toContain('validation')
+
+    // L'objectif reste une étape ouverte : il apporte le chiffrage, il ne bloque rien.
+    const objectif = journey.steps.find((step) => step.id === 'objectif')
+    expect(objectif?.done).toBe(false)
+    expect(objectif?.skipped).toBeUndefined()
+
+    expect(journey.next).not.toBeNull()
+  })
 })

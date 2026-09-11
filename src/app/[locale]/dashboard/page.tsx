@@ -19,90 +19,118 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
 
-  const overview = await getCreatorOverview(user.id, locale)
-  // Sans objectif, le parcours ne peut pas commencer : on y emmène directement.
-  if (overview.objective === null) redirect(`/${locale}/objectif`)
+  const [overview, projects, wallet] = await Promise.all([
+    getCreatorOverview(user.id, locale),
+    listProjects(user.id),
+    getWallet(user.id),
+  ])
+
+  /*
+   * Rien du tout : on laisse choisir son chemin plutôt que d'imposer l'objectif.
+   *
+   * Un créateur qui arrive avec son idée en tête n'a pas à répondre d'abord à dix
+   * questions sur son objectif de revenu. En revanche, celui qui a déjà construit quelque
+   * chose sans objectif garde un tableau de bord utilisable : l'objectif lui est proposé,
+   * pas imposé.
+   */
+  if (overview.objective === null && projects.length === 0) redirect(`/${locale}/demarrer`)
 
   const t = getTranslator(locale)
-  const [projects, wallet] = await Promise.all([listProjects(user.id), getWallet(user.id)])
+  const objective = overview.objective
   const next = overview.journey.next
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
       isAdmin={user.role === 'ADMIN'}>
       <div className="grid gap-6">
-        <Card>
-          <CardBody>
-            <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Figure label="Mon objectif" value={overview.objective.monthlyGoalLabel} />
-                <Figure
-                  label="Mon projet"
-                  value={overview.objective.ideaTitle ?? 'Pas encore choisi'}
-                />
-                <Figure
-                  label="Opportunité"
-                  value={
-                    overview.objective.opportunityScore === null
-                      ? '—'
-                      : `${overview.objective.opportunityScore}/100`
-                  }
-                />
-                <Figure
-                  label="Clients pour l’objectif"
-                  value={
-                    overview.objective.customersNeeded === null
-                      ? '—'
-                      : `environ ${overview.objective.customersNeeded}`
-                  }
-                />
-              </div>
-
-              <div className="sm:w-56">
-                <p className="m-0 text-sm text-[var(--color-ink-soft)]">Avancement</p>
-                <p className="m-0 text-3xl font-semibold">{overview.journey.progress} %</p>
-                <div
-                  className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-canvas)]"
-                  role="progressbar"
-                  aria-valuenow={overview.journey.progress}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                >
-                  <div
-                    className="h-full bg-[var(--color-brand)]"
-                    style={{ width: `${overview.journey.progress}%` }}
+        {objective === null ? (
+          <Card>
+            <CardBody>
+              <h2 className="mt-0 text-lg font-semibold">Vous n’avez pas encore d’objectif</h2>
+              <p className="mt-2 text-sm text-[var(--color-ink-soft)]">
+                Votre application existe, c’est l’essentiel. Définir un objectif de revenu
+                vous dirait combien de clients il vous faudrait, à quel prix, et ferait
+                apparaître des idées adaptées à votre profil.
+              </p>
+              <LinkButton href={`/${locale}/objectif`} className="mt-5">
+                Définir mon objectif
+              </LinkButton>
+            </CardBody>
+          </Card>
+        ) : (
+          <Card>
+            <CardBody>
+              <div className="grid gap-6 sm:grid-cols-[1fr_auto]">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Figure label="Mon objectif" value={objective.monthlyGoalLabel} />
+                  <Figure label="Mon projet" value={objective.ideaTitle ?? 'Pas encore choisi'} />
+                  <Figure
+                    label="Opportunité"
+                    value={
+                      objective.opportunityScore === null
+                        ? '—'
+                        : `${objective.opportunityScore}/100`
+                    }
+                  />
+                  <Figure
+                    label="Clients pour l’objectif"
+                    value={
+                      objective.customersNeeded === null
+                        ? '—'
+                        : `environ ${objective.customersNeeded}`
+                    }
                   />
                 </div>
-              </div>
-            </div>
 
-            {overview.objective.sentence !== null ? (
-              <p className="mt-5 text-sm text-[var(--color-ink-soft)]">
-                {overview.objective.sentence}
-              </p>
-            ) : null}
-            <p className="mt-2 text-xs text-[var(--color-ink-faint)]">{OBJECTIVE_DISCLAIMER}</p>
-          </CardBody>
-
-          <div className="border-t border-[var(--color-line)] px-5 py-4">
-            {next === null ? (
-              <p className="m-0 text-sm font-medium text-[var(--color-positive)]">
-                Votre application est en ligne. Prochaine étape : trouver vos premiers clients.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-4">
-                <div>
-                  <p className="m-0 text-sm text-[var(--color-ink-soft)]">Prochaine étape</p>
-                  <p className="m-0 font-medium">{next.label}</p>
-                  <p className="m-0 mt-0.5 text-sm text-[var(--color-ink-soft)]">{next.why}</p>
+                <div className="sm:w-56">
+                  <p className="m-0 text-sm text-[var(--color-ink-soft)]">Avancement</p>
+                  <p className="m-0 text-3xl font-semibold">{overview.journey.progress} %</p>
+                  <div
+                    className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--color-canvas)]"
+                    role="progressbar"
+                    aria-valuenow={overview.journey.progress}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className="h-full bg-[var(--color-brand)]"
+                      style={{ width: `${overview.journey.progress}%` }}
+                    />
+                  </div>
                 </div>
-                <LinkButton href={next.href ?? `/${locale}/idees`} size="large" className="ml-auto">
-                  {next.action ?? 'Continuer'}
-                </LinkButton>
               </div>
-            )}
-          </div>
-        </Card>
+
+              {objective.sentence !== null ? (
+                <p className="mt-5 text-sm text-[var(--color-ink-soft)]">{objective.sentence}</p>
+              ) : null}
+              <p className="mt-2 text-xs text-[var(--color-ink-faint)]">{OBJECTIVE_DISCLAIMER}</p>
+            </CardBody>
+
+            <div className="border-t border-[var(--color-line)] px-5 py-4">
+              {next === null ? (
+                <p className="m-0 text-sm font-medium text-[var(--color-positive)]">
+                  Votre application est en ligne. Prochaine étape : trouver vos premiers
+                  clients.
+                </p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-4">
+                  <div>
+                    <p className="m-0 text-sm text-[var(--color-ink-soft)]">Prochaine étape</p>
+                    <p className="m-0 font-medium">{next.label}</p>
+                    <p className="m-0 mt-0.5 text-sm text-[var(--color-ink-soft)]">{next.why}</p>
+                  </div>
+                  <LinkButton
+                    href={next.href ?? `/${locale}/idees`}
+                    size="large"
+                    className="ml-auto"
+                  >
+                    {next.action ?? 'Continuer'}
+                  </LinkButton>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
 
         <Card>
           <CardBody>

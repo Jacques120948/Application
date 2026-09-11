@@ -16,6 +16,13 @@ export default async function CreatePage({ params }: { params: Promise<{ locale:
       isAdmin={user.role === 'ADMIN'}>
       <div className="mx-auto w-full max-w-3xl">
         <CreateWizard locale={locale} />
+        <p className="mt-6 text-center text-sm text-[var(--color-ink-soft)]">
+          Vous préférez qu’on cherche avec vous ?{' '}
+          <a href={`/${locale}/objectif`} className="text-[var(--color-brand)]">
+            Partir de votre objectif
+          </a>
+          .
+        </p>
       </div>
     </Shell>
   )

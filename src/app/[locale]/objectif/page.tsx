@@ -23,6 +23,13 @@ export default async function ObjectivePage({ params }: { params: Promise<{ loca
           réalistes pour vous. Vous n&apos;avez pas besoin d&apos;avoir une idée.
         </p>
         <ObjectiveForm locale={locale} profile={profile} />
+        <p className="mt-6 text-center text-sm text-[var(--color-ink-soft)]">
+          Vous savez déjà ce que vous voulez créer ?{' '}
+          <a href={`/${locale}/creer`} className="text-[var(--color-brand)]">
+            Décrivez-le directement
+          </a>
+          .
+        </p>
       </div>
     </Shell>
   )

@@ -87,7 +87,10 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const t = getTranslator(locale)
   const plans = await listPublicPlans()
 
-  const findIdea = `/${locale}/inscription`
+  // Deux entrées distinctes : l'une conduit au parcours guidé, l'autre à la description
+  // directe. Le bouton d'en-tête, lui, laisse choisir une fois le compte créé.
+  const signUp = `/${locale}/inscription`
+  const findIdea = `/${locale}/inscription?suite=objectif`
   const haveIdea = `/${locale}/inscription?suite=idee`
 
   const steps = [
@@ -159,7 +162,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             <LinkButton href={`/${locale}/connexion`} variant="ghost">
               {t('nav.login')}
             </LinkButton>
-            <LinkButton href={findIdea}>{t('nav.register')}</LinkButton>
+            <LinkButton href={signUp}>{t('nav.register')}</LinkButton>
           </div>
         </div>
       </header>

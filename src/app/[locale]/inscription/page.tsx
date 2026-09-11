@@ -15,6 +15,9 @@ import { AuthForm } from '@/components/studio/AuthForm'
  */
 const AFTER_REGISTER: Record<string, string> = { idee: 'creer', objectif: 'objectif' }
 
+/** Sans indication, on laisse la personne choisir son chemin plutôt que de le décider. */
+const DEFAULT_AFTER_REGISTER = 'demarrer'
+
 export default async function RegisterPage({
   params,
   searchParams,
@@ -24,7 +27,7 @@ export default async function RegisterPage({
 }) {
   const locale = resolveLocale((await params).locale)
   const suite = (await searchParams).suite ?? ''
-  const nextPath = `/${locale}/${AFTER_REGISTER[suite] ?? 'objectif'}`
+  const nextPath = `/${locale}/${AFTER_REGISTER[suite] ?? DEFAULT_AFTER_REGISTER}`
   if ((await getCurrentUser()) !== null) redirect(`/${locale}/dashboard`)
   const t = getTranslator(locale)
 
