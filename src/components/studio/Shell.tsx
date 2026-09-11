@@ -25,6 +25,14 @@ export function Shell({
           >
             {t('common.appName')}
           </a>
+          <nav className="flex items-center gap-4 text-sm">
+            <a href={`/${locale}/dashboard`} className="text-[var(--color-ink-soft)] no-underline">
+              {t('nav.dashboard')}
+            </a>
+            <a href={`/${locale}/idees`} className="text-[var(--color-ink-soft)] no-underline">
+              {t('nav.ideas')}
+            </a>
+          </nav>
           <div className="ml-auto flex items-center gap-4 text-sm">
             {credits !== undefined ? (
               <span className="text-[var(--color-ink-soft)]">

@@ -1,7 +1,8 @@
 /** Catalogue de référence. Toute clé doit exister ici. */
 export const fr = {
   'common.appName': 'AppForge',
-  'common.tagline': "Décrivez votre idée. L'IA construit votre application.",
+  'common.tagline':
+    "Trouvez une idée. Créez-la. Lancez-la. Monétisez-la. Sans savoir coder.",
   'common.loading': 'Un instant…',
   'common.save': 'Enregistrer',
   'common.cancel': 'Annuler',
@@ -12,22 +13,29 @@ export const fr = {
   'common.error': "Une erreur s'est produite.",
   'common.retry': 'Réessayer',
 
-  'nav.dashboard': 'Mes applications',
+  'nav.dashboard': 'Mon projet',
+  'nav.ideas': 'Mes idées',
+  'nav.objective': 'Mon objectif',
   'nav.logout': 'Se déconnecter',
   'nav.login': 'Se connecter',
   'nav.register': 'Créer un compte',
   'nav.admin': 'Administration',
 
-  'home.heroTitle': 'Votre idée devient une application.',
+  'home.heroTitle': "De votre idée à votre première application vendable.",
   'home.heroBody':
-    "Décrivez ce que vous voulez créer, en français courant. L'assistant construit l'application, vous la testez, puis vous la mettez en ligne.",
-  'home.cta': 'Créer mon application',
-  'home.step1Title': 'Vous décrivez',
-  'home.step1Body': 'Une phrase suffit. Aucune compétence technique nécessaire.',
-  'home.step2Title': "L'assistant construit",
-  'home.step2Body': 'Structure, design, fonctionnalités et modèle économique vous sont proposés.',
-  'home.step3Title': 'Vous publiez',
-  'home.step3Body': 'Votre application est en ligne, avec une adresse que vous pouvez partager.',
+    "Vous n'avez pas besoin d'avoir une idée, ni de savoir coder. Dites-nous ce que vous visez et ce que vous savez faire : nous vous proposons quoi construire, nous le construisons avec vous, et nous vous accompagnons jusqu'à vos premiers clients.",
+  'home.cta': 'Commencer par mon objectif',
+  'home.step1Title': 'On cherche quoi construire',
+  'home.step1Body':
+    "Vous indiquez votre objectif, votre temps et vos compétences. Nous proposons des idées chiffrées, avec un prix conseillé et le nombre de clients correspondant.",
+  'home.step2Title': "On vérifie avant de construire",
+  'home.step2Body':
+    "Demande, concurrence, prix, risques : l'idée est analysée pour éviter de travailler pour rien.",
+  'home.step3Title': 'On construit et on met en ligne',
+  'home.step3Body':
+    "L'application est créée, testée, puis publiée à une adresse que vous pouvez partager.",
+  'home.notAnotherBuilder':
+    "Nous ne vous demandons pas seulement ce que vous voulez construire. Nous vous aidons à déterminer quoi construire, pourquoi, et comment le vendre.",
 
   'auth.registerTitle': 'Créer votre compte',
   'auth.loginTitle': 'Se connecter',

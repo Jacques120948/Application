@@ -15,58 +15,85 @@ export type PlanDefaults = {
   priceCents: number
   maxProjects: number
   monthlyCredits: number
+  allowBuild: boolean
   allowExport: boolean
   allowCustomDomain: boolean
   allowMobilePrep: boolean
+  isRecommended: boolean
   sortOrder: number
 }
 
 /**
- * Valeurs de départ calées sur le coût réel mesuré : une application complète revient à
- * environ 130 crédits, une modification assistée à une dizaine. Un crédit correspond à
- * un millième de dollar de coût API. Ces chiffres sont modifiables depuis
- * l'administration, sans redéploiement.
+ * Valeurs de départ, calées sur le coût réel mesuré (voir docs/09-recentrage.md).
+ *
+ * L'offre gratuite va volontairement jusqu'au bout de la réflexion — objectif, idées,
+ * validation — mais s'arrête avant la construction. C'est là que se situe la décision
+ * d'abonnement, au moment où l'utilisateur veut concrétiser une idée qui l'intéresse.
  */
 export const DEFAULT_PLANS: readonly PlanDefaults[] = [
   {
-    id: 'starter',
-    name: 'Starter',
-    description: 'Pour tester une première idée et publier une application sur le web.',
+    id: 'free',
+    name: 'Découverte',
+    description:
+      "Définissez votre objectif, recevez des idées adaptées à votre profil et faites analyser celle qui vous plaît.",
     priceCents: 0,
-    maxProjects: 1,
-    monthlyCredits: 600,
+    maxProjects: 0,
+    // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
+    // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
+    // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
+    monthlyCredits: 30,
+    allowBuild: false,
     allowExport: false,
     allowCustomDomain: false,
     allowMobilePrep: false,
+    isRecommended: false,
     sortOrder: 0,
   },
   {
-    id: 'creator',
-    name: 'Creator',
-    description: 'Plusieurs applications, davantage de crédits, export du projet.',
-    priceCents: 1900,
-    maxProjects: 5,
-    monthlyCredits: 6000,
-    allowExport: true,
-    allowCustomDomain: true,
+    id: 'launch',
+    name: 'Launch',
+    description: 'Pour lancer votre première application et la mettre en ligne.',
+    priceCents: 2900,
+    maxProjects: 1,
+    monthlyCredits: 100,
+    allowBuild: true,
+    allowExport: false,
+    allowCustomDomain: false,
     allowMobilePrep: false,
+    isRecommended: false,
     sortOrder: 1,
   },
   {
-    id: 'pro',
-    name: 'Pro',
-    description: 'Volume de projets et de crédits élevé, préparation iOS et Android.',
-    priceCents: 4900,
-    maxProjects: 25,
-    monthlyCredits: 25000,
+    id: 'builder',
+    name: 'Builder',
+    description: 'Plusieurs projets, accompagnement au lancement et adresse personnalisée.',
+    priceCents: 5900,
+    maxProjects: 5,
+    monthlyCredits: 350,
+    allowBuild: true,
+    allowExport: false,
+    allowCustomDomain: true,
+    allowMobilePrep: true,
+    isRecommended: true,
+    sortOrder: 2,
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    description: "Pour exploiter plusieurs applications et aller plus loin dans l'acquisition.",
+    priceCents: 9900,
+    maxProjects: 20,
+    monthlyCredits: 800,
+    allowBuild: true,
     allowExport: true,
     allowCustomDomain: true,
     allowMobilePrep: true,
-    sortOrder: 2,
+    isRecommended: false,
+    sortOrder: 3,
   },
 ] as const
 
-export const FREE_PLAN_ID = 'starter'
+export const FREE_PLAN_ID = 'free'
 
 /** Renvoie le plan effectif d'un utilisateur, en retombant sur l'offre gratuite. */
 export async function getEffectivePlan(userId: string) {

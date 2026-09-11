@@ -22,9 +22,12 @@ async function main(): Promise<void> {
         priceCents: plan.priceCents,
         maxProjects: plan.maxProjects,
         monthlyCredits: plan.monthlyCredits,
+        allowBuild: plan.allowBuild,
         allowExport: plan.allowExport,
         allowCustomDomain: plan.allowCustomDomain,
         allowMobilePrep: plan.allowMobilePrep,
+        isRecommended: plan.isRecommended,
+        isActive: true,
         sortOrder: plan.sortOrder,
       },
       create: {
@@ -34,14 +37,24 @@ async function main(): Promise<void> {
         priceCents: plan.priceCents,
         maxProjects: plan.maxProjects,
         monthlyCredits: plan.monthlyCredits,
+        allowBuild: plan.allowBuild,
         allowExport: plan.allowExport,
         allowCustomDomain: plan.allowCustomDomain,
         allowMobilePrep: plan.allowMobilePrep,
+        isRecommended: plan.isRecommended,
         sortOrder: plan.sortOrder,
       },
     })
   }
+  // Une offre retirée du modèle n'est jamais supprimée : des abonnements peuvent encore
+  // la référencer. Elle est simplement rendue invisible.
+  const retired = await prisma.plan.updateMany({
+    where: { id: { notIn: DEFAULT_PLANS.map((plan) => plan.id) }, isActive: true },
+    data: { isActive: false },
+  })
+
   console.log(`Offres initialisées : ${DEFAULT_PLANS.map((plan) => plan.id).join(', ')}`)
+  if (retired.count > 0) console.log(`Offres retirées du catalogue : ${retired.count}`)
 }
 
 main()

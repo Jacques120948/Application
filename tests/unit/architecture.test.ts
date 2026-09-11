@@ -58,6 +58,39 @@ describe('règles de dépendance', () => {
     expect(offenders).toEqual([])
   })
 
+  /**
+   * Règle née d'un vrai incident : `prisma.project.count()` appelé hors portée de
+   * locataire renvoyait zéro, parce que le Row Level Security masque les projets non
+   * publiés quand aucun contexte n'est posé. La limite de projets de l'offre était donc
+   * silencieusement désactivée. Une lecture filtrée ne lève aucune erreur : seule une
+   * règle automatique empêche la réintroduction.
+   */
+  it('accède aux tables protégées uniquement dans une portée de locataire', () => {
+    const protectedModels = [
+      'project',
+      'projectVersion',
+      'chatMessage',
+      'projectCheck',
+      'appRecord',
+      'appEndUser',
+      'appEndUserSession',
+      'appEvent',
+      'idea',
+      'creatorProfile',
+    ]
+    // Ces deux fichiers lisent délibérément des applications publiées, qui sont publiques.
+    const allowed = new Set([
+      join('src', 'server', 'runtime', 'published.ts'),
+      join('src', 'server', 'runtime', 'context.ts'),
+    ])
+    const pattern = new RegExp(`\\bprisma\\.(${protectedModels.join('|')})\\.`)
+
+    const offenders = sources
+      .filter((path) => !allowed.has(path))
+      .filter((path) => pattern.test(read(path)))
+    expect(offenders).toEqual([])
+  })
+
   it("n'expose aucun secret au navigateur", () => {
     const offenders = sources
       .filter((path) => path.startsWith(join('src', 'components')))

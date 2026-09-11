@@ -68,7 +68,13 @@ describe('coût des opérations IA', () => {
 
   it('applique un plancher par opération', () => {
     expect(creditsForCost('generate', 0)).toBe(MINIMUM_COST.generate)
-    expect(creditsForCost('edit', 500_000)).toBe(500)
+    // Au-delà du plancher, le coût réel commande : 500 000 micro-dollars à 5 000 le crédit.
+    expect(creditsForCost('edit', 500_000)).toBe(100)
+  })
+
+  it('facture une génération complète dans l’ordre de grandeur du modèle tarifaire', () => {
+    // Coût mesuré d'une application complète : environ 0,105 USD.
+    expect(creditsForCost('generate', 105_000)).toBe(21)
   })
 
   it('renvoie zéro pour un modèle inconnu plutôt que de planter', () => {

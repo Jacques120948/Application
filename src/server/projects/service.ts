@@ -3,7 +3,6 @@ import { z } from 'zod'
 import type { Prisma, ProjectStatus } from '@prisma/client'
 import { AppError, conflict, notFound, validation } from '@/lib/errors'
 import { logger } from '@/server/observability/logger'
-import { prisma } from '@/server/db/client'
 import { requireOwnedProject, withUserScope, type TenantClient } from '@/server/db/scope'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { isAiAvailable } from '@/server/ai/client'
@@ -15,7 +14,8 @@ import { buildTemplate, THEME_PRESETS, DEFAULT_THEME } from '@/server/spec/templ
 import { parseAppSpec } from '@/server/spec/validate'
 import type { AppSpec } from '@/server/spec/schema'
 import { SUPPORTED_LOCALES, type Locale } from '@/i18n/config'
-import { heuristicBlueprint } from './blueprint-fallback'
+import { heuristicBlueprint, blueprintFromIdea } from './blueprints'
+import { getIdea } from '@/server/business/ideas'
 
 /**
  * Cas d'usage « projet ».
@@ -110,27 +110,72 @@ export async function createProject(
     }
   }
 
-  const slug = await uniqueSlug(spec.name)
-
-  await withUserScope(userId, async (tx) => {
-    await tx.project.create({
-      data: {
-        id: projectId,
-        ownerId: userId,
-        name: spec.name,
-        slug,
-        locale: input.locale,
-        idea: input.idea,
-        blueprint: blueprint as unknown as Prisma.InputJsonValue,
-        draftSpec: spec as unknown as Prisma.InputJsonValue,
-        status: 'DRAFT',
-      },
-    })
-    await createVersion(tx, projectId, spec, 'Première version', 'AI')
-  })
+  let slug = candidateSlug(spec.name)
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await withUserScope(userId, async (tx) => {
+        await tx.project.create({
+          data: {
+            id: projectId,
+            ownerId: userId,
+            name: spec.name,
+            slug,
+            locale: input.locale,
+            idea: input.idea,
+            blueprint: blueprint as unknown as Prisma.InputJsonValue,
+            draftSpec: spec as unknown as Prisma.InputJsonValue,
+            status: 'DRAFT',
+          },
+        })
+        await createVersion(tx, projectId, spec, 'Première version', 'AI')
+      })
+      break
+    } catch (error) {
+      if (attempt >= 4 || !isSlugCollision(error)) {
+        if (isSlugCollision(error)) {
+          throw conflict("Impossible de réserver une adresse pour cette application. Réessayez.")
+        }
+        throw error
+      }
+      slug = candidateSlug(spec.name)
+    }
+  }
 
   logger.info('projet créé', { userId, projectId, source })
   return { projectId, slug, source, creditsSpent }
+}
+
+/**
+ * Construction depuis une idée du parcours guidé.
+ *
+ * On ne redemande pas au copilote de reformuler un plan : l'idée a déjà été proposée puis
+ * analysée, tout est connu. Cela économise un appel payant et évite qu'une reformulation
+ * contredise l'analyse que l'utilisateur vient de lire.
+ */
+export async function createProjectFromIdea(
+  userId: string,
+  ideaId: string,
+  locale: Locale,
+): Promise<CreatedProject> {
+  await assertCanCreateProject(userId)
+  const idea = await getIdea(userId, ideaId)
+
+  if (idea.projectId !== null) {
+    throw conflict('Une application a déjà été créée à partir de cette idée.')
+  }
+
+  const created = await createProject(userId, {
+    idea: `${idea.title}. ${idea.problem}`.slice(0, 2000),
+    locale,
+    blueprint: blueprintFromIdea(idea),
+  })
+
+  await withUserScope(userId, async (tx) => {
+    await tx.idea.update({ where: { id: ideaId }, data: { status: 'SELECTED' } })
+    await tx.project.update({ where: { id: created.projectId }, data: { ideaId } })
+  })
+
+  return created
 }
 
 export type ProjectSummary = {
@@ -552,7 +597,23 @@ async function recordAssistantMessage(
 
 async function assertCanCreateProject(userId: string): Promise<void> {
   const plan = await getEffectivePlan(userId)
-  const count = await prisma.project.count({ where: { ownerId: userId, deletedAt: null } })
+
+  // L'offre de découverte va jusqu'au bout de la réflexion — objectif, idées, analyse —
+  // puis s'arrête avant la construction. C'est le moment où l'abonnement a du sens.
+  if (!plan.allowBuild || plan.maxProjects === 0) {
+    throw new AppError(
+      'PLAN_LIMIT',
+      "Votre offre actuelle permet de chercher et d'analyser des idées. Pour construire votre application, choisissez une formule.",
+      { details: { planId: plan.id, reason: 'build' } },
+    )
+  }
+
+  // Le comptage DOIT se faire dans la portée du créateur : hors portée, le Row Level
+  // Security masque ses projets non publiés et le compte revient à zéro, ce qui
+  // désactiverait silencieusement la limite de l'offre.
+  const count = await withUserScope(userId, (tx) =>
+    tx.project.count({ where: { ownerId: userId, deletedAt: null } }),
+  )
   if (count >= plan.maxProjects) {
     throw new AppError(
       'PLAN_LIMIT',
@@ -573,14 +634,23 @@ export function slugify(value: string): string {
   return base.length >= 3 ? base : 'application'
 }
 
-async function uniqueSlug(name: string): Promise<string> {
-  const base = slugify(name)
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const candidate = `${base}-${randomBytes(3).toString('hex')}`
-    const existing = await prisma.project.findUnique({ where: { slug: candidate }, select: { id: true } })
-    if (!existing) return candidate
-  }
-  throw conflict("Impossible de réserver une adresse pour cette application. Réessayez.")
+/**
+ * Adresse publique du projet.
+ *
+ * On ne vérifie pas la disponibilité par une lecture préalable : hors portée de
+ * locataire, le Row Level Security masquerait les projets d'autrui et la vérification
+ * conclurait toujours « libre ». C'est la contrainte d'unicité de la base qui fait foi,
+ * et l'appelant réessaie avec une autre adresse en cas de collision.
+ */
+function candidateSlug(name: string): string {
+  return `${slugify(name)}-${randomBytes(3).toString('hex')}`
+}
+
+/** Vrai lorsque l'échec vient de la contrainte d'unicité sur l'adresse publique. */
+function isSlugCollision(error: unknown): boolean {
+  const code = (error as { code?: string } | null)?.code
+  const target = (error as { meta?: { target?: unknown } } | null)?.meta?.target
+  return code === 'P2002' && JSON.stringify(target ?? '').includes('slug')
 }
 
 function readThemeColor(draftSpec: unknown): string {

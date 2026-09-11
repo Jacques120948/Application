@@ -41,7 +41,10 @@ export const GENERATION_STEPS = {
 } as const satisfies Record<string, OperationProfile>
 
 export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
-  ideas: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
+  ideas: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'medium' },
+  // La validation engage l'utilisateur à construire ou à renoncer : elle mérite le
+  // modèle de raisonnement, même si elle est appelée souvent.
+  validate: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'high' },
   blueprint: { model: MODELS.fast, maxTokens: 3_000, effort: 'medium' },
   generate: { model: MODELS.reasoning, maxTokens: 16_000, effort: 'high' },
   edit: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },

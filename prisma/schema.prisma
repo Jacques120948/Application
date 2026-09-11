@@ -34,6 +34,8 @@ model User {
 
   sessions      Session[]
   projects      Project[]
+  profile       CreatorProfile?
+  ideas         Idea[]
   tokens        VerificationToken[]
   subscription  Subscription?
   wallet        CreditWallet?
@@ -93,6 +95,10 @@ model Plan {
   allowExport       Boolean  @default(false)
   allowCustomDomain Boolean  @default(false)
   allowMobilePrep   Boolean  @default(false)
+  /// Permet de générer réellement une application. L'offre gratuite s'arrête avant.
+  allowBuild        Boolean  @default(true)
+  /// Mise en avant dans la grille tarifaire.
+  isRecommended     Boolean  @default(false)
   isActive          Boolean  @default(true)
   sortOrder         Int      @default(0)
   createdAt         DateTime @default(now())
@@ -175,6 +181,88 @@ model AiUsage {
   @@index([createdAt])
 }
 
+// ─────────────────── Parcours entrepreneurial du créateur ────────────────────
+
+/**
+ * Profil du créateur : son objectif de revenu et ce dont il dispose.
+ *
+ * C'est le fil conducteur du produit. L'objectif n'est jamais présenté comme un revenu
+ * garanti : il sert uniquement à cadrer le choix d'idée, le modèle économique et le prix.
+ */
+model CreatorProfile {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @unique @db.Uuid
+  /// Objectif de chiffre d'affaires mensuel visé, en centimes.
+  monthlyGoalCents Int
+  weeklyHours      Int
+  budgetCents      Int
+  country          String    @default("France")
+  skills           String    @default("")
+  interests        String    @default("")
+  sector           String    @default("")
+  /// particuliers | professionnels | les-deux
+  audience         String    @default("particuliers")
+  /// simple | ambitieux
+  ambition         String    @default("simple")
+  /// subscription | one_time | freemium | indifferent
+  preferredModel   String    @default("indifferent")
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+enum IdeaStatus {
+  PROPOSED
+  SELECTED
+  DISCARDED
+}
+
+/**
+ * Idée d'application proposée au créateur, chiffrée et comparable.
+ *
+ * Les grandeurs commerciales sont enregistrées comme des nombres et non comme des
+ * phrases : c'est ce qui permet de comparer des idées et de calculer le nombre de clients
+ * nécessaires à l'objectif.
+ */
+model Idea {
+  id                    String     @id @default(uuid()) @db.Uuid
+  userId                String     @db.Uuid
+  title                 String
+  problem               String
+  audience              String
+  valueProposition      String
+  /// Liste de fonctionnalités, en texte simple.
+  features              Json
+  /// free | one_time | subscription | freemium | credits
+  businessModel         String
+  recommendedPriceCents Int
+  /// once | month | year
+  priceInterval         String
+  opportunityScore      Int
+  /// faible | moyenne | bonne | forte
+  demandLevel           String
+  competitionLevel      String
+  complexityLevel       String
+  operatingCostLevel    String
+  timeToMarketWeeks     Int
+  /// Calculé par la plateforme, jamais par le modèle. Voir server/business/economics.ts
+  customersNeeded       Int
+  risks                 Json
+  differentiators       Json
+  /// Rapport de validation approfondie, produit à la demande.
+  validation            Json?
+  validatedAt           DateTime?
+  status                IdeaStatus @default(PROPOSED)
+  createdAt             DateTime   @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project?
+
+  @@index([userId, createdAt])
+}
+
 // ──────────────────────────────── Projets ────────────────────────────────────
 
 enum ProjectStatus {
@@ -187,6 +275,8 @@ enum ProjectStatus {
 model Project {
   id                 String        @id @default(uuid()) @db.Uuid
   ownerId            String        @db.Uuid
+  /// Idée dont ce projet est issu, quand il vient du parcours guidé.
+  ideaId             String?       @unique @db.Uuid
   name               String
   slug               String        @unique
   status             ProjectStatus @default(DRAFT)
@@ -203,6 +293,7 @@ model Project {
   deletedAt          DateTime?
 
   owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sourceIdea Idea?          @relation(fields: [ideaId], references: [id], onDelete: SetNull)
   versions ProjectVersion[]
   messages ChatMessage[]
   checks   ProjectCheck[]

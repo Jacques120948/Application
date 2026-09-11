@@ -46,7 +46,8 @@ export function AuthForm({
       setBusy(false)
       return
     }
-    router.push(`/${locale}/dashboard`)
+    // Après inscription, le parcours commence par l'objectif, jamais par une idée.
+    router.push(mode === 'register' ? `/${locale}/objectif` : `/${locale}/dashboard`)
     router.refresh()
   }
 

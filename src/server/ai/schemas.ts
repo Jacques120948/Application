@@ -48,32 +48,109 @@ export const blueprintSchema = z
 
 export type Blueprint = z.infer<typeof blueprintSchema>
 
-export const ideasSchema = z
+/** Échelle commune à tous les indicateurs qualitatifs, pour rester comparable. */
+export const LEVELS = ['faible', 'moyen', 'fort'] as const
+
+export const BUSINESS_MODELS = ['one_time', 'subscription', 'freemium', 'credits'] as const
+export const PRICE_INTERVALS = ['once', 'month', 'year'] as const
+
+/**
+ * Idée proposée au créateur.
+ *
+ * Les grandeurs commerciales sont des **nombres**, pas des phrases : c'est ce qui permet
+ * de comparer deux idées et d'en déduire un nombre de clients. Le modèle ne calcule jamais
+ * ce nombre lui-même — c'est la plateforme qui le fait, à partir du prix et de l'objectif
+ * (voir server/business/economics.ts).
+ */
+export const ideaSuggestionSchema = z
   .object({
-    ideas: z
-      .array(
-        z
-          .object({
-            title: z.string().min(1).max(80),
-            problem: z.string().min(1).max(300),
-            audience: z.string().min(1).max(200),
-            solution: z.string().min(1).max(400),
-            features: z.array(z.string().min(1).max(120)).min(3).max(7),
-            monetization: z.string().min(1).max(200),
-            difficulty: z.enum(['facile', 'moyenne', 'exigeante']),
-            startingCost: z.string().min(1).max(120),
-            competition: z.string().min(1).max(200),
-            /** Formulation obligatoire en potentiel, jamais en promesse de revenus. */
-            potential: z.string().min(1).max(300),
-          })
-          .strict(),
-      )
-      .min(2)
-      .max(4),
+    title: z.string().min(1).max(80),
+    problem: z.string().min(1).max(400),
+    audience: z.string().min(1).max(200),
+    valueProposition: z.string().min(1).max(300),
+    features: z.array(z.string().min(1).max(120)).min(3).max(6),
+    businessModel: z.enum(BUSINESS_MODELS),
+    /** Prix conseillé, en centimes. */
+    recommendedPriceCents: z.number().int().min(0).max(500_000),
+    priceInterval: z.enum(PRICE_INTERVALS),
+    /** Note d'opportunité globale, de 0 à 100. */
+    opportunityScore: z.number().int().min(0).max(100),
+    demandLevel: z.enum(LEVELS),
+    competitionLevel: z.enum(LEVELS),
+    complexityLevel: z.enum(LEVELS),
+    operatingCostLevel: z.enum(LEVELS),
+    /** Délai réaliste avant une première version présentable, en semaines. */
+    timeToMarketWeeks: z.number().int().min(1).max(26),
+    risks: z.array(z.string().min(1).max(200)).min(1).max(3),
+    differentiators: z.array(z.string().min(1).max(200)).min(1).max(3),
   })
   .strict()
 
+export type IdeaSuggestion = z.infer<typeof ideaSuggestionSchema>
+
+export const ideasSchema = z
+  .object({ ideas: z.array(ideaSuggestionSchema).min(3).max(5) })
+  .strict()
+
 export type Ideas = z.infer<typeof ideasSchema>
+
+/**
+ * Rapport de validation d'une idée choisie.
+ *
+ * Objectif : éviter de construire à l'aveugle. Le rapport doit pouvoir conclure
+ * « à éviter » — une validation qui valide toujours ne sert à rien.
+ */
+export const validationSchema = z
+  .object({
+    opportunityScore: z.number().int().min(0).max(100),
+    demandLevel: z.enum(LEVELS),
+    competitionLevel: z.enum(LEVELS),
+    complexityLevel: z.enum(LEVELS),
+    operatingCostLevel: z.enum(LEVELS),
+    marketSize: z.string().min(1).max(300),
+    problemAssessment: z.string().min(1).max(500),
+    audienceAssessment: z.string().min(1).max(400),
+    competitors: z
+      .array(z.object({ name: z.string().min(1).max(80), note: z.string().min(1).max(240) }).strict())
+      .max(4),
+    essentialFeatures: z.array(z.string().min(1).max(120)).min(3).max(6),
+    featuresToAvoid: z.array(z.string().min(1).max(120)).max(4),
+    businessModel: z.enum(BUSINESS_MODELS),
+    recommendedPriceCents: z.number().int().min(0).max(500_000),
+    priceInterval: z.enum(PRICE_INTERVALS),
+    pricingRationale: z.string().min(1).max(400),
+    acquisitionDifficulty: z.enum(LEVELS),
+    acquisitionChannels: z.array(z.string().min(1).max(160)).min(2).max(4),
+    risks: z
+      .array(
+        z
+          .object({
+            risk: z.string().min(1).max(240),
+            mitigation: z.string().min(1).max(240),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(4),
+    differentiators: z.array(z.string().min(1).max(200)).min(1).max(3),
+    /** Transparence (exigence 29) : ce qui dépendra d'un tiers, et si c'est payant. */
+    externalServices: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(80),
+            why: z.string().min(1).max(200),
+            paid: z.boolean(),
+          })
+          .strict(),
+      )
+      .max(4),
+    verdict: z.enum(['a-lancer', 'a-ajuster', 'a-eviter']),
+    verdictReason: z.string().min(1).max(500),
+  })
+  .strict()
+
+export type IdeaValidation = z.infer<typeof validationSchema>
 
 /**
  * Réponse de l'assistant à une demande de modification.

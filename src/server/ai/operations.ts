@@ -22,6 +22,7 @@ import {
   GENERATE_PAGE_SYSTEM,
   GENERATE_PLAN_SYSTEM,
   IDEAS_SYSTEM,
+  VALIDATION_SYSTEM,
 } from './prompts'
 import {
   appPlanSchema,
@@ -29,9 +30,11 @@ import {
   editResponseSchema,
   ideasSchema,
   pageContentSchema,
+  validationSchema,
   type Blueprint,
   type EditResponse,
   type Ideas,
+  type IdeaValidation,
 } from './schemas'
 
 /**
@@ -120,12 +123,12 @@ async function callStructured<T>(params: {
     )
   }
 
-  const parsed = params.schema.safeParse(raw)
+  const parsed = parseTolerantly(params.schema, raw)
   if (!parsed.success) {
-    logger.warn('réponse de l\'assistant non conforme au schéma', {
+    logger.warn("réponse de l'assistant non conforme au schéma", {
       model: params.model,
-      issue: parsed.error.issues[0]?.message,
-      path: parsed.error.issues[0]?.path.join('.'),
+      issue: parsed.issue,
+      path: parsed.path,
     })
     throw new AppError(
       'AI_UNAVAILABLE',
@@ -135,6 +138,65 @@ async function callStructured<T>(params: {
   }
 
   return { value: parsed.data, usage, latencyMs, model: params.model }
+}
+
+/**
+ * Valide la réponse, en rattrapant le seul écart qui ne mérite pas de jeter un appel payant :
+ * un texte un peu plus long que la borne du schéma.
+ *
+ * Constat en conditions réelles : une analyse d'idée de quarante secondes a été perdue
+ * parce que la conclusion faisait 512 caractères au lieu de 500. La contrainte de
+ * grammaire ne fait pas respecter les longueurs ; nos bornes servent à borner le stockage,
+ * pas à juger la qualité. On tronque donc, une fois, puis on revalide.
+ */
+function parseTolerantly<T>(
+  schema: ZodType<T>,
+  raw: unknown,
+): { success: true; data: T } | { success: false; issue?: string; path?: string } {
+  const first = schema.safeParse(raw)
+  if (first.success) return { success: true, data: first.data }
+
+  const overflows = first.error.issues.filter(
+    (issue): issue is typeof issue & { maximum: number | bigint } =>
+      issue.code === 'too_big' && issue.origin === 'string',
+  )
+  if (overflows.length === 0 || overflows.length !== first.error.issues.length) {
+    const issue = first.error.issues[0]
+    return { success: false, issue: issue?.message, path: issue?.path.join('.') }
+  }
+
+  const repaired = structuredClone(raw)
+  for (const issue of overflows) {
+    const maximum = Number(issue.maximum)
+    if (!Number.isFinite(maximum) || maximum <= 1) continue
+    truncateAt(repaired, issue.path as Array<string | number>, maximum)
+  }
+
+  const second = schema.safeParse(repaired)
+  if (second.success) {
+    logger.info("réponse de l'assistant tronquée aux bornes du schéma", {
+      fields: overflows.map((issue) => issue.path.join('.')),
+    })
+    return { success: true, data: second.data }
+  }
+  const issue = second.error.issues[0]
+  return { success: false, issue: issue?.message, path: issue?.path.join('.') }
+}
+
+function truncateAt(root: unknown, path: Array<string | number>, maximum: number): void {
+  const last = path[path.length - 1]
+  if (last === undefined) return
+
+  let current: unknown = root
+  for (const segment of path.slice(0, -1)) {
+    if (typeof current !== 'object' || current === null) return
+    current = (current as Record<string | number, unknown>)[segment]
+  }
+  if (typeof current !== 'object' || current === null) return
+
+  const container = current as Record<string | number, unknown>
+  const value = container[last]
+  if (typeof value === 'string') container[last] = value.slice(0, maximum).trimEnd()
 }
 
 type Accounting = { userId: string; projectId?: string; operation: CreditedOperation }
@@ -439,19 +501,23 @@ export async function requestEdit(
   return { ...result, value: toPatchOperations(result.value) }
 }
 
-export type IdeaProfile = {
-  goal: string
-  skills: string
-  sector: string
-  budget: string
-  time: string
+/** Profil du créateur, tel qu'il est transmis au copilote. */
+export type CreatorProfileInput = {
+  monthlyGoalCents: number
+  weeklyHours: number
+  budgetCents: number
   country: string
+  skills: string
+  interests: string
+  sector: string
   audience: string
+  ambition: string
+  preferredModel: string
 }
 
 export async function suggestIdeas(
   userId: string,
-  profile: IdeaProfile,
+  profile: CreatorProfileInput,
   locale: string,
 ): Promise<RunResult<Ideas>> {
   return runSingleCall({
@@ -460,8 +526,28 @@ export async function suggestIdeas(
     schema: ideasSchema,
     userContent: [
       `Langue des textes à produire : ${locale}.`,
-      asUserData('profil', JSON.stringify(profile, null, 2)),
+      asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
       "Propose des idées d'applications adaptées à ce profil.",
+    ].join('\n\n'),
+  })
+}
+
+/** Examen approfondi d'une idée choisie, avant toute construction. */
+export async function validateIdea(
+  userId: string,
+  idea: unknown,
+  profile: CreatorProfileInput,
+  locale: string,
+): Promise<RunResult<IdeaValidation>> {
+  return runSingleCall({
+    accounting: { userId, operation: 'validate' },
+    system: VALIDATION_SYSTEM,
+    schema: validationSchema,
+    userContent: [
+      `Langue des textes à produire : ${locale}.`,
+      asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
+      asUserData('idee_a_examiner', JSON.stringify(idea, null, 2)),
+      'Examine cette idée et rends ton verdict.',
     ].join('\n\n'),
   })
 }

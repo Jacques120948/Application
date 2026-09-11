@@ -5,7 +5,7 @@ import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import { getWallet } from '@/server/billing/credits'
-import { heuristicBlueprint } from '@/server/projects/blueprint-fallback'
+import { heuristicBlueprint } from '@/server/projects/blueprints'
 import {
   applyManualPatch,
   createProject,
@@ -58,6 +58,19 @@ function sampleInput(model: { fields: readonly DataField[] }): Record<string, un
 let userId: string
 let projectId: string
 
+/**
+ * Abonne l'utilisateur à une offre qui autorise la construction.
+ * L'offre de découverte s'arrête volontairement avant : sans cet abonnement, créer un
+ * projet est refusé, ce qui est le comportement voulu du produit.
+ */
+async function subscribeToBuildPlan(userId: string, planId = 'builder'): Promise<void> {
+  await prisma.subscription.upsert({
+    where: { userId },
+    create: { userId, planId, status: 'ACTIVE' },
+    update: { planId, status: 'ACTIVE' },
+  })
+}
+
 beforeAll(async () => {
   for (const plan of DEFAULT_PLANS) {
     await prisma.plan.upsert({
@@ -72,6 +85,7 @@ beforeAll(async () => {
     { ip: randomUUID() },
   )
   userId = account.userId
+  await subscribeToBuildPlan(userId)
   const idea = 'Une application de réservation de créneaux pour un salon de coiffure'
   const created = await createProject(userId, {
     idea,
@@ -221,7 +235,19 @@ describe('données d’une application publiée', () => {
 describe('crédits', () => {
   it('n’est pas débité par les opérations sans IA', async () => {
     const wallet = await getWallet(userId)
-    const plan = DEFAULT_PLANS.find((candidate) => candidate.id === 'starter')!
+    const plan = DEFAULT_PLANS.find((candidate) => candidate.id === 'builder')!
+    // Tout le parcours ci-dessus s'est fait sans appel au copilote : rien n'est débité.
     expect(wallet.balance).toBe(plan.monthlyCredits)
+  })
+
+  it('donne accès aux crédits de la nouvelle offre dès le changement', async () => {
+    await subscribeToBuildPlan(userId, 'launch')
+    const downgraded = await getWallet(userId)
+    expect(downgraded.monthlyGrant).toBe(100)
+
+    await subscribeToBuildPlan(userId, 'business')
+    const upgraded = await getWallet(userId)
+    expect(upgraded.monthlyGrant).toBe(800)
+    expect(upgraded.balance).toBe(800)
   })
 })

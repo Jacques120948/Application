@@ -38,6 +38,9 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           <LinkButton href={`/${locale}/inscription`} size="large" className="mt-9">
             {t('home.cta')}
           </LinkButton>
+          <p className="mx-auto mt-6 max-w-xl text-sm text-[var(--color-ink-faint)]">
+            {t('home.notAnotherBuilder')}
+          </p>
         </section>
 
         <section className="grid gap-4 pb-20 sm:grid-cols-3">

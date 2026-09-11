@@ -2,11 +2,15 @@ import type { Blueprint } from '@/server/ai/schemas'
 import { chooseTemplate, TEMPLATE_LABELS } from '@/server/spec/templates'
 
 /**
- * Plan d'application construit sans IA.
+ * Construction du plan qui sert d'entrée au générateur d'application.
  *
- * Utilisé uniquement lorsque l'assistant n'est pas configuré sur l'installation.
- * L'interface indique alors explicitement que la structure vient d'un modèle de départ
- * et non de l'assistant : on ne fait jamais passer une heuristique pour de l'IA.
+ * Deux sources possibles, aucune n'appelle le modèle :
+ *   - `blueprintFromIdea` : parcours guidé. L'idée a déjà été proposée puis analysée, tout
+ *     est connu. Rappeler le modèle pour reformuler ce qu'il vient de dire serait payer
+ *     deux fois et risquer une incohérence.
+ *   - `heuristicBlueprint` : repli quand le copilote n'est pas configuré. L'interface
+ *     indique alors explicitement que la structure vient d'un modèle de départ, jamais
+ *     qu'une IA a travaillé.
  */
 
 const THEME_BY_KIND = {
@@ -92,6 +96,73 @@ function deriveName(idea: string): string {
   const picked = words.slice(0, 2)
   if (picked.length === 0) return 'Mon application'
   return picked.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+}
+
+/** Plan déduit d'une idée déjà proposée et analysée par le copilote. */
+export function blueprintFromIdea(idea: {
+  title: string
+  problem: string
+  valueProposition: string
+  audience: string
+  features: readonly string[]
+  businessModel: string
+  differentiators: readonly string[]
+  validation: {
+    essentialFeatures?: readonly string[]
+    featuresToAvoid?: readonly string[]
+    pricingRationale?: string
+  } | null
+}): Blueprint {
+  const description = [idea.problem, idea.valueProposition].join(' ').trim()
+  const templateKind = chooseTemplate(`${idea.title} ${idea.problem} ${idea.valueProposition}`)
+
+  // La validation prime sur la proposition initiale : c'est l'analyse la plus complète.
+  const retained = idea.validation?.essentialFeatures ?? idea.features
+  const features = retained.slice(0, 6).map((feature) => ({
+    title: feature.slice(0, 80),
+    body: `Prévu dans la première version pour ${idea.audience.slice(0, 200)}.`,
+  }))
+
+  const limitations = (idea.validation?.featuresToAvoid ?? [])
+    .slice(0, 4)
+    .map((feature) => `Volontairement écarté de la première version : ${feature}`)
+
+  return {
+    feasible: true,
+    appName: idea.title.slice(0, 60),
+    tagline: idea.valueProposition.slice(0, 160),
+    concept: idea.problem.slice(0, 600),
+    description: description.length > 0 ? description.slice(0, 1500) : idea.title,
+    features:
+      features.length >= 2
+        ? features
+        : [...features, { title: 'Espace personnel', body: 'Chaque utilisateur retrouve ses données.' }],
+    monetization: [
+      {
+        model: normaliseModel(idea.businessModel),
+        label: MODEL_LABEL[normaliseModel(idea.businessModel)],
+        rationale:
+          idea.validation?.pricingRationale?.slice(0, 300) ??
+          idea.differentiators[0]?.slice(0, 300) ??
+          'Modèle retenu lors de l’analyse de l’idée.',
+      },
+    ],
+    templateKind,
+    themePreset: THEME_BY_KIND[templateKind],
+    limitations,
+  }
+}
+
+const MODEL_LABEL = {
+  free: 'Application gratuite',
+  one_time: 'Paiement unique',
+  subscription: 'Abonnement',
+  freemium: 'Gratuit puis payant',
+  credits: 'Crédits',
+} as const
+
+function normaliseModel(value: string): keyof typeof MODEL_LABEL {
+  return value in MODEL_LABEL ? (value as keyof typeof MODEL_LABEL) : 'subscription'
 }
 
 export function heuristicBlueprint(idea: string): Blueprint {

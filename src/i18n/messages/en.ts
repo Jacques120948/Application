@@ -2,7 +2,7 @@ import type { fr } from './fr'
 
 export const en: Record<keyof typeof fr, string> = {
   'common.appName': 'AppForge',
-  'common.tagline': 'Describe your idea. AI builds your app.',
+  'common.tagline': 'Find an idea. Build it. Launch it. Monetise it. Without coding.',
   'common.loading': 'One moment…',
   'common.save': 'Save',
   'common.cancel': 'Cancel',
@@ -13,22 +13,28 @@ export const en: Record<keyof typeof fr, string> = {
   'common.error': 'Something went wrong.',
   'common.retry': 'Try again',
 
-  'nav.dashboard': 'My apps',
+  'nav.dashboard': 'My project',
+  'nav.ideas': 'My ideas',
+  'nav.objective': 'My goal',
   'nav.logout': 'Sign out',
   'nav.login': 'Sign in',
   'nav.register': 'Create account',
   'nav.admin': 'Administration',
 
-  'home.heroTitle': 'Your idea becomes an app.',
+  'home.heroTitle': 'From your idea to your first sellable app.',
   'home.heroBody':
-    'Describe what you want to build, in plain words. The assistant builds the app, you test it, then you put it online.',
-  'home.cta': 'Create my app',
-  'home.step1Title': 'You describe',
-  'home.step1Body': 'One sentence is enough. No technical skills needed.',
-  'home.step2Title': 'The assistant builds',
-  'home.step2Body': 'Structure, design, features and business model are proposed to you.',
-  'home.step3Title': 'You publish',
-  'home.step3Body': 'Your app goes online with an address you can share.',
+    "You don't need an idea, and you don't need to code. Tell us what you are aiming for and what you can do: we suggest what to build, we build it with you, and we guide you to your first customers.",
+  'home.cta': 'Start with my goal',
+  'home.step1Title': 'We find what to build',
+  'home.step1Body':
+    'You state your goal, your time and your skills. We propose costed ideas, with a suggested price and the matching number of customers.',
+  'home.step2Title': 'We check before building',
+  'home.step2Body':
+    'Demand, competition, price, risks: the idea is analysed so you avoid working for nothing.',
+  'home.step3Title': 'We build and publish',
+  'home.step3Body': 'The app is created, tested, then published at an address you can share.',
+  'home.notAnotherBuilder':
+    "We don't just ask what you want to build. We help you work out what to build, why, and how to sell it.",
 
   'auth.registerTitle': 'Create your account',
   'auth.loginTitle': 'Sign in',

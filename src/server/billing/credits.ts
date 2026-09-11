@@ -18,18 +18,26 @@ import { DEFAULT_PLANS, FREE_PLAN_ID, getEffectivePlan } from './plans'
  * textes marketing arrivent en phase 4 : ils ne sont pas déclarés ici tant qu'ils
  * n'existent pas.
  */
-export type CreditedOperation = 'ideas' | 'blueprint' | 'generate' | 'edit'
+export type CreditedOperation = 'ideas' | 'validate' | 'blueprint' | 'generate' | 'edit'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
-  ideas: 5,
-  blueprint: 5,
-  generate: 40,
-  edit: 8,
+  ideas: 3,
+  validate: 5,
+  blueprint: 2,
+  generate: 20,
+  edit: 2,
 }
 
-/** 1 crédit = 1 000 micro-dollars de coût API, arrondi au supérieur. */
-const MICROS_PER_CREDIT = 1_000
+/**
+ * 1 crédit = 5 000 micro-dollars de coût API, arrondi au supérieur.
+ *
+ * Cette unité n'est pas arbitraire : elle est choisie pour que le modèle tarifaire de
+ * référence tienne debout. Construire une application coûte environ 0,105 USD, soit 21
+ * crédits ; l'offre Launch en accorde 100 par mois. Changer l'unité ici recalibre tout le
+ * système sans toucher à la mécanique.
+ */
+const MICROS_PER_CREDIT = 5_000
 
 export function creditsForCost(operation: CreditedOperation, costMicros: number): number {
   return Math.max(MINIMUM_COST[operation], Math.ceil(costMicros / MICROS_PER_CREDIT))
@@ -69,9 +77,19 @@ export async function getWallet(userId: string) {
   const plan = await getEffectivePlan(userId)
   const now = new Date()
 
-  if (wallet.resetsAt <= now || wallet.monthlyGrant !== plan.monthlyCredits) {
-    const renew = wallet.resetsAt <= now
-    const balance = renew ? plan.monthlyCredits : wallet.balance
+  const renew = wallet.resetsAt <= now
+  // Un changement d'offre vers le haut donne accès aux crédits immédiatement : faire
+  // attendre le renouvellement mensuel après un paiement serait incompréhensible.
+  const upgrade = !renew && plan.monthlyCredits > wallet.monthlyGrant
+
+  if (renew || upgrade || wallet.monthlyGrant !== plan.monthlyCredits) {
+    const balance = renew
+      ? plan.monthlyCredits
+      : upgrade
+        ? Math.max(wallet.balance, plan.monthlyCredits)
+        : wallet.balance
+    const previousBalance = wallet.balance
+
     wallet = await prisma.creditWallet.update({
       where: { userId },
       data: {
@@ -80,13 +98,14 @@ export async function getWallet(userId: string) {
         resetsAt: renew ? nextResetDate(now) : wallet.resetsAt,
       },
     })
-    if (renew) {
+
+    if (balance !== previousBalance) {
       await prisma.creditLedger.create({
         data: {
           userId,
-          delta: balance,
+          delta: balance - previousBalance,
           balanceAfter: balance,
-          reason: `grant:mensuel:${plan.id}`,
+          reason: renew ? `grant:mensuel:${plan.id}` : `grant:offre:${plan.id}`,
         },
       })
     }

@@ -6,7 +6,7 @@ import { register } from '@/server/auth/service'
 import { createProject, getProject, publishProject } from '@/server/projects/service'
 import { createRecord, listRecords } from '@/server/runtime/records'
 import { withRuntimeScope, withUserScope } from '@/server/db/scope'
-import { heuristicBlueprint } from '@/server/projects/blueprint-fallback'
+import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { AppError } from '@/lib/errors'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 
@@ -28,7 +28,21 @@ async function makeUser(): Promise<string> {
   return userId
 }
 
+/**
+ * Abonne l'utilisateur à une offre qui autorise la construction.
+ * L'offre de découverte s'arrête volontairement avant : sans cet abonnement, créer un
+ * projet est refusé, ce qui est le comportement voulu du produit.
+ */
+async function subscribeToBuildPlan(userId: string, planId = 'builder'): Promise<void> {
+  await prisma.subscription.upsert({
+    where: { userId },
+    create: { userId, planId, status: 'ACTIVE' },
+    update: { planId, status: 'ACTIVE' },
+  })
+}
+
 async function makeProject(userId: string, idea: string): Promise<string> {
+  await subscribeToBuildPlan(userId)
   const blueprint = heuristicBlueprint(idea)
   const created = await createProject(userId, { idea, locale: 'fr', blueprint })
   return created.projectId
