@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "prisma generate && prisma migrate deploy && tsx prisma/seed.ts && next build",
+    "build": "prisma generate && prisma migrate deploy && tsx prisma/seed.ts && tsx scripts/verify-isolation.ts && next build",
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -19,7 +19,8 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "build:app-only": "prisma generate && next build"
+    "build:app-only": "prisma generate && next build",
+    "db:verify": "tsx scripts/verify-isolation.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.0",

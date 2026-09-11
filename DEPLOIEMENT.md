@@ -14,8 +14,8 @@ Trois choses, chacune avec son coût réel. Rien n'est caché.
 
 | Élément | À quoi ça sert | Coût |
 |---|---|---|
-| Un hébergeur | Faire tourner la plateforme sur internet | 0 à 5 € par mois |
-| Une base de données | Conserver les comptes, les idées, les applications | incluse ou gratuite |
+| Un hébergeur | Faire tourner la plateforme sur internet | gratuit avec Vercel |
+| Une base de données | Conserver les comptes, les idées, les applications | gratuite avec Supabase |
 | Une clé d'accès au copilote | Faire fonctionner l'IA | à l'usage, environ 0,37 $ par parcours complet |
 
 **Créez une nouvelle clé Anthropic.** Celle utilisée pendant le développement a circulé
@@ -24,71 +24,73 @@ avec une limite de dépense mensuelle basse (10 $ suffisent pour tester).
 
 ---
 
-## Solution recommandée : Railway
+## Vous avez déjà Vercel, GitHub et Supabase
 
-La plus simple. Un seul compte, la base de données est fournie, tout est branché
-automatiquement. Environ 5 € par mois.
+C'est la meilleure combinaison, et elle est gratuite. Aucun compte à créer.
 
-### 1. Créer le projet
+### 1. La base de données, dans Supabase
 
-1. Allez sur **railway.com** et créez un compte avec votre compte GitHub.
-2. Cliquez sur **New Project**, puis **Deploy from GitHub repo**.
-3. Choisissez le dépôt **Application** et la branche `claude/ai-nocode-app-platform-d5g0br`.
+1. Ouvrez **supabase.com**, puis votre projet. Si vous n'en avez pas encore, cliquez sur
+   **New project**. Choisissez un mot de passe pour la base et **notez-le** : il apparaît
+   une seule fois.
+2. En haut de la page, cliquez sur le bouton **Connect**.
+3. Vous voyez plusieurs adresses de connexion. Il vous en faut deux, que vous
+   reconnaîtrez à leur numéro :
+   - celle qui contient **`:6543`** — c'est le « Transaction pooler » ;
+   - celle qui contient **`:5432`** et `pooler.supabase.com` — c'est le « Session pooler ».
+4. Dans les deux, remplacez `[YOUR-PASSWORD]` par le mot de passe que vous avez noté.
+5. À la fin de la première seulement, celle en `:6543`, ajoutez `?pgbouncer=true`.
 
-Railway commence à construire. Il va échouer une première fois : c'est normal, la base de
-données n'existe pas encore.
+Gardez ces deux adresses sous la main. Ce sont des mots de passe : ne les envoyez à
+personne, y compris dans une conversation.
 
-### 2. Ajouter la base de données
+### 2. L'hébergement, dans Vercel
 
-1. Dans votre projet, cliquez sur **New**, puis **Database**, puis **Add PostgreSQL**.
-2. Railway crée la base et la relie automatiquement à votre application.
+1. Ouvrez **vercel.com**, cliquez sur **Add New**, puis **Project**.
+2. Dans la liste de vos dépôts GitHub, choisissez **Application**.
+3. Dépliez **Git Branch** et choisissez `claude/ai-nocode-app-platform-d5g0br`.
+4. Dépliez **Environment Variables** et ajoutez les réglages du tableau ci-dessous.
+5. Cliquez sur **Deploy**.
 
-### 3. Renseigner les cinq réglages
-
-Cliquez sur votre application, puis sur l'onglet **Variables**, et ajoutez ceci :
+### 3. Les réglages à recopier
 
 | Nom | Valeur à mettre |
 |---|---|
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` — copiez exactement, Railway remplace tout seul |
-| `DIRECT_DATABASE_URL` | `${{Postgres.DATABASE_URL}}` — la même chose |
+| `DATABASE_URL` | L'adresse Supabase en **`:6543`**, terminée par `?pgbouncer=true` |
+| `DIRECT_DATABASE_URL` | L'adresse Supabase en **`:5432`** |
 | `SESSION_SECRET` | Quarante caractères au hasard, tapés sur votre clavier |
 | `ENCRYPTION_KEY` | Quarante autres caractères au hasard, différents |
 | `ANTHROPIC_API_KEY` | Votre nouvelle clé, celle qui commence par `sk-ant-` |
-| `APP_URL` | L'adresse que Railway vous donne, par exemple `https://appforge-xxxx.up.railway.app` |
-| `SIGNUP_CODE` | Un mot de passe de votre choix. Sans lui, n'importe qui pourrait créer un compte |
+| `SIGNUP_CODE` | Un mot de passe de votre choix, sans lui n'importe qui pourrait créer un compte |
+| `APP_URL` | À remplir après le premier déploiement, voir juste en dessous |
 
-Pour `APP_URL` : allez d'abord dans **Settings**, section **Networking**, et cliquez sur
-**Generate Domain**. Railway vous donne l'adresse, que vous recopiez dans `APP_URL`.
+`APP_URL` ne peut être connue qu'une fois le site déployé. Laissez-la vide au premier
+essai. Vercel vous donnera une adresse du type `application-xxxx.vercel.app` : revenez
+alors dans **Settings**, puis **Environment Variables**, ajoutez `APP_URL` avec cette
+adresse complète, précédée de `https://`, et relancez le déploiement avec **Redeploy**.
 
-### 4. Relancer
+### 4. Ce que la mise en ligne fait toute seule
 
-Cliquez sur **Deploy**. Cette fois la construction va au bout. Elle prépare la base de
-données toute seule, sans que vous ayez rien à faire.
-
-Ouvrez votre adresse. Vous êtes chez vous.
+Vous n'avez aucune commande à taper. La construction prépare la base de données, insère
+vos quatre formules, puis **vérifie que le cloisonnement des données fonctionne
+réellement**. Si la base ne protège pas correctement les comptes les uns des autres, la
+mise en ligne s'interrompt avec un message clair au lieu de mettre un site vulnérable sur
+Internet.
 
 ---
 
-## Solution gratuite : Vercel et Neon
+## Autre possibilité : Railway
 
-Gratuite, mais deux comptes à créer au lieu d'un, et un peu plus de copier-coller.
+Si vous préférez ne gérer qu'un seul service, Railway fournit l'hébergement et la base
+ensemble, pour environ 5 € par mois.
 
-### 1. La base de données
-
-1. Allez sur **neon.com**, créez un compte, puis un projet.
-2. Dans **Connection string**, copiez deux adresses :
-   - celle marquée **Pooled connection** — ce sera `DATABASE_URL` ;
-   - celle marquée **Direct connection** — ce sera `DIRECT_DATABASE_URL`.
-3. À la fin de la première adresse seulement, ajoutez `&pgbouncer=true`.
-
-### 2. L'hébergement
-
-1. Allez sur **vercel.com**, créez un compte avec GitHub.
-2. **Add New**, puis **Project**, choisissez le dépôt **Application** et la branche
-   `claude/ai-nocode-app-platform-d5g0br`.
-3. Dans **Environment Variables**, ajoutez les mêmes sept réglages que dans le tableau
-   ci-dessus, avec les deux adresses de Neon.
-4. Cliquez sur **Deploy**.
+1. Sur **railway.com**, **New Project**, puis **Deploy from GitHub repo**, choisissez
+   **Application** et la branche `claude/ai-nocode-app-platform-d5g0br`.
+2. **New**, **Database**, **Add PostgreSQL**. Railway relie tout seul.
+3. Dans **Variables**, mettez `${{Postgres.DATABASE_URL}}` pour `DATABASE_URL` **et** pour
+   `DIRECT_DATABASE_URL`, puis les cinq autres réglages du tableau ci-dessus.
+4. Dans **Settings**, **Networking**, cliquez sur **Generate Domain** pour obtenir votre
+   adresse, recopiez-la dans `APP_URL`, et relancez.
 
 ---
 
@@ -123,6 +125,18 @@ Ces éléments ne sont pas développés, et leur absence ne vous empêche pas de
 
 ## Si quelque chose ne marche pas
 
-L'erreur la plus fréquente est une adresse de base de données mal recopiée. Sur Railway,
-regardez l'onglet **Deployments**, puis le journal de la dernière construction : le message
-d'erreur y est écrit en clair. Envoyez-le moi, je vous dirai quoi corriger.
+L'erreur la plus fréquente est une adresse de base de données mal recopiée : mot de passe
+non remplacé, ou les deux adresses interverties.
+
+Sur Vercel, ouvrez le déploiement raté et regardez **Building**. Sur Railway, regardez
+l'onglet **Deployments**. Le message y est écrit en clair.
+
+Deux messages ont un sens précis :
+
+- **« MISE EN LIGNE INTERROMPUE : le cloisonnement des données n'est pas garanti »** — la
+  base ne protège pas les comptes les uns des autres. C'est volontaire : mieux vaut pas de
+  site qu'un site qui laisse fuiter les données de vos clients. Envoyez-moi le détail.
+- **« Can't reach database server »** — l'adresse de connexion est mauvaise, ou le mot de
+  passe n'a pas été remplacé dans l'adresse.
+
+Dans tous les cas, copiez-moi le message et je vous dirai quoi corriger.
