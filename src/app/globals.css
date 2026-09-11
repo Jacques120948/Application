@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+/*
+ * Design system de la plateforme (exigence 39).
+ *
+ * Une seule échelle de couleurs, d'espacements et de rayons. Les composants ne
+ * définissent jamais de valeur arbitraire : ils consomment ces jetons.
+ */
+
+@theme {
+  --color-ink: #0f172a;
+  --color-ink-soft: #475569;
+  --color-ink-faint: #94a3b8;
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-line: #e2e8f0;
+
+  --color-brand: #2563eb;
+  --color-brand-strong: #1d4ed8;
+  --color-brand-soft: #eff6ff;
+
+  --color-positive: #15803d;
+  --color-positive-soft: #f0fdf4;
+  --color-caution: #b45309;
+  --color-caution-soft: #fffbeb;
+  --color-critical: #b91c1c;
+  --color-critical-soft: #fef2f2;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Focus visible et cohérent partout : exigence d'accessibilité de base. */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -176,6 +176,8 @@ export type ProjectDetail = {
   publishedAt: Date | null
   publishedVersionId: string | null
   report: CheckReport
+  /** Vrai si un test a déjà été lancé sur ce projet : la progression survit au rechargement. */
+  hasBeenTested: boolean
 }
 
 export async function getProject(userId: string, projectId: string): Promise<ProjectDetail> {
@@ -195,6 +197,7 @@ export async function getProject(userId: string, projectId: string): Promise<Pro
       publishedAt: project.publishedAt,
       publishedVersionId: project.publishedVersionId,
       report: runChecks(spec),
+      hasBeenTested: project.lastCheckScore !== null,
     }
   })
 }

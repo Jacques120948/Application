@@ -1,0 +1,44 @@
+import type { ReactNode } from 'react'
+import { getTranslator, type Locale } from '@/i18n'
+import { LogoutButton } from './LogoutButton'
+
+/** Cadre du studio : en-tête sobre, contenu centré (exigence 38). */
+export function Shell({
+  locale,
+  userName,
+  credits,
+  children,
+}: {
+  locale: Locale
+  userName?: string | null
+  credits?: number
+  children: ReactNode
+}) {
+  const t = getTranslator(locale)
+  return (
+    <div className="min-h-screen">
+      <header className="border-b border-[var(--color-line)] bg-[var(--color-surface)]">
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-4 px-5 py-3.5">
+          <a
+            href={`/${locale}/dashboard`}
+            className="text-base font-semibold text-[var(--color-ink)] no-underline"
+          >
+            {t('common.appName')}
+          </a>
+          <div className="ml-auto flex items-center gap-4 text-sm">
+            {credits !== undefined ? (
+              <span className="text-[var(--color-ink-soft)]">
+                {t('dashboard.credits')} : <strong className="text-[var(--color-ink)]">{credits}</strong>
+              </span>
+            ) : null}
+            {userName !== undefined && userName !== null ? (
+              <span className="text-[var(--color-ink-soft)]">{userName}</span>
+            ) : null}
+            <LogoutButton label={t('nav.logout')} locale={locale} />
+          </div>
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-6xl px-5 py-8">{children}</main>
+    </div>
+  )
+}

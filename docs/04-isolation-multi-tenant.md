@@ -36,8 +36,9 @@ const scope = await requireProjectScope(projectId, session.userId)
 ```
 
 Renvoyer « introuvable » plutôt que « interdit » évite de confirmer l'existence du projet
-d'autrui. Une revue de code refuse tout `prisma.` hors de `src/server/db` et
-`src/server/*/repository.ts` ; une règle ESLint le vérifie automatiquement.
+d'autrui. Aucune route ni aucun composant n'importe Prisma : `tests/unit/architecture.test.ts`
+échoue si l'un le fait, et si `PrismaClient` est instancié ailleurs que dans
+`src/server/db/client.ts`.
 
 ### Barrière 3 — Row Level Security PostgreSQL
 
@@ -60,9 +61,10 @@ Le rôle applicatif (`appforge_app`) n'est pas propriétaire des tables et n'a p
 ### Barrière 4 — Cloisonnement des sessions
 
 - Cookie studio `af_session` : émis sur le domaine de la plateforme, portée `/`.
-- Cookie d'application générée `afu_<projectId>` : **un cookie par application**, portée
-  `/a/<slug>`, contenant une session qui ne vaut que pour ce projet. Un jeton volé sur
-  l'application A est inutilisable sur l'application B et sur le studio.
+- Cookie d'application générée `afu_<projectId>` : **un cookie par application**. Son
+  empreinte en base est salée par l'identifiant du projet, donc un jeton volé sur
+  l'application A est inutilisable sur l'application B, et inutilisable sur le studio —
+  qui ne lit jamais ces cookies.
 - Les deux systèmes de session sont des tables et des modules distincts ; il n'existe
   aucune fonction capable d'échanger l'un contre l'autre.
 

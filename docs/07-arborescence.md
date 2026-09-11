@@ -48,5 +48,7 @@ Règles de dépendance, vérifiées en revue :
 
 - `src/app/**` peut importer `src/server/**` (côté serveur uniquement) et `src/components/**`.
 - `src/server/**` n'importe jamais `src/app/**`.
-- `src/components/**` n'importe jamais `src/server/**` ; il reçoit des données par props.
-- `prisma` n'est importé que dans `src/server/db/**` et les fichiers `repository.ts`.
+- `src/components/**` n'importe de `src/server/**` que des **types** ; les données arrivent par props.
+- `prisma` n'est importé que dans `src/server/**` ; jamais depuis une route ni un composant.
+
+Ces quatre règles sont vérifiées automatiquement par `tests/unit/architecture.test.ts`.
