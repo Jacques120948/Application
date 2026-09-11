@@ -14,7 +14,7 @@ import { buildTemplate, THEME_PRESETS, DEFAULT_THEME } from '@/server/spec/templ
 import { parseAppSpec } from '@/server/spec/validate'
 import type { AppSpec } from '@/server/spec/schema'
 import { SUPPORTED_LOCALES, type Locale } from '@/i18n/config'
-import { heuristicBlueprint, blueprintFromIdea } from './blueprints'
+import { heuristicBlueprint, blueprintFromIdea, blueprintFromSpecSheet } from './blueprints'
 import { getIdea } from '@/server/business/ideas'
 
 /**
@@ -146,11 +146,12 @@ export async function createProject(
 }
 
 /**
- * Construction depuis une idée du parcours guidé.
+ * Construction depuis le parcours guidé.
  *
- * On ne redemande pas au copilote de reformuler un plan : l'idée a déjà été proposée puis
- * analysée, tout est connu. Cela économise un appel payant et évite qu'une reformulation
- * contredise l'analyse que l'utilisateur vient de lire.
+ * Le moteur de génération n'est pas modifié : on lui fournit simplement son plan d'entrée
+ * habituel, dérivé du cahier des charges approuvé quand il existe, de l'idée analysée
+ * sinon. On ne redemande jamais au copilote de reformuler un plan qu'il vient de produire :
+ * cela coûterait un appel et risquerait de contredire ce que le créateur a lu et approuvé.
  */
 export async function createProjectFromIdea(
   userId: string,
@@ -164,10 +165,15 @@ export async function createProjectFromIdea(
     throw conflict('Une application a déjà été créée à partir de cette idée.')
   }
 
+  // Le cahier des charges est l'étape que le créateur lit et approuve. On ne construit
+  // pas sans lui : l'idée seule décrit une intention, pas ce qui sera livré.
+  const blueprint =
+    idea.specSheet === null ? blueprintFromIdea(idea) : blueprintFromSpecSheet(idea.specSheet)
+
   const created = await createProject(userId, {
     idea: `${idea.title}. ${idea.problem}`.slice(0, 2000),
     locale,
-    blueprint: blueprintFromIdea(idea),
+    blueprint,
   })
 
   await withUserScope(userId, async (tx) => {

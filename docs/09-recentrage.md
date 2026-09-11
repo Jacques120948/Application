@@ -55,6 +55,13 @@ On passe directement de l'idée à la construction. La vision demande une étape
 intermédiaire qui évite de construire à l'aveugle : demande, concurrence, complexité,
 coûts, risques, avantages différenciants, score d'opportunité.
 
+### D5 bis — Le cahier des charges n'est pas montré
+
+L'idée validée était traduite directement en plan d'entrée du moteur. Le créateur ne
+voyait jamais ce qui allait être construit. Il manquait l'artefact qu'il lit et approuve :
+ce qui sera fait, ce qui attendra, quels écrans, quelles données, qui peut faire quoi, ce
+qui est payant et ce que cela coûtera chaque mois.
+
 ### D6 — Le tableau de bord ne dit pas où on en est
 
 Il liste des applications avec un statut technique. Il ne répond pas aux trois questions
@@ -101,6 +108,8 @@ Priorité donnée aux six dérives, dans l'ordre où elles bloquent le parcours.
 | Idées chiffrées, comparables, enregistrées, sélectionnables | livré |
 | Nombre de clients nécessaires calculé depuis l'objectif | livré |
 | Validation d'idée avec score d'opportunité | livré |
+| Cahier des charges du MVP, lu et approuvé avant construction | livré |
+| Coût de fonctionnement mensuel estimé, affiché par idée | livré |
 | Parcours visible : étape actuelle, avancement, prochaine action | livré |
 | Entonnoir inversé : on part de l'objectif, pas de l'idée | livré |
 | Offres et unité de crédit recalibrées | livré |
@@ -111,3 +120,23 @@ Priorité donnée aux six dérives, dans l'ordre où elles bloquent le parcours.
 Rien de ce qui fonctionnait n'a été supprimé : la création d'application, l'aperçu, les
 versions, les tests et la publication sont inchangés. Ils deviennent les dernières étapes
 d'un parcours qui commence beaucoup plus tôt.
+
+## 9.5 Le point de jonction avec le moteur existant
+
+Le moteur de génération n'a pas été touché, et il n'en existe qu'un seul. Le parcours
+entrepreneurial produit un cahier des charges ; `blueprintFromSpecSheet` le traduit dans le
+format d'entrée que le moteur attend déjà, et le moteur fait son travail habituel.
+
+```
+objectif → profil → idées chiffrées → analyse → cahier des charges
+                                                       │
+                                      blueprintFromSpecSheet (traduction pure)
+                                                       │
+                                                       ▼
+                          MOTEUR EXISTANT : plan, pages, données, aperçu,
+                          versions, conversation, tests, publication
+```
+
+Ce qui a été écarté du cahier des charges, et ce qui coûtera de l'argent, suit jusque dans
+le projet sous forme de limites explicites : le créateur les revoit, elles ne disparaissent
+pas du parcours.

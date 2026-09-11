@@ -45,6 +45,9 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   // La validation engage l'utilisateur à construire ou à renoncer : elle mérite le
   // modèle de raisonnement, même si elle est appelée souvent.
   validate: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'high' },
+  // Le cahier des charges est lu et approuvé par le créateur, et il commande ensuite la
+  // construction : c'est le document le plus structurant du parcours.
+  specsheet: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'high' },
   blueprint: { model: MODELS.fast, maxTokens: 3_000, effort: 'medium' },
   generate: { model: MODELS.reasoning, maxTokens: 16_000, effort: 'high' },
   edit: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },

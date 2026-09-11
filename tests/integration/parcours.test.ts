@@ -125,3 +125,41 @@ describe('l’offre de découverte s’arrête avant la construction', () => {
     ).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
   })
 })
+
+describe('le cahier des charges commande la construction', () => {
+  it('traduit un cahier des charges approuvé en plan pour le moteur existant', async () => {
+    const { blueprintFromSpecSheet } = await import('@/server/projects/blueprints')
+
+    const blueprint = blueprintFromSpecSheet({
+      appName: 'Chaise Vide',
+      tagline: 'Moins de rendez-vous manqués dans votre salon.',
+      summary: 'Suivi des clients qui ne viennent pas, et relance simple.',
+      problem: 'Les créneaux perdus coûtent cher aux salons de coiffure.',
+      forWho: 'Les gérantes de salon indépendantes',
+      mvpFeatures: [
+        { title: 'Fiche client', why: 'Voir qui honore ses rendez-vous.' },
+        { title: 'Enregistrer un rendez-vous', why: 'En trois touches maximum.' },
+        { title: 'Clients à risque', why: 'Repérer les absences répétées.' },
+      ],
+      postponed: [{ title: 'Agenda complet', why: 'Trop lourd pour une première version.' }],
+      paymentModel: 'subscription',
+      whatIsPaid: "L'accès complet au suivi des clients.",
+      externalServices: [
+        { name: 'Encaissement des abonnements', why: 'Prélever chaque mois.', paid: true },
+      ],
+    })
+
+    expect(blueprint.appName).toBe('Chaise Vide')
+    expect(blueprint.features).toHaveLength(3)
+    expect(blueprint.monetization[0]?.model).toBe('subscription')
+    // Ce qui a été écarté et ce qui coûte de l'argent suit jusqu'au moteur : le créateur
+    // le reverra dans son projet, il ne disparaît pas du parcours.
+    expect(blueprint.limitations.some((line) => line.includes('Agenda complet'))).toBe(true)
+    expect(blueprint.limitations.some((line) => line.includes('payant'))).toBe(true)
+  })
+
+  it('refuse de construire tant que le cahier des charges n’a pas été rédigé', async () => {
+    const { createProjectFromIdea } = await import('@/server/projects/service')
+    await expect(createProjectFromIdea(userId, randomUUID(), 'fr')).rejects.toThrow(AppError)
+  })
+})

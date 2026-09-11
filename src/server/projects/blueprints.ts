@@ -98,7 +98,61 @@ function deriveName(idea: string): string {
   return picked.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
-/** Plan déduit d'une idée déjà proposée et analysée par le copilote. */
+/**
+ * Plan déduit du cahier des charges approuvé.
+ *
+ * C'est le point de jonction entre le parcours entrepreneurial et le moteur de génération
+ * qui existait déjà. Aucun second moteur n'est créé : on traduit simplement le document
+ * approuvé dans le format d'entrée que le moteur attend.
+ */
+export function blueprintFromSpecSheet(sheet: {
+  appName: string
+  tagline: string
+  summary: string
+  problem: string
+  forWho: string
+  mvpFeatures: ReadonlyArray<{ title: string; why: string }>
+  postponed: ReadonlyArray<{ title: string; why: string }>
+  paymentModel: string
+  whatIsPaid: string
+  externalServices: ReadonlyArray<{ name: string; why: string; paid: boolean }>
+}): Blueprint {
+  const templateKind = chooseTemplate(
+    `${sheet.appName} ${sheet.problem} ${sheet.tagline} ${sheet.mvpFeatures.map((f) => f.title).join(' ')}`,
+  )
+
+  const limitations = [
+    ...sheet.postponed.slice(0, 4).map((item) => `Volontairement reporté : ${item.title} — ${item.why}`),
+    ...sheet.externalServices
+      .filter((service) => service.paid)
+      .slice(0, 2)
+      .map((service) => `${service.name} est un service payant : ${service.why}`),
+  ]
+
+  return {
+    feasible: true,
+    appName: sheet.appName.slice(0, 60),
+    tagline: sheet.tagline.slice(0, 160),
+    concept: sheet.problem.slice(0, 600),
+    description: sheet.summary.slice(0, 1500),
+    features: sheet.mvpFeatures.slice(0, 8).map((feature) => ({
+      title: feature.title.slice(0, 80),
+      body: feature.why.slice(0, 300),
+    })),
+    monetization: [
+      {
+        model: normaliseModel(sheet.paymentModel),
+        label: MODEL_LABEL[normaliseModel(sheet.paymentModel)],
+        rationale: sheet.whatIsPaid.slice(0, 300),
+      },
+    ],
+    templateKind,
+    themePreset: THEME_BY_KIND[templateKind],
+    limitations: limitations.slice(0, 5),
+  }
+}
+
+/** Plan déduit d'une idée analysée, quand aucun cahier des charges n'a été rédigé. */
 export function blueprintFromIdea(idea: {
   title: string
   problem: string

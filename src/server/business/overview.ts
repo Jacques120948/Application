@@ -80,6 +80,7 @@ export async function getCreatorOverview(
     guidedPath: data.ideas.length > 0,
     hasIdea: data.ideas.some((idea) => idea.status === 'SELECTED') || data.projects.length > 0,
     ideaValidated: data.ideas.some((idea) => idea.validatedAt !== null),
+    specSheetReady: data.ideas.some((idea) => idea.specSheetAt !== null),
     projectId: current?.id ?? null,
     hasBuild: data.projects.length > 0,
     testedWithoutError,

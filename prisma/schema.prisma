@@ -251,9 +251,14 @@ model Idea {
   customersNeeded       Int
   risks                 Json
   differentiators       Json
+  /// Coût de fonctionnement mensuel estimé de l'application, en centimes.
+  runningCostCents      Int        @default(0)
   /// Rapport de validation approfondie, produit à la demande.
   validation            Json?
   validatedAt           DateTime?
+  /// Cahier des charges du MVP, lu et approuvé par le créateur avant construction.
+  specSheet             Json?
+  specSheetAt           DateTime?
   status                IdeaStatus @default(PROPOSED)
   createdAt             DateTime   @default(now())
 

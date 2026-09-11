@@ -18,12 +18,19 @@ import { DEFAULT_PLANS, FREE_PLAN_ID, getEffectivePlan } from './plans'
  * textes marketing arrivent en phase 4 : ils ne sont pas déclarés ici tant qu'ils
  * n'existent pas.
  */
-export type CreditedOperation = 'ideas' | 'validate' | 'blueprint' | 'generate' | 'edit'
+export type CreditedOperation =
+  | 'ideas'
+  | 'validate'
+  | 'specsheet'
+  | 'blueprint'
+  | 'generate'
+  | 'edit'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
   ideas: 3,
   validate: 5,
+  specsheet: 5,
   blueprint: 2,
   generate: 20,
   edit: 2,

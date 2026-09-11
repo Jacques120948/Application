@@ -14,6 +14,7 @@ export type JourneyStepId =
   | 'objectif'
   | 'idee'
   | 'validation'
+  | 'cahier'
   | 'construction'
   | 'test'
   | 'monetisation'
@@ -49,6 +50,8 @@ export type JourneyFacts = {
   guidedPath: boolean
   hasIdea: boolean
   ideaValidated: boolean
+  /** Le cahier des charges du MVP a été rédigé et peut être lu avant construction. */
+  specSheetReady: boolean
   projectId: string | null
   hasBuild: boolean
   testedWithoutError: boolean
@@ -87,6 +90,15 @@ export function computeJourney(facts: JourneyFacts): Journey {
       ...(ownIdea ? { skipped: true } : {}),
       why: 'Pour éviter de construire quelque chose que personne n’achètera.',
       action: 'Lancer l’analyse',
+      href: `${base}/idees`,
+    },
+    {
+      id: 'cahier',
+      label: 'Lire le cahier des charges',
+      done: facts.specSheetReady,
+      ...(ownIdea ? { skipped: true } : {}),
+      why: 'Vous validez ce qui sera construit, et ce qui attendra, avant que ça ne commence.',
+      action: 'Voir le cahier des charges',
       href: `${base}/idees`,
     },
     {
@@ -137,6 +149,7 @@ export function projectFacts(params: {
   hasProfile: boolean
   guidedPath: boolean
   ideaValidated: boolean
+  specSheetReady: boolean
   projectId: string
   spec: AppSpec
   report: CheckReport
@@ -149,6 +162,7 @@ export function projectFacts(params: {
     hasProfile: params.hasProfile,
     guidedPath: params.guidedPath,
     hasIdea: true,
+    specSheetReady: params.specSheetReady,
     ideaValidated: params.ideaValidated,
     projectId: params.projectId,
     hasBuild: true,

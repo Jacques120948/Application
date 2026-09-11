@@ -7,6 +7,7 @@ const nothing: JourneyFacts = {
   guidedPath: true,
   hasIdea: false,
   ideaValidated: false,
+  specSheetReady: false,
   projectId: null,
   hasBuild: false,
   testedWithoutError: false,
@@ -35,6 +36,9 @@ describe('parcours du créateur', () => {
     expect(computeJourney({ ...nothing, hasProfile: true, hasIdea: true }).next?.id).toBe(
       'validation',
     )
+    expect(
+      computeJourney({ ...nothing, hasProfile: true, hasIdea: true, ideaValidated: true }).next?.id,
+    ).toBe('cahier')
   })
 
   it('donne un avancement chiffré', () => {
@@ -43,6 +47,7 @@ describe('parcours du créateur', () => {
       hasProfile: true,
       hasIdea: true,
       ideaValidated: true,
+      specSheetReady: true,
       projectId: 'p1',
       hasBuild: true,
     })
@@ -71,6 +76,7 @@ describe('parcours du créateur', () => {
       guidedPath: true,
       hasIdea: true,
       ideaValidated: true,
+      specSheetReady: true,
       projectId: 'p1',
       hasBuild: true,
       testedWithoutError: true,

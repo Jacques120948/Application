@@ -22,6 +22,7 @@ import {
   GENERATE_PAGE_SYSTEM,
   GENERATE_PLAN_SYSTEM,
   IDEAS_SYSTEM,
+  SPECSHEET_SYSTEM,
   VALIDATION_SYSTEM,
 } from './prompts'
 import {
@@ -30,11 +31,13 @@ import {
   editResponseSchema,
   ideasSchema,
   pageContentSchema,
+  specSheetSchema,
   validationSchema,
   type Blueprint,
   type EditResponse,
   type Ideas,
   type IdeaValidation,
+  type SpecSheet,
 } from './schemas'
 
 /**
@@ -528,6 +531,33 @@ export async function suggestIdeas(
       `Langue des textes à produire : ${locale}.`,
       asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
       "Propose des idées d'applications adaptées à ce profil.",
+    ].join('\n\n'),
+  })
+}
+
+/**
+ * Cahier des charges du MVP, rédigé à partir de l'idée analysée.
+ *
+ * Étape 5 du parcours : le créateur lit ce document et l'approuve. Ce n'est pas un second
+ * générateur — une fois approuvé, il est traduit en plan d'entrée du moteur existant.
+ */
+export async function writeSpecSheet(
+  userId: string,
+  idea: unknown,
+  validation: unknown,
+  profile: CreatorProfileInput,
+  locale: string,
+): Promise<RunResult<SpecSheet>> {
+  return runSingleCall({
+    accounting: { userId, operation: 'specsheet' },
+    system: SPECSHEET_SYSTEM,
+    schema: specSheetSchema,
+    userContent: [
+      `Langue des textes à produire : ${locale}.`,
+      asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
+      asUserData('idee', JSON.stringify(idea, null, 2)),
+      ...(validation === null ? [] : [asUserData('analyse', JSON.stringify(validation, null, 2))]),
+      'Rédige le cahier des charges de la première version.',
     ].join('\n\n'),
   })
 }

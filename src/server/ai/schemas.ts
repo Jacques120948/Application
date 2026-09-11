@@ -81,6 +81,11 @@ export const ideaSuggestionSchema = z
     operatingCostLevel: z.enum(LEVELS),
     /** Délai réaliste avant une première version présentable, en semaines. */
     timeToMarketWeeks: z.number().int().min(1).max(26),
+    /**
+     * Coût de fonctionnement mensuel estimé de l'application une fois lancée, en centimes
+     * (hébergement, encaissement, e-mails, nom de domaine). Zéro est une réponse valable.
+     */
+    runningCostCents: z.number().int().min(0).max(100_000),
     risks: z.array(z.string().min(1).max(200)).min(1).max(3),
     differentiators: z.array(z.string().min(1).max(200)).min(1).max(3),
   })
@@ -151,6 +156,103 @@ export const validationSchema = z
   .strict()
 
 export type IdeaValidation = z.infer<typeof validationSchema>
+
+/**
+ * Cahier des charges du MVP.
+ *
+ * Étape charnière du parcours : c'est le document que le créateur lit et approuve avant
+ * qu'une ligne ne soit construite. Il est rédigé pour être compris par quelqu'un qui ne
+ * sait pas coder — pas de vocabulaire technique, et surtout ce qui est volontairement
+ * laissé de côté pour la première version.
+ *
+ * Ce document n'est pas un second moteur : une fois approuvé, il est traduit en plan
+ * d'entrée du moteur de génération existant (voir server/projects/blueprints.ts).
+ */
+export const specSheetSchema = z
+  .object({
+    appName: z.string().min(1).max(60),
+    tagline: z.string().min(1).max(200),
+    summary: z.string().min(1).max(1_200),
+    forWho: z.string().min(1).max(400),
+    problem: z.string().min(1).max(600),
+    mvpFeatures: z
+      .array(
+        z
+          .object({
+            title: z.string().min(1).max(120),
+            why: z.string().min(1).max(300),
+          })
+          .strict(),
+      )
+      .min(3)
+      .max(8),
+    /** Ce qui est délibérément reporté, et pourquoi. La simplicité est un choix explicite. */
+    postponed: z
+      .array(
+        z
+          .object({
+            title: z.string().min(1).max(120),
+            why: z.string().min(1).max(300),
+          })
+          .strict(),
+      )
+      .max(5),
+    screens: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(80),
+            purpose: z.string().min(1).max(240),
+            requiresAccount: z.boolean(),
+          })
+          .strict(),
+      )
+      .min(2)
+      .max(8),
+    roles: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(60),
+            canDo: z.string().min(1).max(300),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(3),
+    storedData: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(80),
+            description: z.string().min(1).max(240),
+            /** Vrai si chaque utilisateur ne voit que ses propres enregistrements. */
+            private: z.boolean(),
+          })
+          .strict(),
+      )
+      .max(6),
+    accountsNeeded: z.boolean(),
+    paymentModel: z.enum(BUSINESS_MODELS),
+    priceCents: z.number().int().min(0).max(500_000),
+    priceInterval: z.enum(PRICE_INTERVALS),
+    whatIsPaid: z.string().min(1).max(300),
+    externalServices: z
+      .array(
+        z
+          .object({
+            name: z.string().min(1).max(80),
+            why: z.string().min(1).max(200),
+            paid: z.boolean(),
+          })
+          .strict(),
+      )
+      .max(4),
+    runningCostCents: z.number().int().min(0).max(100_000),
+  })
+  .strict()
+
+export type SpecSheet = z.infer<typeof specSheetSchema>
 
 /**
  * Réponse de l'assistant à une demande de modification.

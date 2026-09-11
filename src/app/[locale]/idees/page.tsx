@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
-import { getEffectivePlan } from '@/server/billing/plans'
 import { isAiAvailable } from '@/server/ai/client'
 import { getProfile } from '@/server/business/profile'
 import { listIdeas } from '@/server/business/ideas'
@@ -19,11 +18,7 @@ export default async function IdeasPage({ params }: { params: Promise<{ locale: 
   // Le parcours part toujours de l'objectif : sans lui, rien à proposer.
   if (profile === null || profile.completedAt === null) redirect(`/${locale}/objectif`)
 
-  const [ideas, wallet, plan] = await Promise.all([
-    listIdeas(user.id),
-    getWallet(user.id),
-    getEffectivePlan(user.id),
-  ])
+  const [ideas, wallet] = await Promise.all([listIdeas(user.id), getWallet(user.id)])
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}>
@@ -37,7 +32,6 @@ export default async function IdeasPage({ params }: { params: Promise<{ locale: 
           locale={locale}
           initialIdeas={ideas}
           objectiveLabel={`${formatAmount(profile.monthlyGoalCents)} par mois`}
-          canBuild={plan.allowBuild && plan.maxProjects > 0}
           aiAvailable={isAiAvailable()}
         />
       </div>
