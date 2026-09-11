@@ -1,4 +1,4 @@
-import { AppError, validation } from '@/lib/errors'
+import { validation } from '@/lib/errors'
 import { appSpecSchema, type AppSpec, type Block } from './schema'
 
 /**
@@ -163,16 +163,4 @@ export function parseAppSpec(input: unknown): AppSpec {
     throw validation("La description de l'application est incohérente.", { issues })
   }
   return parsed.data
-}
-
-/** Variante sans exception, pour les chemins où l'on veut inspecter les erreurs. */
-export function safeParseAppSpec(
-  input: unknown,
-): { ok: true; spec: AppSpec } | { ok: false; error: AppError } {
-  try {
-    return { ok: true, spec: parseAppSpec(input) }
-  } catch (error) {
-    if (error instanceof AppError) return { ok: false, error }
-    throw error
-  }
 }

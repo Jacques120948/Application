@@ -13,13 +13,12 @@ import { DEFAULT_PLANS, FREE_PLAN_ID, getEffectivePlan } from './plans'
  * `CreditWallet.balance` est un cache ; la vérité est la somme de `CreditLedger`.
  */
 
-export type CreditedOperation =
-  | 'ideas'
-  | 'blueprint'
-  | 'generate'
-  | 'edit'
-  | 'diagnose'
-  | 'marketing'
+/**
+ * Opérations réellement implémentées. Le diagnostic automatique et la génération de
+ * textes marketing arrivent en phase 4 : ils ne sont pas déclarés ici tant qu'ils
+ * n'existent pas.
+ */
+export type CreditedOperation = 'ideas' | 'blueprint' | 'generate' | 'edit'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -27,8 +26,6 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   blueprint: 5,
   generate: 40,
   edit: 8,
-  diagnose: 15,
-  marketing: 10,
 }
 
 /** 1 crédit = 1 000 micro-dollars de coût API, arrondi au supérieur. */

@@ -10,8 +10,11 @@ L'IA ne rédige jamais de code. Elle produit des **objets validés** :
 | `blueprint` | idée en français courant | concept + fonctions + monétisation | faible |
 | `generate` | blueprint validé | **AppSpec complète** | élevé |
 | `edit` | AppSpec + demande en langage naturel | **SpecPatch** (liste d'opérations) | faible |
-| `diagnose` | AppSpec + journal d'erreurs | cause probable + SpecPatch correctif | moyen |
-| `marketing` | AppSpec publiée | textes de lancement, fiches de stores | moyen |
+| `diagnose` *(phase 4)* | AppSpec + journal d'erreurs | cause probable + SpecPatch correctif | moyen |
+| `marketing` *(phase 4)* | AppSpec publiée | textes de lancement, fiches de stores | moyen |
+
+Les deux dernières lignes ne sont **pas** implémentées aujourd'hui et ne figurent pas
+dans le code : une opération n'est déclarée que lorsqu'elle existe.
 
 Chaque sortie est contrainte par un schéma Zod et obtenue via les **sorties structurées**
 de l'API Claude (`output_config.format` avec `zodOutputFormat`). Une réponse qui ne
@@ -43,8 +46,8 @@ Les chemins sont restreints : pas d'indice négatif, pas de `__proto__`, pas de
 
 | Opération | Modèle | Effort | Justification |
 |---|---|---|---|
-| `generate`, `diagnose` | `claude-opus-5` | `high` | Tâche structurante, une seule fois par projet |
-| `edit`, `blueprint`, `ideas`, `marketing` | `claude-sonnet-5` | `medium` | Volume élevé, tâche cadrée par le schéma |
+| `generate` | `claude-opus-5` | `high` | Tâche structurante, une seule fois par projet |
+| `edit`, `blueprint`, `ideas` | `claude-sonnet-5` | `medium` | Volume élevé, tâche cadrée par le schéma |
 
 Le routage est une table de configuration, pas des `if` dispersés
 (`src/server/ai/routing.ts`). Il est modifiable sans toucher aux appels.

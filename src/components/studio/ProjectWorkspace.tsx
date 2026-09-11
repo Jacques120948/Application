@@ -19,6 +19,16 @@ import { ProgressSteps } from './ProgressSteps'
 
 type Message = { id: string; role: 'USER' | 'ASSISTANT' | 'SYSTEM'; content: string }
 
+type DataOverview = {
+  endUserCount: number
+  models: Array<{
+    id: string
+    label: string
+    count: number
+    recent: Array<{ id: string; createdAt: string; summary: string }>
+  }>
+}
+
 type Version = {
   id: string
   number: number
@@ -29,12 +39,21 @@ type Version = {
   isPublished: boolean
 }
 
-type Tab = 'assistant' | 'design' | 'features' | 'monetization' | 'tests' | 'publish' | 'versions'
+type Tab =
+  | 'assistant'
+  | 'design'
+  | 'features'
+  | 'users'
+  | 'monetization'
+  | 'tests'
+  | 'publish'
+  | 'versions'
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'assistant', label: "Modifier avec l'IA" },
   { id: 'design', label: 'Design' },
   { id: 'features', label: 'Fonctionnalités' },
+  { id: 'users', label: 'Utilisateurs' },
   { id: 'monetization', label: 'Monétisation' },
   { id: 'tests', label: 'Tests' },
   { id: 'publish', label: 'Publication' },
@@ -76,6 +95,7 @@ export function ProjectWorkspace({
   const [device, setDevice] = useState<DeviceKey>('phone')
   const [previewKey, setPreviewKey] = useState(0)
   const [versions, setVersions] = useState<Version[] | null>(null)
+  const [data, setData] = useState<DataOverview | null>(null)
   const [busy, setBusy] = useState(false)
   const [tested, setTested] = useState(alreadyTested)
   const [error, setError] = useState<string | null>(null)
@@ -90,9 +110,16 @@ export function ProjectWorkspace({
     setVersions(body.versions)
   }, [projectId])
 
+  const loadData = useCallback(async () => {
+    const response = await fetch(`/api/projects/${projectId}/donnees`)
+    if (!response.ok) return
+    setData((await response.json()) as DataOverview)
+  }, [projectId])
+
   useEffect(() => {
     if (tab === 'versions') void loadVersions()
-  }, [tab, loadVersions])
+    if (tab === 'users') void loadData()
+  }, [tab, loadVersions, loadData])
 
   const sendPatch = useCallback(
     async (summary: string, operations: PatchOperation[]) => {
@@ -248,6 +275,56 @@ export function ProjectWorkspace({
             {tab === 'features' ? (
               <div className="p-4">
                 <FeaturesPanel spec={spec} send={sendPatch} />
+              </div>
+            ) : null}
+
+            {tab === 'users' ? (
+              <div className="grid gap-4 p-4">
+                {data === null ? (
+                  <p className="text-sm text-[var(--color-ink-soft)]">Chargement…</p>
+                ) : (
+                  <>
+                    <Card>
+                      <CardBody>
+                        <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+                          Comptes créés dans votre application
+                        </p>
+                        <p className="m-0 mt-1 text-2xl font-semibold">{data.endUserCount}</p>
+                      </CardBody>
+                    </Card>
+                    {data.models.map((model) => (
+                      <Card key={model.id}>
+                        <CardBody>
+                          <div className="flex items-center gap-2">
+                            <h3 className="m-0 text-sm font-semibold">{model.label}</h3>
+                            <span className="ml-auto">
+                              <Badge tone="neutral">{model.count} enregistrement(s)</Badge>
+                            </span>
+                          </div>
+                          {model.recent.length === 0 ? (
+                            <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
+                              Rien n&apos;a encore été enregistré.
+                            </p>
+                          ) : (
+                            <ul className="mt-3 grid gap-2 p-0 text-sm list-none">
+                              {model.recent.map((item) => (
+                                <li
+                                  key={item.id}
+                                  className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2"
+                                >
+                                  <p className="m-0">{item.summary}</p>
+                                  <p className="m-0 mt-0.5 text-xs text-[var(--color-ink-soft)]">
+                                    {new Date(item.createdAt).toLocaleString(locale)}
+                                  </p>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </CardBody>
+                      </Card>
+                    ))}
+                  </>
+                )}
               </div>
             ) : null}
 

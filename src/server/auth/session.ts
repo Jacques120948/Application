@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHmac, randomBytes } from 'node:crypto'
 import { cookies } from 'next/headers'
 import type { UserRole } from '@prisma/client'
 import { prisma } from '@/server/db/client'
@@ -126,11 +126,4 @@ export function isSameOrigin(request: Request): boolean {
   } catch {
     return false
   }
-}
-
-/** Comparaison à temps constant, utilisée pour les jetons courts hors session. */
-export function safeEqual(a: string, b: string): boolean {
-  const bufferA = Buffer.from(a)
-  const bufferB = Buffer.from(b)
-  return bufferA.length === bufferB.length && timingSafeEqual(bufferA, bufferB)
 }

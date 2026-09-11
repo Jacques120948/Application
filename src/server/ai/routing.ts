@@ -33,8 +33,6 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   blueprint: { model: MODELS.fast, maxTokens: 3_000, effort: 'medium' },
   generate: { model: MODELS.reasoning, maxTokens: 16_000, effort: 'high' },
   edit: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
-  diagnose: { model: MODELS.reasoning, maxTokens: 6_000, effort: 'high' },
-  marketing: { model: MODELS.fast, maxTokens: 6_000, effort: 'medium' },
 }
 
 export type TokenUsage = {

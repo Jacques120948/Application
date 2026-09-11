@@ -181,18 +181,60 @@ export async function deleteRecord(params: {
   })
 }
 
-/** Vue du créateur sur les données de sa propre application (onglet Utilisateurs). */
-export async function listRecordsForOwner(params: {
-  userId: string
-  projectId: string
-  modelId: string
-  limit?: number
-}) {
-  return withOwnerRuntimeScope(params.userId, params.projectId, (tx) =>
-    tx.appRecord.findMany({
-      where: { projectId: params.projectId, modelId: params.modelId },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(params.limit ?? 50, 200),
-    }),
-  )
+export type OwnerDataOverview = {
+  endUserCount: number
+  models: Array<{
+    id: string
+    label: string
+    count: number
+    recent: Array<{ id: string; createdAt: Date; summary: string }>
+  }>
+}
+
+/**
+ * Vue du créateur sur les données de sa propre application (onglet Utilisateurs).
+ * Le créateur voit les données de son application ; il ne voit jamais celles d'une autre.
+ */
+export async function getOwnerDataOverview(
+  userId: string,
+  projectId: string,
+  spec: AppSpec,
+): Promise<OwnerDataOverview> {
+  return withOwnerRuntimeScope(userId, projectId, async (tx) => {
+    const endUserCount = await tx.appEndUser.count({ where: { projectId } })
+    const models = []
+    for (const model of spec.dataModels) {
+      const [count, recent] = await Promise.all([
+        tx.appRecord.count({ where: { projectId, modelId: model.id } }),
+        tx.appRecord.findMany({
+          where: { projectId, modelId: model.id },
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+        }),
+      ])
+      models.push({
+        id: model.id,
+        label: model.labelPlural,
+        count,
+        recent: recent.map((row) => ({
+          id: row.id,
+          createdAt: row.createdAt,
+          summary: summarise(model, row.data as RecordData),
+        })),
+      })
+    }
+    return { endUserCount, models }
+  })
+}
+
+/** Résumé d'un enregistrement : les deux premiers champs texte renseignés. */
+function summarise(model: DataModel, data: RecordData): string {
+  const parts: string[] = []
+  for (const field of model.fields) {
+    const value = data[field.id]
+    if (value === null || value === undefined || value === '') continue
+    parts.push(`${field.label} : ${String(value).slice(0, 60)}`)
+    if (parts.length === 2) break
+  }
+  return parts.length === 0 ? 'Enregistrement vide' : parts.join(' — ')
 }

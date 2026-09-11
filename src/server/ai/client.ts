@@ -26,8 +26,3 @@ export function getAnthropic(): Anthropic {
   })
   return cached
 }
-
-/** Réservé aux tests : réinitialise le client mémorisé. */
-export function resetAnthropicClient(): void {
-  cached = null
-}
