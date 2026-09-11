@@ -61,6 +61,8 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   edit: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
   // Réponse courte à un visiteur. Volume potentiellement élevé, enjeu faible par réponse.
   assistant: { model: MODELS.economical, maxTokens: 700, effort: 'low' },
+  // Le coach explique le produit, il ne le construit pas. Réponse courte, modèle rapide.
+  coach: { model: MODELS.economical, maxTokens: 800, effort: 'low' },
 }
 
 export type TokenUsage = {

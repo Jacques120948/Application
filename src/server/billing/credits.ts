@@ -27,6 +27,8 @@ export type CreditedOperation =
   | 'edit'
   /** Réponse de l'assistant intégré à une application, payée par son créateur. */
   | 'assistant'
+  /** Réponse du coach qui accompagne le créateur dans Evoliia. */
+  | 'coach'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -37,6 +39,7 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   generate: 20,
   edit: 2,
   assistant: 1,
+  coach: 1,
 }
 
 /**

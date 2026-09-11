@@ -41,7 +41,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
-      isAdmin={user.role === 'ADMIN'}>
+      isAdmin={user.role === 'ADMIN'}
+      screen="dashboard">
       <div className="grid gap-6">
         {objective === null ? (
           <Card>

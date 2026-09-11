@@ -68,6 +68,7 @@ Mesurés sur des générations réelles, aux tarifs publics de l'API Claude :
 | Analyse d'une idée | 0,011 USD |
 | Construction d'une application de six pages | 0,105 USD |
 | Une réponse de l'assistant intégré à une application | 0,0005 à 0,002 USD |
+| Une question au coach qui accompagne le créateur | 0,0005 à 0,002 USD |
 | Une modification demandée à l'assistant | 0,008 à 0,012 USD |
 
 Un crédit correspond à un millième de dollar de coût API. Les dotations mensuelles par

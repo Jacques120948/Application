@@ -19,6 +19,7 @@ import {
   appAssistantSystem,
   asUserData,
   BLUEPRINT_SYSTEM,
+  COACH_SYSTEM,
   EDIT_SYSTEM,
   GENERATE_PAGE_SYSTEM,
   GENERATE_PLAN_SYSTEM,
@@ -673,5 +674,91 @@ export async function answerAsAppAssistant(params: {
       error instanceof AppError ? error.code : 'inconnu',
     )
     throw toPublicFailure(error, { projectId: params.projectId })
+  }
+}
+
+/**
+ * Réponse du coach qui accompagne le créateur dans Evoliia.
+ *
+ * L'état du parcours est calculé côté serveur et transmis en donnée : le coach ne le
+ * découvre pas de la bouche de la personne, il le lit. C'est ce qui lui permet de ne pas
+ * proposer une étape déjà franchie.
+ *
+ * L'historique est borné à quelques échanges : une conversation qui grossit sans limite
+ * ferait grossir la facture de la même façon.
+ */
+export async function askCoach(params: {
+  userId: string
+  question: string
+  situation: string
+  history: Array<{ question: string; answer: string }>
+  locale: string
+}): Promise<{ answer: string; creditsSpent: number }> {
+  const accounting: Accounting = { userId: params.userId, operation: 'coach' }
+  await beforeCalls(accounting)
+  const profile = OPERATION_PROFILES.coach
+  const startedAt = Date.now()
+
+  const messages = [
+    ...params.history.slice(-2).flatMap((turn) => [
+      { role: 'user' as const, content: asUserData('question', turn.question) },
+      { role: 'assistant' as const, content: turn.answer.slice(0, 600) },
+    ]),
+    {
+      role: 'user' as const,
+      content: [
+        `Langue de la réponse : ${params.locale}.`,
+        asUserData('etat_du_parcours', params.situation),
+        asUserData('question', params.question),
+      ].join('\n\n'),
+    },
+  ]
+
+  try {
+    const response = await getAnthropic().messages.create({
+      model: profile.model,
+      max_tokens: profile.maxTokens,
+      system: [
+        { type: 'text', text: COACH_SYSTEM, cache_control: { type: 'ephemeral' } },
+      ],
+      messages,
+    })
+
+    const usage: TokenUsage = {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cachedTokens: response.usage.cache_read_input_tokens ?? 0,
+    }
+    const cost = await recordCall(
+      accounting,
+      'coach',
+      { model: profile.model, usage, latencyMs: Date.now() - startedAt },
+      true,
+    )
+    const spent = await afterCalls(accounting, cost)
+
+    const answer = response.content
+      .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim()
+
+    if (answer === '') {
+      throw new AppError('AI_REFUSED', "Le coach n'a pas pu répondre. Reformulez votre question.")
+    }
+    return { answer, creditsSpent: spent.creditsSpent }
+  } catch (error) {
+    await recordCall(
+      accounting,
+      'coach',
+      {
+        model: profile.model,
+        usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
+        latencyMs: Date.now() - startedAt,
+      },
+      false,
+      error instanceof AppError ? error.code : 'inconnu',
+    )
+    throw toPublicFailure(error, { userId: params.userId })
   }
 }

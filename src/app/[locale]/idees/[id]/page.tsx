@@ -32,7 +32,8 @@ export default async function IdeaStudyPage({
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
-      isAdmin={user.role === 'ADMIN'}>
+      isAdmin={user.role === 'ADMIN'}
+      screen="idee">
       <div className="mx-auto w-full max-w-3xl">
         <IdeaStudy
           locale={locale}

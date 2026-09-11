@@ -25,6 +25,7 @@ export default async function StartPage({ params }: { params: Promise<{ locale: 
       userName={user.name ?? user.email}
       credits={wallet.balance}
       isAdmin={user.role === 'ADMIN'}
+      screen="demarrer"
     >
       <div className="mx-auto w-full max-w-4xl">
         <h1 className="mb-1 text-2xl font-semibold">Par où voulez-vous commencer ?</h1>

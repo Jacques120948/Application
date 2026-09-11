@@ -15,7 +15,8 @@ export default async function ObjectivePage({ params }: { params: Promise<{ loca
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
-      isAdmin={user.role === 'ADMIN'}>
+      isAdmin={user.role === 'ADMIN'}
+      screen="objectif">
       <div className="mx-auto w-full max-w-3xl">
         <h1 className="mb-1 text-2xl font-semibold">Par où commencer</h1>
         <p className="mb-7 text-[var(--color-ink-soft)]">

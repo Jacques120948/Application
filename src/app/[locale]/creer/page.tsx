@@ -13,7 +13,8 @@ export default async function CreatePage({ params }: { params: Promise<{ locale:
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
-      isAdmin={user.role === 'ADMIN'}>
+      isAdmin={user.role === 'ADMIN'}
+      screen="creer">
       <div className="mx-auto w-full max-w-3xl">
         <CreateWizard locale={locale} />
         <p className="mt-6 text-center text-sm text-[var(--color-ink-soft)]">

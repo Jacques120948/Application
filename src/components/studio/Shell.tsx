@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { getTranslator, type Locale } from '@/i18n'
 import { Logo } from '@/components/marketing/Logo'
 import { LogoutButton } from './LogoutButton'
+import { CoachLauncher } from './CoachLauncher'
 
 /** Cadre du studio : en-tête sobre, contenu centré (exigence 38). */
 export function Shell({
@@ -9,6 +10,7 @@ export function Shell({
   userName,
   credits,
   isAdmin = false,
+  screen = 'autre',
   children,
 }: {
   locale: Locale
@@ -16,6 +18,8 @@ export function Shell({
   credits?: number
   /** Affiche l'entrée du back-office. Le lien ne donne aucun droit : le serveur décide. */
   isAdmin?: boolean
+  /** Écran courant, transmis au coach pour qu'il situe la personne. */
+  screen?: string
   children: ReactNode
 }) {
   const t = getTranslator(locale)
@@ -60,6 +64,7 @@ export function Shell({
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl px-5 py-8">{children}</main>
+      <CoachLauncher screen={screen} />
     </div>
   )
 }

@@ -22,7 +22,8 @@ export default async function IdeasPage({ params }: { params: Promise<{ locale: 
 
   return (
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
-      isAdmin={user.role === 'ADMIN'}>
+      isAdmin={user.role === 'ADMIN'}
+      screen="idees">
       <div className="mx-auto w-full max-w-3xl">
         <h1 className="mb-1 text-2xl font-semibold">Des idées pour vous</h1>
         <p className="mb-7 text-[var(--color-ink-soft)]">
