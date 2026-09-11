@@ -86,6 +86,38 @@ body {
   outline-color: #ffffff;
 }
 
+/*
+ * Apparition au défilement, sans une ligne de JavaScript.
+ *
+ * `animation-timeline: view()` n'est pas encore lu par tous les navigateurs : là où il
+ * manque, le contenu s'affiche simplement sans animation, ce qui est le bon repli. Aucun
+ * observateur, aucun calcul au scroll, donc aucun coût processeur.
+ *
+ * L'intervalle est exprimé en `cover` et non en `entry` : `entry` ne s'achève que lorsque
+ * l'élément est entré en entier dans l'écran, ce qui n'arrive jamais pour un bloc plus
+ * haut que la fenêtre — il resterait alors transparent pour toujours.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 18%;
+    }
+  }
+}
+
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

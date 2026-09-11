@@ -10,12 +10,18 @@ export function AuthForm({
   locale,
   labels,
   requiresCode = false,
+  nextPath,
 }: {
   mode: 'register' | 'login'
   locale: string
   labels: { email: string; password: string; name: string; passwordHint: string; submit: string }
   /** Vrai lorsque l'installation est réservée aux personnes disposant d'un code. */
   requiresCode?: boolean
+  /**
+   * Où conduire la personne après son inscription. Choisi par la page, jamais par
+   * l'utilisateur : un chemin arbitraire venant de l'URL serait une redirection ouverte.
+   */
+  nextPath?: string
 }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
@@ -50,8 +56,10 @@ export function AuthForm({
       setBusy(false)
       return
     }
-    // Après inscription, le parcours commence par l'objectif, jamais par une idée.
-    router.push(mode === 'register' ? `/${locale}/objectif` : `/${locale}/dashboard`)
+    // Par défaut, le parcours commence par l'objectif, jamais par une idée. Une personne
+    // qui arrive en disant qu'elle a déjà son idée peut être conduite ailleurs.
+    const afterRegister = nextPath ?? `/${locale}/objectif`
+    router.push(mode === 'register' ? afterRegister : `/${locale}/dashboard`)
     router.refresh()
   }
 

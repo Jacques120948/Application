@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { DEFAULT_PLANS } from '../src/server/billing/plans'
+import { seedDemoApps } from './seed-demos'
 
 /**
  * Initialisation d'une installation.
@@ -55,6 +56,8 @@ async function main(): Promise<void> {
 
   console.log(`Offres initialisées : ${DEFAULT_PLANS.map((plan) => plan.id).join(', ')}`)
   if (retired.count > 0) console.log(`Offres retirées du catalogue : ${retired.count}`)
+
+  await seedDemoApps(prisma)
 }
 
 main()
