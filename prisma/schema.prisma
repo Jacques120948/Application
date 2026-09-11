@@ -196,6 +196,8 @@ model CreatorProfile {
   monthlyGoalCents Int
   weeklyHours      Int
   budgetCents      Int
+  /// Monnaie de tous les montants du parcours. Aucune conversion n'est faite.
+  currency         String    @default("EUR")
   country          String    @default("France")
   skills           String    @default("")
   interests        String    @default("")
@@ -238,6 +240,8 @@ model Idea {
   /// free | one_time | subscription | freemium | credits
   businessModel         String
   recommendedPriceCents Int
+  /// Monnaie dans laquelle l'idée a été chiffrée, figée à sa création.
+  currency              String     @default("EUR")
   /// once | month | year
   priceInterval         String
   opportunityScore      Int

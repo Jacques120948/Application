@@ -50,6 +50,10 @@ export type BoardIdea = {
   businessModel: string
   recommendedPriceCents: number
   priceInterval: 'once' | 'month' | 'year'
+  /** Monnaie dans laquelle l'idée a été chiffrée, code ISO. Rien n'est converti. */
+  currency: string
+  /** Faux si l'idée a été chiffrée dans une autre monnaie que l'objectif courant. */
+  comparableToObjective: boolean
   opportunityScore: number
   demandLevel: string
   competitionLevel: string
@@ -75,17 +79,30 @@ export const MODEL_LABEL: Record<string, string> = {
   free: 'Gratuit',
 }
 
-export function formatEuros(cents: number): string {
-  return new Intl.NumberFormat('fr-FR', {
+/**
+ * Formatage monétaire côté navigateur.
+ *
+ * La monnaie vient du profil du créateur ; la Suisse écrit « CHF 2'000 », la France
+ * « 2 000 € ». Aucune conversion n'est faite, ici pas plus qu'ailleurs.
+ */
+const FORMAT_LOCALE: Record<string, string> = { EUR: 'fr-FR', CHF: 'fr-CH' }
+
+export function formatMoney(cents: number, currency = 'EUR'): string {
+  const code = currency in FORMAT_LOCALE ? currency : 'EUR'
+  return new Intl.NumberFormat(FORMAT_LOCALE[code] ?? 'fr-FR', {
     style: 'currency',
-    currency: 'EUR',
+    currency: code,
     maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100)
 }
 
-export function formatPrice(cents: number, interval: BoardIdea['priceInterval']): string {
+export function formatPrice(
+  cents: number,
+  interval: BoardIdea['priceInterval'],
+  currency = 'EUR',
+): string {
   if (cents <= 0) return 'Gratuit'
-  const amount = formatEuros(cents)
+  const amount = formatMoney(cents, currency)
   if (interval === 'month') return `${amount} par mois`
   if (interval === 'year') return `${amount} par an`
   return `${amount} une fois`

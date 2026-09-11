@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { AppError, notFound } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import type { CreatorProfileInput } from '@/server/ai/operations'
-import { OBJECTIVE_PRESETS_CENTS } from './economics'
+import { OBJECTIVE_PRESETS_CENTS, SUPPORTED_CURRENCIES } from './economics'
 
 /**
  * Profil du créateur : la première chose que la plateforme apprend de lui.
@@ -19,6 +19,11 @@ export const profileInput = z.object({
     .max(5_000_000),
   weeklyHours: z.number().int().min(1).max(80),
   budgetCents: z.number().int().min(0).max(1_000_000),
+  /**
+   * Monnaie du parcours. Elle est choisie, jamais déduite du pays : quelqu'un peut vivre
+   * en Suisse et vouloir vendre en euros.
+   */
+  currency: z.enum(SUPPORTED_CURRENCIES).default('EUR'),
   country: z.string().trim().min(1).max(60).default('France'),
   skills: z.string().trim().max(400).default(''),
   interests: z.string().trim().max(400).default(''),
@@ -62,6 +67,7 @@ export function toAssistantProfile(profile: {
   monthlyGoalCents: number
   weeklyHours: number
   budgetCents: number
+  currency: string
   country: string
   skills: string
   interests: string
@@ -74,6 +80,7 @@ export function toAssistantProfile(profile: {
     monthlyGoalCents: profile.monthlyGoalCents,
     weeklyHours: profile.weeklyHours,
     budgetCents: profile.budgetCents,
+    currency: profile.currency,
     country: profile.country,
     skills: profile.skills,
     interests: profile.interests,

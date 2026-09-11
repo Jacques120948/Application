@@ -6,6 +6,9 @@ import {
   monthlyRevenuePerCustomerCents,
 } from '@/server/business/economics'
 
+// Intl insère une espace insécable avant le symbole monétaire : on la normalise.
+const plain = (value: string) => value.replace(/\s/g, ' ')
+
 describe('arithmétique commerciale', () => {
   it('calcule le nombre d’abonnés mensuels nécessaires', () => {
     // 1 000 € visés, 19 € par mois -> 53 abonnés (exemple du cahier des charges).
@@ -52,10 +55,33 @@ describe('arithmétique commerciale', () => {
   })
 
   it('formate les prix pour un lecteur non technique', () => {
-    // Intl insère une espace insécable avant le symbole monétaire : on la normalise.
-    const plain = (value: string) => value.replace(/\s/g, ' ')
     expect(plain(formatPrice(1_900, 'month'))).toBe('19 € par mois')
     expect(formatPrice(0, 'month')).toBe('Gratuit')
     expect(plain(formatPrice(4_900, 'once'))).toBe('49 € (paiement unique)')
+  })
+
+  it('exprime les montants dans la monnaie demandée, sans convertir', () => {
+    expect(plain(formatPrice(1_900, 'month', 'CHF'))).toContain('CHF')
+    expect(plain(formatPrice(1_900, 'month', 'CHF'))).toContain('19')
+    // Une monnaie inconnue ne fait pas planter l'affichage : on retombe sur l'euro.
+    expect(plain(formatPrice(1_900, 'month', 'XYZ'))).toContain('€')
+  })
+
+  it('garde le nombre de clients identique quelle que soit la monnaie', () => {
+    const euros = describeObjective({
+      monthlyGoalCents: 200_000,
+      priceCents: 1_200,
+      interval: 'month',
+      currency: 'EUR',
+    })
+    const francs = describeObjective({
+      monthlyGoalCents: 200_000,
+      priceCents: 1_200,
+      interval: 'month',
+      currency: 'CHF',
+    })
+    expect(euros).toContain('167')
+    expect(francs).toContain('167')
+    expect(plain(francs)).toContain('CHF')
   })
 })

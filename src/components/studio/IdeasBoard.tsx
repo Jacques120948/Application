@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Badge, Button, Card, CardBody, EmptyState, Notice } from '@/components/ui'
 import {
-  formatEuros,
+  formatMoney,
   formatPrice,
   MODEL_LABEL,
   scoreTone,
@@ -121,17 +121,21 @@ export function IdeasBoard({
               <Figure label="Difficulté" value={idea.complexityLevel} />
               <Figure
                 label="Prix conseillé"
-                value={formatPrice(idea.recommendedPriceCents, idea.priceInterval)}
+                value={formatPrice(idea.recommendedPriceCents, idea.priceInterval, idea.currency)}
               />
               <Figure
                 label="Clients pour votre objectif"
-                value={idea.customersNeeded > 0 ? `environ ${idea.customersNeeded}` : '—'}
+                value={
+                  idea.comparableToObjective && idea.customersNeeded > 0
+                    ? `environ ${idea.customersNeeded}`
+                    : '—'
+                }
               />
               <Figure
                 label="Coût de fonctionnement"
                 value={
                   idea.runningCostCents > 0
-                    ? `${formatEuros(idea.runningCostCents)} par mois`
+                    ? `${formatMoney(idea.runningCostCents, idea.currency)} par mois`
                     : 'proche de zéro'
                 }
               />

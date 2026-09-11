@@ -509,6 +509,8 @@ export type CreatorProfileInput = {
   monthlyGoalCents: number
   weeklyHours: number
   budgetCents: number
+  /** Monnaie de tous les montants, code ISO. Les prix proposés doivent s'y conformer. */
+  currency: string
   country: string
   skills: string
   interests: string
@@ -529,6 +531,7 @@ export async function suggestIdeas(
     schema: ideasSchema,
     userContent: [
       `Langue des textes à produire : ${locale}.`,
+      `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
       asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
       "Propose des idées d'applications adaptées à ce profil.",
     ].join('\n\n'),
@@ -554,6 +557,7 @@ export async function writeSpecSheet(
     schema: specSheetSchema,
     userContent: [
       `Langue des textes à produire : ${locale}.`,
+      `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
       asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
       asUserData('idee', JSON.stringify(idea, null, 2)),
       ...(validation === null ? [] : [asUserData('analyse', JSON.stringify(validation, null, 2))]),
@@ -575,6 +579,7 @@ export async function validateIdea(
     schema: validationSchema,
     userContent: [
       `Langue des textes à produire : ${locale}.`,
+      `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
       asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
       asUserData('idee_a_examiner', JSON.stringify(idea, null, 2)),
       'Examine cette idée et rends ton verdict.',

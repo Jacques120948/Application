@@ -5,7 +5,12 @@ import { withUserScope } from '@/server/db/scope'
 import { isAiAvailable } from '@/server/ai/client'
 import { suggestIdeas, validateIdea, writeSpecSheet } from '@/server/ai/operations'
 import type { IdeaSuggestion, IdeaValidation, SpecSheet } from '@/server/ai/schemas'
-import { customersNeededFor, describeObjective, type PriceInterval } from './economics'
+import {
+  customersNeededFor,
+  describeObjective,
+  MIXED_CURRENCY_NOTICE,
+  type PriceInterval,
+} from './economics'
 import { requireProfile, toAssistantProfile } from './profile'
 
 /**
@@ -29,6 +34,10 @@ export type ScoredIdea = {
   businessModel: string
   recommendedPriceCents: number
   priceInterval: PriceInterval
+  /** Monnaie dans laquelle l'idée a été chiffrée, figée à sa création. */
+  currency: string
+  /** Faux si l'idée a été chiffrée dans une autre monnaie que l'objectif courant. */
+  comparableToObjective: boolean
   opportunityScore: number
   demandLevel: string
   competitionLevel: string
@@ -62,6 +71,7 @@ function present(
     features: Prisma.JsonValue
     businessModel: string
     recommendedPriceCents: number
+    currency: string
     priceInterval: string
     opportunityScore: number
     demandLevel: string
@@ -78,9 +88,10 @@ function present(
     specSheet: Prisma.JsonValue | null
     project?: { id: string } | null
   },
-  monthlyGoalCents: number,
+  profile: { monthlyGoalCents: number; currency: string },
 ): ScoredIdea {
   const interval = row.priceInterval as PriceInterval
+  const comparable = row.currency === profile.currency
   return {
     id: row.id,
     title: row.title,
@@ -91,6 +102,8 @@ function present(
     businessModel: row.businessModel,
     recommendedPriceCents: row.recommendedPriceCents,
     priceInterval: interval,
+    currency: row.currency,
+    comparableToObjective: comparable,
     opportunityScore: row.opportunityScore,
     demandLevel: row.demandLevel,
     competitionLevel: row.competitionLevel,
@@ -102,11 +115,14 @@ function present(
     risks: asStrings(row.risks),
     differentiators: asStrings(row.differentiators),
     status: row.status as ScoredIdea['status'],
-    objectiveSentence: describeObjective({
-      monthlyGoalCents,
-      priceCents: row.recommendedPriceCents,
-      interval,
-    }),
+    objectiveSentence: comparable
+      ? describeObjective({
+          monthlyGoalCents: profile.monthlyGoalCents,
+          priceCents: row.recommendedPriceCents,
+          interval,
+          currency: row.currency,
+        })
+      : MIXED_CURRENCY_NOTICE,
     validation: (row.validation as IdeaValidation | null) ?? null,
     specSheet: (row.specSheet as SpecSheet | null) ?? null,
     projectId: row.project?.id ?? null,
@@ -138,6 +154,7 @@ export async function proposeIdeas(
     features: idea.features as unknown as Prisma.InputJsonValue,
     businessModel: idea.businessModel,
     recommendedPriceCents: idea.recommendedPriceCents,
+    currency: profile.currency,
     priceInterval: idea.priceInterval,
     opportunityScore: idea.opportunityScore,
     demandLevel: idea.demandLevel,
@@ -171,7 +188,7 @@ export async function proposeIdeas(
   logger.info('idées proposées', { userId, count: created.length })
   return {
     ideas: created
-      .map((row) => present(row, profile.monthlyGoalCents))
+      .map((row) => present(row, profile))
       .sort((a, b) => b.opportunityScore - a.opportunityScore),
     creditsSpent: result.creditsSpent,
   }
@@ -187,7 +204,7 @@ export async function listIdeas(userId: string): Promise<ScoredIdea[]> {
       include: { project: { select: { id: true } } },
     }),
   )
-  return rows.map((row) => present(row, profile.monthlyGoalCents))
+  return rows.map((row) => present(row, profile))
 }
 
 export async function getIdea(userId: string, ideaId: string): Promise<ScoredIdea> {
@@ -199,7 +216,7 @@ export async function getIdea(userId: string, ideaId: string): Promise<ScoredIde
     }),
   )
   if (row === null) throw notFound('Cette idée est introuvable.')
-  return present(row, profile.monthlyGoalCents)
+  return present(row, profile)
 }
 
 /**
@@ -266,7 +283,7 @@ export async function runValidation(
   )
 
   return {
-    idea: present(updated, profile.monthlyGoalCents),
+    idea: present(updated, profile),
     creditsSpent: result.creditsSpent,
   }
 }
@@ -325,7 +342,7 @@ export async function buildSpecSheet(
   )
 
   logger.info('cahier des charges rédigé', { userId, ideaId })
-  return { idea: present(updated, profile.monthlyGoalCents), creditsSpent: result.creditsSpent }
+  return { idea: present(updated, profile), creditsSpent: result.creditsSpent }
 }
 
 export async function discardIdea(userId: string, ideaId: string): Promise<void> {

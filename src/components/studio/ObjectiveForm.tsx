@@ -11,17 +11,36 @@ import { Button, Card, CardBody, Field, Input, Notice, Select, Textarea } from '
  * aller et avec quoi elle part. C'est à partir de là que la plateforme propose.
  */
 
-const OBJECTIVES = [
-  { cents: 30_000, label: '300 € par mois' },
-  { cents: 50_000, label: '500 € par mois' },
-  { cents: 100_000, label: '1 000 € par mois' },
-  { cents: 200_000, label: '2 000 € par mois' },
+const OBJECTIVES = [30_000, 50_000, 100_000, 200_000] as const
+
+/**
+ * Monnaies proposées. Rien n'est converti : un objectif en francs donne des prix pensés
+ * pour le marché suisse, un objectif en euros des prix pensés pour la zone euro.
+ */
+const CURRENCIES = [
+  { code: 'EUR', label: 'Euro (€)' },
+  { code: 'CHF', label: 'Franc suisse (CHF)' },
 ] as const
+
+const FORMAT_LOCALE: Record<string, string> = { EUR: 'fr-FR', CHF: 'fr-CH' }
+
+function formatMoney(cents: number, currency: string): string {
+  return new Intl.NumberFormat(FORMAT_LOCALE[currency] ?? 'fr-FR', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(cents / 100)
+}
+
+function currencyName(currency: string): string {
+  return currency === 'CHF' ? 'francs suisses' : 'euros'
+}
 
 export type ExistingProfile = {
   monthlyGoalCents: number
   weeklyHours: number
   budgetCents: number
+  currency: string
   country: string
   skills: string
   interests: string
@@ -35,6 +54,7 @@ export function ObjectiveForm({ locale, profile }: { locale: string; profile: Ex
   const router = useRouter()
   const [goal, setGoal] = useState(profile?.monthlyGoalCents ?? 100_000)
   const [customGoal, setCustomGoal] = useState('')
+  const [currency, setCurrency] = useState(profile?.currency ?? 'EUR')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -54,6 +74,7 @@ export function ObjectiveForm({ locale, profile }: { locale: string; profile: Ex
         monthlyGoalCents,
         weeklyHours: Number(form.get('weeklyHours')),
         budgetCents: Number(form.get('budget')) * 100,
+        currency,
         country: String(form.get('country') ?? 'France'),
         skills: String(form.get('skills') ?? ''),
         interests: String(form.get('interests') ?? ''),
@@ -86,28 +107,46 @@ export function ObjectiveForm({ locale, profile }: { locale: string; profile: Ex
             prévision, ni une promesse de revenu.
           </p>
 
+          <div className="mt-4 max-w-xs">
+            <Field
+              label="Votre monnaie"
+              hint="Les prix conseillés seront pensés pour ce marché, sans conversion."
+            >
+              <Select
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value)}
+              >
+                {CURRENCIES.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
           <div className="mt-4 flex flex-wrap gap-2">
-            {OBJECTIVES.map((objective) => (
+            {OBJECTIVES.map((cents) => (
               <button
-                key={objective.cents}
+                key={cents}
                 type="button"
                 onClick={() => {
-                  setGoal(objective.cents)
+                  setGoal(cents)
                   setCustomGoal('')
                 }}
                 className={
-                  goal === objective.cents && customGoal === ''
+                  goal === cents && customGoal === ''
                     ? 'rounded-full border border-[var(--color-brand)] bg-[var(--color-brand-soft)] px-4 py-2 text-sm font-medium text-[var(--color-brand-strong)]'
                     : 'rounded-full border border-[var(--color-line)] px-4 py-2 text-sm text-[var(--color-ink-soft)] hover:border-[var(--color-ink-faint)]'
                 }
               >
-                {objective.label}
+                {formatMoney(cents, currency)} par mois
               </button>
             ))}
           </div>
 
           <div className="mt-4 max-w-xs">
-            <Field label="Ou un autre montant (en euros par mois)">
+            <Field label={`Ou un autre montant (en ${currencyName(currency)} par mois)`}>
               <Input
                 inputMode="numeric"
                 value={customGoal}
@@ -133,7 +172,10 @@ export function ObjectiveForm({ locale, profile }: { locale: string; profile: Ex
                 defaultValue={profile?.weeklyHours ?? 5}
               />
             </Field>
-            <Field label="Budget de départ (euros)" hint="Zéro est une réponse valable.">
+            <Field
+              label={`Budget de départ (${currencyName(currency)})`}
+              hint="Zéro est une réponse valable."
+            >
               <Input
                 type="number"
                 name="budget"
@@ -143,7 +185,7 @@ export function ObjectiveForm({ locale, profile }: { locale: string; profile: Ex
                 defaultValue={(profile?.budgetCents ?? 0) / 100}
               />
             </Field>
-            <Field label="Pays">
+            <Field label="Pays" hint="Il oriente le marché visé, pas la monnaie.">
               <Input name="country" maxLength={60} defaultValue={profile?.country ?? 'France'} />
             </Field>
             <Field label="Secteur dans lequel vous travaillez">

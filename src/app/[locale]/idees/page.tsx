@@ -31,7 +31,7 @@ export default async function IdeasPage({ params }: { params: Promise<{ locale: 
         <IdeasBoard
           locale={locale}
           initialIdeas={ideas}
-          objectiveLabel={`${formatAmount(profile.monthlyGoalCents)} par mois`}
+          objectiveLabel={`${formatAmount(profile.monthlyGoalCents, profile.currency)} par mois`}
           aiAvailable={isAiAvailable()}
         />
       </div>

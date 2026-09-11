@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/server/db/client'
+import { withUserScope } from '@/server/db/scope'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
@@ -61,7 +62,8 @@ describe('le parcours commence par l’objectif', () => {
       monthlyGoalCents: 100_000,
       weeklyHours: 6,
       budgetCents: 5_000,
-      country: 'France',
+      currency: 'CHF',
+      country: 'Suisse',
       skills: 'Coiffure, gestion de planning',
       interests: 'Artisanat local',
       sector: 'Beauté',
@@ -71,6 +73,7 @@ describe('le parcours commence par l’objectif', () => {
     })
     const profile = await getProfile(userId)
     expect(profile?.monthlyGoalCents).toBe(100_000)
+    expect(profile?.currency).toBe('CHF')
     expect(profile?.completedAt).not.toBeNull()
   })
 
@@ -79,6 +82,52 @@ describe('le parcours commence par l’objectif', () => {
     expect(overview.journey.next?.id).toBe('idee')
     expect(overview.objective?.monthlyGoalLabel).toContain('1')
     expect(overview.journey.progress).toBeGreaterThan(0)
+  })
+
+  it('affiche l’objectif dans la monnaie choisie', async () => {
+    const overview = await getCreatorOverview(userId, 'fr')
+    expect(overview.objective?.monthlyGoalLabel).toContain('CHF')
+  })
+
+  /**
+   * Une idée chiffrée en euros ne doit pas être réétiquetée en francs le jour où le
+   * créateur change de monnaie : les montants ont été pensés pour un autre marché.
+   */
+  it('refuse de comparer une idée chiffrée dans une autre monnaie', async () => {
+    await withUserScope(userId, (tx) =>
+      tx.idea.create({
+        data: {
+          userId,
+          title: 'Idée chiffrée en euros',
+          problem: 'Un problème quelconque',
+          audience: 'Des artisans',
+          valueProposition: 'Une proposition',
+          features: ['a'],
+          businessModel: 'subscription',
+          recommendedPriceCents: 1_200,
+          currency: 'EUR',
+          priceInterval: 'month',
+          opportunityScore: 60,
+          demandLevel: 'moyen',
+          competitionLevel: 'moyen',
+          complexityLevel: 'faible',
+          operatingCostLevel: 'faible',
+          timeToMarketWeeks: 4,
+          customersNeeded: 167,
+          risks: [],
+          differentiators: [],
+        },
+      }),
+    )
+
+    const ideas = await listIdeas(userId)
+    const imported = ideas.find((candidate) => candidate.title === 'Idée chiffrée en euros')
+    expect(imported?.currency).toBe('EUR')
+    expect(imported?.comparableToObjective).toBe(false)
+    expect(imported?.objectiveSentence).toContain('autre monnaie')
+
+    // Les tests suivants vérifient l'avancement du parcours : on rend l'état d'origine.
+    await withUserScope(userId, (tx) => tx.idea.deleteMany({ where: { userId } }))
   })
 })
 

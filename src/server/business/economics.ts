@@ -12,6 +12,24 @@
 
 export type PriceInterval = 'once' | 'month' | 'year'
 
+/**
+ * Monnaies proposées au créateur.
+ *
+ * Aucune conversion n'est faite nulle part : un objectif en francs produit des prix en
+ * francs, un objectif en euros des prix en euros. Convertir supposerait un taux de change,
+ * donc un chiffre qui vieillit mal et que personne n'aurait vérifié.
+ */
+export const SUPPORTED_CURRENCIES = ['EUR', 'CHF'] as const
+export type Currency = (typeof SUPPORTED_CURRENCIES)[number]
+export const DEFAULT_CURRENCY: Currency = 'EUR'
+
+export function isCurrency(value: string): value is Currency {
+  return (SUPPORTED_CURRENCIES as readonly string[]).includes(value)
+}
+
+/** La Suisse écrit « CHF 2'000 », la France « 2 000 € ». */
+const FORMAT_LOCALE: Record<Currency, string> = { EUR: 'fr-FR', CHF: 'fr-CH' }
+
 export const OBJECTIVE_PRESETS_CENTS = [30_000, 50_000, 100_000, 200_000] as const
 
 /**
@@ -45,10 +63,11 @@ export function customersNeededFor(
   return Math.max(1, Math.ceil(monthlyGoalCents / perCustomer))
 }
 
-export function formatAmount(cents: number, currency = 'EUR'): string {
-  return new Intl.NumberFormat('fr-FR', {
+export function formatAmount(cents: number, currency: string = DEFAULT_CURRENCY): string {
+  const code = isCurrency(currency) ? currency : DEFAULT_CURRENCY
+  return new Intl.NumberFormat(FORMAT_LOCALE[code], {
     style: 'currency',
-    currency,
+    currency: code,
     maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100)
 }
@@ -59,7 +78,11 @@ const INTERVAL_LABEL: Record<PriceInterval, string> = {
   year: 'par an',
 }
 
-export function formatPrice(cents: number, interval: PriceInterval, currency = 'EUR'): string {
+export function formatPrice(
+  cents: number,
+  interval: PriceInterval,
+  currency: string = DEFAULT_CURRENCY,
+): string {
   if (cents <= 0) return 'Gratuit'
   return interval === 'once'
     ? `${formatAmount(cents, currency)} (${INTERVAL_LABEL.once})`
@@ -76,7 +99,7 @@ export function describeObjective(params: {
   interval: PriceInterval
   currency?: string
 }): string {
-  const currency = params.currency ?? 'EUR'
+  const currency = params.currency ?? DEFAULT_CURRENCY
   const customers = customersNeededFor(params.monthlyGoalCents, params.priceCents, params.interval)
 
   if (customers === null) {
@@ -94,6 +117,13 @@ export function describeObjective(params: {
   }
   return `Avec un abonnement à ${price} par mois, environ ${customers} abonné(s) représenteraient ${goal} de chiffre d'affaires mensuel, avant frais et taxes.`
 }
+
+/**
+ * Affiché lorsqu'une idée a été chiffrée dans une autre monnaie que l'objectif courant.
+ * Plutôt que de comparer des francs à des euros, on le dit et on propose de recommencer.
+ */
+export const MIXED_CURRENCY_NOTICE =
+  "Cette idée a été chiffrée dans une autre monnaie que votre objectif actuel. Relancez une recherche d'idées pour obtenir des montants comparables."
 
 /** Avertissement affiché partout où un objectif est montré. Jamais omis. */
 export const OBJECTIVE_DISCLAIMER =

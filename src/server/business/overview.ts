@@ -2,7 +2,13 @@ import { withUserScope } from '@/server/db/scope'
 import { parseAppSpec } from '@/server/spec/validate'
 import { runChecks } from '@/server/spec/checks'
 import { computeJourney, type Journey } from './journey'
-import { customersNeededFor, describeObjective, formatAmount, type PriceInterval } from './economics'
+import {
+  customersNeededFor,
+  describeObjective,
+  formatAmount,
+  MIXED_CURRENCY_NOTICE,
+  type PriceInterval,
+} from './economics'
 
 /**
  * Vue d'ensemble du créateur, telle qu'elle apparaît sur le tableau de bord.
@@ -10,6 +16,20 @@ import { customersNeededFor, describeObjective, formatAmount, type PriceInterval
  * Répond aux trois questions de l'exigence 14 : où j'en suis, ce que je dois faire
  * ensuite, et pourquoi. Tout est dérivé de l'état réel, rien n'est stocké en double.
  */
+
+function describeSelection(
+  profile: { monthlyGoalCents: number; currency: string },
+  idea: { recommendedPriceCents: number; priceInterval: string; currency: string } | null,
+): string | null {
+  if (idea === null) return null
+  if (idea.currency !== profile.currency) return MIXED_CURRENCY_NOTICE
+  return describeObjective({
+    monthlyGoalCents: profile.monthlyGoalCents,
+    priceCents: idea.recommendedPriceCents,
+    interval: idea.priceInterval as PriceInterval,
+    currency: idea.currency,
+  })
+}
 
 export type CreatorOverview = {
   journey: Journey
@@ -92,29 +112,27 @@ export async function getCreatorOverview(
     data.profile === null
       ? null
       : {
-          monthlyGoalLabel: `${formatAmount(data.profile.monthlyGoalCents)} par mois`,
+          monthlyGoalLabel: `${formatAmount(
+            data.profile.monthlyGoalCents,
+            data.profile.currency,
+          )} par mois`,
           ideaTitle: selectedIdea?.title ?? null,
           opportunityScore: selectedIdea?.opportunityScore ?? null,
           priceLabel:
             selectedIdea === null
               ? null
-              : formatAmount(selectedIdea.recommendedPriceCents),
+              : formatAmount(selectedIdea.recommendedPriceCents, selectedIdea.currency),
+          // Une idée chiffrée dans une autre monnaie n'est pas comparable à l'objectif :
+          // on préfère ne rien afficher plutôt qu'un rapprochement trompeur.
           customersNeeded:
-            selectedIdea === null
+            selectedIdea === null || selectedIdea.currency !== data.profile.currency
               ? null
               : customersNeededFor(
                   data.profile.monthlyGoalCents,
                   selectedIdea.recommendedPriceCents,
                   selectedIdea.priceInterval as PriceInterval,
                 ),
-          sentence:
-            selectedIdea === null
-              ? null
-              : describeObjective({
-                  monthlyGoalCents: data.profile.monthlyGoalCents,
-                  priceCents: selectedIdea.recommendedPriceCents,
-                  interval: selectedIdea.priceInterval as PriceInterval,
-                }),
+          sentence: describeSelection(data.profile, selectedIdea),
         }
 
   return {

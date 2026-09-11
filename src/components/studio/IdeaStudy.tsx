@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Badge, Button, Card, CardBody, Notice } from '@/components/ui'
 import {
-  formatEuros,
+  formatMoney,
   formatPrice,
   MODEL_LABEL,
   scoreTone,
@@ -105,13 +105,13 @@ export function IdeaStudy({
             <Figure label="Modèle" value={MODEL_LABEL[idea.businessModel] ?? idea.businessModel} />
             <Figure
               label="Prix conseillé"
-              value={formatPrice(idea.recommendedPriceCents, idea.priceInterval)}
+              value={formatPrice(idea.recommendedPriceCents, idea.priceInterval, idea.currency)}
             />
             <Figure
               label="Coût de fonctionnement"
               value={
                 idea.runningCostCents > 0
-                  ? `${formatEuros(idea.runningCostCents)} par mois`
+                  ? `${formatMoney(idea.runningCostCents, idea.currency)} par mois`
                   : 'proche de zéro'
               }
             />
@@ -119,9 +119,11 @@ export function IdeaStudy({
 
           <div className="mt-5 rounded-[var(--radius-card)] bg-[var(--color-brand-soft)] px-4 py-3">
             <p className="m-0 text-sm font-medium text-[var(--color-brand-strong)]">
-              {idea.customersNeeded > 0
-                ? `Environ ${idea.customersNeeded} client(s) pour votre objectif`
-                : 'Cette idée ne génère pas directement de chiffre d’affaires'}
+              {!idea.comparableToObjective
+                ? 'Montants non comparables à votre objectif actuel'
+                : idea.customersNeeded > 0
+                  ? `Environ ${idea.customersNeeded} client(s) pour votre objectif`
+                  : 'Cette idée ne génère pas directement de chiffre d’affaires'}
             </p>
             <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
               {idea.objectiveSentence}
@@ -159,7 +161,7 @@ export function IdeaStudy({
         disabled={busy !== null || !aiAvailable}
         onRun={() => void call('cahier', `/api/idees/${idea.id}/cahier-des-charges`)}
       >
-        {idea.specSheet !== null ? <SpecSheetView sheet={idea.specSheet} /> : null}
+        {idea.specSheet !== null ? <SpecSheetView sheet={idea.specSheet} currency={idea.currency} /> : null}
       </Step>
 
       <Card>
@@ -355,7 +357,7 @@ function ValidationReport({ validation }: { validation: Validation }) {
   )
 }
 
-function SpecSheetView({ sheet }: { sheet: SpecSheet }) {
+function SpecSheetView({ sheet, currency }: { sheet: SpecSheet; currency: string }) {
   return (
     <div className="grid gap-5">
       <div>
@@ -369,7 +371,7 @@ function SpecSheetView({ sheet }: { sheet: SpecSheet }) {
         <Row label="Le problème" value={sheet.problem} />
         <Row
           label="Ce qui est payant"
-          value={`${sheet.whatIsPaid} (${formatPrice(sheet.priceCents, sheet.priceInterval)})`}
+          value={`${sheet.whatIsPaid} (${formatPrice(sheet.priceCents, sheet.priceInterval, currency)})`}
         />
         <Row
           label="Comptes utilisateurs"
@@ -379,7 +381,7 @@ function SpecSheetView({ sheet }: { sheet: SpecSheet }) {
           label="Coût de fonctionnement"
           value={
             sheet.runningCostCents > 0
-              ? `${formatEuros(sheet.runningCostCents)} par mois environ`
+              ? `${formatMoney(sheet.runningCostCents, currency)} par mois environ`
               : 'proche de zéro'
           }
         />

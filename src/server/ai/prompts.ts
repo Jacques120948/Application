@@ -200,7 +200,10 @@ Chiffrage :
 - "timeToMarketWeeks" est le délai avant une première version présentable à un client.
 - "runningCostCents" est ce que coûtera l'application chaque mois une fois lancée
   (hébergement, encaissement des paiements, envoi d'e-mails, nom de domaine), en centimes.
-  Sois honnête : une application simple coûte souvent moins de 10 € par mois.
+  Sois honnête : une application simple coûte souvent moins de 10 unités par mois.
+- Tous les montants sont exprimés dans la monnaie du profil ("currency"), sans conversion.
+  Un objectif en francs suisses appelle des prix pensés pour le marché suisse, pas des prix
+  français convertis.
 - Les niveaux sont "faible", "moyen" ou "fort".
 
 Tu ne calcules JAMAIS de revenu, de nombre de clients ni de projection financière. La
