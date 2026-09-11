@@ -1,4 +1,4 @@
-# Mettre AppForge en ligne
+# Mettre Evoliia en ligne
 
 Ce guide s'adresse à quelqu'un qui n'a jamais mis un site en ligne. Aucune commande à
 taper dans un terminal. Comptez vingt minutes.

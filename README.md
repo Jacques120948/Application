@@ -1,4 +1,4 @@
-# AppForge
+# Evoliia
 
 Plateforme SaaS permettant à une personne qui ne sait pas coder de passer d'une idée à une
 application web fonctionnelle, monétisable et publiée.

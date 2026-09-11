@@ -1,6 +1,6 @@
 /** Catalogue de référence. Toute clé doit exister ici. */
 export const fr = {
-  'common.appName': 'AppForge',
+  'common.appName': 'Evoliia',
   'common.tagline':
     "Trouvez une idée. Créez-la. Lancez-la. Monétisez-la. Sans savoir coder.",
   'common.loading': 'Un instant…',

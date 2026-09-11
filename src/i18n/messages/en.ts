@@ -1,7 +1,7 @@
 import type { fr } from './fr'
 
 export const en: Record<keyof typeof fr, string> = {
-  'common.appName': 'AppForge',
+  'common.appName': 'Evoliia',
   'common.tagline': 'Find an idea. Build it. Launch it. Monetise it. Without coding.',
   'common.loading': 'One moment…',
   'common.save': 'Save',
