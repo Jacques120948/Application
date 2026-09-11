@@ -3,6 +3,7 @@ import { getTranslator, resolveLocale } from '@/i18n'
 import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
 import { Card, CardBody } from '@/components/ui'
+import { Logo } from '@/components/marketing/Logo'
 import { AuthForm } from '@/components/studio/AuthForm'
 
 export default async function RegisterPage({ params }: { params: Promise<{ locale: string }> }) {
@@ -12,7 +13,10 @@ export default async function RegisterPage({ params }: { params: Promise<{ local
 
   return (
     <div className="mx-auto w-full max-w-md px-5 py-16">
-      <h1 className="mb-6 text-2xl font-semibold">{t('auth.registerTitle')}</h1>
+      <a href={`/${locale}`} className="text-[var(--color-ink)] no-underline">
+        <Logo id="mark-register" size={30} wordmark={t('common.appName')} />
+      </a>
+      <h1 className="mt-6 mb-6 text-2xl font-semibold">{t('auth.registerTitle')}</h1>
       <Card>
         <CardBody>
           <AuthForm

@@ -5,19 +5,32 @@
  *
  * Une seule échelle de couleurs, d'espacements et de rayons. Les composants ne
  * définissent jamais de valeur arbitraire : ils consomment ces jetons.
+ *
+ * La palette reprend le logo Evoliia : une feuille en dégradé violet → bleu → cyan
+ * posée sur un bleu nuit profond. Le violet porte l'action, le cyan reste décoratif
+ * (son contraste sur blanc est insuffisant pour du texte), le bleu nuit sert de fond
+ * aux sections mises en avant.
  */
 
 @theme {
-  --color-ink: #0f172a;
-  --color-ink-soft: #475569;
-  --color-ink-faint: #94a3b8;
-  --color-canvas: #f8fafc;
+  --color-ink: #0e1235;
+  --color-ink-soft: #4a5378;
+  --color-ink-faint: #757fa6;
+  --color-canvas: #f7f8fd;
   --color-surface: #ffffff;
-  --color-line: #e2e8f0;
+  --color-line: #e4e7f4;
 
-  --color-brand: #2563eb;
-  --color-brand-strong: #1d4ed8;
-  --color-brand-soft: #eff6ff;
+  --color-brand: #5b4be8;
+  --color-brand-strong: #4436c9;
+  --color-brand-soft: #eeebff;
+
+  /* Cyan du logo. Décoratif uniquement : jamais du texte sur fond clair. */
+  --color-accent: #22b8e6;
+  --color-accent-soft: #e6f7fd;
+
+  --color-night: #0b1033;
+  --color-night-soft: #161c4a;
+  --color-night-line: #2a3168;
 
   --color-positive: #15803d;
   --color-positive-soft: #f0fdf4;
@@ -34,6 +47,10 @@
 
 :root {
   color-scheme: light;
+
+  /* Dégradé de la feuille du logo, réutilisé pour les aplats et les titres. */
+  --gradient-brand: linear-gradient(135deg, #7b5cff 0%, #4c6bff 48%, #37c6f0 100%);
+  --gradient-night: linear-gradient(160deg, #0b1033 0%, #1a1f56 55%, #241a5e 100%);
 }
 
 html,
@@ -54,6 +71,19 @@ body {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
   border-radius: 4px;
+}
+
+/* Réservé aux grands titres : le dégradé remplace la couleur du texte. */
+.text-gradient-brand {
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Sur fond nuit, le focus blanc reste visible. */
+.on-night :focus-visible {
+  outline-color: #ffffff;
 }
 
 @media (prefers-reduced-motion: reduce) {

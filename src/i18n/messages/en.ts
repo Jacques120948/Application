@@ -21,20 +21,104 @@ export const en: Record<keyof typeof fr, string> = {
   'nav.register': 'Create account',
   'nav.admin': 'Administration',
 
-  'home.heroTitle': 'From your idea to your first sellable app.',
-  'home.heroBody':
-    "You don't need an idea, and you don't need to code. Tell us what you are aiming for and what you can do: we suggest what to build, we build it with you, and we guide you to your first customers.",
-  'home.cta': 'Start with my goal',
-  'home.step1Title': 'We find what to build',
-  'home.step1Body':
-    'You state your goal, your time and your skills. We propose costed ideas, with a suggested price and the matching number of customers.',
-  'home.step2Title': 'We check before building',
-  'home.step2Body':
-    'Demand, competition, price, risks: the idea is analysed so you avoid working for nothing.',
-  'home.step3Title': 'We build and publish',
-  'home.step3Body': 'The app is created, tested, then published at an address you can share.',
-  'home.notAnotherBuilder':
-    "We don't just ask what you want to build. We help you work out what to build, why, and how to sell it.",
+  'landing.navHow': 'How it works',
+  'landing.navPricing': 'Pricing',
+
+  'landing.eyebrow': 'No coding, and no idea needed',
+  'landing.heroTitle': 'You are looking for extra income.',
+  'landing.heroTitleAccent': 'We look for what to build with you.',
+  'landing.heroBody':
+    'Most tools ask you to describe your app. Evoliia starts one step earlier: your goal, the time you have and what you already know how to do. From that we produce costed ideas, we check the one you like, then we build it with you.',
+  'landing.ctaPrimary': 'Start with my goal',
+  'landing.ctaSecondary': 'See how it works',
+  'landing.heroNote':
+    'Thinking, ideas and validation are free. No card is required to get started.',
+
+  'landing.exampleBadge': 'Example of a proposal',
+  'landing.exampleName': 'Guided revision sheets for parents',
+  'landing.exampleSummary':
+    'A simple space where a parent picks the level and subject, and receives a printable sheet every week, with the answer key.',
+  'landing.labelPrice': 'Suggested price',
+  'landing.labelCustomers': 'Customers for the goal',
+  'landing.labelCost': 'Running cost',
+  'landing.examplePrice': '12 € per month',
+  'landing.exampleCustomers': 'about 167',
+  'landing.exampleCost': '9 € per month',
+  'landing.exampleFootnote':
+    'Illustrative figures. In the app they are calculated from your own goal. They are calculations, never forecasts.',
+
+  'landing.diffTitle': 'This is not another app builder',
+  'landing.diffElsewhereTitle': 'Elsewhere',
+  'landing.diffElsewhereQuote': 'Describe the app you want.',
+  'landing.diffElsewhereBody':
+    'That assumes you have an idea, that someone wants it, and that you know what to charge. You leave with an app, and the income question is still open.',
+  'landing.diffHereTitle': 'With Evoliia',
+  'landing.diffHereQuote': 'How much extra income would you like to aim for?',
+  'landing.diffHereBody':
+    'Ideas come after that question, matched to your profile and comparable with each other. Each one states its suggested price, the matching number of customers and its running cost.',
+
+  'landing.howTitle': 'Six steps, in this order',
+  'landing.howBody':
+    'Each step exists so the next one is not wasted. Nothing is built until the customer question is settled.',
+  'landing.step1Title': 'Your goal',
+  'landing.step1Body':
+    'The amount you would like to reach, the time you have, your starting budget. Everything follows from this.',
+  'landing.step2Title': 'Costed ideas',
+  'landing.step2Body':
+    'Several directions matched to your profile, each with a suggested price and the number of customers needed to reach your goal.',
+  'landing.step3Title': 'Validation',
+  'landing.step3Body':
+    'Real demand, competition, legal obligations, hidden costs. The analysis is allowed to advise against an idea.',
+  'landing.step4Title': 'The specification',
+  'landing.step4Body':
+    'What will be built, what is deliberately postponed, and what depends on an outside service. You read it before anything starts.',
+  'landing.step5Title': 'The build',
+  'landing.step5Body':
+    'The app is generated, checked, and you watch it take shape. You change it by writing what you want different.',
+  'landing.step6Title': 'Going live',
+  'landing.step6Body':
+    'An address to share, a sales page, and a view of what actually happens: visits, sign-ups, payments.',
+
+  'landing.honestTitle': 'What we will never promise you',
+  'landing.honestBody':
+    'An honest tool beats an enthusiastic one. Here is what you will never read here.',
+  'landing.honest1Title': 'No guaranteed income',
+  'landing.honest1Body':
+    'We will never tell you how much you will earn. We calculate how many customers would be needed, at what price. What you make of it depends on your market and your work.',
+  'landing.honest2Title': 'No promises about app stores',
+  'landing.honest2Body':
+    'Nobody can guarantee that Apple or Google will accept an app. We tell you what they require, and what is left for you to do.',
+  'landing.honest3Title': 'No hidden costs',
+  'landing.honest3Body':
+    'When an idea needs an outside account, an approval or a paid service, it is written down before the build, not discovered afterwards.',
+
+  'landing.pricingTitle': 'Simple plans',
+  'landing.pricingBody':
+    'You only pay when you build. Setting your goal, receiving ideas and having one analysed costs nothing.',
+  'landing.pricingFree': 'Free',
+  'landing.pricingPerMonth': 'per month',
+  'landing.pricingCredits': '{count} credits per month',
+  'landing.pricingProjectsOne': 'One app',
+  'landing.pricingProjects': 'Up to {count} apps',
+  'landing.pricingNoBuild': 'Stops before the build',
+  'landing.pricingBuild': 'Build and publish',
+  'landing.pricingDomain': 'Custom address',
+  'landing.pricingExport': 'Code export',
+  'landing.pricingMobile': 'Mobile preparation',
+  'landing.pricingRecommended': 'Most chosen',
+  'landing.pricingCtaFree': 'Start for free',
+  'landing.pricingCtaPaid': 'Create my account',
+  'landing.pricingPaymentNote':
+    'Online payment is not active on this installation yet. Create your account for free: you will pick your plan the day it is, without losing any of your work.',
+  'landing.pricingNote':
+    'Credits cover the operations that call on artificial intelligence. A search for ideas uses about a dozen, building an app about twenty.',
+
+  'landing.finalTitle': 'Start with a question, not with an idea',
+  'landing.finalBody':
+    'A few minutes are enough to set your goal and receive your first costed directions.',
+  'landing.footerTagline':
+    'Evoliia helps people build extra income without knowing how to code.',
+  'landing.footerRights': 'All rights reserved.',
 
   'auth.registerTitle': 'Create your account',
   'auth.loginTitle': 'Sign in',

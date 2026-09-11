@@ -117,3 +117,16 @@ export async function getEffectivePlan(userId: string) {
     updatedAt: new Date(),
   }
 }
+
+/**
+ * Offres affichées publiquement, dans l'ordre défini en base.
+ *
+ * La grille tarifaire de la page d'accueil lit cette fonction : aucun prix n'est écrit
+ * dans une page, ils restent modifiables depuis la table `Plan` (exigence 34).
+ */
+export async function listPublicPlans() {
+  return prisma.plan.findMany({
+    where: { isActive: true },
+    orderBy: [{ sortOrder: 'asc' }, { priceCents: 'asc' }],
+  })
+}

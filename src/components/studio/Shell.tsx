@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { getTranslator, type Locale } from '@/i18n'
+import { Logo } from '@/components/marketing/Logo'
 import { LogoutButton } from './LogoutButton'
 
 /** Cadre du studio : en-tête sobre, contenu centré (exigence 38). */
@@ -21,9 +22,10 @@ export function Shell({
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-4 px-5 py-3.5">
           <a
             href={`/${locale}/dashboard`}
-            className="text-base font-semibold text-[var(--color-ink)] no-underline"
+            className="text-[var(--color-ink)] no-underline"
+            aria-label={t('common.appName')}
           >
-            {t('common.appName')}
+            <Logo id="mark-shell" size={28} wordmark={t('common.appName')} />
           </a>
           <nav className="flex items-center gap-4 text-sm">
             <a href={`/${locale}/dashboard`} className="text-[var(--color-ink-soft)] no-underline">

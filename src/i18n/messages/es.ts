@@ -5,7 +5,8 @@ import type { MessageKey } from './fr'
  * langue le signale à l'utilisateur (voir LOCALE_COMPLETENESS).
  */
 export const es: Partial<Record<MessageKey, string>> = {
-  'home.heroTitle': 'Tu idea se convierte en una aplicación.',
+  'landing.heroTitle': 'Busca unos ingresos complementarios.',
+  'landing.heroTitleAccent': 'Buscamos con usted qué construir.',
   'nav.dashboard': 'Mis aplicaciones',
   'dashboard.title': 'Mis aplicaciones',
   'dashboard.create': 'Crear una aplicación',
