@@ -9,10 +9,13 @@ export function AuthForm({
   mode,
   locale,
   labels,
+  requiresCode = false,
 }: {
   mode: 'register' | 'login'
   locale: string
   labels: { email: string; password: string; name: string; passwordHint: string; submit: string }
+  /** Vrai lorsque l'installation est réservée aux personnes disposant d'un code. */
+  requiresCode?: boolean
 }) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +34,7 @@ export function AuthForm({
             password: form.get('password'),
             name: form.get('name') || undefined,
             locale,
+            ...(requiresCode ? { invitationCode: form.get('invitationCode') } : {}),
           }
         : { email: form.get('email'), password: form.get('password') }
 
@@ -53,6 +57,15 @@ export function AuthForm({
 
   return (
     <form onSubmit={submit} className="grid gap-4">
+      {mode === 'register' && requiresCode ? (
+        <Field
+          label="Code d'accès"
+          hint="Cette version est réservée aux personnes invitées."
+        >
+          <Input name="invitationCode" required maxLength={120} autoComplete="off" />
+        </Field>
+      ) : null}
+
       {mode === 'register' ? (
         <Field label={labels.name}>
           <Input name="name" autoComplete="given-name" maxLength={80} />

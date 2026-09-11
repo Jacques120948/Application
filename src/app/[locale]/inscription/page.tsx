@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
+import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
 import { Card, CardBody } from '@/components/ui'
 import { AuthForm } from '@/components/studio/AuthForm'
@@ -17,6 +18,7 @@ export default async function RegisterPage({ params }: { params: Promise<{ local
           <AuthForm
             mode="register"
             locale={locale}
+            requiresCode={env.signupCode !== undefined}
             labels={{
               email: t('auth.email'),
               password: t('auth.password'),

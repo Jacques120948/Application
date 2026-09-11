@@ -37,6 +37,16 @@ export const env = {
   get anthropicApiKey(): string | undefined {
     return read('ANTHROPIC_API_KEY')
   },
+  /**
+   * Code d'accès exigé à l'inscription, quand il est défini.
+   *
+   * Sert à mettre la plateforme en ligne pour un test privé sans que quiconque trouvant
+   * l'adresse puisse créer un compte et consommer les crédits du propriétaire. Non défini,
+   * l'inscription est ouverte à tous.
+   */
+  get signupCode(): string | undefined {
+    return read('SIGNUP_CODE')
+  },
   get appUrl(): string {
     return read('APP_URL') ?? 'http://localhost:3000'
   },

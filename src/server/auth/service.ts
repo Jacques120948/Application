@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { prisma } from '@/server/db/client'
+import { env } from '@/lib/env'
 import { conflict, validation } from '@/lib/errors'
 import { logger } from '@/server/observability/logger'
 import { assertPasswordAcceptable, hashPassword, verifyPassword } from './password'
@@ -15,6 +16,8 @@ export const registerInput = z.object({
   password: z.string(),
   name: z.string().trim().min(1).max(80).optional(),
   locale: z.enum(SUPPORTED_LOCALES).default('fr'),
+  /** Exigé uniquement lorsque l'installation définit un code d'accès. */
+  invitationCode: z.string().trim().max(120).optional(),
 })
 
 export const loginInput = z.object({
@@ -32,6 +35,12 @@ export async function register(
   context: RequestContext = {},
 ): Promise<{ userId: string; token: string; expiresAt: Date }> {
   consume(`register:${context.ip ?? 'inconnu'}`, RULES.register)
+
+  const expected = env.signupCode
+  if (expected !== undefined && input.invitationCode !== expected) {
+    throw validation("Ce code d'accès n'est pas valide.")
+  }
+
   assertPasswordAcceptable(input.password)
 
   const existing = await prisma.user.findUnique({ where: { email: input.email } })

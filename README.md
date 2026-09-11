@@ -74,6 +74,19 @@ La plateforme reste utilisable de bout en bout : le parcours de création retomb
 modèles de départ déterministes, et l'interface indique explicitement que la structure ne
 vient pas de l'assistant. Aucun écran ne laisse croire qu'une IA a travaillé alors que non.
 
+## Mettre en ligne
+
+Voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)** : guide pas à pas, sans terminal, pour Railway ou
+pour Vercel et Neon.
+
+Une seule commande suffit sur l'hébergeur. `npm run build` applique les migrations, insère
+les offres par défaut, puis construit l'application. Vérifié sur une base vierge.
+
+La sécurité ne dépend pas d'une configuration particulière de la base : les politiques Row
+Level Security sont posées en `FORCE`, donc elles s'appliquent même au rôle propriétaire.
+Une installation avec une seule adresse de connexion, comme en fournissent les hébergeurs
+gérés, reste protégée. Les tests d'isolation ont été rejoués dans cette configuration.
+
 ## Commandes
 
 | Commande | Effet |

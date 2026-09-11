@@ -81,3 +81,41 @@ describe('coût des opérations IA', () => {
     expect(costMicros('modele-inexistant', { inputTokens: 10, outputTokens: 10, cachedTokens: 0 })).toBe(0)
   })
 })
+
+describe("code d'accès à l'inscription", () => {
+  beforeEach(() => clearAll())
+
+  it("laisse l'inscription ouverte quand aucun code n'est défini", async () => {
+    delete process.env.SIGNUP_CODE
+    const { registerInput } = await import('@/server/auth/service')
+    expect(registerInput.parse({ email: 'a@b.fr', password: 'motdepasse-42' })).toMatchObject({
+      email: 'a@b.fr',
+    })
+  })
+
+  it('refuse un code absent ou faux quand un code est exigé', async () => {
+    process.env.SIGNUP_CODE = 'sesame-2026'
+    const { register } = await import('@/server/auth/service')
+
+    await expect(
+      register(
+        { email: `${Date.now()}@exemple.test`, password: 'motdepasse-42', locale: 'fr' },
+        { ip: `sans-code-${Date.now()}` },
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+
+    await expect(
+      register(
+        {
+          email: `${Date.now()}@exemple.test`,
+          password: 'motdepasse-42',
+          locale: 'fr',
+          invitationCode: 'mauvais',
+        },
+        { ip: `faux-code-${Date.now()}` },
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+
+    delete process.env.SIGNUP_CODE
+  })
+})
