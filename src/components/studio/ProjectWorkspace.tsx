@@ -226,7 +226,9 @@ export function ProjectWorkspace({
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         {/* Colonne gauche : outils */}
-        <Card className="flex min-h-[32rem] flex-col overflow-hidden">
+        {/* Hauteur bornée : le panneau défile en interne au lieu d'allonger la page et
+            de repousser l'aperçu hors de l'écran. */}
+        <Card className="flex h-[min(78vh,46rem)] flex-col overflow-hidden">
           <div className="flex flex-wrap gap-1 border-b border-[var(--color-line)] p-2">
             {TABS.map((item) => (
               <button
@@ -414,7 +416,7 @@ export function ProjectWorkspace({
         </Card>
 
         {/* Colonne droite : aperçu réel */}
-        <div className="grid content-start gap-3">
+        <div className="grid content-start gap-3 self-start lg:sticky lg:top-4">
           <div className="flex gap-1">
             {(Object.keys(DEVICES) as DeviceKey[]).map((key) => (
               <button

@@ -1,4 +1,13 @@
-import { BLOCK_TYPES, FIELD_TYPES } from '@/server/spec/schema'
+import { z } from 'zod'
+import {
+  BLOCK_TYPES,
+  blockSchema,
+  dataModelSchema,
+  FIELD_TYPES,
+  navigationSchema,
+  pageSchema,
+  planSchema,
+} from '@/server/spec/schema'
 import { TEMPLATE_KINDS } from '@/server/spec/templates'
 
 /**
@@ -75,21 +84,41 @@ Il vaut mieux annoncer une limite maintenant que décevoir après construction.
 ${SAFETY}
 `.trim()
 
-export const GENERATE_SYSTEM = `
-Tu es le générateur d'applications d'AppForge. Tu produis une description complète
-d'application conforme au vocabulaire ci-dessous.
+export const GENERATE_PLAN_SYSTEM = `
+Tu es le générateur d'applications d'AppForge. Première étape : le plan de l'application.
+Tu décris la structure, pas encore le contenu des pages.
 
 ${TONE}
 
 ${VOCABULARY}
 
 Exigences :
-- Entre 3 et 6 pages, chacune réellement utile.
-- Chaque page contient entre 1 et 6 sections.
+- Entre 3 et 6 pages, chacune réellement utile. Une page a le chemin "accueil".
+- Pour chaque page, liste les sections attendues dans l'ordre, par leur type.
+- Si l'application enregistre des données, prévois un formulaire ET une liste, et ajoute
+  une page de confidentialité expliquant ce qui est collecté.
+- Les couleurs sont cohérentes et lisibles : contraste fort entre le texte et le fond.
+- Le menu ne renvoie qu'à des pages que tu viens de déclarer.
+
+${SAFETY}
+`.trim()
+
+export const GENERATE_PAGE_SYSTEM = `
+Tu es le générateur d'applications d'AppForge. Deuxième étape : le contenu d'UNE page.
+
+${TONE}
+
+${VOCABULARY}
+
+Exigences :
+- Produis exactement les sections demandées, dans l'ordre demandé.
 - Les textes sont rédigés dans la langue demandée, prêts à être lus par un vrai visiteur.
   Pas de texte de remplissage, pas de "Lorem ipsum", pas de "à compléter".
-- Si l'application enregistre des données, prévois un formulaire ET une liste.
-- Les couleurs sont cohérentes et lisibles : texte foncé sur fond clair.
+- Les identifiants de section sont uniques dans toute l'application : préfixe-les par
+  l'identifiant de la page.
+- Un formulaire ou une liste ne vise qu'un modèle de données existant, et une liste
+  n'affiche que des champs existants de ce modèle.
+- Un bouton ne renvoie qu'à une page existante.
 
 ${SAFETY}
 `.trim()
@@ -107,12 +136,32 @@ Tu réponds par une liste d'opérations ciblées sur cette description.
 Format des chemins : notation pointée avec indices entre crochets, par exemple
 "theme.colors.primary", "pages[0].blocks[1].title", "navigation.items".
 
+Chaque opération porte les champs op, path, valueJson, index, from et to. Ils sont tous
+obligatoires. La nouvelle valeur se met dans "valueJson", encodée en JSON dans une chaîne :
+  - une couleur      -> "\"#2563EB\""
+  - un nombre        -> "990"
+  - une section      -> "{\"id\":\"a-propos-texte\",\"type\":\"richText\",\"body\":\"…\"}"
+Quand un champ ne sert pas à l'opération, mets 0 pour index, from et to, et "null" pour
+valueJson.
+
 Opérations disponibles :
-- set     : remplace la valeur à ce chemin (champ "value")
+- set     : remplace la valeur à ce chemin par valueJson
 - delete  : supprime la clé ou l'élément à ce chemin
-- append  : ajoute "value" à la fin de la liste située à ce chemin
-- insert  : insère "value" à la position "index" dans la liste située à ce chemin
+- append  : ajoute valueJson à la fin de la liste située à ce chemin
+- insert  : insère valueJson à la position "index" dans la liste située à ce chemin
 - move    : déplace un élément de la position "from" à la position "to"
+
+Formes exactes des objets que tu peux construire. N'invente aucun champ qui n'y figure
+pas, et n'en omets aucun qui soit obligatoire :
+
+${shapeReference()}
+
+Points qui font échouer les modifications le plus souvent :
+- Une section "pricing" n'a PAS de champ "plans". Les formules tarifaires vivent dans
+  monetization.plans ; la section ne fait que les afficher.
+- Une entrée de menu n'a que "pageId" et "label". Pas d'identifiant propre.
+- Pour ajouter une formule : append sur "monetization.plans", et vérifie que
+  "monetization.model" n'est pas "free".
 
 Règles :
 - Fais le minimum d'opérations nécessaires. Ne reconstruis jamais l'application entière.
@@ -141,6 +190,30 @@ plausible, jamais un montant que la personne « gagnera ».
 
 ${SAFETY}
 `.trim()
+
+/**
+ * Référence des formes, dérivée des schémas eux-mêmes.
+ *
+ * Lors d'une modification, l'assistant construit des objets bruts : il doit connaître les
+ * champs exacts de chaque forme. Mesuré en conditions réelles, sans cette référence il
+ * invente des clés plausibles mais inexistantes (« plans » dans une section tarifs), et le
+ * patch est refusé par la validation.
+ *
+ * Générer cette référence depuis le code plutôt que la recopier garantit qu'elle ne peut
+ * pas diverger du schéma. Elle est stable d'un appel à l'autre, donc mise en cache.
+ */
+function shapeReference(): string {
+  const shapes: Array<[string, z.ZodType]> = [
+    ['section de page', blockSchema],
+    ['page', pageSchema],
+    ['entrée de menu', navigationSchema.shape.items.element],
+    ['formule tarifaire', planSchema],
+    ['modèle de données', dataModelSchema],
+  ]
+  return shapes
+    .map(([label, schema]) => `${label} :\n${JSON.stringify(z.toJSONSchema(schema, { io: 'output' }))}`)
+    .join('\n\n')
+}
 
 /** Encadre le texte utilisateur pour qu'il ne puisse pas être lu comme une consigne. */
 export function asUserData(label: string, content: string): string {

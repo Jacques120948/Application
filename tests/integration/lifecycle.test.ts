@@ -19,8 +19,41 @@ import { getPublishedApp } from '@/server/runtime/published'
 import { createRecord, listRecords } from '@/server/runtime/records'
 import { withRuntimeScope } from '@/server/db/scope'
 import { AppError } from '@/lib/errors'
+import type { DataField } from '@/server/spec/schema'
 
 /** Parcours complet du MVP : créer, modifier, versionner, tester, publier, utiliser. */
+
+/** Valeur valide pour chaque type de champ, quel que soit le modèle de données. */
+function sampleInput(model: { fields: readonly DataField[] }): Record<string, unknown> {
+  const input: Record<string, unknown> = {}
+  for (const field of model.fields) {
+    switch (field.type) {
+      case 'number':
+        input[field.id] = 3
+        break
+      case 'boolean':
+        input[field.id] = true
+        break
+      case 'date':
+        input[field.id] = '2026-03-03'
+        break
+      case 'select':
+        input[field.id] = field.options?.[0]
+        break
+      case 'email':
+        input[field.id] = 'client@exemple.test'
+        break
+      case 'url':
+        input[field.id] = 'https://exemple.test'
+        break
+      case 'text':
+      case 'longText':
+        input[field.id] = 'Valeur de test'
+        break
+    }
+  }
+  return input
+}
 
 let userId: string
 let projectId: string
@@ -140,23 +173,7 @@ describe('données d’une application publiée', () => {
     const model = project.spec.dataModels.find((candidate) => candidate.scope === 'shared')
     if (model === undefined) return
 
-    const input: Record<string, unknown> = { champInconnu: 'valeur pirate' }
-    for (const field of model.fields) {
-      input[field.id] =
-        field.type === 'number'
-          ? 2
-          : field.type === 'boolean'
-            ? true
-            : field.type === 'date'
-              ? '2026-02-02'
-              : field.type === 'select'
-                ? field.options?.[0]
-                : field.type === 'email'
-                  ? 'client@exemple.fr'
-                  : field.type === 'url'
-                    ? 'https://exemple.fr'
-                    : 'Valeur'
-    }
+    const input = { ...sampleInput(model), champInconnu: 'valeur pirate' }
 
     const record = await createRecord({
       projectId,
@@ -179,17 +196,7 @@ describe('données d’une application publiée', () => {
       }),
     )
 
-    const input: Record<string, unknown> = {}
-    for (const field of model.fields) {
-      input[field.id] =
-        field.type === 'date'
-          ? '2026-03-03'
-          : field.type === 'select'
-            ? field.options?.[0]
-            : field.type === 'number'
-              ? 3
-              : 'Ma donnée privée'
-    }
+    const input = sampleInput(model)
     await createRecord({ projectId, spec: project.spec, modelId: model.id, endUserId: endUser.id, input })
 
     const mine = await listRecords({

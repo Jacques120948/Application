@@ -9,5 +9,6 @@ process.env.DIRECT_DATABASE_URL ??= 'postgresql://appforge:appforge_dev@127.0.0.
 process.env.SESSION_SECRET ??= 'secret-de-test-suffisamment-long-0123456789'
 process.env.ENCRYPTION_KEY ??= 'cle-de-test-suffisamment-longue-0123456789'
 process.env.APP_URL ??= 'http://localhost:3000'
-// Aucun appel réseau vers le modèle pendant les tests.
-delete process.env.ANTHROPIC_API_KEY
+// Aucun appel réseau vers le modèle pendant les tests : ceinture et bretelles avec
+// `env` dans vitest.config.ts, car Vitest charge le fichier .env du projet.
+process.env.ANTHROPIC_API_KEY = ''

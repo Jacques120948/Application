@@ -21,6 +21,12 @@ export type PlanDefaults = {
   sortOrder: number
 }
 
+/**
+ * Valeurs de départ calées sur le coût réel mesuré : une application complète revient à
+ * environ 130 crédits, une modification assistée à une dizaine. Un crédit correspond à
+ * un millième de dollar de coût API. Ces chiffres sont modifiables depuis
+ * l'administration, sans redéploiement.
+ */
 export const DEFAULT_PLANS: readonly PlanDefaults[] = [
   {
     id: 'starter',
@@ -28,7 +34,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Pour tester une première idée et publier une application sur le web.',
     priceCents: 0,
     maxProjects: 1,
-    monthlyCredits: 300,
+    monthlyCredits: 600,
     allowExport: false,
     allowCustomDomain: false,
     allowMobilePrep: false,
@@ -40,7 +46,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Plusieurs applications, davantage de crédits, export du projet.',
     priceCents: 1900,
     maxProjects: 5,
-    monthlyCredits: 2000,
+    monthlyCredits: 6000,
     allowExport: true,
     allowCustomDomain: true,
     allowMobilePrep: false,
@@ -52,7 +58,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Volume de projets et de crédits élevé, préparation iOS et Android.',
     priceCents: 4900,
     maxProjects: 25,
-    monthlyCredits: 8000,
+    monthlyCredits: 25000,
     allowExport: true,
     allowCustomDomain: true,
     allowMobilePrep: true,

@@ -236,8 +236,47 @@ export async function editWithAssistant(
     return { reply, applied: false, summary: null, spec: current, creditsSpent: 0, versionNumber: null }
   }
 
-  const result = await requestEdit(userId, projectId, current, trimmed)
-  const response = result.value
+  // Une tentative, puis une seule reprise si la validation refuse le patch. La reprise
+  // reçoit le motif exact du refus : mesurée en conditions réelles, elle rattrape les
+  // erreurs de forme que l'assistant corrige dès qu'on les lui nomme.
+  let result = await requestEdit(userId, projectId, current, trimmed)
+  let creditsSpent = result.creditsSpent
+  let response = result.value
+  let patch: SpecPatch | null = null
+  let updated: AppSpec | null = null
+  let lastProblem = ''
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (!response.supported || response.operations.length === 0) break
+
+    try {
+      // Le contrat de sortie de l'assistant est plus permissif que le moteur de patch.
+      // C'est ici que la forme est resserrée.
+      patch = specPatchSchema.parse({
+        summary: response.summary,
+        operations: response.operations,
+      })
+      updated = applyPatch(current, patch)
+      break
+    } catch (error) {
+      patch = null
+      lastProblem = describeFailure(error)
+      logger.warn('patch rejeté', {
+        projectId,
+        attempt: attempt + 1,
+        reason: lastProblem,
+        operations: response.operations.map((operation) => `${operation.op} ${operation.path}`),
+      })
+      if (attempt === 1) break
+
+      const retry = await requestEdit(userId, projectId, current, trimmed, {
+        operations: response.operations,
+        problem: lastProblem,
+      })
+      creditsSpent += retry.creditsSpent
+      response = retry.value
+    }
+  }
 
   if (!response.supported || response.operations.length === 0) {
     await recordAssistantMessage(userId, projectId, response.reply, null)
@@ -246,47 +285,36 @@ export async function editWithAssistant(
       applied: false,
       summary: null,
       spec: current,
-      creditsSpent: result.creditsSpent,
+      creditsSpent,
       versionNumber: null,
     }
   }
 
-  // Le contrat de sortie de l'assistant est volontairement plus permissif que le moteur
-  // de patch (champs optionnels selon l'opération). C'est ici que la forme est resserrée.
-  let patch: SpecPatch
-  let updated: AppSpec
-  try {
-    patch = specPatchSchema.parse({
-      summary: response.summary,
-      operations: response.operations,
-    })
-    updated = applyPatch(current, patch)
-  } catch (error) {
+  if (patch === null || updated === null) {
     const reply =
       "Je n'ai pas réussi à appliquer cette modification sans casser votre application. Rien n'a été changé. Reformulez votre demande et je réessaie."
     await recordAssistantMessage(userId, projectId, reply, null)
-    logger.warn('patch rejeté', {
-      projectId,
-      reason: error instanceof Error ? error.message : 'inconnu',
-    })
     return {
       reply,
       applied: false,
       summary: null,
       spec: current,
-      creditsSpent: result.creditsSpent,
+      creditsSpent,
       versionNumber: null,
     }
   }
 
+  const appliedSpec = updated
+  const appliedPatch = patch
+
   const versionNumber = await withUserScope(userId, async (tx) => {
     await requireOwnedProject(tx, projectId, userId)
-    const version = await createVersion(tx, projectId, updated, patch.summary, 'AI')
+    const version = await createVersion(tx, projectId, appliedSpec, appliedPatch.summary, 'AI')
     await tx.project.update({
       where: { id: projectId },
       data: {
-        draftSpec: updated as unknown as Prisma.InputJsonValue,
-        name: updated.name,
+        draftSpec: appliedSpec as unknown as Prisma.InputJsonValue,
+        name: appliedSpec.name,
         status: 'TESTING',
       },
     })
@@ -305,11 +333,26 @@ export async function editWithAssistant(
   return {
     reply: response.reply,
     applied: true,
-    summary: patch.summary,
-    spec: updated,
-    creditsSpent: result.creditsSpent,
+    summary: appliedPatch.summary,
+    spec: appliedSpec,
+    creditsSpent,
     versionNumber,
   }
+}
+
+/** Motif de refus, lisible par l'assistant lors de la reprise. */
+function describeFailure(error: unknown): string {
+  if (error instanceof AppError) {
+    const issues = (error.details as { issues?: Array<{ path: string; message: string }> })?.issues
+    if (Array.isArray(issues) && issues.length > 0) {
+      return issues
+        .slice(0, 5)
+        .map((issue) => `${issue.path} : ${issue.message}`)
+        .join(' ; ')
+    }
+    return error.message
+  }
+  return error instanceof Error ? error.message : 'inconnu'
 }
 
 /**

@@ -10,21 +10,25 @@ import {
   type CreditedOperation,
 } from '@/server/billing/credits'
 import { consume, RULES } from '@/server/auth/rate-limit'
-import { appSpecSchema, type AppSpec } from '@/server/spec/schema'
-import { parseAppSpec } from '@/server/spec/validate'
+import type { AppSpec, Block } from '@/server/spec/schema'
+import type { PatchOperation } from '@/server/spec/patch'
+import { assembleSpec } from '@/server/spec/assemble'
 import { getAnthropic, isAiAvailable } from './client'
-import { costMicros, OPERATION_PROFILES } from './routing'
+import { costMicros, GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
 import {
   asUserData,
   BLUEPRINT_SYSTEM,
   EDIT_SYSTEM,
-  GENERATE_SYSTEM,
+  GENERATE_PAGE_SYSTEM,
+  GENERATE_PLAN_SYSTEM,
   IDEAS_SYSTEM,
 } from './prompts'
 import {
+  appPlanSchema,
   blueprintSchema,
   editResponseSchema,
   ideasSchema,
+  pageContentSchema,
   type Blueprint,
   type EditResponse,
   type Ideas,
@@ -33,157 +37,201 @@ import {
 /**
  * Opérations de l'assistant.
  *
- * Séquence invariable, dans cet ordre :
+ * Séquence invariable :
  *   1. quota d'appels (protège d'une boucle accidentelle) ;
  *   2. solde de crédits vérifié AVANT tout appel réseau ;
- *   3. appel du modèle avec une sortie structurée ;
- *   4. enregistrement du coût réel observé ;
+ *   3. un ou plusieurs appels du modèle en sortie structurée ;
+ *   4. enregistrement du coût réel observé, un enregistrement par appel ;
  *   5. débit des crédits — jamais en cas d'échec.
  */
 
-type RunOptions<T> = {
-  operation: CreditedOperation
-  userId: string
-  projectId?: string
+export type RunResult<T> = { value: T; creditsSpent: number; balance: number }
+
+type CallOutcome<T> = { value: T; usage: TokenUsage; latencyMs: number; model: ModelId }
+
+/**
+ * Un appel au modèle, sans comptabilité : c'est l'appelant qui la fait.
+ *
+ * On ignore volontairement le `parsed_output` du SDK et on valide la réponse nous-mêmes :
+ * mesuré contre l'API réelle, ce champ vaut `null` dès que la réponse contient un bloc de
+ * réflexion avant le texte, ce qui est le cas par défaut sur les modèles actuels. La
+ * validation doit de toute façon passer par notre schéma Zod, qui fait autorité.
+ * La contrainte de grammaire, elle, s'applique toujours : le modèle ne peut produire que
+ * du JSON conforme au schéma.
+ */
+async function callStructured<T>(params: {
+  model: ModelId
+  maxTokens: number
+  effort: 'low' | 'medium' | 'high'
   system: string
   userContent: string
   schema: ZodType<T>
-}
-
-type RunResult<T> = { value: T; creditsSpent: number; balance: number }
-
-async function runStructured<T>(options: RunOptions<T>): Promise<RunResult<T>> {
-  if (!isAiAvailable()) {
-    throw new AppError(
-      'AI_UNAVAILABLE',
-      "L'assistant n'est pas configuré sur cette installation.",
-    )
-  }
-
-  consume(`ai:${options.userId}`, RULES.aiOperation)
-  await ensureCredits(options.userId, options.operation)
-
-  const profile = OPERATION_PROFILES[options.operation]
+}): Promise<CallOutcome<T>> {
   const startedAt = Date.now()
 
-  try {
-    const response = await getAnthropic().beta.messages.parse({
-      model: profile.model,
-      max_tokens: profile.maxTokens,
-      system: [{ type: 'text', text: options.system, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: options.userContent }],
-      output_config: {
-        format: betaZodOutputFormat(options.schema),
-        effort: profile.effort,
-      },
-    })
+  const response = await getAnthropic().beta.messages.parse({
+    model: params.model,
+    max_tokens: params.maxTokens,
+    // Le prompt système ne varie pas d'un appel à l'autre : il est mis en cache.
+    system: [{ type: 'text', text: params.system, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: params.userContent }],
+    output_config: {
+      format: betaZodOutputFormat(params.schema),
+      effort: params.effort,
+    },
+  })
 
-    const latencyMs = Date.now() - startedAt
+  const usage: TokenUsage = {
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+    cachedTokens: response.usage.cache_read_input_tokens ?? 0,
+  }
+  const latencyMs = Date.now() - startedAt
+  const details = { usage, latencyMs }
 
-    if (response.stop_reason === 'refusal') {
-      await recordUsage(options, profile.model, response.usage, latencyMs, false, 'refusal')
-      throw new AppError(
-        'AI_REFUSED',
-        "Je ne peux pas créer cette application. Essayez de décrire une autre idée.",
-      )
-    }
-
-    const parsed = response.parsed_output
-    if (parsed === null || parsed === undefined) {
-      await recordUsage(options, profile.model, response.usage, latencyMs, false, 'unparsable')
-      throw new AppError(
-        'AI_UNAVAILABLE',
-        "L'assistant n'a pas répondu correctement. Réessayez dans un instant.",
-      )
-    }
-
-    const usage = {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-      cachedTokens: response.usage.cache_read_input_tokens ?? 0,
-    }
-    const cost = costMicros(profile.model, usage)
-    const credits = creditsForCost(options.operation, cost)
-
-    await prisma.aiUsage.create({
-      data: {
-        userId: options.userId,
-        projectId: options.projectId ?? null,
-        operation: options.operation,
-        model: profile.model,
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        cachedTokens: usage.cachedTokens,
-        costMicros: cost,
-        creditsSpent: credits,
-        latencyMs,
-        success: true,
-      },
-    })
-
-    const balance = await spendCredits(
-      options.userId,
-      credits,
-      `ia:${options.operation}`,
-      options.projectId,
-    )
-
-    return { value: parsed as T, creditsSpent: credits, balance }
-  } catch (error) {
-    if (error instanceof AppError) throw error
-    logger.error('appel IA en échec', {
-      operation: options.operation,
-      userId: options.userId,
-      reason: error instanceof Error ? error.message : 'inconnu',
-    })
-    await prisma.aiUsage
-      .create({
-        data: {
-          userId: options.userId,
-          projectId: options.projectId ?? null,
-          operation: options.operation,
-          model: profile.model,
-          latencyMs: Date.now() - startedAt,
-          success: false,
-          errorCode: 'network',
-        },
-      })
-      .catch(() => undefined)
+  if (response.stop_reason === 'refusal') {
     throw new AppError(
-      'AI_UNAVAILABLE',
-      "L'assistant est momentanément indisponible. Réessayez dans un instant.",
+      'AI_REFUSED',
+      "Je ne peux pas créer cette application. Essayez de décrire une autre idée.",
+      { details },
     )
   }
+  if (response.stop_reason === 'max_tokens') {
+    throw new AppError(
+      'AI_UNAVAILABLE',
+      "La réponse de l'assistant a été interrompue. Réessayez avec une demande plus simple.",
+      { details },
+    )
+  }
+
+  const text = response.content
+    .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    throw new AppError(
+      'AI_UNAVAILABLE',
+      "L'assistant n'a pas répondu correctement. Réessayez dans un instant.",
+      { details },
+    )
+  }
+
+  const parsed = params.schema.safeParse(raw)
+  if (!parsed.success) {
+    logger.warn('réponse de l\'assistant non conforme au schéma', {
+      model: params.model,
+      issue: parsed.error.issues[0]?.message,
+      path: parsed.error.issues[0]?.path.join('.'),
+    })
+    throw new AppError(
+      'AI_UNAVAILABLE',
+      "L'assistant n'a pas répondu correctement. Réessayez dans un instant.",
+      { details },
+    )
+  }
+
+  return { value: parsed.data, usage, latencyMs, model: params.model }
 }
 
-async function recordUsage(
-  options: { userId: string; projectId?: string; operation: CreditedOperation },
-  model: string,
-  usage: { input_tokens: number; output_tokens: number },
-  latencyMs: number,
+type Accounting = { userId: string; projectId?: string; operation: CreditedOperation }
+
+async function recordCall(
+  accounting: Accounting,
+  step: string,
+  outcome: { model: string; usage: TokenUsage; latencyMs: number },
   success: boolean,
-  errorCode: string,
-): Promise<void> {
+  errorCode?: string,
+): Promise<number> {
+  const cost = costMicros(outcome.model, outcome.usage)
   await prisma.aiUsage
     .create({
       data: {
-        userId: options.userId,
-        projectId: options.projectId ?? null,
-        operation: options.operation,
-        model,
-        inputTokens: usage.input_tokens,
-        outputTokens: usage.output_tokens,
-        costMicros: costMicros(model, {
-          inputTokens: usage.input_tokens,
-          outputTokens: usage.output_tokens,
-          cachedTokens: 0,
-        }),
-        latencyMs,
+        userId: accounting.userId,
+        projectId: accounting.projectId ?? null,
+        operation: step,
+        model: outcome.model,
+        inputTokens: outcome.usage.inputTokens,
+        outputTokens: outcome.usage.outputTokens,
+        cachedTokens: outcome.usage.cachedTokens,
+        costMicros: cost,
+        latencyMs: outcome.latencyMs,
         success,
-        errorCode,
+        errorCode: errorCode ?? null,
       },
     })
     .catch(() => undefined)
+  return cost
+}
+
+/** Vérifie le quota et le solde. À appeler avant le premier appel réseau. */
+async function beforeCalls(accounting: Accounting): Promise<void> {
+  if (!isAiAvailable()) {
+    throw new AppError('AI_UNAVAILABLE', "L'assistant n'est pas configuré sur cette installation.")
+  }
+  consume(`ai:${accounting.userId}`, RULES.aiOperation)
+  await ensureCredits(accounting.userId, accounting.operation)
+}
+
+/** Débite une fois, sur la base du coût cumulé réellement observé. */
+async function afterCalls(accounting: Accounting, totalCostMicros: number): Promise<RunResult<null>> {
+  const credits = creditsForCost(accounting.operation, totalCostMicros)
+  const balance = await spendCredits(
+    accounting.userId,
+    credits,
+    `ia:${accounting.operation}`,
+    accounting.projectId,
+  )
+  return { value: null, creditsSpent: credits, balance }
+}
+
+function toPublicFailure(error: unknown, context: Record<string, unknown>): AppError {
+  if (error instanceof AppError) return error
+  logger.error('appel IA en échec', {
+    ...context,
+    reason: error instanceof Error ? error.message : 'inconnu',
+  })
+  return new AppError(
+    'AI_UNAVAILABLE',
+    "L'assistant est momentanément indisponible. Réessayez dans un instant.",
+  )
+}
+
+/** Cas courant : une opération = un seul appel. */
+async function runSingleCall<T>(params: {
+  accounting: Accounting
+  system: string
+  userContent: string
+  schema: ZodType<T>
+}): Promise<RunResult<T>> {
+  await beforeCalls(params.accounting)
+  const profile = OPERATION_PROFILES[params.accounting.operation]
+
+  try {
+    const outcome = await callStructured({
+      model: profile.model,
+      maxTokens: profile.maxTokens,
+      effort: profile.effort,
+      system: params.system,
+      userContent: params.userContent,
+      schema: params.schema,
+    })
+    const cost = await recordCall(params.accounting, params.accounting.operation, outcome, true)
+    const spent = await afterCalls(params.accounting, cost)
+    return { value: outcome.value, creditsSpent: spent.creditsSpent, balance: spent.balance }
+  } catch (error) {
+    await recordCall(
+      params.accounting,
+      params.accounting.operation,
+      { model: profile.model, usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 }, latencyMs: 0 },
+      false,
+      error instanceof AppError ? error.code : 'network',
+    )
+    throw toPublicFailure(error, { operation: params.accounting.operation })
+  }
 }
 
 // ───────────────────────────── Opérations publiques ──────────────────────────
@@ -193,9 +241,8 @@ export async function generateBlueprint(
   idea: string,
   locale: string,
 ): Promise<RunResult<Blueprint>> {
-  return runStructured({
-    operation: 'blueprint',
-    userId,
+  return runSingleCall({
+    accounting: { userId, operation: 'blueprint' },
     system: BLUEPRINT_SYSTEM,
     schema: blueprintSchema,
     userContent: [
@@ -206,27 +253,161 @@ export async function generateBlueprint(
   })
 }
 
+/**
+ * Génération complète, en deux temps.
+ *
+ * Un appel pour le plan, puis un appel par page, lancés en parallèle. Ce découpage est
+ * imposé par la taille maximale de la grammaire des sorties structurées, mesurée contre
+ * l'API réelle (voir src/server/ai/schemas.ts). Il rend aussi la génération plus robuste :
+ * une page en échec ne fait pas perdre l'application entière.
+ */
 export async function generateSpec(
   userId: string,
   projectId: string,
   blueprint: Blueprint,
   locale: string,
 ): Promise<RunResult<AppSpec>> {
-  const result = await runStructured({
-    operation: 'generate',
-    userId,
-    projectId,
-    system: GENERATE_SYSTEM,
-    schema: appSpecSchema,
-    userContent: [
-      `Langue des textes à produire : ${locale}. Le champ "locale" doit valoir "${locale}".`,
-      `Le champ "specVersion" doit valoir 1.`,
-      asUserData('plan', JSON.stringify(blueprint, null, 2)),
-      "Construis la description complète de cette application.",
-    ].join('\n\n'),
-  })
-  // Deuxième filet : cohérence des références internes, que le schéma seul ne couvre pas.
-  return { ...result, value: parseAppSpec(result.value) }
+  const accounting: Accounting = { userId, projectId, operation: 'generate' }
+  await beforeCalls(accounting)
+
+  let totalCost = 0
+
+  try {
+    const plan = await callStructured({
+      ...GENERATION_STEPS.plan,
+      system: GENERATE_PLAN_SYSTEM,
+      schema: appPlanSchema,
+      userContent: [
+        `Langue des textes à produire : ${locale}. Le champ "locale" doit valoir "${locale}".`,
+        asUserData('plan_valide_par_utilisateur', JSON.stringify(blueprint, null, 2)),
+        "Décris la structure de cette application.",
+      ].join('\n\n'),
+    })
+    totalCost += await recordCall(accounting, 'generate:plan', plan, true)
+
+    // Contexte commun à toutes les pages : identique d'un appel à l'autre, donc mis en cache.
+    const sharedContext = JSON.stringify({
+      application: { name: plan.value.name, tagline: plan.value.tagline, locale },
+      modeles_de_donnees: plan.value.dataModels,
+      pages: plan.value.pages.map((page) => ({ id: page.id, title: page.title })),
+    })
+
+    const results = await Promise.allSettled(
+      plan.value.pages.map((page) =>
+        callStructured({
+          ...GENERATION_STEPS.page,
+          system: GENERATE_PAGE_SYSTEM,
+          schema: pageContentSchema,
+          userContent: [
+            `Langue des textes à produire : ${locale}.`,
+            asUserData('contexte', sharedContext),
+            asUserData('page_a_rediger', JSON.stringify(page, null, 2)),
+            'Produis les sections de cette page.',
+          ].join('\n\n'),
+        }).then((outcome) => ({ pageId: page.id, outcome })),
+      ),
+    )
+
+    const blocksByPage = new Map<string, Block[]>()
+    let failedPages = 0
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        totalCost += await recordCall(accounting, 'generate:page', result.value.outcome, true)
+        blocksByPage.set(result.value.pageId, result.value.outcome.value.blocks)
+      } else {
+        failedPages += 1
+        logger.warn('page non générée', { projectId })
+      }
+    }
+    if (blocksByPage.size === 0) {
+      throw new AppError('AI_UNAVAILABLE', "L'assistant n'a produit aucune page exploitable.")
+    }
+    if (failedPages > 0) {
+      logger.warn('génération partielle', { projectId, failedPages })
+    }
+
+    const spec = assembleSpec({
+      name: plan.value.name,
+      tagline: plan.value.tagline,
+      description: plan.value.description,
+      locale: plan.value.locale,
+      theme: plan.value.theme,
+      auth: plan.value.auth,
+      dataModels: plan.value.dataModels,
+      navigation: plan.value.navigation,
+      monetization: plan.value.monetization,
+      pages: plan.value.pages,
+      blocksByPage,
+    })
+
+    const spent = await afterCalls(accounting, totalCost)
+    return { value: spec, creditsSpent: spent.creditsSpent, balance: spent.balance }
+  } catch (error) {
+    // Les appels déjà faits ont coûté : ils sont facturés même si l'assemblage échoue.
+    if (totalCost > 0) await afterCalls(accounting, totalCost).catch(() => undefined)
+    throw toPublicFailure(error, { operation: 'generate', projectId })
+  }
+}
+
+export type EditOperations = {
+  supported: boolean
+  reply: string
+  summary: string
+  operations: PatchOperation[]
+}
+
+/**
+ * Traduit la réponse de l'assistant en opérations de patch.
+ *
+ * Les valeurs arrivent encodées en JSON dans une chaîne (voir editResponseSchema). Une
+ * chaîne illisible rend l'opération inapplicable : on préfère abandonner la modification
+ * et le dire, plutôt que d'appliquer un patch partiel.
+ */
+function toPatchOperations(response: EditResponse): EditOperations {
+  const operations: PatchOperation[] = []
+
+  for (const operation of response.operations) {
+    if (operation.op === 'delete') {
+      operations.push({ op: 'delete', path: operation.path })
+      continue
+    }
+    if (operation.op === 'move') {
+      operations.push({ op: 'move', path: operation.path, from: operation.from, to: operation.to })
+      continue
+    }
+
+    let value: unknown
+    try {
+      value = JSON.parse(operation.valueJson)
+    } catch {
+      return {
+        supported: false,
+        reply:
+          "Je n'ai pas réussi à préparer cette modification. Reformulez votre demande et je réessaie.",
+        summary: response.summary,
+        operations: [],
+      }
+    }
+
+    if (operation.op === 'insert') {
+      operations.push({ op: 'insert', path: operation.path, index: operation.index, value })
+    } else {
+      operations.push({ op: operation.op, path: operation.path, value })
+    }
+  }
+
+  return {
+    supported: response.supported && operations.length > 0,
+    reply: response.reply,
+    summary: response.summary,
+    operations,
+  }
+}
+
+/** Contexte d'une tentative précédente refusée par la validation. */
+export type FailedAttempt = {
+  operations: PatchOperation[]
+  problem: string
 }
 
 export async function requestEdit(
@@ -234,19 +415,28 @@ export async function requestEdit(
   projectId: string,
   spec: AppSpec,
   request: string,
-): Promise<RunResult<EditResponse>> {
-  return runStructured({
-    operation: 'edit',
-    userId,
-    projectId,
+  previous?: FailedAttempt,
+): Promise<RunResult<EditOperations>> {
+  const result = await runSingleCall({
+    accounting: { userId, projectId, operation: 'edit' },
     system: EDIT_SYSTEM,
     schema: editResponseSchema,
     userContent: [
       asUserData('application_actuelle', JSON.stringify(spec)),
       asUserData('demande', request),
+      ...(previous === undefined
+        ? []
+        : [
+            [
+              'Ta tentative précédente a été refusée par la validation. Corrige-la.',
+              `Opérations proposées : ${JSON.stringify(previous.operations)}`,
+              `Motif du refus : ${previous.problem}`,
+            ].join('\n'),
+          ]),
       'Produis les opérations nécessaires pour répondre à cette demande.',
     ].join('\n\n'),
   })
+  return { ...result, value: toPatchOperations(result.value) }
 }
 
 export type IdeaProfile = {
@@ -264,9 +454,8 @@ export async function suggestIdeas(
   profile: IdeaProfile,
   locale: string,
 ): Promise<RunResult<Ideas>> {
-  return runStructured({
-    operation: 'ideas',
-    userId,
+  return runSingleCall({
+    accounting: { userId, operation: 'ideas' },
     system: IDEAS_SYSTEM,
     schema: ideasSchema,
     userContent: [

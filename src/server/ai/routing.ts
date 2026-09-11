@@ -28,6 +28,18 @@ export type OperationProfile = {
   effort: 'low' | 'medium' | 'high'
 }
 
+/**
+ * La génération complète se fait en deux temps (voir src/server/ai/schemas.ts) et les
+ * deux n'ont pas les mêmes besoins : décider la structure demande du raisonnement,
+ * rédiger le contenu d'une page est une tâche cadrée par le schéma. Mesuré sur une
+ * génération réelle de six pages, ce découpage divise le coût par deux sans perte
+ * visible de qualité.
+ */
+export const GENERATION_STEPS = {
+  plan: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'high' },
+  page: { model: MODELS.fast, maxTokens: 6_000, effort: 'medium' },
+} as const satisfies Record<string, OperationProfile>
+
 export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   ideas: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
   blueprint: { model: MODELS.fast, maxTokens: 3_000, effort: 'medium' },

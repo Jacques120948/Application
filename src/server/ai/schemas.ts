@@ -1,5 +1,13 @@
 import { z } from 'zod'
 import { TEMPLATE_KINDS } from '@/server/spec/templates'
+import {
+  BLOCK_TYPES,
+  blockSchema,
+  dataModelSchema,
+  monetizationSchema,
+  navigationSchema,
+  themeSchema,
+} from '@/server/spec/schema'
 
 /**
  * Contrats de sortie de l'assistant.
@@ -67,7 +75,18 @@ export const ideasSchema = z
 
 export type Ideas = z.infer<typeof ideasSchema>
 
-/** Réponse de l'assistant à une demande de modification. */
+/**
+ * Réponse de l'assistant à une demande de modification.
+ *
+ * `valueJson` porte la nouvelle valeur **encodée en JSON dans une chaîne**, et non comme
+ * une valeur libre. Raison mesurée contre l'API : un champ sans type déclaré (`unknown`)
+ * est refusé par la compilation de grammaire des sorties structurées. Une chaîne est
+ * typable, et la valeur qu'elle contient est de toute façon revalidée par le schéma
+ * AppSpec après application du patch — la sécurité ne repose pas sur ce champ.
+ *
+ * Tous les champs sont obligatoires : `index`, `from` et `to` valent 0 quand l'opération
+ * ne les utilise pas, `valueJson` vaut "null".
+ */
 export const editResponseSchema = z
   .object({
     /** Faux quand la demande sort du vocabulaire de la plateforme. */
@@ -81,10 +100,10 @@ export const editResponseSchema = z
           .object({
             op: z.enum(['set', 'delete', 'append', 'insert', 'move']),
             path: z.string().min(1).max(300),
-            value: z.unknown().optional(),
-            index: z.number().int().min(0).max(200).optional(),
-            from: z.number().int().min(0).max(200).optional(),
-            to: z.number().int().min(0).max(200).optional(),
+            valueJson: z.string().max(20_000),
+            index: z.number().int().min(0).max(200),
+            from: z.number().int().min(0).max(200),
+            to: z.number().int().min(0).max(200),
           })
           .strict(),
       )
@@ -93,3 +112,53 @@ export const editResponseSchema = z
   .strict()
 
 export type EditResponse = z.infer<typeof editResponseSchema>
+
+/**
+ * Génération en deux temps.
+ *
+ * L'API compile les sorties structurées en grammaire, et cette grammaire a une taille
+ * maximale. Mesuré contre l'API réelle : l'union des dix types de section passe sans
+ * problème dans `{ blocks: [...] }`, mais la même union imbriquée un niveau plus bas,
+ * dans `{ pages: [ { blocks: [...] } ] }`, dépasse la limite et l'appel est refusé.
+ *
+ * D'où deux contrats :
+ *   1. `appPlanSchema`   — tout sauf le contenu des pages (un seul appel) ;
+ *   2. `pageContentSchema` — les sections d'UNE page (un appel par page, en parallèle).
+ *
+ * Effet de bord bienvenu : une page qui échoue ne fait pas perdre toute l'application,
+ * et le prompt système commun reste identique d'un appel à l'autre, donc mis en cache.
+ */
+export const appPlanSchema = z
+  .object({
+    name: z.string().min(1).max(120),
+    tagline: z.string().min(1).max(400),
+    description: z.string().min(1).max(4000),
+    locale: z.enum(['fr', 'en', 'de', 'it', 'es']),
+    theme: themeSchema,
+    auth: z.object({ enabled: z.boolean(), allowSignup: z.boolean() }).strict(),
+    dataModels: z.array(dataModelSchema).max(8),
+    pages: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(48),
+            title: z.string().min(1).max(120),
+            path: z.string().min(1).max(48),
+            requiresAuth: z.boolean(),
+            /** Sections attendues sur cette page, dans l'ordre. */
+            blockTypes: z.array(z.enum(BLOCK_TYPES)).min(1).max(8),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(8),
+    navigation: navigationSchema,
+    monetization: monetizationSchema,
+  })
+  .strict()
+
+export type AppPlan = z.infer<typeof appPlanSchema>
+
+export const pageContentSchema = z.object({ blocks: z.array(blockSchema).min(1).max(10) }).strict()
+
+export type PageContent = z.infer<typeof pageContentSchema>

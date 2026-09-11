@@ -55,6 +55,19 @@ npm run dev
 | `ANTHROPIC_API_KEY` | Accès à l'assistant. **Facultative** — voir ci-dessous |
 | `APP_URL` | Adresse publique de la plateforme |
 
+### Coûts observés
+
+Mesurés sur des générations réelles, aux tarifs publics de l'API Claude :
+
+| Opération | Coût |
+|---|---|
+| Analyse d'une idée | 0,011 USD |
+| Construction d'une application de six pages | 0,105 USD |
+| Une modification demandée à l'assistant | 0,008 à 0,012 USD |
+
+Un crédit correspond à un millième de dollar de coût API. Les dotations mensuelles par
+offre sont calées là-dessus et restent modifiables depuis l'administration.
+
 ### Sans clé d'accès au modèle
 
 La plateforme reste utilisable de bout en bout : le parcours de création retombe sur des
@@ -76,6 +89,11 @@ vient pas de l'assistant. Aucun écran ne laisse croire qu'une IA a travaillé a
 Les tests d'intégration tournent sur une vraie base PostgreSQL, avec le rôle applicatif
 soumis au Row Level Security : c'est la seule façon de vérifier réellement l'isolation
 entre clients. Base attendue : `appforge_test`.
+
+La suite de tests ne passe **jamais** d'appel au modèle : `vitest.config.ts` neutralise la
+clé d'accès. Des tests qui dépenseraient de l'argent à chaque exécution ne seraient ni
+reproductibles ni exécutables en intégration continue. Le chemin assistant se vérifie
+manuellement, avec une clé, sur une installation de développement.
 
 ## Architecture en une phrase
 

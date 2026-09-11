@@ -22,10 +22,13 @@ export function ChatPanel({
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const endRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
+  // On fait défiler le conteneur de la conversation, jamais la page : `scrollIntoView`
+  // ferait remonter toute la fenêtre et chasserait l'aperçu hors de l'écran.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
+    const container = scrollRef.current
+    if (container !== null) container.scrollTop = container.scrollHeight
   }, [messages.length, busy])
 
   async function send() {
@@ -63,7 +66,7 @@ export function ChatPanel({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto p-4">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <p className="text-sm text-[var(--color-ink-soft)]">
             Dites ce que vous voulez changer. Par exemple : « Mets le bouton en bleu », « Ajoute
@@ -87,7 +90,6 @@ export function ChatPanel({
             <p className="text-sm text-[var(--color-ink-soft)]">L&apos;assistant travaille…</p>
           ) : null}
         </div>
-        <div ref={endRef} />
       </div>
 
       <div className="border-t border-[var(--color-line)] p-3">
