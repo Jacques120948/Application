@@ -31,7 +31,8 @@ export default async function IdeaStudyPage({
   const [wallet, plan] = await Promise.all([getWallet(user.id), getEffectivePlan(user.id)])
 
   return (
-    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}>
+    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
+      isAdmin={user.role === 'ADMIN'}>
       <div className="mx-auto w-full max-w-3xl">
         <IdeaStudy
           locale={locale}

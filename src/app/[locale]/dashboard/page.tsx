@@ -28,7 +28,8 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   const next = overview.journey.next
 
   return (
-    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}>
+    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
+      isAdmin={user.role === 'ADMIN'}>
       <div className="grid gap-6">
         <Card>
           <CardBody>

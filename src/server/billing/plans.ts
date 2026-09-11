@@ -73,7 +73,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     allowBuild: true,
     allowExport: false,
     allowCustomDomain: true,
-    allowMobilePrep: true,
+    allowMobilePrep: false,
     isRecommended: true,
     sortOrder: 2,
   },
@@ -85,15 +85,26 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxProjects: 20,
     monthlyCredits: 800,
     allowBuild: true,
-    allowExport: true,
+    allowExport: false,
     allowCustomDomain: true,
-    allowMobilePrep: true,
+    allowMobilePrep: false,
     isRecommended: false,
     sortOrder: 3,
   },
 ] as const
 
 export const FREE_PLAN_ID = 'free'
+
+/**
+ * Capacités réellement construites aujourd'hui.
+ *
+ * Une offre ne doit jamais annoncer autre chose que ce que le produit sait faire. L'export
+ * du code et la préparation pour mobile sont prévus, mais rien ne les met en œuvre : ils
+ * restent donc désactivés partout, et un test le vérifie (tests/unit/plans.test.ts).
+ */
+export const IMPLEMENTED_PLAN_CAPABILITIES = ['allowBuild', 'allowCustomDomain'] as const
+
+export const PLANNED_PLAN_CAPABILITIES = ['allowExport', 'allowMobilePrep'] as const
 
 /** Renvoie le plan effectif d'un utilisateur, en retombant sur l'offre gratuite. */
 export async function getEffectivePlan(userId: string) {

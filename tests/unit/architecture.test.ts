@@ -91,6 +91,29 @@ describe('règles de dépendance', () => {
     expect(offenders).toEqual([])
   })
 
+  /**
+   * Le back-office écrit en base sans repasser par le parcours. Toute route ajoutée sous
+   * /api/admin doit donc traverser le service qui vérifie le rôle : une route qui appelle
+   * Prisma directement ouvrirait l'administration à n'importe qui.
+   */
+  it("n'expose aucune route d'administration non gardée", () => {
+    const adminRoutes = sources.filter((path) =>
+      path.startsWith(join('src', 'app', 'api', 'admin')),
+    )
+    expect(adminRoutes.length).toBeGreaterThan(0)
+    const offenders = adminRoutes.filter(
+      (path) => !read(path).includes("from '@/server/admin/service'"),
+    )
+    expect(offenders).toEqual([])
+  })
+
+  it("vérifie l'origine sur toute écriture d'administration", () => {
+    const offenders = sources
+      .filter((path) => path.startsWith(join('src', 'app', 'api', 'admin')))
+      .filter((path) => !read(path).includes('assertSameOrigin'))
+    expect(offenders).toEqual([])
+  })
+
   it("n'expose aucun secret au navigateur", () => {
     const offenders = sources
       .filter((path) => path.startsWith(join('src', 'components')))

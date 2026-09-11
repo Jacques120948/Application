@@ -47,6 +47,17 @@ export const env = {
   get signupCode(): string | undefined {
     return read('SIGNUP_CODE')
   },
+  /**
+   * Adresse du compte administrateur, promu à chaque mise en ligne par prisma/seed.ts.
+   *
+   * C'est l'amorçage : sans elle, personne ne pourrait ouvrir le back-office sur une
+   * installation neuve sans écrire de SQL. Le rôle reste stocké en base, cette variable
+   * ne fait que le poser la première fois.
+   */
+  get adminEmail(): string | undefined {
+    const value = read('ADMIN_EMAIL')
+    return value?.trim().toLowerCase()
+  },
   get appUrl(): string {
     return read('APP_URL') ?? 'http://localhost:3000'
   },

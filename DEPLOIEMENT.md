@@ -62,6 +62,7 @@ personne, y compris dans une conversation.
 | `ENCRYPTION_KEY` | Quarante autres caractères au hasard, différents |
 | `ANTHROPIC_API_KEY` | Votre nouvelle clé, celle qui commence par `sk-ant-` |
 | `SIGNUP_CODE` | Un mot de passe de votre choix, sans lui n'importe qui pourrait créer un compte |
+| `ADMIN_EMAIL` | Votre adresse e-mail, celle du compte qui pourra ouvrir l'administration |
 | `APP_URL` | À remplir après le premier déploiement, voir juste en dessous |
 
 `APP_URL` ne peut être connue qu'une fois le site déployé. Laissez-la vide au premier

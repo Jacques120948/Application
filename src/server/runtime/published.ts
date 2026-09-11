@@ -49,3 +49,14 @@ export async function recordVisit(projectId: string, path: string): Promise<void
     tx.appEvent.create({ data: { projectId, type: 'view', path: path.slice(0, 200) } }),
   ).catch(() => undefined)
 }
+
+/**
+ * Nombre d'applications actuellement en ligne.
+ *
+ * Cette lecture vit ici, avec les autres lectures d'applications publiées, et pas dans le
+ * back-office : les projets publiés sont publics par construction, tout le reste de la
+ * table reste masqué par le Row Level Security.
+ */
+export async function countPublishedApps(): Promise<number> {
+  return prisma.project.count({ where: { publishedAt: { not: null }, deletedAt: null } })
+}

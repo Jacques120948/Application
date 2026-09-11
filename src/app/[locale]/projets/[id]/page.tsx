@@ -33,7 +33,8 @@ export default async function ProjectPage({
   ])
 
   return (
-    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}>
+    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
+      isAdmin={user.role === 'ADMIN'}>
       <ProjectWorkspace
         projectId={project.id}
         locale={locale}

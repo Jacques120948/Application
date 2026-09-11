@@ -8,11 +8,14 @@ export function Shell({
   locale,
   userName,
   credits,
+  isAdmin = false,
   children,
 }: {
   locale: Locale
   userName?: string | null
   credits?: number
+  /** Affiche l'entrée du back-office. Le lien ne donne aucun droit : le serveur décide. */
+  isAdmin?: boolean
   children: ReactNode
 }) {
   const t = getTranslator(locale)
@@ -34,6 +37,14 @@ export function Shell({
             <a href={`/${locale}/idees`} className="text-[var(--color-ink-soft)] no-underline">
               {t('nav.ideas')}
             </a>
+            {isAdmin ? (
+              <a
+                href={`/${locale}/administration`}
+                className="text-[var(--color-ink-soft)] no-underline"
+              >
+                {t('nav.admin')}
+              </a>
+            ) : null}
           </nav>
           <div className="ml-auto flex items-center gap-4 text-sm">
             {credits !== undefined ? (

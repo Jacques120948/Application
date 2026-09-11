@@ -21,7 +21,8 @@ export default async function IdeasPage({ params }: { params: Promise<{ locale: 
   const [ideas, wallet] = await Promise.all([listIdeas(user.id), getWallet(user.id)])
 
   return (
-    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}>
+    <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
+      isAdmin={user.role === 'ADMIN'}>
       <div className="mx-auto w-full max-w-3xl">
         <h1 className="mb-1 text-2xl font-semibold">Des idées pour vous</h1>
         <p className="mb-7 text-[var(--color-ink-soft)]">

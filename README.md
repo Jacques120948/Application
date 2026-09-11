@@ -54,6 +54,8 @@ npm run dev
 | `ENCRYPTION_KEY` | Clé de chiffrement des secrets des créateurs |
 | `ANTHROPIC_API_KEY` | Accès à l'assistant. **Facultative** — voir ci-dessous |
 | `APP_URL` | Adresse publique de la plateforme |
+| `SIGNUP_CODE` | Code exigé à l'inscription. **Facultative** — sans elle, l'inscription est ouverte |
+| `ADMIN_EMAIL` | Compte promu administrateur à chaque mise en ligne. **Facultative** |
 
 ### Coûts observés
 
@@ -66,7 +68,8 @@ Mesurés sur des générations réelles, aux tarifs publics de l'API Claude :
 | Une modification demandée à l'assistant | 0,008 à 0,012 USD |
 
 Un crédit correspond à un millième de dollar de coût API. Les dotations mensuelles par
-offre sont calées là-dessus et restent modifiables depuis l'administration.
+offre sont calées là-dessus et se modifient depuis le back-office, à `/fr/administration`,
+sans redéploiement.
 
 ### Sans clé d'accès au modèle
 
