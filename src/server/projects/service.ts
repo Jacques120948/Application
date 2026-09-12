@@ -193,6 +193,8 @@ export type ProjectSummary = {
   publishedAt: Date | null
   readyScore: number | null
   themeColor: string
+  themeAccent: string
+  tagline: string
 }
 
 export async function listProjects(userId: string): Promise<ProjectSummary[]> {
@@ -210,7 +212,7 @@ export async function listProjects(userId: string): Promise<ProjectSummary[]> {
       updatedAt: project.updatedAt,
       publishedAt: project.publishedAt,
       readyScore: project.lastCheckScore,
-      themeColor: readThemeColor(project.draftSpec),
+      ...readIdentity(project.draftSpec),
     }))
   })
 }
@@ -659,7 +661,27 @@ function isSlugCollision(error: unknown): boolean {
   return code === 'P2002' && JSON.stringify(target ?? '').includes('slug')
 }
 
-function readThemeColor(draftSpec: unknown): string {
-  const colors = (draftSpec as { theme?: { colors?: { primary?: unknown } } })?.theme?.colors
-  return typeof colors?.primary === 'string' ? colors.primary : '#2563EB'
+/**
+ * Couleurs et accroche de l'application, lues dans sa spécification.
+ *
+ * Le tableau de bord affiche la vignette d'une application avec ses propres couleurs et sa
+ * propre phrase. Une pastille de couleur unie ne disait rien ; le dégradé et l'accroche
+ * font qu'on reconnaît son application sans lire son nom.
+ */
+function readIdentity(draftSpec: unknown): {
+  themeColor: string
+  themeAccent: string
+  tagline: string
+} {
+  const spec = draftSpec as {
+    tagline?: unknown
+    theme?: { colors?: { primary?: unknown; accent?: unknown } }
+  }
+  const colors = spec?.theme?.colors
+  const primary = typeof colors?.primary === 'string' ? colors.primary : '#2563EB'
+  return {
+    themeColor: primary,
+    themeAccent: typeof colors?.accent === 'string' ? colors.accent : primary,
+    tagline: typeof spec?.tagline === 'string' ? spec.tagline : '',
+  }
 }
