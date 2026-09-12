@@ -42,8 +42,12 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   edit: 2,
   assistant: 1,
   coach: 1,
-  // Mesuré sur la taille réelle du prompt et de la sortie attendue : environ 0,025 USD,
-  // soit 5 crédits. À réviser dès que des appels réels auront été observés.
+  /*
+   * Plancher seulement. Le coût réel observé sur un premier kit complet est de 11 crédits,
+   * soit environ 0,055 USD : la sortie fait près de 5 000 jetons, le double de ce qui
+   * avait été estimé avant mesure. Le plancher reste bas pour ne pas surfacturer un kit
+   * court ; c'est LAUNCH_KIT_ESTIMATED_CREDITS qui est annoncé au créateur.
+   */
   launchKit: 5,
 }
 

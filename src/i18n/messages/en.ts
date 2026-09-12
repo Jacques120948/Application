@@ -290,4 +290,30 @@ export const en: Record<keyof typeof fr, string> = {
   'credits.insufficient':
     'You no longer have enough credits for this operation. Your credits renew every month.',
   'ai.disabled': 'The assistant is not configured on this installation. See the setup guide.',
+
+  'landing.step7Title': 'The launch',
+  'landing.step7Body':
+    "Building an app does not make it known. Your marketing angles, your post ideas and your first week, prepared from what you have already described.",
+
+  'landing.launchTitle': 'Once it is live, it has to be found',
+  'landing.launchBody':
+    "This is where most projects stop: the app exists, and nobody knows what to say about it. Evoliia prepares enough to start, without asking you to write everything again.",
+  'landing.launchAnglesTitle': 'Your marketing angles',
+  'landing.launchAnglesBody':
+    "Several ways to present the same app: time saved, problem avoided, result obtained. Keep the ones that sound like you, drop the rest.",
+  'landing.launchIdeasTitle': 'Seven post ideas',
+  'landing.launchIdeasBody':
+    "Each with its hook, what to show and say, and the photo or video to prepare. Enough for a first week without wondering what to publish.",
+  'landing.launchWeekTitle': 'Your first week',
+  'landing.launchWeekBody':
+    "Seven dated, written posts with their call to action. Every text can be edited in place, then you approve what suits you.",
+  'landing.launchSourceTitle': 'Nothing is asked twice',
+  'landing.launchSourceBody':
+    "The problem you solve, your audience, your value proposition, your price: all of it comes from what you already wrote along the way. No extra form.",
+  'landing.launchLimitTitle': 'What we do not do',
+  'landing.launchLimitBody':
+    "Nothing is published, nothing is scheduled: social networks are not connected. The kit is there to be read, corrected and copied. No statistic is invented, and no customer review is written on your behalf.",
+  'landing.launchIncluded': 'Included from the Launch plan.',
+
+  'landing.pricingLaunchKit': 'Marketing launch kit',
 }

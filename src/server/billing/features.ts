@@ -108,6 +108,12 @@ export const FEATURES: readonly Feature[] = [
 
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)
 
+/**
+ * Kit de lancement. Nommé ici plutôt que dans le service qui l'implémente : la grille
+ * tarifaire a besoin de savoir quelles offres l'ouvrent, sans charger tout le moteur.
+ */
+export const LAUNCH_KIT_FEATURE = 'social_launch_basic'
+
 export function findFeature(id: string): Feature | undefined {
   return FEATURES.find((feature) => feature.id === id)
 }

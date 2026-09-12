@@ -6,7 +6,7 @@ import { logger } from '@/server/observability/logger'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { creditsForCost, ensureCredits, spendCredits } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
-import { requireFeature } from '@/server/billing/features'
+import { LAUNCH_KIT_FEATURE, requireFeature } from '@/server/billing/features'
 import { costMicros } from '@/server/ai/routing'
 import { appSpecSchema } from '@/server/spec/schema'
 import { launchKitSchema, type LaunchKit } from '@/lib/marketing'
@@ -28,7 +28,16 @@ import { isEngineAvailable, requestLaunchKit } from './engine'
  *      calculer la marge d'une offre à 29, 59 ou 99 francs sans deviner.
  */
 
-export const LAUNCH_KIT_FEATURE = 'social_launch_basic'
+export { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
+
+/**
+ * Coût annoncé avant de lancer la préparation.
+ *
+ * Mesuré, pas estimé : un premier kit complet en conditions réelles a coûté 11 crédits.
+ * Annoncer un chiffre plus flatteur ferait une mauvaise surprise à celui qui regarde son
+ * solde après coup. À réviser si la taille des kits change.
+ */
+export const LAUNCH_KIT_ESTIMATED_CREDITS = 11
 
 export type KitView = {
   id: string

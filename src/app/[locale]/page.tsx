@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
+import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listPublicPlans } from '@/server/billing/plans'
 import { customersNeededFor, formatAmount } from '@/server/business/economics'
 import { DEMO_APPS } from '@/server/demos/catalog'
@@ -100,6 +101,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     { title: t('landing.step4Title'), body: t('landing.step4Body') },
     { title: t('landing.step5Title'), body: t('landing.step5Body') },
     { title: t('landing.step6Title'), body: t('landing.step6Body') },
+    { title: t('landing.step7Title'), body: t('landing.step7Body') },
   ]
 
   const promises = [
@@ -558,7 +560,61 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         </div>
       </section>
 
-      {/* ─────────── 8. Plus qu'un générateur d'applications ───────────── */}
+      {/* ───────────────── 8. Préparer son lancement ────────────────────── */}
+      <Section
+        id="lancement"
+        title={t('landing.launchTitle')}
+        body={t('landing.launchBody')}
+        tone="surface"
+      >
+        <div className="grid gap-5 md:grid-cols-3">
+          {[
+            { title: t('landing.launchAnglesTitle'), body: t('landing.launchAnglesBody') },
+            { title: t('landing.launchIdeasTitle'), body: t('landing.launchIdeasBody') },
+            { title: t('landing.launchWeekTitle'), body: t('landing.launchWeekBody') },
+          ].map((card) => (
+            <div
+              key={card.title}
+              className="reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6"
+            >
+              <h3 className="m-0 text-base font-semibold">{card.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                {card.body}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/*
+          Ce qui vient du parcours, et ce que nous ne faisons pas : les deux côte à côte.
+          Annoncer la seconde colonne aussi clairement que la première évite la déception
+          de celui qui croirait acheter une publication automatique.
+        */}
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div className="rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
+            <h3 className="m-0 text-base font-semibold text-[var(--color-brand-strong)]">
+              {t('landing.launchSourceTitle')}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('landing.launchSourceBody')}
+            </p>
+          </div>
+          <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+            <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
+              {t('landing.launchLimitTitle')}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('landing.launchLimitBody')}
+            </p>
+          </div>
+        </div>
+
+        <p className="mt-6 text-sm text-[var(--color-ink-soft)]">
+          {t('landing.launchIncluded')}
+        </p>
+      </Section>
+
+      {/* ─────────── 9. Plus qu'un générateur d'applications ───────────── */}
       <Section title={t('landing.compareTitle')} body={t('landing.compareBody')}>
         <div className="grid gap-5 md:grid-cols-2">
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
@@ -630,6 +686,9 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                   : t('landing.pricingProjects', { count: plan.maxProjects })
                 : t('landing.pricingNoBuild'),
               ...(plan.allowBuild ? [t('landing.pricingBuild')] : []),
+              ...(plan.features.includes(LAUNCH_KIT_FEATURE)
+                ? [t('landing.pricingLaunchKit')]
+                : []),
               ...(plan.allowCustomDomain ? [t('landing.pricingDomain')] : []),
               ...(plan.allowMobilePrep ? [t('landing.pricingMobile')] : []),
               ...(plan.allowExport ? [t('landing.pricingExport')] : []),

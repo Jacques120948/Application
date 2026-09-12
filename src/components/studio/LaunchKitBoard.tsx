@@ -32,11 +32,13 @@ export function LaunchKitBoard({
   initialKit,
   engineReady,
   credits,
+  estimatedCredits,
 }: {
   projectId: string
   initialKit: KitState | null
   engineReady: boolean
   credits: number
+  estimatedCredits: number
 }) {
   const [kit, setKit] = useState(initialKit)
   const [busy, setBusy] = useState<'creation' | 'enregistrement' | 'approbation' | null>(null)
@@ -118,7 +120,7 @@ export function LaunchKitBoard({
                   {busy === 'creation' ? 'Préparation en cours…' : 'Préparer mon lancement'}
                 </Button>
                 <span className="text-xs text-[var(--color-ink-soft)]">
-                  Environ 5 crédits. Il vous en reste {credits}.
+                  Environ {estimatedCredits} crédits. Il vous en reste {credits}.
                 </span>
               </div>
             ) : (

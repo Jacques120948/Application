@@ -99,30 +99,34 @@ maintenant sans vendre ce qui n'est pas construit.
 ## Coût mesuré
 
 Prompt système réel, mesuré sur un projet complet : 4 222 caractères, soit environ
-1 170 jetons. Sortie attendue pour trois angles, sept idées et sept publications : environ
-2 500 jetons.
+1 170 jetons. Sortie observée sur un premier kit réel : environ 5 000 jetons — le double de
+ce qui avait été estimé avant mesure, parce que sept publications rédigées entièrement,
+avec leurs hashtags et leurs appels à l'action, pèsent plus qu'on ne le croit.
 
 | | Jetons | Prix unitaire | Coût |
 |---|---|---|---|
-| Entrée | 1 170 | 2 $/M | 0,0023 $ |
-| Sortie | 2 500 | 10 $/M | 0,0250 $ |
-| **Total par kit** | | | **≈ 0,027 $** |
+| Entrée | ~1 170 | 2 $/M | 0,002 $ |
+| Sortie | ~5 000 | 10 $/M | 0,050 $ |
+| **Total par kit** | | | **0,055 $, soit 11 crédits** |
 
-Soit 6 crédits au barème d'Evoliia (1 crédit = 5 000 micro-dollars). Le modèle retenu est
-`claude-sonnet-5` et non le haut de gamme : rédiger du texte marketing ne demande pas le
-modèle de raisonnement, et la sortie y coûte deux fois et demie moins cher.
+Chiffre relevé sur un appel réel le 12 septembre 2026, pas une estimation. Le modèle retenu
+est `claude-sonnet-5` et non le haut de gamme : rédiger du texte marketing ne demande pas le
+modèle de raisonnement, et la sortie y coûte deux fois et demie moins cher. Au modèle de
+raisonnement, ce même kit coûterait environ 0,13 $.
 
 **Plafond de dépense par client**, qui est la vraie garantie : le coût est borné par les
 crédits de l'offre, pas par l'usage.
 
-| Offre | Crédits/mois | Dépense IA maximale | Recette |
-|---|---|---|---|
-| Launch | 100 | 0,50 $ | 29 € |
-| Builder | 350 | 1,75 $ | 59 € |
-| Business | 800 | 4,00 $ | 99 € |
+| Offre | Crédits/mois | Kits possibles | Dépense IA maximale | Recette |
+|---|---|---|---|---|
+| Launch | 100 | 9 | 0,50 $ | 29 € |
+| Builder | 350 | 31 | 1,75 $ | 59 € |
+| Business | 800 | 72 | 4,00 $ | 99 € |
 
 Aucune offre ne propose d'IA illimitée. Un client qui consomme énormément atteint son
-plafond de crédits ; il ne creuse pas une facture chez Evoliia.
+plafond de crédits ; il ne creuse pas une facture chez Evoliia. La colonne « kits
+possibles » suppose qu'il ne fait que cela, ce qui n'arrive pas : construire une application
+consomme déjà une vingtaine de crédits.
 
 ## Repli
 

@@ -5,7 +5,11 @@ import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { getProject } from '@/server/projects/service'
-import { getLatestKit, LAUNCH_KIT_FEATURE } from '@/server/marketing/launch-kit'
+import {
+  getLatestKit,
+  LAUNCH_KIT_ESTIMATED_CREDITS,
+  LAUNCH_KIT_FEATURE,
+} from '@/server/marketing/launch-kit'
 import { isEngineAvailable } from '@/server/marketing/engine'
 import { Shell } from '@/components/studio/Shell'
 import { LaunchKitBoard } from '@/components/studio/LaunchKitBoard'
@@ -61,6 +65,7 @@ export default async function MarketingPage({
             initialKit={kit}
             engineReady={isEngineAvailable()}
             credits={wallet.balance}
+            estimatedCredits={LAUNCH_KIT_ESTIMATED_CREDITS}
           />
         ) : (
           <Card>

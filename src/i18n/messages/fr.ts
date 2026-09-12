@@ -114,7 +114,7 @@ export const fr = {
 
   'landing.howTitle': 'Comment fonctionne Evoliia',
   'landing.howBody':
-    "Six étapes, dans cet ordre. Chacune sert à ne pas gaspiller la suivante : on ne construit qu’une fois la question du client réglée.",
+    "Sept étapes, dans cet ordre. Chacune sert à ne pas gaspiller la suivante : on ne construit qu’une fois la question du client réglée, et on ne lance qu’une fois l’application en ligne.",
   'landing.step1Title': 'Votre objectif',
   'landing.step1Body':
     "Le montant que vous aimeriez atteindre, le temps dont vous disposez, votre budget de départ. Tout part de là.",
@@ -133,6 +133,31 @@ export const fr = {
   'landing.step6Title': 'La mise en ligne',
   'landing.step6Body':
     "Une adresse à partager, une page de vente, et le suivi de ce qui se passe réellement : visites, inscriptions, paiements.",
+  'landing.step7Title': 'Le lancement',
+  'landing.step7Body':
+    "Construire une application ne la fait pas connaître. Vos angles marketing, vos idées de publications et votre première semaine, préparés à partir de ce que vous avez déjà décrit.",
+
+  'landing.launchTitle': 'Une fois en ligne, il faut se faire connaître',
+  'landing.launchBody':
+    "C’est là que la plupart des projets s’arrêtent : l’application existe, et personne ne sait quoi en dire. Evoliia prépare de quoi commencer, sans vous demander de tout réécrire.",
+  'landing.launchAnglesTitle': 'Vos angles marketing',
+  'landing.launchAnglesBody':
+    "Plusieurs façons de présenter la même application : le gain de temps, le problème évité, le résultat obtenu. Vous gardez celles qui vous ressemblent, vous écartez les autres.",
+  'landing.launchIdeasTitle': 'Sept idées de publications',
+  'landing.launchIdeasBody':
+    "Chacune avec son accroche, ce qu’il faut montrer et dire, et la photo ou la vidéo à préparer. De quoi tenir une première semaine sans chercher quoi publier.",
+  'landing.launchWeekTitle': 'Votre première semaine',
+  'landing.launchWeekBody':
+    "Sept publications datées, rédigées, avec leur appel à l’action. Chaque texte est modifiable directement, puis vous approuvez ce qui vous convient.",
+  'landing.launchSourceTitle': 'Rien ne vous est redemandé',
+  'landing.launchSourceBody':
+    "Le problème que vous résolvez, votre clientèle, votre proposition de valeur, votre prix : tout vient de ce que vous avez déjà écrit pendant le parcours. Aucun formulaire de plus.",
+  'landing.launchLimitTitle': 'Ce que nous ne faisons pas',
+  'landing.launchLimitBody':
+    "Rien n’est publié, rien n’est programmé : les réseaux sociaux ne sont pas reliés. Le kit se relit, se corrige et se copie. Aucune statistique n’est inventée, et aucun avis client n’est écrit à votre place.",
+  'landing.launchIncluded': 'Compris à partir de l’offre Launch.',
+
+  'landing.pricingLaunchKit': 'Kit de lancement marketing',
 
   'landing.showcaseTitle': 'Créé avec Evoliia',
   'landing.showcaseBody':
