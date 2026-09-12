@@ -3,6 +3,7 @@ import { getTranslator, resolveLocale, type MessageKey } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
+import { getEffectivePlan } from '@/server/billing/plans'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listProjects, type ProjectSummary } from '@/server/projects/service'
 import { getCreatorOverview } from '@/server/business/overview'
@@ -27,11 +28,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
 
-  const [overview, projects, wallet, entitlements] = await Promise.all([
+  const [overview, projects, wallet, entitlements, plan] = await Promise.all([
     getCreatorOverview(user.id, locale),
     listProjects(user.id),
     getWallet(user.id),
     getEntitlements(user.id),
+    getEffectivePlan(user.id),
   ])
 
   /*
@@ -50,6 +52,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
   const firstName = (user.name ?? user.email).split(/[\s@]/)[0] ?? ''
   const published = projects.filter((project) => project.status === 'PUBLISHED')
   const canLaunch = entitlements.granted.includes(LAUNCH_KIT_FEATURE)
+  /*
+   * Place restante dans l'offre. Proposer « Nouveau projet » à qui a atteint sa limite
+   * mènerait à un refus après trois écrans : mieux vaut dire tout de suite où ça bloque.
+   */
+  const slotsLeft = plan.allowBuild ? Math.max(0, plan.maxProjects - projects.length) : 0
 
   return (
     <Shell
@@ -189,11 +196,19 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
         {/* ────────────────────── Mes applications ────────────────────────── */}
         {projects.length > 0 ? (
           <section>
-            <div className="mb-4 flex flex-wrap items-center gap-4">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <h2 className="m-0 text-lg font-semibold">{t('dashboard.title')}</h2>
+              <span className="text-sm text-[var(--color-ink-soft)]">
+                {slotsLeft === 0
+                  ? `${projects.length} sur ${plan.maxProjects}`
+                  : `${projects.length} sur ${plan.maxProjects}, ${slotsLeft} de libre`}
+              </span>
               <LinkButton href={`/${locale}/idees`} variant="secondary" className="ml-auto">
                 Voir mes idées
               </LinkButton>
+              {slotsLeft > 0 ? (
+                <LinkButton href={`/${locale}/demarrer`}>Nouveau projet</LinkButton>
+              ) : null}
             </div>
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => (
@@ -205,11 +220,72 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                   canLaunch={canLaunch}
                 />
               ))}
+              {/*
+                Une carte d'invitation plutôt qu'un simple bouton : elle occupe la place
+                vide de la grille, et dit pourquoi on recommencerait plutôt que seulement
+                comment. Quand l'offre est pleine, elle dit franchement ce qui manque.
+              */}
+              <NewProjectCard locale={locale} slotsLeft={slotsLeft} planName={plan.name} />
             </div>
           </section>
         ) : null}
       </div>
     </Shell>
+  )
+}
+
+/**
+ * Invitation à démarrer un nouveau projet.
+ *
+ * Rien n'obligeait à ce qu'un créateur s'arrête à une application, et pourtant l'écran ne
+ * lui proposait nulle part d'en commencer une autre. Elle prend la place laissée libre par
+ * la grille, en pointillés, pour se distinguer des projets réels sans crier plus fort
+ * qu'eux.
+ */
+function NewProjectCard({
+  locale,
+  slotsLeft,
+  planName,
+}: {
+  locale: string
+  slotsLeft: number
+  planName: string
+}) {
+  if (slotsLeft === 0) {
+    return (
+      <div className="grid place-items-center rounded-[var(--radius-card)] border border-dashed border-[var(--color-line)] p-6 text-center">
+        <div>
+          <p className="m-0 text-sm font-medium">Votre offre {planName} est complète</p>
+          <p className="m-0 mt-1 text-sm text-[var(--color-ink-soft)]">
+            Passez à une offre supérieure pour créer une application de plus.
+          </p>
+          <LinkButton href={`/${locale}#tarifs`} variant="secondary" className="mt-4">
+            Voir les offres
+          </LinkButton>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <a
+      href={`/${locale}/demarrer`}
+      className="grid min-h-44 place-items-center rounded-[var(--radius-card)] border border-dashed border-[var(--color-line)] p-6 text-center no-underline transition-colors hover:border-[var(--color-brand)]"
+    >
+      <div>
+        <span
+          aria-hidden="true"
+          className="mx-auto grid h-11 w-11 place-items-center rounded-full text-xl font-semibold text-white"
+          style={{ background: 'var(--gradient-brand)' }}
+        >
+          +
+        </span>
+        <p className="m-0 mt-3 text-base font-semibold text-[var(--color-ink)]">Nouveau projet</p>
+        <p className="m-0 mt-1 text-sm text-[var(--color-ink-soft)]">
+          Partez d’une idée à trouver, ou de celle que vous avez déjà en tête.
+        </p>
+      </div>
+    </a>
   )
 }
 

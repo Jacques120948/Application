@@ -7,6 +7,7 @@ import { RecordForm } from './RecordForm'
 import { RecordList } from './RecordList'
 import { AuthPanel } from './AuthPanel'
 import { AssistantPanel } from './AssistantPanel'
+import { InstallPrompt } from './InstallPrompt'
 
 /**
  * Rendu d'une page d'application générée.
@@ -86,6 +87,13 @@ export function AppPageView({
       >
         {spec.name}
       </footer>
+      {/*
+        L'aperçu du créateur n'est pas installable : son adresse est provisoire et changera
+        à la publication. Lui proposer d'installer un brouillon créerait une icône morte.
+      */}
+      {context.preview ? null : (
+        <InstallPrompt appName={spec.name} scope={`${context.basePath}/`} />
+      )}
     </div>
   )
 }
