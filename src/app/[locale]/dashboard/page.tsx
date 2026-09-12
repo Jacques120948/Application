@@ -249,7 +249,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                   */}
                   <ul className="m-0 mt-3 grid list-none gap-2 p-0">
                     {credits.entries.map((entry) => (
-                      <li key={entry.id} className="flex items-baseline justify-between gap-3 text-sm">
+                      <li
+                        key={entry.id}
+                        className="flex min-w-0 items-baseline justify-between gap-3 text-sm"
+                      >
                         <span className="truncate text-[var(--color-ink-soft)]">{entry.label}</span>
                         <span
                           className={
@@ -282,6 +285,11 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                 </a>
               </div>
 
+              {/*
+                `min-w-0` sur chaque élément de liste : un enfant de grille refuse par
+                défaut de rétrécir sous la taille de son contenu, si bien qu'un titre long
+                poussait la ligne hors de la carte au lieu d'être abrégé.
+              */}
               {pendingIdeas.length === 0 ? (
                 <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
                   Aucune idée en attente. Vous pouvez en chercher de nouvelles à tout moment,
@@ -290,10 +298,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
               ) : (
                 <ul className="m-0 mt-3 grid list-none gap-3 p-0">
                   {pendingIdeas.map((idea) => (
-                    <li key={idea.id}>
+                    <li key={idea.id} className="min-w-0">
                       <a
                         href={`/${locale}/idees`}
-                        className="flex items-baseline gap-3 no-underline"
+                        className="flex min-w-0 items-baseline gap-3 no-underline"
                       >
                         <span
                           className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
@@ -301,7 +309,12 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                         >
                           {idea.opportunityScore}
                         </span>
-                        <span className="min-w-0">
+                        {/*
+                          `flex-1` autant que `min-w-0` : sans lui le bloc se dimensionne
+                          sur son texte, déborde du lien, et c'est la carte qui le coupe —
+                          net, sans points de suspension.
+                        */}
+                        <span className="min-w-0 flex-1">
                           <span className="block truncate font-medium text-[var(--color-ink)]">
                             {idea.title}
                           </span>
