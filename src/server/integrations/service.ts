@@ -175,6 +175,15 @@ export async function connectWithApiKey(
   const accountLabel = verdict === null ? null : verdict.label
 
   /*
+   * Ce qui est conservé n'est pas toujours ce qui a été saisi. Un code d'appairage est
+   * périmé dès l'instant où il a servi : garder l'autorisation qu'il a produite est le
+   * seul choix qui ait du sens.
+   */
+  const secret = verdict !== null && verdict.ok && verdict.secret !== undefined
+    ? verdict.secret
+    : input.apiKey
+
+  /*
    * Reconnecter le même service remplace l'ancienne connexion plutôt que d'en empiler une
    * seconde. La recherche est faite à la main : une clé unique portant une colonne
    * nullable ne se prête pas à un upsert.
@@ -223,15 +232,15 @@ export async function connectWithApiKey(
       where: { connectionId: connection.id },
       update: {
         kind: 'API_KEY',
-        secret: encryptSecret(input.apiKey),
+        secret: encryptSecret(secret),
         refreshSecret: null,
-        hint: secretHint(input.apiKey),
+        hint: secretHint(secret),
       },
       create: {
         connectionId: connection.id,
         kind: 'API_KEY',
-        secret: encryptSecret(input.apiKey),
-        hint: secretHint(input.apiKey),
+        secret: encryptSecret(secret),
+        hint: secretHint(secret),
       },
     })
 
@@ -252,7 +261,7 @@ export async function connectWithApiKey(
     lastUsedAt: null,
     expiresAt: null,
     lastError: null,
-    hint: secretHint(input.apiKey),
+    hint: secretHint(secret),
   }
 }
 

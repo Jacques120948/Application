@@ -10,7 +10,13 @@
  * `reviewedOn` dit quand ils ont été vérifiés pour la dernière fois.
  */
 
-export type IntegrationCategory = 'google' | 'stockage' | 'productivite' | 'commerce' | 'ia'
+export type IntegrationCategory =
+  | 'google'
+  | 'stockage'
+  | 'productivite'
+  | 'commerce'
+  | 'ia'
+  | 'social'
 
 /** Qui paie quoi. C'est la seule question qui décide si une intégration est acceptable. */
 export type CostToEvoliia =
@@ -184,6 +190,33 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     reviewedOn: '2026-09-12',
   },
   {
+    id: 'postelya',
+    name: 'Postelya',
+    category: 'social',
+    summary: 'Votre espace Postelya, pour publier sur vos réseaux sociaux.',
+    usage:
+      'Envoyer vos publications préparées dans votre espace Postelya, où vous les relisez, les programmez et les publiez sur vos comptes.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: [],
+    costToEvoliia: 'aucun',
+    costToCreator: 'abonnement-externe',
+    costNotice:
+      'Postelya est un produit distinct, avec son propre abonnement. Evoliia y dépose vos contenus, elle ne publie rien elle-même.',
+    freeQuota: "Selon l'offre de votre espace Postelya.",
+    webhooks: false,
+    providerReview:
+      'Aucune validation à obtenir pour relier un espace. Publier sur Instagram et Facebook exige en revanche que Postelya ait obtenu l’accord de Meta, ce qui ne dépend pas d’Evoliia.',
+    risk:
+      "Evoliia dépose des brouillons, elle ne publie pas. Rien ne part sur un réseau social sans que vous l'ayez relu et validé dans Postelya.",
+    keyHelp: {
+      label: 'Votre code de liaison',
+      hint: 'Il se génère dans Postelya, Réglages puis « Relier un service ». Il est valable un quart d’heure et ne sert qu’une fois.',
+    },
+    reviewedOn: '2026-09-12',
+  },
+  {
     id: 'notion',
     name: 'Notion',
     category: 'productivite',
@@ -233,6 +266,7 @@ export const CATEGORY_LABEL: Record<IntegrationCategory, string> = {
   productivite: 'Productivité',
   commerce: 'Commerce et paiement',
   ia: 'Intelligence artificielle',
+  social: 'Réseaux sociaux',
 }
 
 export const COST_LABEL: Record<CostToCreator, string> = {

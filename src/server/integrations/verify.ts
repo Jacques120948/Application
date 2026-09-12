@@ -1,4 +1,5 @@
 import { verifyAnthropicKey } from './providers/anthropic'
+import { verifyPostelyaCode } from './providers/postelya'
 
 /**
  * Vérification d'un secret avant enregistrement.
@@ -11,12 +12,27 @@ import { verifyAnthropicKey } from './providers/anthropic'
  * volontaire : mieux vaut un fournisseur ouvert sans contrôle préalable qu'un contrôle
  * inventé qui rejetterait des clés valides.
  */
-export type KeyVerdict = { ok: true; label: string | null } | { ok: false; reason: string }
+export type KeyVerdict =
+  | {
+      ok: true
+      label: string | null
+      /**
+       * Secret à conserver, quand il diffère de celui que le créateur a saisi.
+       *
+       * Certains services ne se relient pas avec une clé durable mais avec un code
+       * d'appairage : court, valable quelques minutes, utilisable une seule fois. Ce qui
+       * doit être gardé n'est alors pas ce code, déjà périmé, mais l'autorisation obtenue
+       * en l'échangeant. Absent, c'est la saisie du créateur qui est conservée.
+       */
+      secret?: string
+    }
+  | { ok: false; reason: string }
 
 export type KeyVerifier = (apiKey: string) => Promise<KeyVerdict>
 
 const VERIFIERS: Record<string, KeyVerifier> = {
   anthropic: verifyAnthropicKey,
+  postelya: verifyPostelyaCode,
 }
 
 export function findVerifier(providerId: string): KeyVerifier | undefined {

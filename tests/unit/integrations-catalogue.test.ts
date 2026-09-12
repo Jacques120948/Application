@@ -33,6 +33,16 @@ describe('catalogue des intégrations', () => {
     }
   })
 
+  it('relie un espace Postelya par code d’appairage, pas par clé durable', () => {
+    const postelya = findProvider('postelya')
+    expect(postelya?.status).toBe('available')
+    expect(postelya?.credential).toBe('API_KEY')
+    expect(findVerifier('postelya')).toBeDefined()
+    // Evoliia dépose, elle ne publie pas : la fiche doit le dire, c'est ce qui distingue
+    // cette connexion d'une autorisation de publier au nom du créateur.
+    expect(postelya?.risk).toContain('ne publie pas')
+  })
+
   it('sait vérifier la clé Anthropic avant de l’enregistrer', () => {
     expect(findProvider('anthropic')?.status).toBe('available')
     expect(findVerifier('anthropic')).toBeDefined()
