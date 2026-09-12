@@ -15,6 +15,28 @@ datasource db {
 
 // ─────────────────────────────── Plateforme ──────────────────────────────────
 
+/// Où sert la connexion. La distinction est structurante : une connexion « EVOLIIA » sert
+/// au créateur pendant qu'il construit, une connexion « APP » servira à son application une
+/// fois en ligne. Les deux ne vivent pas la même vie et ne se révoquent pas ensemble.
+enum IntegrationTarget {
+  EVOLIIA
+  APP
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  EXPIRED
+  REVOKED
+  ERROR
+}
+
+/// Comment le fournisseur nous autorise. OAuth quand il le propose ; clé fournie par le
+/// créateur seulement quand aucun OAuth n'existe et que le fournisseur l'autorise.
+enum CredentialKind {
+  OAUTH
+  API_KEY
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -32,16 +54,18 @@ model User {
   updatedAt       DateTime  @updatedAt
   disabledAt      DateTime?
 
-  sessions      Session[]
-  projects      Project[]
-  profile       CreatorProfile?
-  ideas         Idea[]
-  tokens        VerificationToken[]
-  subscription  Subscription?
-  wallet        CreditWallet?
-  creditEntries CreditLedger[]
-  aiUsage       AiUsage[]
-  chatMessages  ChatMessage[]
+  sessions          Session[]
+  projects          Project[]
+  connections       IntegrationConnection[]
+  integrationEvents IntegrationEvent[]
+  profile           CreatorProfile?
+  ideas             Idea[]
+  tokens            VerificationToken[]
+  subscription      Subscription?
+  wallet            CreditWallet?
+  creditEntries     CreditLedger[]
+  aiUsage           AiUsage[]
+  chatMessages      ChatMessage[]
 
   @@index([createdAt])
 }
@@ -99,6 +123,8 @@ model Plan {
   currency          String   @default("EUR")
   interval          String   @default("month")
   maxProjects       Int
+  /// Connexions externes autorisées. Modifiable depuis le back-office, comme le reste.
+  maxConnections    Int      @default(0)
   monthlyCredits    Int
   allowExport       Boolean  @default(false)
   allowCustomDomain Boolean  @default(false)
@@ -140,6 +166,75 @@ model Subscription {
 }
 
 /// Solde de crédits IA. Cache : la vérité est la somme de CreditLedger.
+/// Connexion d'un créateur à un service externe.
+///
+/// Aucun secret ici : cette table est lue pour afficher la liste des connexions, et cette
+/// lecture ne doit jamais approcher un jeton. Les secrets vivent dans IntegrationCredential.
+model IntegrationConnection {
+  id             String            @id @default(uuid()) @db.Uuid
+  userId         String            @db.Uuid
+  /// Identifiant du fournisseur dans le catalogue applicatif, par exemple "google-drive".
+  providerId     String
+  target         IntegrationTarget @default(EVOLIIA)
+  /// Projet concerné, quand la connexion sert une application précise.
+  projectId      String?           @db.Uuid
+  status         IntegrationStatus @default(CONNECTED)
+  /// Autorisations réellement accordées par le fournisseur, telles qu'il les a renvoyées.
+  scopes         String[]          @default([])
+  /// Compte distant, affiché au créateur pour qu'il sache ce qu'il a connecté.
+  accountLabel   String?
+  connectedAt    DateTime          @default(now())
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  /// Dernière erreur, en clair et sans secret : « autorisation refusée », « quota dépassé ».
+  lastError      String?
+  disconnectedAt DateTime?
+  updatedAt      DateTime          @updatedAt
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project    Project?               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  credential IntegrationCredential?
+  events     IntegrationEvent[]
+
+  @@unique([userId, providerId, target, projectId])
+  @@index([userId, status])
+}
+
+/// Secrets d'une connexion, chiffrés au repos.
+///
+/// Table séparée pour une raison simple : ce qui n'est jamais lu ne peut pas fuir. Le
+/// service qui affiche les connexions ne la touche pas.
+model IntegrationCredential {
+  connectionId  String         @id @db.Uuid
+  kind          CredentialKind
+  /// Jeton d'accès ou clé, chiffré. Format : voir src/lib/crypto.ts.
+  secret        String
+  /// Jeton de rafraîchissement, chiffré, quand le fournisseur en délivre un.
+  refreshSecret String?
+  /// Quatre derniers caractères, pour que le créateur reconnaisse sa clé sans la révéler.
+  hint          String?
+  updatedAt     DateTime       @updatedAt
+
+  connection IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+}
+
+/// Journal technique d'une connexion. Jamais de secret, jamais de jeton.
+model IntegrationEvent {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  connectionId String?  @db.Uuid
+  providerId   String
+  /// connected | disconnected | refreshed | refresh_failed | permission_denied | quota | error
+  type         String
+  detail       String?
+  createdAt    DateTime @default(now())
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection IntegrationConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
 model CreditWallet {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @unique @db.Uuid
@@ -193,7 +288,6 @@ model AiUsage {
 
 /**
  * Profil du créateur : son objectif de revenu et ce dont il dispose.
- *
  * C'est le fil conducteur du produit. L'objectif n'est jamais présenté comme un revenu
  * garanti : il sert uniquement à cadrer le choix d'idée, le modèle économique et le prix.
  */
@@ -231,7 +325,6 @@ enum IdeaStatus {
 
 /**
  * Idée d'application proposée au créateur, chiffrée et comparable.
- *
  * Les grandeurs commerciales sont enregistrées comme des nombres et non comme des
  * phrases : c'est ce qui permet de comparer des idées et de calculer le nombre de clients
  * nécessaires à l'objectif.
@@ -309,14 +402,15 @@ model Project {
   updatedAt          DateTime      @updatedAt
   deletedAt          DateTime?
 
-  owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  sourceIdea Idea?          @relation(fields: [ideaId], references: [id], onDelete: SetNull)
-  versions ProjectVersion[]
-  messages ChatMessage[]
-  checks   ProjectCheck[]
-  records  AppRecord[]
-  endUsers AppEndUser[]
-  events   AppEvent[]
+  owner       User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sourceIdea  Idea?                   @relation(fields: [ideaId], references: [id], onDelete: SetNull)
+  versions    ProjectVersion[]
+  messages    ChatMessage[]
+  checks      ProjectCheck[]
+  records     AppRecord[]
+  endUsers    AppEndUser[]
+  events      AppEvent[]
+  connections IntegrationConnection[]
 
   @@index([ownerId, updatedAt])
 }
@@ -392,7 +486,7 @@ model AppEndUser {
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime?
 
-  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project  Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
   records  AppRecord[]
   sessions AppEndUserSession[]
 
@@ -416,13 +510,13 @@ model AppEndUserSession {
 /// Enregistrement de données d'une application créée.
 /// La forme de `data` est validée côté serveur contre le modèle déclaré dans l'AppSpec.
 model AppRecord {
-  id              String   @id @default(uuid()) @db.Uuid
-  projectId       String   @db.Uuid
-  modelId         String
-  ownerEndUserId  String?  @db.Uuid
-  data            Json
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @db.Uuid
+  modelId        String
+  ownerEndUserId String?  @db.Uuid
+  data           Json
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   owner   AppEndUser? @relation(fields: [ownerEndUserId], references: [id], onDelete: Cascade)

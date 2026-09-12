@@ -14,6 +14,8 @@ export type PlanDefaults = {
   description: string
   priceCents: number
   maxProjects: number
+  /** Services externes connectables. Zéro tant qu'aucun connecteur n'est ouvert. */
+  maxConnections: number
   monthlyCredits: number
   allowBuild: boolean
   allowExport: boolean
@@ -38,6 +40,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
       "Définissez votre objectif, recevez des idées adaptées à votre profil et faites analyser celle qui vous plaît.",
     priceCents: 0,
     maxProjects: 0,
+    maxConnections: 0,
     // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
     // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
     // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
@@ -55,6 +58,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Pour lancer votre première application et la mettre en ligne.',
     priceCents: 2900,
     maxProjects: 1,
+    maxConnections: 0,
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -69,6 +73,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Plusieurs projets, accompagnement au lancement et adresse personnalisée.',
     priceCents: 5900,
     maxProjects: 5,
+    maxConnections: 0,
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: false,
@@ -83,6 +88,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: "Pour exploiter plusieurs applications et aller plus loin dans l'acquisition.",
     priceCents: 9900,
     maxProjects: 20,
+    maxConnections: 0,
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: false,

@@ -41,6 +41,9 @@ export function Shell({
             <a href={`/${locale}/idees`} className="text-[var(--color-ink-soft)] no-underline">
               {t('nav.ideas')}
             </a>
+            <a href={`/${locale}/connexions`} className="text-[var(--color-ink-soft)] no-underline">
+              Connexions
+            </a>
             {isAdmin ? (
               <a
                 href={`/${locale}/administration`}

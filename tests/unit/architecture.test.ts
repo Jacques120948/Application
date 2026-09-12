@@ -77,6 +77,9 @@ describe('règles de dépendance', () => {
       'appEvent',
       'idea',
       'creatorProfile',
+      'integrationConnection',
+      'integrationCredential',
+      'integrationEvent',
     ]
     // Ces deux fichiers lisent délibérément des applications publiées, qui sont publiques.
     const allowed = new Set([

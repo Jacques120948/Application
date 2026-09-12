@@ -23,6 +23,9 @@ const PROTECTED_TABLES = [
   'AppEvent',
   'CreatorProfile',
   'Idea',
+  'IntegrationConnection',
+  'IntegrationCredential',
+  'IntegrationEvent',
 ] as const
 
 type RoleRow = { role: string; bypassrls: boolean }

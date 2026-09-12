@@ -12,6 +12,7 @@ describe('validation du back-office', () => {
     description: 'Plusieurs projets et adresse personnalisée.',
     priceCents: 5900,
     maxProjects: 5,
+    maxConnections: 3,
     monthlyCredits: 350,
     allowBuild: true,
     allowCustomDomain: true,

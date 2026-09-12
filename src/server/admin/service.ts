@@ -38,6 +38,7 @@ export const planUpdateInput = z.object({
   description: z.string().trim().min(1).max(400),
   priceCents: z.number().int().min(0).max(1_000_000),
   maxProjects: z.number().int().min(0).max(1_000),
+  maxConnections: z.number().int().min(0).max(100),
   monthlyCredits: z.number().int().min(0).max(1_000_000),
   allowBuild: z.boolean(),
   allowCustomDomain: z.boolean(),

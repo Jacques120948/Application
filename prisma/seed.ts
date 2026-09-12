@@ -34,6 +34,7 @@ async function main(): Promise<void> {
         description: plan.description,
         priceCents: plan.priceCents,
         maxProjects: plan.maxProjects,
+        maxConnections: plan.maxConnections,
         monthlyCredits: plan.monthlyCredits,
         allowBuild: plan.allowBuild,
         allowExport: plan.allowExport,

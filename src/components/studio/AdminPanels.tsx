@@ -18,6 +18,7 @@ export type AdminPlan = {
   priceCents: number
   currency: string
   maxProjects: number
+  maxConnections: number
   monthlyCredits: number
   allowBuild: boolean
   allowCustomDomain: boolean
@@ -69,6 +70,7 @@ function PlanCard({ plan }: { plan: AdminPlan }) {
         description: String(form.get('description') ?? ''),
         priceCents: Math.round(Number(form.get('price')) * 100),
         maxProjects: Number(form.get('maxProjects')),
+        maxConnections: Number(form.get('maxConnections')),
         monthlyCredits: Number(form.get('monthlyCredits')),
         allowBuild: form.get('allowBuild') === 'on',
         allowCustomDomain: form.get('allowCustomDomain') === 'on',
@@ -117,7 +119,7 @@ function PlanCard({ plan }: { plan: AdminPlan }) {
             <Textarea name="description" maxLength={400} required defaultValue={plan.description} />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Applications autorisées">
               <Input
                 name="maxProjects"
@@ -126,6 +128,16 @@ function PlanCard({ plan }: { plan: AdminPlan }) {
                 max={1000}
                 required
                 defaultValue={plan.maxProjects}
+              />
+            </Field>
+            <Field label="Connexions externes">
+              <Input
+                name="maxConnections"
+                type="number"
+                min={0}
+                max={100}
+                required
+                defaultValue={plan.maxConnections}
               />
             </Field>
             <Field label="Crédits par mois">

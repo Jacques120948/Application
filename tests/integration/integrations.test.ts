@@ -1,0 +1,162 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { prisma } from '@/server/db/client'
+import { withUserScope } from '@/server/db/scope'
+import { clearAll } from '@/server/auth/rate-limit'
+import { register } from '@/server/auth/service'
+import { decryptSecret } from '@/lib/crypto'
+import {
+  connectWithApiKey,
+  countConnections,
+  disconnect,
+  listConnections,
+} from '@/server/integrations/service'
+import { INTEGRATION_PROVIDERS } from '@/server/integrations/catalog'
+
+/**
+ * Gestionnaire d'intégrations, sur une vraie base.
+ *
+ * Ce qui est vérifié ici tient en une phrase : un secret confié par un créateur ne doit
+ * ressortir ni en clair, ni chez quelqu'un d'autre, ni après une déconnexion.
+ */
+
+let userId: string
+let email: string
+let otherId: string
+let otherEmail: string
+
+/** Fournisseur fictif, pour éprouver la mécanique sans ouvrir un vrai service. */
+const TEST_PROVIDER = {
+  ...INTEGRATION_PROVIDERS[0]!,
+  id: 'fournisseur-de-test',
+  status: 'available' as const,
+  credential: 'API_KEY' as const,
+}
+
+beforeAll(async () => {
+  clearAll()
+  email = `integr-${Date.now()}@exemple.test`
+  otherEmail = `autre-${Date.now()}@exemple.test`
+  userId = (await register({ email, password: 'motdepasse-2026-solide', locale: 'fr' })).userId
+  otherId = (await register({ email: otherEmail, password: 'motdepasse-2026-solide', locale: 'fr' }))
+    .userId
+
+  // Le catalogue est figé dans le code : on y ajoute le fournisseur de test pour la durée
+  // de la suite, plutôt que d'ouvrir un vrai service au public.
+  ;(INTEGRATION_PROVIDERS as unknown as Array<typeof TEST_PROVIDER>).push(TEST_PROVIDER)
+  // L'offre gratuite n'autorise aucune connexion : on en accorde pour le test.
+  await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 2 } })
+})
+
+afterAll(async () => {
+  await prisma.user.deleteMany({ where: { email: { in: [email, otherEmail] } } })
+  await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 0 } })
+})
+
+describe('connexion par clé du créateur', () => {
+  const key = 'sk-une-cle-de-test-0123456789'
+
+  it('enregistre la connexion sans jamais renvoyer la clé', async () => {
+    const view = await connectWithApiKey(userId, {
+      providerId: TEST_PROVIDER.id,
+      target: 'EVOLIIA',
+      projectId: null,
+      apiKey: key,
+    })
+    expect(view.status).toBe('CONNECTED')
+    expect(view.hint).toBe('••••6789')
+    expect(JSON.stringify(view)).not.toContain(key)
+  })
+
+  it('chiffre la clé au repos', async () => {
+    const stored = await withUserScope(userId, (tx) =>
+      tx.integrationCredential.findFirstOrThrow({ select: { secret: true } }),
+    )
+    expect(stored.secret).not.toContain(key)
+    expect(decryptSecret(stored.secret)).toBe(key)
+  })
+
+  it('ne laisse pas la clé dans le journal des événements', async () => {
+    const events = await withUserScope(userId, (tx) =>
+      tx.integrationEvent.findMany({ select: { type: true, detail: true } }),
+    )
+    expect(events.map((event) => event.type)).toContain('connected')
+    expect(JSON.stringify(events)).not.toContain(key)
+  })
+
+  it('n’expose pas la connexion au créateur voisin', async () => {
+    const mine = await listConnections(userId)
+    const theirs = await listConnections(otherId)
+    expect(mine.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection).not.toBeNull()
+    expect(theirs.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection).toBeNull()
+    expect(await countConnections(otherId)).toBe(0)
+  })
+
+  it('reconnecte sans empiler une seconde connexion', async () => {
+    await connectWithApiKey(userId, {
+      providerId: TEST_PROVIDER.id,
+      target: 'EVOLIIA',
+      projectId: null,
+      apiKey: 'sk-une-autre-cle-9999',
+    })
+    expect(await countConnections(userId)).toBe(1)
+  })
+
+  it('refuse un service absent du catalogue', async () => {
+    await expect(
+      connectWithApiKey(userId, {
+        providerId: 'service-inconnu',
+        target: 'EVOLIIA',
+        projectId: null,
+        apiKey: key,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('refuse une clé pour un service qui se connecte par autorisation', async () => {
+    await expect(
+      connectWithApiKey(userId, {
+        providerId: 'stripe',
+        target: 'EVOLIIA',
+        projectId: null,
+        apiKey: key,
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+  })
+})
+
+describe('déconnexion', () => {
+  it('supprime le secret, garde la trace', async () => {
+    const entries = await listConnections(userId)
+    const connectionId = entries.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection
+      ?.id
+    expect(connectionId).toBeDefined()
+
+    await disconnect(userId, connectionId as string)
+
+    const credentials = await withUserScope(userId, (tx) =>
+      tx.integrationCredential.count({ where: { connectionId } }),
+    )
+    expect(credentials).toBe(0)
+
+    const connection = await withUserScope(userId, (tx) =>
+      tx.integrationConnection.findFirstOrThrow({
+        where: { id: connectionId },
+        select: { status: true, disconnectedAt: true, scopes: true },
+      }),
+    )
+    expect(connection.status).toBe('REVOKED')
+    expect(connection.disconnectedAt).not.toBeNull()
+    expect(connection.scopes).toEqual([])
+    expect(await countConnections(userId)).toBe(0)
+  })
+
+  it('refuse de déconnecter la connexion d’un autre', async () => {
+    const view = await connectWithApiKey(userId, {
+      providerId: TEST_PROVIDER.id,
+      target: 'EVOLIIA',
+      projectId: null,
+      apiKey: 'sk-encore-une-cle-4242',
+    })
+    await expect(disconnect(otherId, view.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+})
