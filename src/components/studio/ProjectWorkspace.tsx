@@ -8,6 +8,7 @@ import type { PatchOperation } from '@/server/spec/patch'
 import { Badge, Button, Card, CardBody, ComingSoon, Notice } from '@/components/ui'
 import { ChatPanel } from './ChatPanel'
 import { ChecksPanel, DesignPanel, FeaturesPanel, MonetizationPanel } from './panels'
+import { MediaPanel } from './MediaPanel'
 import { ProgressSteps } from './ProgressSteps'
 
 /**
@@ -42,6 +43,7 @@ type Version = {
 type Tab =
   | 'assistant'
   | 'design'
+  | 'medias'
   | 'features'
   | 'users'
   | 'monetization'
@@ -52,6 +54,7 @@ type Tab =
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'assistant', label: "Modifier avec l'IA" },
   { id: 'design', label: 'Design' },
+  { id: 'medias', label: 'Images' },
   { id: 'features', label: 'Fonctionnalités' },
   { id: 'users', label: 'Utilisateurs' },
   { id: 'monetization', label: 'Monétisation' },
@@ -271,6 +274,12 @@ export function ProjectWorkspace({
             {tab === 'design' ? (
               <div className="p-4">
                 <DesignPanel spec={spec} send={sendPatch} />
+              </div>
+            ) : null}
+
+            {tab === 'medias' ? (
+              <div className="p-4">
+                <MediaPanel projectId={projectId} spec={spec} send={sendPatch} />
               </div>
             ) : null}
 

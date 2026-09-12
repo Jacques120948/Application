@@ -40,6 +40,8 @@ export const planUpdateInput = z.object({
   priceCents: z.number().int().min(0).max(1_000_000),
   maxProjects: z.number().int().min(0).max(1_000),
   maxConnections: z.number().int().min(0).max(100),
+  /** Espace d'images, en mégaoctets. Converti en octets avant écriture. */
+  storageMegabytes: z.number().int().min(0).max(20_000),
   monthlyCredits: z.number().int().min(0).max(1_000_000),
   allowBuild: z.boolean(),
   allowCustomDomain: z.boolean(),
@@ -79,10 +81,12 @@ export async function updatePlan(planId: string, input: PlanUpdateInput) {
         data: { isRecommended: false },
       })
     }
+    const { storageMegabytes, ...rest } = input
     return tx.plan.update({
       where: { id: planId },
       data: {
-        ...input,
+        ...rest,
+        storageBytes: storageMegabytes * 1024 * 1024,
         ...Object.fromEntries(PLANNED_PLAN_CAPABILITIES.map((capability) => [capability, false])),
       },
     })

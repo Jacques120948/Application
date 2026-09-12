@@ -9,6 +9,8 @@ import { DEFAULT_PLAN_FEATURES } from './features'
  * sans redéploiement (exigence 34).
  */
 
+const MEGABYTE = 1024 * 1024
+
 export type PlanDefaults = {
   id: string
   name: string
@@ -23,6 +25,13 @@ export type PlanDefaults = {
   maxConnections: number
   /** Fonctions ouvertes, par identifiant. Voir features.ts. */
   features: readonly string[]
+  /**
+   * Espace d'images autorisé, en octets.
+   *
+   * C'est la seule dépense de la plateforme qui grandirait avec l'usage et non avec le
+   * nombre de clients. La borner par offre est ce qui permet d'annoncer un prix fixe.
+   */
+  storageBytes: number
   monthlyCredits: number
   allowBuild: boolean
   allowExport: boolean
@@ -49,6 +58,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxProjects: 0,
     maxConnections: 0,
     features: DEFAULT_PLAN_FEATURES['free'] ?? [],
+    storageBytes: 0,
     // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
     // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
     // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
@@ -68,6 +78,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxProjects: 1,
     maxConnections: 1,
     features: DEFAULT_PLAN_FEATURES['launch'] ?? [],
+    storageBytes: 50 * MEGABYTE,
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -84,6 +95,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxProjects: 5,
     maxConnections: 3,
     features: DEFAULT_PLAN_FEATURES['builder'] ?? [],
+    storageBytes: 250 * MEGABYTE,
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: false,
@@ -100,6 +112,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxProjects: 20,
     maxConnections: 10,
     features: DEFAULT_PLAN_FEATURES['business'] ?? [],
+    storageBytes: 1024 * MEGABYTE,
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: false,

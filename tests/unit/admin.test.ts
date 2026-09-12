@@ -13,6 +13,7 @@ describe('validation du back-office', () => {
     priceCents: 5900,
     maxProjects: 5,
     maxConnections: 3,
+    storageMegabytes: 250,
     monthlyCredits: 350,
     allowBuild: true,
     allowCustomDomain: true,

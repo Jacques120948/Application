@@ -258,11 +258,53 @@ function BlockView({
        * thème : aucune image à charger, aucun poids supplémentaire, et le résultat suit la
        * palette au lieu de la contredire.
        */
+      /*
+       * L'adresse porte le projet autant que l'image : c'est ce qui empêche une
+       * spécification de pointer vers le fichier d'un autre projet. Elle est la même en
+       * aperçu et en ligne, le service se chargeant de la vérification.
+       */
+      const image =
+        block.imageId === undefined
+          ? null
+          : `/api/app/${context.projectId}/medias/${block.imageId}`
+
       return (
         <section
           className="relative isolate overflow-hidden"
           style={{ background: 'var(--app-gradient)', color: 'var(--app-on-gradient)' }}
         >
+          {/*
+            Photo du créateur si elle existe, motif abstrait sinon. Les deux halos ne sont
+            pas un pis-aller : ils font le fond quand il n'y a pas d'image, et ils
+            entretiennent la couleur de la marque quand il y en a une.
+          */}
+          {image !== null ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={image}
+                alt=""
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+              />
+              {/*
+                Deux voiles superposés. Le premier teinte la photo aux couleurs de
+                l'application pour qu'elle ne jure pas avec le reste ; le second, plus dense
+                vers le bas, garantit la lisibilité du texte quelle que soit l'image — on ne
+                sait pas ce que le créateur téléversera.
+              */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0"
+                style={{ background: 'var(--app-gradient)', opacity: 0.55 }}
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0"
+                style={{ background: 'var(--app-scrim)' }}
+              />
+            </>
+          ) : null}
           <div
             aria-hidden="true"
             className="pointer-events-none absolute -left-24 -top-32 h-96 w-96 rounded-full opacity-40 blur-3xl"

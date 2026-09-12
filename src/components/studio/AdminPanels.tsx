@@ -26,6 +26,7 @@ export type AdminPlan = {
   isActive: boolean
   sortOrder: number
   features: string[]
+  storageBytes: number
 }
 
 /** Catalogue des fonctions, passé par le serveur : il n'est pas dupliqué ici. */
@@ -86,6 +87,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         priceCents: Math.round(Number(form.get('price')) * 100),
         maxProjects: Number(form.get('maxProjects')),
         maxConnections: Number(form.get('maxConnections')),
+        storageMegabytes: Number(form.get('storageMegabytes')),
         monthlyCredits: Number(form.get('monthlyCredits')),
         allowBuild: form.get('allowBuild') === 'on',
         allowCustomDomain: form.get('allowCustomDomain') === 'on',
@@ -154,6 +156,16 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
                 max={100}
                 required
                 defaultValue={plan.maxConnections}
+              />
+            </Field>
+            <Field label="Images (Mo)" hint="Espace total pour les photos des applications.">
+              <Input
+                name="storageMegabytes"
+                type="number"
+                min={0}
+                max={20000}
+                required
+                defaultValue={Math.round(plan.storageBytes / (1024 * 1024))}
               />
             </Field>
             <Field label="Crédits par mois">

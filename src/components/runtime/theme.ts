@@ -110,6 +110,16 @@ export function themeStyle(theme: Theme): CSSProperties {
     '--app-border': withAlpha(text, dark ? 0.16 : 0.1),
     '--app-gradient': gradient,
     '--app-on-gradient': readableOn(primary),
+    /*
+     * Voile de lisibilité posé sur une photo, dans la couleur opposée à celle du texte.
+     * Une photo peut être n'importe quoi — un mur blanc, un chantier sombre — et le texte
+     * doit rester lisible sur les deux. Le dégradé est plus dense en bas qu'en haut :
+     * c'est là que se trouvent le sous-titre et le bouton.
+     */
+    '--app-scrim':
+      readableOn(primary) === '#ffffff'
+        ? 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.45) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.5) 100%)',
     // Ombres douces et colorées plutôt que grises : une ombre teintée de la couleur
     // principale donne l'impression d'un objet posé, pas d'une bordure de plus.
     '--app-shadow': `0 1px 2px ${withAlpha(text, 0.05)}, 0 8px 24px -12px ${withAlpha(primary, dark ? 0.5 : 0.28)}`,

@@ -59,6 +59,7 @@ model User {
   connections       IntegrationConnection[]
   integrationEvents IntegrationEvent[]
   marketingKits     MarketingKit[]
+  medias            MediaAsset[]
   profile           CreatorProfile?
   ideas             Idea[]
   tokens            VerificationToken[]
@@ -129,6 +130,9 @@ model Plan {
   /// Fonctions ouvertes par cette offre, par identifiant (voir server/billing/features.ts).
   /// Source de vérité des droits : le code ne décide jamais d'après le nom de l'offre.
   features          String[] @default([])
+  /// Espace d'images autorisé, en octets. Borne la seule dépense qui grandirait sinon
+  /// avec l'usage plutôt qu'avec le nombre de clients.
+  storageBytes      Int      @default(0)
   monthlyCredits    Int
   allowExport       Boolean  @default(false)
   allowCustomDomain Boolean  @default(false)
@@ -416,6 +420,7 @@ model Project {
   events      AppEvent[]
   connections IntegrationConnection[]
   marketing   MarketingKit[]
+  medias      MediaAsset[]
 
   @@index([ownerId, updatedAt])
 }
@@ -573,4 +578,35 @@ model MarketingKit {
 
   @@index([projectId, createdAt])
   @@index([userId, createdAt])
+}
+
+/// Image téléversée par un créateur pour une de ses applications.
+///
+/// Stockée en base plutôt que chez un hébergeur de fichiers : cela évite un fournisseur de
+/// plus, une facture de plus et un secret de plus, et l'image hérite du cloisonnement déjà
+/// en place. Le volume reste borné par le quota de l'offre, ce qui est la condition pour
+/// que mille créateurs ne se traduisent pas par une facture imprévisible.
+model MediaAsset {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  /// Nom d'origine, pour que le créateur reconnaisse son fichier. Jamais utilisé comme chemin.
+  filename  String
+  /// Toujours image/webp : c'est ce que le traitement produit, quoi qu'on ait reçu.
+  mime      String
+  width     Int
+  height    Int
+  /// Poids de l'image stockée, après traitement. C'est lui qui compte dans le quota.
+  bytes     Int
+  /// L'image, ré-encodée et débarrassée de ses métadonnées.
+  data      Bytes
+  /// Vignette pour les écrans de l'atelier, pour ne pas charger l'originale dans une liste.
+  thumb     Bytes
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([userId])
 }

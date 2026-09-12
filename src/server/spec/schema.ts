@@ -115,6 +115,14 @@ export const heroBlockSchema = z
     subtitle: mediumText,
     ctaLabel: shortText.optional(),
     ctaPageId: slug.optional(),
+    /**
+     * Image de fond, choisie par le créateur dans sa bibliothèque.
+     *
+     * Jamais renseignée par l'assistant : il ne connaît aucun identifiant réel, et un
+     * identifiant inventé ne renverrait rien. C'est l'atelier qui la pose, et le service
+     * qui sert l'image vérifie qu'elle appartient bien au projet.
+     */
+    imageId: z.string().uuid().optional(),
   })
   .strict()
 

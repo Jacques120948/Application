@@ -27,6 +27,7 @@ const PROTECTED_TABLES = [
   'IntegrationCredential',
   'IntegrationEvent',
   'MarketingKit',
+  'MediaAsset',
 ] as const
 
 type RoleRow = { role: string; bypassrls: boolean }
