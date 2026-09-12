@@ -16,6 +16,8 @@ export type AppErrorCode =
   | 'PLAN_LIMIT'
   | 'AI_UNAVAILABLE'
   | 'AI_REFUSED'
+  /** Le compte extérieur d'un créateur a refusé l'appel : clé invalide, crédit épuisé. */
+  | 'CREATOR_KEY_REJECTED'
   | 'UNSUPPORTED_REQUEST'
   | 'INTERNAL'
 
@@ -29,6 +31,7 @@ const STATUS_BY_CODE: Record<AppErrorCode, number> = {
   PLAN_LIMIT: 402,
   AI_UNAVAILABLE: 503,
   AI_REFUSED: 422,
+  CREATOR_KEY_REJECTED: 503,
   UNSUPPORTED_REQUEST: 422,
   INTERNAL: 500,
 }

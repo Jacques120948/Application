@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { AppError, notFound, validation } from '@/lib/errors'
-import { encryptSecret, secretHint } from '@/lib/crypto'
+import { decryptSecret, encryptSecret, secretHint } from '@/lib/crypto'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { findProvider, INTEGRATION_PROVIDERS, type IntegrationProvider } from './catalog'
+import { findVerifier } from './verify'
 
 /**
  * Gestionnaire d'intégrations.
@@ -44,12 +45,13 @@ export type CatalogueEntry = {
   connection: ConnectionView | null
 }
 
-const target = z.enum(['EVOLIIA', 'APP'])
-
+/*
+ * Le navigateur ne choisit ni la portée ni le projet : le catalogue déclare à quoi sert
+ * une connexion, et le gestionnaire l'impose. Un champ de moins envoyé depuis le client
+ * est un champ de moins à ne pas se faire tordre.
+ */
 export const connectInput = z.object({
   providerId: z.string().trim().min(1).max(60),
-  target: target.default('EVOLIIA'),
-  projectId: z.string().uuid().nullable().default(null),
   /** Secret fourni par le créateur, pour les fournisseurs sans OAuth. */
   apiKey: z.string().trim().min(8).max(400),
 })
@@ -163,17 +165,29 @@ export async function connectWithApiKey(
   }
 
   /*
+   * La clé est vérifiée auprès du fournisseur AVANT d'être écrite. Une clé fautive
+   * rejetée tout de suite vaut mieux qu'une connexion verte qui échoue le jour où un
+   * visiteur pose sa première question.
+   */
+  const verifier = findVerifier(provider.id)
+  const verdict = verifier === undefined ? null : await verifier(input.apiKey)
+  if (verdict !== null && !verdict.ok) throw validation(verdict.reason)
+  const accountLabel = verdict === null ? null : verdict.label
+
+  /*
    * Reconnecter le même service remplace l'ancienne connexion plutôt que d'en empiler une
    * seconde. La recherche est faite à la main : une clé unique portant une colonne
    * nullable ne se prête pas à un upsert.
    */
+  const target = provider.connectionTarget
+
   const created = await withUserScope(userId, async (tx) => {
     const previous = await tx.integrationConnection.findFirst({
       where: {
         userId,
         providerId: provider.id,
-        target: input.target,
-        projectId: input.projectId,
+        target,
+        projectId: null,
       },
       select: { id: true },
     })
@@ -184,10 +198,11 @@ export async function connectWithApiKey(
             data: {
               userId,
               providerId: provider.id,
-              target: input.target,
-              projectId: input.projectId,
+              target,
+              projectId: null,
               status: 'CONNECTED',
               scopes: [...provider.scopes],
+              accountLabel,
             },
             select: { id: true, connectedAt: true },
           })
@@ -196,6 +211,7 @@ export async function connectWithApiKey(
             data: {
               status: 'CONNECTED',
               scopes: [...provider.scopes],
+              accountLabel,
               lastError: null,
               disconnectedAt: null,
               connectedAt: new Date(),
@@ -227,11 +243,11 @@ export async function connectWithApiKey(
   return {
     id: created.id,
     providerId: provider.id,
-    target: input.target,
-    projectId: input.projectId,
+    target,
+    projectId: null,
     status: 'CONNECTED',
     scopes: [...provider.scopes],
-    accountLabel: null,
+    accountLabel,
     connectedAt: created.connectedAt.toISOString(),
     lastUsedAt: null,
     expiresAt: null,
@@ -265,4 +281,81 @@ export async function disconnect(userId: string, connectionId: string): Promise<
 
   if (connection === null) throw notFound("Cette connexion n'existe pas.")
   await record(userId, connection.providerId, 'disconnected', undefined, connection.id)
+}
+
+/**
+ * Seul chemin par lequel un secret est déchiffré.
+ *
+ * Il n'y en a qu'un, et il est ici, pour que la question « qui peut lire une clé de
+ * créateur ? » ait une réponse d'une ligne. La valeur renvoyée sert à l'appel qui suit,
+ * puis disparaît : elle n'est ni journalisée, ni renvoyée à une page, ni ajoutée à un
+ * prompt.
+ *
+ * Renvoie `null` plutôt qu'une erreur quand la connexion n'existe pas : l'appelant a
+ * presque toujours un plan de repli, et une absence de connexion n'est pas une panne.
+ */
+export async function useCredential(
+  userId: string,
+  providerId: string,
+  options: { target?: 'EVOLIIA' | 'APP'; projectId?: string | null } = {},
+): Promise<{ connectionId: string; secret: string } | null> {
+  const found = await withUserScope(userId, async (tx) => {
+    const connection = await tx.integrationConnection.findFirst({
+      where: {
+        userId,
+        providerId,
+        status: 'CONNECTED',
+        disconnectedAt: null,
+        ...(options.target === undefined ? {} : { target: options.target }),
+        ...(options.projectId === undefined ? {} : { projectId: options.projectId }),
+      },
+      select: { id: true, credential: { select: { secret: true } } },
+    })
+    if (connection === null || connection.credential === null) return null
+
+    await tx.integrationConnection.update({
+      where: { id: connection.id },
+      data: { lastUsedAt: new Date() },
+    })
+    return { id: connection.id, secret: connection.credential.secret }
+  })
+
+  if (found === null) return null
+
+  try {
+    return { connectionId: found.id, secret: decryptSecret(found.secret) }
+  } catch {
+    // Un secret illisible est un secret perdu : la connexion est marquée, pas silencieuse.
+    await markConnectionError(userId, found.id, 'Clé illisible. Reconnectez le service.')
+    return null
+  }
+}
+
+/**
+ * Note sur la connexion ce que le fournisseur a répondu de travers.
+ *
+ * Le texte est destiné au créateur et passe sous ses yeux : il dit ce qui ne va pas, sans
+ * jamais contenir de secret ni de fragment de secret.
+ */
+export async function markConnectionError(
+  userId: string,
+  connectionId: string,
+  reason: string,
+): Promise<void> {
+  const detail = reason.slice(0, 200)
+  const touched = await withUserScope(userId, async (tx) => {
+    const connection = await tx.integrationConnection.findFirst({
+      where: { id: connectionId, userId },
+      select: { id: true, providerId: true },
+    })
+    if (connection === null) return null
+    await tx.integrationConnection.update({
+      where: { id: connection.id },
+      data: { status: 'ERROR', lastError: detail },
+    })
+    return connection
+  }).catch(() => null)
+
+  if (touched === null) return
+  await record(userId, touched.providerId, 'error', detail, touched.id)
 }

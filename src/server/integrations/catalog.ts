@@ -39,6 +39,12 @@ export type IntegrationProvider = {
   status: 'available' | 'planned'
   /** OAuth quand le fournisseur le propose ; clé du créateur sinon. */
   credential: 'OAUTH' | 'API_KEY'
+  /**
+   * Qui se sert de la connexion. `EVOLIIA` : l'atelier, pendant que le créateur construit.
+   * `APP` : les applications qu'il a publiées, donc ses visiteurs. Ce n'est pas au
+   * navigateur de trancher — le catalogue le déclare, le gestionnaire l'impose.
+   */
+  connectionTarget: 'EVOLIIA' | 'APP'
   /** Autorisations minimales envisagées. Le principe est de n'en demander aucune de plus. */
   scopes: readonly string[]
   costToEvoliia: CostToEvoliia
@@ -53,6 +59,8 @@ export type IntegrationProvider = {
   providerReview: string
   /** Ce qui peut mal tourner, dit franchement. */
   risk: string
+  /** Comment le créateur obtient sa clé. Absent pour les fournisseurs en OAuth. */
+  keyHelp?: { label: string; hint: string }
   reviewedOn: string
 }
 
@@ -66,6 +74,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       'Choisir un fichier précis pour le donner à Evoliia : un document à analyser, une image à réutiliser.',
     status: 'planned',
     credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
     // drive.file ne donne accès qu'aux fichiers que la personne choisit elle-même. C'est le
     // seul périmètre Drive qui évite une vérification lourde côté Google.
     scopes: ['https://www.googleapis.com/auth/drive.file'],
@@ -90,6 +99,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     usage: 'Importer les données d’un tableau, ou écrire dans une feuille que vous désignez.',
     status: 'planned',
     credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
     scopes: ['https://www.googleapis.com/auth/drive.file'],
     costToEvoliia: 'quota-partage',
     costToCreator: 'compte-gratuit-suffisant',
@@ -109,6 +119,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     usage: 'Créer un rendez-vous depuis une application de réservation, lire les créneaux occupés.',
     status: 'planned',
     credential: 'OAUTH',
+    connectionTarget: 'APP',
     scopes: ['https://www.googleapis.com/auth/calendar.events.owned'],
     costToEvoliia: 'quota-partage',
     costToCreator: 'compte-gratuit-suffisant',
@@ -129,6 +140,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       'Votre application encaisse sur VOTRE compte Stripe. L’argent ne transite jamais par Evoliia.',
     status: 'planned',
     credential: 'OAUTH',
+    connectionTarget: 'APP',
     scopes: ['read_write'],
     costToEvoliia: 'aucun',
     costToCreator: 'selon-usage',
@@ -144,13 +156,16 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
   },
   {
     id: 'anthropic',
-    name: 'Clé Anthropic du créateur',
+    // Le nom sert aussi d'étiquette dans « Coût <fournisseur> » : il doit rester celui du
+    // service, pas une description de ce qu'on en fait.
+    name: 'Anthropic',
     category: 'ia',
     summary: 'Votre propre clé, pour l’intelligence artificielle de votre application.',
     usage:
       'L’assistant de votre application publiée répond avec votre clé et votre budget, au lieu de consommer vos crédits Evoliia.',
-    status: 'planned',
+    status: 'available',
     credential: 'API_KEY',
+    connectionTarget: 'APP',
     scopes: [],
     costToEvoliia: 'aucun',
     costToCreator: 'selon-usage',
@@ -158,9 +173,14 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       'Vos échanges sont facturés sur votre propre compte Anthropic, indépendamment de votre abonnement Evoliia.',
     freeQuota: "Aucun. Le compte fonctionne par crédits prépayés, avec un plafond mensuel réglable.",
     webhooks: false,
-    providerReview: 'Aucune validation à obtenir : la clé est créée par le créateur en deux minutes.',
+    providerReview:
+      'Aucune validation à obtenir : la clé est créée par le créateur en deux minutes. La clé est vérifiée auprès d’Anthropic avant d’être enregistrée.',
     risk:
       "Une clé confiée est une clé à protéger. Elle est chiffrée au repos, jamais renvoyée au navigateur, jamais écrite dans un journal.",
+    keyHelp: {
+      label: 'Votre clé Anthropic',
+      hint: 'Elle se crée sur console.anthropic.com, dans « API keys ». Posez-y un plafond mensuel : c’est votre compte qui paie. La clé est chiffrée et ne vous sera plus jamais réaffichée.',
+    },
     reviewedOn: '2026-09-12',
   },
   {
@@ -171,6 +191,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     usage: 'Importer le contenu d’une page ou d’une base que vous désignez.',
     status: 'planned',
     credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
     scopes: [],
     costToEvoliia: 'aucun',
     costToCreator: 'compte-gratuit-suffisant',
@@ -189,6 +210,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     usage: 'Choisir un fichier à donner à Evoliia.',
     status: 'planned',
     credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
     scopes: [],
     costToEvoliia: 'aucun',
     costToCreator: 'compte-gratuit-suffisant',

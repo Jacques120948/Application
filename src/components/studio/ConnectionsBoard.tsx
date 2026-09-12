@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge, Button, Card, CardBody, ComingSoon, Notice } from '@/components/ui'
+import { Badge, Button, Card, CardBody, ComingSoon, Field, Input, Notice } from '@/components/ui'
 
 /**
  * Écran « Connexions ».
@@ -21,6 +21,8 @@ export type ProviderCard = {
   credential: 'OAUTH' | 'API_KEY'
   costNotice: string
   costLabel: string
+  /** Où le créateur va chercher sa clé, quand le service s'en remet à une clé. */
+  keyHelp: { label: string; hint: string } | null
   connection: {
     id: string
     status: string
@@ -49,8 +51,48 @@ export function ConnectionsBoard({
   const [rows, setRows] = useState(cards)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Fournisseur dont le formulaire de clé est ouvert, et ce qui y est saisi. */
+  const [opened, setOpened] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState('')
 
   const active = rows.filter((row) => row.connection?.status === 'CONNECTED').length
+
+  /*
+   * Ce qui est connectable d'abord. La plupart des services du catalogue sont encore des
+   * fiches : les laisser en tête ferait descendre en bas de page la seule chose que le
+   * créateur peut réellement faire aujourd'hui.
+   */
+  const ordered = [...categories].sort((a, b) => {
+    const open = (id: string) =>
+      Number(rows.some((row) => row.category === id && row.status === 'available'))
+    return open(b.id) - open(a.id)
+  })
+
+  async function link(providerId: string) {
+    setBusy(providerId)
+    setError(null)
+    const response = await fetch('/api/connexions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ providerId, apiKey }),
+    })
+    const body = (await response.json()) as {
+      message?: string
+      connection?: ProviderCard['connection']
+    }
+    setBusy(null)
+    if (!response.ok || body.connection === undefined || body.connection === null) {
+      setError(body.message ?? "La connexion n'a pas abouti.")
+      return
+    }
+    const connection = body.connection
+    // La clé quitte la mémoire du navigateur dès qu'elle est enregistrée.
+    setApiKey('')
+    setOpened(null)
+    setRows((current) =>
+      current.map((row) => (row.id === providerId ? { ...row, connection } : row)),
+    )
+  }
 
   async function unlink(connectionId: string) {
     setBusy(connectionId)
@@ -86,8 +128,10 @@ export function ConnectionsBoard({
         ) : null}
       </Notice>
 
-      {categories.map((category) => {
-        const inCategory = rows.filter((row) => row.category === category.id)
+      {ordered.map((category) => {
+        const inCategory = rows
+          .filter((row) => row.category === category.id)
+          .sort((a, b) => Number(b.status === 'available') - Number(a.status === 'available'))
         if (inCategory.length === 0) return null
         return (
           <section key={category.id}>
@@ -141,8 +185,55 @@ export function ConnectionsBoard({
                             {busy === row.connection.id ? 'Déconnexion…' : 'Déconnecter'}
                           </Button>
                         </div>
-                      ) : row.status === 'available' ? (
-                        <Button>Connecter</Button>
+                      ) : row.status === 'available' && row.keyHelp !== null ? (
+                        opened === row.id ? (
+                          <form
+                            className="grid gap-3"
+                            onSubmit={(event) => {
+                              event.preventDefault()
+                              void link(row.id)
+                            }}
+                          >
+                            <Field label={row.keyHelp.label} hint={row.keyHelp.hint}>
+                              <Input
+                                type="password"
+                                name="apiKey"
+                                autoComplete="off"
+                                spellCheck={false}
+                                required
+                                minLength={8}
+                                value={apiKey}
+                                placeholder="sk-ant-…"
+                                onChange={(event) => setApiKey(event.target.value)}
+                              />
+                            </Field>
+                            <div className="flex gap-2">
+                              <Button type="submit" disabled={busy === row.id}>
+                                {busy === row.id ? 'Vérification…' : 'Enregistrer la clé'}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => {
+                                  setApiKey('')
+                                  setOpened(null)
+                                }}
+                              >
+                                Annuler
+                              </Button>
+                            </div>
+                          </form>
+                        ) : (
+                          <Button
+                            onClick={() => {
+                              setApiKey('')
+                              setError(null)
+                              setOpened(row.id)
+                            }}
+                          >
+                            Connecter
+                          </Button>
+                        )
                       ) : (
                         <ComingSoon
                           what={`Connexion à ${row.name}`}

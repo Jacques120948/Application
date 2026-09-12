@@ -14,7 +14,11 @@ export type PlanDefaults = {
   description: string
   priceCents: number
   maxProjects: number
-  /** Services externes connectables. Zéro tant qu'aucun connecteur n'est ouvert. */
+  /**
+   * Services externes connectables. Un seul connecteur est ouvert à ce jour, la clé
+   * Anthropic du créateur ; le plafond existe pour que l'ouverture des suivants ne se
+   * traduise pas par un nombre illimité de comptes reliés à une offre d'entrée.
+   */
   maxConnections: number
   monthlyCredits: number
   allowBuild: boolean
@@ -58,7 +62,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Pour lancer votre première application et la mettre en ligne.',
     priceCents: 2900,
     maxProjects: 1,
-    maxConnections: 0,
+    maxConnections: 1,
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -73,7 +77,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: 'Plusieurs projets, accompagnement au lancement et adresse personnalisée.',
     priceCents: 5900,
     maxProjects: 5,
-    maxConnections: 0,
+    maxConnections: 3,
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: false,
@@ -88,7 +92,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description: "Pour exploiter plusieurs applications et aller plus loin dans l'acquisition.",
     priceCents: 9900,
     maxProjects: 20,
-    maxConnections: 0,
+    maxConnections: 10,
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: false,

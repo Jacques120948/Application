@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { AppError, notFound, validation } from '@/lib/errors'
 import { answerAsAppAssistant } from '@/server/ai/operations'
+import { markConnectionError, useCredential } from '@/server/integrations/service'
 import { resolveRuntimeSpec } from './context'
 import { countAssistantAnswersToday, recordAssistantAnswer } from './published'
 
@@ -25,6 +26,18 @@ import { countAssistantAnswersToday, recordAssistantAnswer } from './published'
 
 /** Réponses maximales par application et par jour, toutes personnes confondues. */
 export const DAILY_ANSWER_LIMIT = 200
+
+/**
+ * Qui paie l'appel.
+ *
+ * Le créateur qui a connecté sa propre clé Anthropic répond sur son compte : ses crédits
+ * Evoliia ne bougent pas. Le plafond journalier s'applique quand même — il protège son
+ * portefeuille, pas seulement le nôtre.
+ */
+async function creatorKeyFor(ownerId: string): Promise<{ id: string; secret: string } | null> {
+  const credential = await useCredential(ownerId, 'anthropic', { target: 'APP' })
+  return credential === null ? null : { id: credential.connectionId, secret: credential.secret }
+}
 
 export const assistantInput = z.object({
   blockId: z.string().trim().min(1).max(48),
@@ -54,17 +67,37 @@ export async function askAppAssistant(
     )
   }
 
-  try {
-    const { answer } = await answerAsAppAssistant({
+  const creatorKey = await creatorKeyFor(runtime.ownerId)
+
+  const call = (key: string | null) =>
+    answerAsAppAssistant({
       ownerId: runtime.ownerId,
       projectId: runtime.projectId,
       appName: runtime.spec.name,
       role: block.role,
       question: input.question,
       locale: runtime.spec.locale,
+      creatorKey: key,
     })
+
+  try {
+    let result
+    try {
+      result = await call(creatorKey?.secret ?? null)
+    } catch (error) {
+      /*
+       * Clé du créateur refusée : l'application continue de répondre, sur les crédits
+       * Evoliia du créateur, et la connexion est marquée en erreur pour qu'il le découvre
+       * sur son écran « Connexions » plutôt qu'au travers d'une application muette.
+       */
+      if (!(error instanceof AppError && error.code === 'CREATOR_KEY_REJECTED')) throw error
+      if (creatorKey !== null) {
+        await markConnectionError(runtime.ownerId, creatorKey.id, error.message)
+      }
+      result = await call(null)
+    }
     await recordAssistantAnswer(runtime.projectId)
-    return { answer }
+    return { answer: result.answer }
   } catch (error) {
     /*
      * Le visiteur n'a pas à connaître l'état du portefeuille du créateur : ce serait une

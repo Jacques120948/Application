@@ -107,8 +107,37 @@ créateur encaisse les clients du créateur. Les deux ne se rencontrent jamais.
 | Validation fournisseur | Aucune |
 | Risque | Une clé confiée est une clé à protéger : chiffrée au repos, jamais renvoyée au navigateur, jamais journalisée |
 
-C'est la contrepartie directe de l'assistant intégré aux applications créées : aujourd'hui
-il consomme les crédits Evoliia du créateur, demain il pourra consommer son propre compte.
+C'est la contrepartie directe de l'assistant intégré aux applications créées. **Premier — et
+pour l'instant seul — connecteur ouvert**, précisément parce qu'il est le seul dont le coût
+pour Evoliia est nul par construction : pas de quota partagé, pas de projet Cloud commun,
+pas de facturation différée annoncée. Evoliia relaie des octets, rien d'autre.
+
+**Ce qui se passe à la connexion**
+
+1. Le créateur colle sa clé. Elle est vérifiée auprès d'Anthropic par un appel gratuit
+   (liste des modèles, zéro jeton consommé) : une clé fautive est refusée tout de suite,
+   au lieu d'être découverte par un visiteur des mois plus tard.
+2. Elle est chiffrée (AES-256-GCM) avant d'atteindre la base. Seuls quatre derniers
+   caractères sont conservés en clair, pour que le créateur reconnaisse sa clé.
+3. La connexion est rangée en portée `APP` : elle sert les applications publiées, pas
+   l'atelier. Ce n'est pas le navigateur qui le décide, c'est le catalogue.
+
+**Ce qui se passe à chaque question posée à une application**
+
+| Cas | Qui paie | Crédits Evoliia débités |
+|---|---|---|
+| Créateur sans clé connectée | Ses crédits Evoliia | Oui |
+| Créateur avec clé connectée | Son compte Anthropic | **Non** |
+| Clé connectée mais refusée | Ses crédits Evoliia, en repli | Oui, et la connexion passe en erreur |
+
+Le plafond de 200 réponses par application et par jour s'applique dans tous les cas : il
+protège le portefeuille du créateur, pas seulement celui de la plateforme. Les appels
+passés sur la clé du créateur sont enregistrés avec un coût nul — il n'est pas question de
+faire figurer dans les dépenses d'Evoliia de l'argent qu'elle n'a pas déboursé.
+
+Le repli mérite d'être assumé : une clé révoquée ne rend pas l'application muette, elle la
+fait retomber sur le comportement d'avant la connexion, et la connexion est marquée en
+erreur pour que le créateur le voie sur son écran « Connexions ».
 
 ### Notion, Dropbox
 
@@ -125,3 +154,8 @@ Fiches incomplètes. Ne pas implémenter en l'état.
 5. Le coût externe est annoncé sur la carte, avant la connexion.
 6. À la déconnexion, le secret est supprimé, pas seulement marqué inutilisable.
 7. La suppression d'un compte Evoliia emporte ses connexions, par cascade en base.
+8. Un seul chemin déchiffre un secret : `useCredential`, dans le gestionnaire. La réponse
+   sert à l'appel qui suit et disparaît — elle n'est ni journalisée, ni renvoyée à une
+   page, ni ajoutée à un prompt.
+9. Un fournisseur n'est ouvert que si son coût pour Evoliia est `aucun`. Ce n'est pas une
+   intention : `tests/unit/integrations-catalogue.test.ts` fait échouer la suite sinon.

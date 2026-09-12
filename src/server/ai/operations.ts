@@ -13,7 +13,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import type { AppSpec, Block } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
 import { assembleSpec } from '@/server/spec/assemble'
-import { getAnthropic, isAiAvailable } from './client'
+import { getAnthropic, getAnthropicWithKey, isAiAvailable } from './client'
 import { costMicros, GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
 import {
   appAssistantSystem,
@@ -206,14 +206,23 @@ function truncateAt(root: unknown, path: Array<string | number>, maximum: number
 
 type Accounting = { userId: string; projectId?: string; operation: CreditedOperation }
 
+/**
+ * Enregistre un appel et renvoie ce qu'il a coûté à Evoliia.
+ *
+ * `billedToEvoliia` à faux pour un appel passé sur la clé d'un créateur : les jetons sont
+ * comptés, parce qu'ils disent ce qui s'est passé, mais le coût est nul — il n'est pas
+ * question de faire figurer dans les dépenses d'Evoliia de l'argent qu'elle n'a pas
+ * déboursé.
+ */
 async function recordCall(
   accounting: Accounting,
   step: string,
   outcome: { model: string; usage: TokenUsage; latencyMs: number },
   success: boolean,
   errorCode?: string,
+  billedToEvoliia = true,
 ): Promise<number> {
-  const cost = costMicros(outcome.model, outcome.usage)
+  const cost = billedToEvoliia ? costMicros(outcome.model, outcome.usage) : 0
   await prisma.aiUsage
     .create({
       data: {
@@ -605,18 +614,38 @@ export async function answerAsAppAssistant(params: {
   role: string
   question: string
   locale: string
-}): Promise<{ answer: string; creditsSpent: number }> {
+  /**
+   * Clé Anthropic du créateur, quand il en a connecté une. L'appel part alors sur son
+   * compte : aucun crédit Evoliia n'est débité, et le coût de l'appel pour Evoliia est nul.
+   */
+  creatorKey?: string | null
+}): Promise<{ answer: string; creditsSpent: number; paidByCreatorKey: boolean }> {
   const accounting: Accounting = {
     userId: params.ownerId,
     projectId: params.projectId,
     operation: 'assistant',
   }
-  await beforeCalls(accounting)
+  const creatorKey = params.creatorKey ?? null
+  const onCreatorKey = creatorKey !== null && creatorKey !== ''
+
+  if (onCreatorKey) {
+    /*
+     * La clé d'Evoliia n'est pas requise ici, et il n'y a pas de solde à vérifier : le
+     * compte sollicité est celui du créateur. Le quota d'appels, lui, reste — il protège
+     * d'une boucle, pas d'une facture.
+     */
+    consume(`ai:${params.ownerId}`, RULES.aiOperation)
+  } else {
+    await beforeCalls(accounting)
+  }
+
   const profile = OPERATION_PROFILES.assistant
   const startedAt = Date.now()
+  const step = onCreatorKey ? 'assistant-cle-createur' : 'assistant'
 
   try {
-    const response = await getAnthropic().messages.create({
+    const client = onCreatorKey ? getAnthropicWithKey(creatorKey) : getAnthropic()
+    const response = await client.messages.create({
       model: profile.model,
       max_tokens: profile.maxTokens,
       system: [
@@ -642,11 +671,13 @@ export async function answerAsAppAssistant(params: {
     }
     const cost = await recordCall(
       accounting,
-      'assistant',
+      step,
       { model: profile.model, usage, latencyMs: Date.now() - startedAt },
       true,
+      undefined,
+      !onCreatorKey,
     )
-    const spent = await afterCalls(accounting, cost)
+    const creditsSpent = onCreatorKey ? 0 : (await afterCalls(accounting, cost)).creditsSpent
 
     const answer = response.content
       .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
@@ -660,11 +691,11 @@ export async function answerAsAppAssistant(params: {
         "L'assistant n'a pas pu répondre à cette question. Reformulez-la.",
       )
     }
-    return { answer, creditsSpent: spent.creditsSpent }
+    return { answer, creditsSpent, paidByCreatorKey: onCreatorKey }
   } catch (error) {
     await recordCall(
       accounting,
-      'assistant',
+      step,
       {
         model: profile.model,
         usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
@@ -672,9 +703,34 @@ export async function answerAsAppAssistant(params: {
       },
       false,
       error instanceof AppError ? error.code : 'inconnu',
+      false,
     )
+    if (onCreatorKey) throw creatorKeyFailure(error)
     throw toPublicFailure(error, { projectId: params.projectId })
   }
+}
+
+/**
+ * Traduit un refus du compte du créateur.
+ *
+ * Distinguer « la clé est mauvaise » d'une panne passagère a une conséquence concrète :
+ * dans le premier cas l'appelant doit le dire au créateur, dans le second il doit
+ * simplement réessayer plus tard. Le message ne cite jamais la clé.
+ */
+function creatorKeyFailure(error: unknown): AppError {
+  const status =
+    typeof error === 'object' && error !== null && 'status' in error ? error.status : null
+
+  if (status === 401 || status === 403) {
+    return new AppError('CREATOR_KEY_REJECTED', 'Anthropic a refusé votre clé.')
+  }
+  if (status === 402 || status === 429) {
+    return new AppError(
+      'CREATOR_KEY_REJECTED',
+      'Votre compte Anthropic a refusé l’appel : crédit épuisé ou plafond atteint.',
+    )
+  }
+  return toPublicFailure(error, {})
 }
 
 /**

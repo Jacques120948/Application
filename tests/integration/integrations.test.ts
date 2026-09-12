@@ -9,6 +9,8 @@ import {
   countConnections,
   disconnect,
   listConnections,
+  markConnectionError,
+  useCredential,
 } from '@/server/integrations/service'
 import { INTEGRATION_PROVIDERS } from '@/server/integrations/catalog'
 
@@ -30,6 +32,7 @@ const TEST_PROVIDER = {
   id: 'fournisseur-de-test',
   status: 'available' as const,
   credential: 'API_KEY' as const,
+  connectionTarget: 'EVOLIIA' as const,
 }
 
 beforeAll(async () => {
@@ -58,8 +61,6 @@ describe('connexion par clé du créateur', () => {
   it('enregistre la connexion sans jamais renvoyer la clé', async () => {
     const view = await connectWithApiKey(userId, {
       providerId: TEST_PROVIDER.id,
-      target: 'EVOLIIA',
-      projectId: null,
       apiKey: key,
     })
     expect(view.status).toBe('CONNECTED')
@@ -94,8 +95,6 @@ describe('connexion par clé du créateur', () => {
   it('reconnecte sans empiler une seconde connexion', async () => {
     await connectWithApiKey(userId, {
       providerId: TEST_PROVIDER.id,
-      target: 'EVOLIIA',
-      projectId: null,
       apiKey: 'sk-une-autre-cle-9999',
     })
     expect(await countConnections(userId)).toBe(1)
@@ -105,8 +104,6 @@ describe('connexion par clé du créateur', () => {
     await expect(
       connectWithApiKey(userId, {
         providerId: 'service-inconnu',
-        target: 'EVOLIIA',
-        projectId: null,
         apiKey: key,
       }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
@@ -116,11 +113,54 @@ describe('connexion par clé du créateur', () => {
     await expect(
       connectWithApiKey(userId, {
         providerId: 'stripe',
-        target: 'EVOLIIA',
-        projectId: null,
         apiKey: key,
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION' })
+  })
+})
+
+describe('utilisation du secret', () => {
+  it('déchiffre la clé au moment de s’en servir, et date l’usage', async () => {
+    const used = await useCredential(userId, TEST_PROVIDER.id)
+    expect(used?.secret).toBe('sk-une-autre-cle-9999')
+
+    const connection = await withUserScope(userId, (tx) =>
+      tx.integrationConnection.findFirstOrThrow({
+        where: { providerId: TEST_PROVIDER.id },
+        select: { lastUsedAt: true },
+      }),
+    )
+    expect(connection.lastUsedAt).not.toBeNull()
+  })
+
+  it('ne donne rien au créateur voisin', async () => {
+    expect(await useCredential(otherId, TEST_PROVIDER.id)).toBeNull()
+  })
+
+  it('ne donne rien pour une portée qui n’est pas celle de la connexion', async () => {
+    expect(await useCredential(userId, TEST_PROVIDER.id, { target: 'APP' })).toBeNull()
+  })
+
+  it('marque la connexion en erreur sans y écrire de secret', async () => {
+    const entries = await listConnections(userId)
+    const connectionId = entries.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection
+      ?.id as string
+
+    await markConnectionError(userId, connectionId, 'Le fournisseur a refusé la clé.')
+
+    const connection = await withUserScope(userId, (tx) =>
+      tx.integrationConnection.findFirstOrThrow({
+        where: { id: connectionId },
+        select: { status: true, lastError: true },
+      }),
+    )
+    expect(connection.status).toBe('ERROR')
+    expect(connection.lastError).toBe('Le fournisseur a refusé la clé.')
+
+    const events = await withUserScope(userId, (tx) =>
+      tx.integrationEvent.findMany({ select: { type: true, detail: true } }),
+    )
+    expect(JSON.stringify(events)).not.toContain('sk-')
   })
 })
 
@@ -148,13 +188,13 @@ describe('déconnexion', () => {
     expect(connection.disconnectedAt).not.toBeNull()
     expect(connection.scopes).toEqual([])
     expect(await countConnections(userId)).toBe(0)
+    // Et surtout : plus rien à déchiffrer, donc plus rien à faire fuir.
+    expect(await useCredential(userId, TEST_PROVIDER.id)).toBeNull()
   })
 
   it('refuse de déconnecter la connexion d’un autre', async () => {
     const view = await connectWithApiKey(userId, {
       providerId: TEST_PROVIDER.id,
-      target: 'EVOLIIA',
-      projectId: null,
       apiKey: 'sk-encore-une-cle-4242',
     })
     await expect(disconnect(otherId, view.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })

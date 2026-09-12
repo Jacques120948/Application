@@ -39,6 +39,7 @@ export default async function ConnectionsPage({
     credential: provider.credential,
     costNotice: provider.costNotice,
     costLabel: COST_LABEL[provider.costToCreator],
+    keyHelp: provider.keyHelp ?? null,
     connection:
       connection === null
         ? null

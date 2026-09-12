@@ -39,6 +39,22 @@ describe('règles de dépendance', () => {
     expect(offenders).toEqual([])
   })
 
+  it("ne déchiffre un secret de créateur qu'au sein du gestionnaire d'intégrations", () => {
+    /*
+     * Un jeton OAuth ou une clé d'API appartient à quelqu'un d'autre. Plus il y a
+     * d'endroits capables de les lire en clair, plus il y a d'endroits d'où ils peuvent
+     * fuir. Un seul module déchiffre, et c'est celui qui expose `useCredential`.
+     */
+    const allowed = [
+      join('src', 'lib', 'crypto.ts'),
+      join('src', 'server', 'integrations', 'service.ts'),
+    ]
+    const offenders = sources
+      .filter((path) => !allowed.includes(path))
+      .filter((path) => read(path).includes('decryptSecret'))
+    expect(offenders).toEqual([])
+  })
+
   it('interdit au serveur de dépendre des pages', () => {
     const offenders = sources
       .filter((path) => path.startsWith(join('src', 'server')))
