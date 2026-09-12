@@ -1,4 +1,5 @@
 import { prisma } from '@/server/db/client'
+import { DEFAULT_PLAN_FEATURES } from './features'
 
 /**
  * Offres de la plateforme.
@@ -20,6 +21,8 @@ export type PlanDefaults = {
    * traduise pas par un nombre illimité de comptes reliés à une offre d'entrée.
    */
   maxConnections: number
+  /** Fonctions ouvertes, par identifiant. Voir features.ts. */
+  features: readonly string[]
   monthlyCredits: number
   allowBuild: boolean
   allowExport: boolean
@@ -45,6 +48,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     priceCents: 0,
     maxProjects: 0,
     maxConnections: 0,
+    features: DEFAULT_PLAN_FEATURES['free'] ?? [],
     // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
     // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
     // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
@@ -63,6 +67,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     priceCents: 2900,
     maxProjects: 1,
     maxConnections: 1,
+    features: DEFAULT_PLAN_FEATURES['launch'] ?? [],
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -78,6 +83,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     priceCents: 5900,
     maxProjects: 5,
     maxConnections: 3,
+    features: DEFAULT_PLAN_FEATURES['builder'] ?? [],
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: false,
@@ -93,6 +99,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     priceCents: 9900,
     maxProjects: 20,
     maxConnections: 10,
+    features: DEFAULT_PLAN_FEATURES['business'] ?? [],
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: false,

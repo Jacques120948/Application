@@ -76,7 +76,7 @@ beforeAll(async () => {
     await prisma.plan.upsert({
       where: { id: plan.id },
       update: { maxProjects: plan.maxProjects, monthlyCredits: plan.monthlyCredits },
-      create: { ...plan, currency: 'EUR', interval: 'month' },
+      create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
   clearAll()

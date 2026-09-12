@@ -1,3 +1,4 @@
+import { FEATURES } from '@/server/billing/features'
 import { notFound, redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
@@ -84,7 +85,15 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
           code et la préparation pour mobile n’apparaissent pas : ils ne sont pas encore
           construits, donc aucune offre ne peut les promettre.
         </p>
-        <PlanEditor plans={plans as unknown as AdminPlan[]} />
+        <PlanEditor
+          plans={plans as unknown as AdminPlan[]}
+          features={FEATURES.map((feature) => ({
+            id: feature.id,
+            label: feature.label,
+            summary: feature.summary,
+            status: feature.status,
+          }))}
+        />
 
         <h2 className="mt-12 mb-1 text-lg font-semibold">Les comptes</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">

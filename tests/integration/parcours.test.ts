@@ -28,7 +28,7 @@ beforeAll(async () => {
         monthlyCredits: plan.monthlyCredits,
         allowBuild: plan.allowBuild,
       },
-      create: { ...plan, currency: 'EUR', interval: 'month' },
+      create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
   clearAll()

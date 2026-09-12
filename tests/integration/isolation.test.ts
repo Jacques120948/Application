@@ -56,7 +56,7 @@ beforeAll(async () => {
     await prisma.plan.upsert({
       where: { id: plan.id },
       update: { maxProjects: plan.maxProjects },
-      create: { ...plan, currency: 'EUR', interval: 'month' },
+      create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
   const aliceId = await makeUser()

@@ -25,6 +25,15 @@ export type AdminPlan = {
   isRecommended: boolean
   isActive: boolean
   sortOrder: number
+  features: string[]
+}
+
+/** Catalogue des fonctions, passé par le serveur : il n'est pas dupliqué ici. */
+export type AdminFeature = {
+  id: string
+  label: string
+  summary: string
+  status: 'live' | 'prevu'
 }
 
 export type AdminUser = {
@@ -43,17 +52,23 @@ function euros(cents: number): string {
   return (cents / 100).toString()
 }
 
-export function PlanEditor({ plans }: { plans: AdminPlan[] }) {
+export function PlanEditor({
+  plans,
+  features,
+}: {
+  plans: AdminPlan[]
+  features: AdminFeature[]
+}) {
   return (
     <div className="grid gap-4">
       {plans.map((plan) => (
-        <PlanCard key={plan.id} plan={plan} />
+        <PlanCard key={plan.id} plan={plan} features={features} />
       ))}
     </div>
   )
 }
 
-function PlanCard({ plan }: { plan: AdminPlan }) {
+function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[] }) {
   const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
   const [error, setError] = useState<string | null>(null)
 
@@ -77,6 +92,7 @@ function PlanCard({ plan }: { plan: AdminPlan }) {
         isRecommended: form.get('isRecommended') === 'on',
         isActive: form.get('isActive') === 'on',
         sortOrder: Number(form.get('sortOrder')),
+        features: features.filter((feature) => form.get(`feature:${feature.id}`) === 'on').map((feature) => feature.id),
       }),
     })
     const body = (await response.json()) as { message?: string }
@@ -172,6 +188,25 @@ function PlanCard({ plan }: { plan: AdminPlan }) {
             <Toggle name="isRecommended" label="Mise en avant sur la page d’accueil" checked={plan.isRecommended} />
             <Toggle name="isActive" label="Visible publiquement" checked={plan.isActive} />
           </div>
+
+          <fieldset className="grid gap-2 border-0 p-0">
+            <legend className="mb-1 text-sm font-medium">Fonctions ouvertes par cette offre</legend>
+            <p className="m-0 mb-2 text-xs text-[var(--color-ink-soft)]">
+              Une fonction marquée « à construire » peut être cochée dès maintenant : elle
+              restera fermée tant qu’elle n’existe pas, et s’ouvrira d’elle-même le jour où
+              elle sera prête. Aucune grille tarifaire ne la présente entre-temps.
+            </p>
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
+              {features.map((feature) => (
+                <Toggle
+                  key={feature.id}
+                  name={`feature:${feature.id}`}
+                  label={feature.status === 'live' ? feature.label : `${feature.label} (à construire)`}
+                  checked={plan.features.includes(feature.id)}
+                />
+              ))}
+            </div>
+          </fieldset>
 
           {error !== null ? <Notice tone="critical">{error}</Notice> : null}
           {status === 'saved' ? (

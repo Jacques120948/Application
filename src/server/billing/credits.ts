@@ -29,6 +29,8 @@ export type CreditedOperation =
   | 'assistant'
   /** Réponse du coach qui accompagne le créateur dans Evoliia. */
   | 'coach'
+  /** Kit de lancement marketing, produit par le moteur social. */
+  | 'launchKit'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -40,6 +42,9 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   edit: 2,
   assistant: 1,
   coach: 1,
+  // Mesuré sur la taille réelle du prompt et de la sortie attendue : environ 0,025 USD,
+  // soit 5 crédits. À réviser dès que des appels réels auront été observés.
+  launchKit: 5,
 }
 
 /**

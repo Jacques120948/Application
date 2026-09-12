@@ -8,6 +8,7 @@ import { isAiAvailable } from '@/server/ai/client'
 import { getProject, listChatMessages } from '@/server/projects/service'
 import { Shell } from '@/components/studio/Shell'
 import { ProjectWorkspace } from '@/components/studio/ProjectWorkspace'
+import { LinkButton } from '@/components/ui'
 
 export default async function ProjectPage({
   params,
@@ -36,6 +37,24 @@ export default async function ProjectPage({
     <Shell locale={locale} userName={user.name ?? user.email} credits={wallet.balance}
       isAdmin={user.role === 'ADMIN'}
       screen="projet">
+      {/*
+        Une application construite n'est pas une application connue. L'invitation
+        n'apparaît qu'une fois le projet en ligne : proposer de préparer un lancement
+        avant qu'il y ait quelque chose à lancer serait une étape de plus, pas une aide.
+      */}
+      {project.publishedAt === null ? null : (
+        <div className="mx-auto mb-6 flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+          <p className="m-0 text-sm">
+            <span className="font-medium">Votre application est en ligne.</span>{' '}
+            <span className="text-[var(--color-ink-soft)]">
+              Préparons maintenant son lancement.
+            </span>
+          </p>
+          <LinkButton href={`/${locale}/projets/${project.id}/marketing`}>
+            Préparer mon lancement
+          </LinkButton>
+        </div>
+      )}
       <ProjectWorkspace
         projectId={project.id}
         locale={locale}

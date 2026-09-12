@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { FEATURE_IDS } from '@/server/billing/features'
 import { prisma } from '@/server/db/client'
 import { notFound } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
@@ -45,6 +46,13 @@ export const planUpdateInput = z.object({
   isRecommended: z.boolean(),
   isActive: z.boolean(),
   sortOrder: z.number().int().min(0).max(100),
+  /*
+   * Fonctions ouvertes par l'offre. Déplacer une fonction d'une offre à l'autre est une
+   * décision commerciale, pas une modification de code : elle se prend ici. Seuls les
+   * identifiants du catalogue sont acceptés — un identifiant libre créerait un droit que
+   * rien ne sait honorer.
+   */
+  features: z.array(z.enum(FEATURE_IDS as [string, ...string[]])).max(40).default([]),
 })
 
 export type PlanUpdateInput = z.infer<typeof planUpdateInput>

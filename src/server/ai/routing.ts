@@ -63,6 +63,9 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   assistant: { model: MODELS.economical, maxTokens: 700, effort: 'low' },
   // Le coach explique le produit, il ne le construit pas. Réponse courte, modèle rapide.
   coach: { model: MODELS.economical, maxTokens: 800, effort: 'low' },
+  // Le modèle est en réalité choisi par le moteur social, qui exécute l'appel. Ce profil
+  // sert de référence de coût et de garde-fou si le moteur revenait un jour sur place.
+  launchKit: { model: MODELS.fast, maxTokens: 8_000, effort: 'medium' },
 }
 
 export type TokenUsage = {
