@@ -685,3 +685,50 @@ function readIdentity(draftSpec: unknown): {
     tagline: typeof spec?.tagline === 'string' ? spec.tagline : '',
   }
 }
+
+export const renameInput = z.object({
+  projectId: z.string().uuid(),
+  name: z.string().trim().min(1).max(60),
+})
+
+/**
+ * Renomme un projet.
+ *
+ * Le nom affiché dans l'atelier change, pas l'adresse publique : un slug qui bougerait
+ * casserait les liens déjà partagés, les icônes déjà installées sur un écran d'accueil et
+ * les caches des visiteurs. Renommer est un geste anodin ; changer d'adresse ne l'est pas.
+ */
+export async function renameProject(
+  userId: string,
+  input: z.infer<typeof renameInput>,
+): Promise<{ name: string }> {
+  const updated = await withUserScope(userId, (tx) =>
+    tx.project.updateMany({
+      where: { id: input.projectId, ownerId: userId, deletedAt: null },
+      data: { name: input.name },
+    }),
+  )
+  if (updated.count === 0) throw notFound("Ce projet n'existe pas.")
+  return { name: input.name }
+}
+
+/**
+ * Supprime un projet.
+ *
+ * Suppression marquée, pas effacement : la ligne reste, avec sa date. Un créateur qui
+ * supprime par erreur l'application qu'il a mis trois semaines à construire doit pouvoir
+ * être dépanné, et les données de ses visiteurs ne disparaissent pas sans trace.
+ *
+ * En revanche l'application cesse immédiatement d'être servie : dépublier fait partie de
+ * la suppression, sans quoi « supprimé » ne voudrait rien dire pour le public.
+ */
+export async function deleteProject(userId: string, projectId: string): Promise<void> {
+  const removed = await withUserScope(userId, (tx) =>
+    tx.project.updateMany({
+      where: { id: projectId, ownerId: userId, deletedAt: null },
+      data: { deletedAt: new Date(), publishedAt: null, publishedVersionId: null },
+    }),
+  )
+  if (removed.count === 0) throw notFound("Ce projet n'existe pas.")
+  logger.info('projet supprimé', { userId, projectId })
+}

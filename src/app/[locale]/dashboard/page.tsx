@@ -5,12 +5,16 @@ import { getWallet } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
-import { listProjects, type ProjectSummary } from '@/server/projects/service'
+import { listProjects } from '@/server/projects/service'
+import { getCreatorStats, getCreditHistory } from '@/server/business/stats'
+import { listIdeas } from '@/server/business/ideas'
+import { env } from '@/lib/env'
 import { getCreatorOverview } from '@/server/business/overview'
 import { OBJECTIVE_DISCLAIMER } from '@/server/business/economics'
 import type { JourneyStep } from '@/server/business/journey'
-import { Badge, Card, CardBody, LinkButton } from '@/components/ui'
+import { Card, CardBody, LinkButton } from '@/components/ui'
 import { Shell } from '@/components/studio/Shell'
+import { ProjectCard } from '@/components/studio/ProjectCard'
 
 /**
  * Tableau de bord.
@@ -35,6 +39,23 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
     getEntitlements(user.id),
     getEffectivePlan(user.id),
   ])
+
+  /*
+   * Les chiffres, le registre de crédits et les idées en attente sont lus après la liste
+   * des projets, dont ils dépendent. `listIdeas` échoue tant qu'aucun profil n'existe :
+   * l'absence d'idées n'est pas une erreur, c'est simplement un parcours qui commence
+   * autrement.
+   */
+  const [stats, credits, ideas] = await Promise.all([
+    getCreatorStats(
+      user.id,
+      projects.map((project) => project.id),
+    ),
+    getCreditHistory(user.id),
+    listIdeas(user.id).catch(() => []),
+  ])
+  const pendingIdeas = ideas.filter((idea) => idea.status === 'PROPOSED').slice(0, 3)
+  const appUrl = env.appUrl.replace(/\/$/, '')
 
   /*
    * Rien du tout : on laisse choisir son chemin plutôt que d'imposer l'objectif.
@@ -183,6 +204,120 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
           </Card>
         )}
 
+        {/* ──────────────── Crédits et idées en attente ───────────────────── */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardBody>
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="m-0 text-sm font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
+                  Vos crédits
+                </h2>
+                <span className="text-xs text-[var(--color-ink-soft)]">
+                  Recharge le{' '}
+                  {new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(wallet.resetsAt)}
+                </span>
+              </div>
+
+              <div className="mt-3 flex items-baseline gap-3">
+                <span className="text-3xl font-semibold">{wallet.balance}</span>
+                <span className="text-sm text-[var(--color-ink-soft)]">
+                  sur {plan.monthlyCredits} par mois
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[var(--color-canvas)]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${plan.monthlyCredits === 0 ? 0 : Math.min(100, Math.round((wallet.balance / plan.monthlyCredits) * 100))}%`,
+                    background: 'var(--gradient-brand)',
+                  }}
+                />
+              </div>
+
+              {credits.entries.length === 0 ? (
+                <p className="mt-4 text-sm text-[var(--color-ink-soft)]">
+                  Aucune dépense pour l’instant.
+                </p>
+              ) : (
+                <>
+                  <p className="mt-4 text-sm text-[var(--color-ink-soft)]">
+                    {credits.spentInWindow} crédits dépensés sur {credits.windowDays} jours.
+                  </p>
+                  {/*
+                    Le détail dit à quoi sont passés les crédits, pas seulement combien.
+                    Un solde qui baisse sans explication ressemble à une fuite.
+                  */}
+                  <ul className="m-0 mt-3 grid list-none gap-2 p-0">
+                    {credits.entries.map((entry) => (
+                      <li key={entry.id} className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="truncate text-[var(--color-ink-soft)]">{entry.label}</span>
+                        <span
+                          className={
+                            entry.delta < 0
+                              ? 'shrink-0 tabular-nums text-[var(--color-ink)]'
+                              : 'shrink-0 tabular-nums text-[var(--color-positive)]'
+                          }
+                        >
+                          {entry.delta > 0 ? `+${entry.delta}` : entry.delta}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardBody>
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="m-0 text-sm font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
+                  Idées en attente
+                </h2>
+                <a
+                  href={`/${locale}/idees`}
+                  className="text-sm text-[var(--color-brand-strong)] no-underline"
+                >
+                  Toutes mes idées
+                </a>
+              </div>
+
+              {pendingIdeas.length === 0 ? (
+                <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
+                  Aucune idée en attente. Vous pouvez en chercher de nouvelles à tout moment,
+                  adaptées à votre profil.
+                </p>
+              ) : (
+                <ul className="m-0 mt-3 grid list-none gap-3 p-0">
+                  {pendingIdeas.map((idea) => (
+                    <li key={idea.id}>
+                      <a
+                        href={`/${locale}/idees`}
+                        className="flex items-baseline gap-3 no-underline"
+                      >
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+                          style={{ background: 'var(--gradient-brand)' }}
+                        >
+                          {idea.opportunityScore}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-[var(--color-ink)]">
+                            {idea.title}
+                          </span>
+                          <span className="block truncate text-sm text-[var(--color-ink-soft)]">
+                            {idea.valueProposition}
+                          </span>
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
+        </div>
+
         {/* ───────────────────────── Le parcours ──────────────────────────── */}
         <Card>
           <CardBody>
@@ -214,10 +349,23 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
               {projects.map((project) => (
                 <ProjectCard
                   key={project.id}
-                  project={project}
                   locale={locale}
                   statusLabel={t(`status.${project.status}` as MessageKey)}
                   canLaunch={canLaunch}
+                  windowDays={stats.windowDays}
+                  stats={stats.byProject.get(project.id) ?? null}
+                  project={{
+                    id: project.id,
+                    name: project.name,
+                    slug: project.slug,
+                    status: project.status,
+                    tagline: project.tagline,
+                    themeColor: project.themeColor,
+                    themeAccent: project.themeAccent,
+                    readyScore: project.readyScore,
+                    publicUrl:
+                      project.status === 'PUBLISHED' ? `${appUrl}/a/${project.slug}` : null,
+                  }}
                 />
               ))}
               {/*
@@ -408,72 +556,5 @@ function Stepper({ steps, currentId }: { steps: JourneyStep[]; currentId: string
         )
       })}
     </ol>
-  )
-}
-
-/**
- * Vignette d'une application.
- *
- * Elle porte les couleurs de l'application et son accroche, pas une pastille de couleur
- * unie : c'est ce qui permet de reconnaître son projet sans lire son nom, surtout quand on
- * en a plusieurs.
- */
-function ProjectCard({
-  project,
-  locale,
-  statusLabel,
-  canLaunch,
-}: {
-  project: ProjectSummary
-  locale: string
-  statusLabel: string
-  canLaunch: boolean
-}) {
-  const published = project.status === 'PUBLISHED'
-  return (
-    <Card className="flex h-full flex-col overflow-hidden">
-      <a href={`/${locale}/projets/${project.id}`} className="no-underline">
-        <div
-          className="relative h-28 overflow-hidden"
-          style={{
-            background: `linear-gradient(135deg, ${project.themeColor} 0%, ${project.themeAccent} 100%)`,
-          }}
-          aria-hidden="true"
-        >
-          <div
-            className="absolute -right-8 -top-10 h-32 w-32 rounded-full opacity-25 blur-2xl"
-            style={{ background: '#ffffff' }}
-          />
-        </div>
-        <CardBody className="grid gap-2">
-          <div className="flex items-start gap-3">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-ink)]">{project.name}</h3>
-            <span className="ml-auto shrink-0">
-              <Badge tone={published ? 'positive' : 'neutral'}>{statusLabel}</Badge>
-            </span>
-          </div>
-          {project.tagline === '' ? null : (
-            <p className="m-0 line-clamp-2 text-sm text-[var(--color-ink-soft)]">
-              {project.tagline}
-            </p>
-          )}
-          <p className="m-0 text-xs text-[var(--color-ink-faint)]">
-            {project.readyScore === null
-              ? 'Pas encore testée'
-              : `Prête à ${project.readyScore} %`}
-          </p>
-        </CardBody>
-      </a>
-      {published && canLaunch ? (
-        <div className="mt-auto border-t border-[var(--color-line)] px-5 py-3">
-          <a
-            href={`/${locale}/projets/${project.id}/marketing`}
-            className="text-sm font-medium text-[var(--color-brand-strong)] no-underline"
-          >
-            Préparer son lancement →
-          </a>
-        </div>
-      ) : null}
-    </Card>
   )
 }
