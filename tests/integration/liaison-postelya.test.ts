@@ -6,7 +6,9 @@ import { withUserScope } from '@/server/db/scope'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { decryptSecret } from '@/lib/crypto'
-import { connectWithApiKey, listConnections } from '@/server/integrations/service'
+import { connectWithApiKey, disconnect, listConnections } from '@/server/integrations/service'
+import { sendWeekToSocial } from '@/server/marketing/publish'
+import { DEMO_APPS } from '@/server/demos/catalog'
 
 /**
  * Liaison d'un espace Postelya, de bout en bout.
@@ -29,6 +31,7 @@ let server: Server
 let userId: string
 let email: string
 let received: { service?: string; code?: string } = {}
+let deposited: Array<{ batchRef: string; count: number; grant: string }> = []
 
 beforeAll(async () => {
   clearAll()
@@ -48,8 +51,32 @@ beforeAll(async () => {
         response.end(JSON.stringify({ error: 'unauthorized' }))
         return
       }
-      const payload = JSON.parse(body) as { service: string; code: string }
-      received = payload
+      const payload = JSON.parse(body) as Record<string, unknown>
+
+      if (request.url === '/api/engine/drafts') {
+        if (payload.grant !== GRANT) {
+          response.writeHead(403, { 'content-type': 'application/json' })
+          response.end(JSON.stringify({ error: 'Espace non relié.', code: 'LINK_REVOKED' }))
+          return
+        }
+        const posts = payload.posts as unknown[]
+        const batchRef = String(payload.batchRef)
+        // Idempotence : un même lot déjà reçu ne crée rien de plus.
+        const seen = deposited.some((entry) => entry.batchRef === batchRef)
+        deposited.push({ batchRef, count: posts.length, grant: String(payload.grant) })
+        response.writeHead(200, { 'content-type': 'application/json' })
+        response.end(
+          JSON.stringify({
+            version: '1',
+            workspace: { name: 'Cap-Nature' },
+            created: seen ? 0 : posts.length,
+            alreadyThere: seen ? posts.length : 0,
+          }),
+        )
+        return
+      }
+
+      received = payload as { service: string; code: string }
       if (payload.code !== CODE) {
         response.writeHead(422, { 'content-type': 'application/json' })
         response.end(JSON.stringify({ error: "Ce code n'est pas valide ou a expiré." }))
@@ -118,5 +145,106 @@ describe('liaison d’un espace Postelya', () => {
     await expect(
       connectWithApiKey(userId, { providerId: 'postelya', apiKey: 'ZZZZ9999' }),
     ).rejects.toMatchObject({ code: 'VALIDATION' })
+  })
+})
+
+describe('dépôt d’une semaine', () => {
+  let projectId: string
+  let kitId: string
+
+  const semaine = Array.from({ length: 7 }, (_, day) => ({
+    day,
+    time: '10:00',
+    angleKey: 'PROBLEM_SOLUTION' as const,
+    objective: 'AWARENESS' as const,
+    format: 'POST' as const,
+    caption: `Publication du jour ${day + 1}.`,
+    hashtags: ['artisan'],
+    cta: 'Essayez',
+  }))
+
+  beforeAll(async () => {
+    const project = await withUserScope(userId, (tx) =>
+      tx.project.create({
+        data: {
+          ownerId: userId,
+          name: 'Projet',
+          slug: `envoi-${Date.now()}`,
+          idea: 'une idée',
+          draftSpec: DEMO_APPS[0]!.spec as unknown as object,
+        },
+        select: { id: true },
+      }),
+    )
+    projectId = project.id
+
+    const kit = await withUserScope(userId, (tx) =>
+      tx.marketingKit.create({
+        data: {
+          userId,
+          projectId,
+          engineVersion: '1',
+          model: 'claude-sonnet-5',
+          content: {
+            benefits: ['un', 'deux'],
+            valueProposition: 'une promesse',
+            angles: [
+              { key: 'PROBLEM_SOLUTION', title: 'Gain de temps', promise: 'p', example: 'e' },
+            ],
+            ideas: [
+              {
+                title: 'Idée',
+                angleKey: 'PROBLEM_SOLUTION',
+                format: 'POST',
+                hook: 'h',
+                description: 'd',
+                visual: 'v',
+              },
+            ],
+            week: semaine,
+            ctas: ['Essayez'],
+          },
+        },
+        select: { id: true },
+      }),
+    )
+    kitId = kit.id
+  })
+
+  it('refuse d’envoyer une semaine non approuvée', async () => {
+    // Approuver est le geste par lequel le créateur dit avoir tout relu. Déposer sans lui
+    // mettrait dans son espace des textes qu'il n'a peut-être jamais ouverts.
+    await expect(sendWeekToSocial(userId, kitId)).rejects.toMatchObject({ code: 'VALIDATION' })
+    expect(deposited).toHaveLength(0)
+  })
+
+  it('dépose les sept publications une fois la semaine approuvée', async () => {
+    await withUserScope(userId, (tx) =>
+      tx.marketingKit.update({ where: { id: kitId }, data: { approvedAt: new Date() } }),
+    )
+    const result = await sendWeekToSocial(userId, kitId)
+    expect(result.created).toBe(7)
+    expect(result.workspace).toBe('Cap-Nature')
+    expect(deposited[0]?.grant).toBe(GRANT)
+  })
+
+  it('note le dépôt sans empêcher un renvoi', async () => {
+    const kit = await withUserScope(userId, (tx) =>
+      tx.marketingKit.findFirstOrThrow({ where: { id: kitId }, select: { sentToSocialAt: true } }),
+    )
+    expect(kit.sentToSocialAt).not.toBeNull()
+
+    // Rejouer ne crée pas de doublon : la référence du lot est la même.
+    const again = await sendWeekToSocial(userId, kitId)
+    expect(again.created).toBe(0)
+    expect(again.alreadyThere).toBe(7)
+  })
+
+  it('renvoie vers l’écran Connexions quand l’espace n’est plus relié', async () => {
+    const entries = await listConnections(userId)
+    const link = entries.find((entry) => entry.provider.id === 'postelya')?.connection
+    await disconnect(userId, link!.id)
+
+    await expect(sendWeekToSocial(userId, kitId)).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
   })
 })

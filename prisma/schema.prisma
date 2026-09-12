@@ -570,6 +570,9 @@ model MarketingKit {
   creditsSpent  Int       @default(0)
   /// Posé quand le créateur a relu et validé. Rien n'est publié sans ce geste.
   approvedAt    DateTime?
+  /// Posé quand la semaine a été déposée en brouillon dans l'espace Postelya du créateur.
+  /// Sert à le dire à l'écran, pas à empêcher un second envoi : celui-ci est sans effet.
+  sentToSocialAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

@@ -24,6 +24,7 @@ export type KitState = {
   id: string
   content: LaunchKit
   approvedAt: string | null
+  sentToSocialAt: string | null
   creditsSpent: number
 }
 
@@ -33,16 +34,22 @@ export function LaunchKitBoard({
   engineReady,
   credits,
   estimatedCredits,
+  socialLinked,
 }: {
   projectId: string
   initialKit: KitState | null
   engineReady: boolean
   credits: number
   estimatedCredits: number
+  /** Un espace Postelya est relié : sans lui, l'envoi n'a nulle part où aller. */
+  socialLinked: boolean
 }) {
   const [kit, setKit] = useState(initialKit)
-  const [busy, setBusy] = useState<'creation' | 'enregistrement' | 'approbation' | null>(null)
+  const [busy, setBusy] = useState<
+    'creation' | 'enregistrement' | 'approbation' | 'envoi' | null
+  >(null)
   const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
 
   async function create() {
@@ -95,6 +102,42 @@ export function LaunchKitBoard({
     setKit({ ...kit, approvedAt: new Date().toISOString() })
   }
 
+  /**
+   * Dépose la semaine dans l'espace Postelya du créateur.
+   *
+   * Le bouton reste actif après un envoi réussi : Postelya refuse de créer deux fois la
+   * même publication, donc recliquer ne fait pas de doublon. Le griser priverait le
+   * créateur du moyen le plus simple de réparer un dépôt à moitié abouti.
+   */
+  async function send() {
+    if (kit === null) return
+    setBusy('envoi')
+    setError(null)
+    const response = await fetch(`/api/projects/${projectId}/marketing/envoi`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kitId: kit.id }),
+    })
+    const body = (await response.json()) as {
+      message?: string
+      created?: number
+      alreadyThere?: number
+      workspace?: string
+    }
+    setBusy(null)
+    if (!response.ok) {
+      setError(body.message ?? "L'envoi n'a pas abouti.")
+      return
+    }
+    const created = body.created ?? 0
+    setSent(
+      created === 0
+        ? `Ces publications étaient déjà dans ${body.workspace ?? 'votre espace'}.`
+        : `${created} publication(s) déposées en brouillon dans ${body.workspace ?? 'votre espace'}.`,
+    )
+    setKit({ ...kit, sentToSocialAt: new Date().toISOString() })
+  }
+
   function edit(next: LaunchKit) {
     if (kit === null) return
     setKit({ ...kit, content: next })
@@ -140,6 +183,17 @@ export function LaunchKitBoard({
   return (
     <div className="grid gap-8">
       {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+      {sent !== null ? (
+        <Notice tone="positive" title="Déposé en brouillon">
+          {sent} Rien n’est publié : relisez et programmez depuis Postelya.
+        </Notice>
+      ) : null}
+      {kit.approvedAt !== null && !socialLinked ? (
+        <Notice tone="neutral" title="Envoyer vers vos réseaux">
+          Reliez votre espace Postelya depuis l’écran Connexions pour y déposer cette
+          semaine en brouillon.
+        </Notice>
+      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -161,6 +215,19 @@ export function LaunchKitBoard({
           <Button disabled={busy !== null || kit.approvedAt !== null} onClick={() => void approve()}>
             {busy === 'approbation' ? 'Approbation…' : 'Approuver'}
           </Button>
+          {/*
+            L'envoi n'apparaît qu'une fois la semaine approuvée : c'est le geste par lequel
+            le créateur dit avoir tout relu, et on ne dépose que ce qui a été relu.
+          */}
+          {kit.approvedAt !== null && socialLinked ? (
+            <Button variant="secondary" disabled={busy !== null} onClick={() => void send()}>
+              {busy === 'envoi'
+                ? 'Envoi…'
+                : kit.sentToSocialAt === null
+                  ? 'Envoyer vers Postelya'
+                  : 'Renvoyer vers Postelya'}
+            </Button>
+          ) : null}
         </div>
       </div>
 

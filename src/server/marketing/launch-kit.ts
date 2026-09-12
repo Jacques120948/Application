@@ -44,6 +44,8 @@ export type KitView = {
   projectId: string
   content: LaunchKit
   approvedAt: string | null
+  /** Date du dépôt dans l'espace social du créateur, ou null. */
+  sentToSocialAt: string | null
   createdAt: string
   creditsSpent: number
 }
@@ -77,6 +79,7 @@ export async function getLatestKit(userId: string, projectId: string): Promise<K
     projectId: row.projectId,
     content: parsed.data,
     approvedAt: row.approvedAt?.toISOString() ?? null,
+    sentToSocialAt: row.sentToSocialAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     creditsSpent: row.creditsSpent,
   }
@@ -216,6 +219,7 @@ export async function createLaunchKit(userId: string, projectId: string): Promis
     projectId,
     content: kit.data,
     approvedAt: null,
+    sentToSocialAt: null,
     createdAt: saved.createdAt.toISOString(),
     creditsSpent: credits,
   }
@@ -244,6 +248,7 @@ export async function updateKit(
     projectId: updated.projectId,
     content: input.content,
     approvedAt: updated.approvedAt?.toISOString() ?? null,
+    sentToSocialAt: updated.sentToSocialAt?.toISOString() ?? null,
     createdAt: updated.createdAt.toISOString(),
     creditsSpent: updated.creditsSpent,
   }

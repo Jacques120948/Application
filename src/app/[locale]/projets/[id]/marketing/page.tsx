@@ -11,6 +11,7 @@ import {
   LAUNCH_KIT_FEATURE,
 } from '@/server/marketing/launch-kit'
 import { isEngineAvailable } from '@/server/marketing/engine'
+import { listConnections } from '@/server/integrations/service'
 import { Shell } from '@/components/studio/Shell'
 import { LaunchKitBoard } from '@/components/studio/LaunchKitBoard'
 import { Card, CardBody, LinkButton, Notice } from '@/components/ui'
@@ -42,6 +43,12 @@ export default async function MarketingPage({
   const [wallet, entitlements] = await Promise.all([getWallet(user.id), getEntitlements(user.id)])
   const allowed = entitlements.granted.includes(LAUNCH_KIT_FEATURE)
   const kit = allowed ? await getLatestKit(user.id, id) : null
+  // La liste des connexions ne touche jamais la table des secrets : savoir qu'un espace
+  // est relié ne demande pas de lire l'autorisation.
+  const connections = allowed ? await listConnections(user.id) : []
+  const socialLinked =
+    connections.find((entry) => entry.provider.id === 'postelya')?.connection?.status ===
+    'CONNECTED'
   const locked = entitlements.locked.find((entry) => entry.feature.id === LAUNCH_KIT_FEATURE)
 
   return (
@@ -66,6 +73,7 @@ export default async function MarketingPage({
             engineReady={isEngineAvailable()}
             credits={wallet.balance}
             estimatedCredits={LAUNCH_KIT_ESTIMATED_CREDITS}
+            socialLinked={socialLinked}
           />
         ) : (
           <Card>
