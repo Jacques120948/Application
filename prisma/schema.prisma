@@ -603,6 +603,12 @@ model AppPurchase {
   stripeAccountId      String
   stripeSessionId      String    @unique
   stripeSubscriptionId String?
+  /// Paiement à rembourser (paiement unique). Pour un abonnement, la dernière facture est relue chez Stripe.
+  stripePaymentIntentId String?
+  /// Commission d'Evoliia prélevée sur cette vente, restituée en cas de remboursement.
+  applicationFeeCents  Int       @default(0)
+  refundedCents        Int       @default(0)
+  refundedAt           DateTime?
   currentPeriodEnd     DateTime?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @default(now()) @updatedAt
@@ -612,6 +618,7 @@ model AppPurchase {
 
   @@index([projectId, status, createdAt])
   @@index([endUserId])
+  @@index([stripePaymentIntentId])
   @@index([stripeSubscriptionId])
 }
 

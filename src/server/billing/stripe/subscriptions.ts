@@ -307,9 +307,53 @@ export async function handleStripeEvent(stripe: Stripe, event: Stripe.Event): Pr
       logger.warn('stripe : paiement échoué', { userId: user.id })
       return 'handled'
     }
+    case 'charge.refunded': {
+      // Un remboursement fait depuis le tableau de bord Stripe d'Evoliia : on le note, sans
+      // toucher à l'offre. La fermer est une décision à prendre dans le back-office.
+      const charge = event.data.object
+      const customerId = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id
+      const user =
+        customerId === undefined
+          ? null
+          : await prisma.user.findUnique({ where: { stripeCustomerId: customerId }, select: { id: true } })
+      logger.info('stripe : remboursement constaté', { userId: user?.id ?? null, amount: charge.amount_refunded })
+      return user === null ? 'ignored' : 'handled'
+    }
     default:
       return 'ignored'
   }
+}
+
+/**
+ * Rembourse la dernière facture d'un abonné, et le cas échéant ferme son abonnement
+ * sur-le-champ. Réservé au back-office : c'est l'argent d'Evoliia qui repart.
+ */
+export async function refundLastPayment(
+  stripe: Stripe,
+  userId: string,
+  options: { cancel: boolean },
+): Promise<{ refundedCents: number; canceled: boolean }> {
+  const current = await prisma.subscription.findUnique({ where: { userId } })
+  if (!current?.stripeSubscriptionId) throw validation("Aucun abonnement Stripe n'est en cours pour ce compte.")
+
+  const sub = await stripe.subscriptions.retrieve(current.stripeSubscriptionId, {
+    expand: ['latest_invoice.payments'],
+  })
+  const invoice = typeof sub.latest_invoice === 'string' ? null : sub.latest_invoice
+  const payment = invoice?.payments?.data.find((candidate) => candidate.status === 'paid')
+  const ref = payment?.payment.payment_intent
+  const paymentIntentId = typeof ref === 'string' ? ref : (ref?.id ?? null)
+  if (paymentIntentId === null) throw validation('Aucun paiement à rembourser sur la dernière facture.')
+
+  const refund = await stripe.refunds.create({ payment_intent: paymentIntentId, metadata: { userId } })
+  let canceled = false
+  if (options.cancel && sub.status !== 'canceled') {
+    const closed = await stripe.subscriptions.cancel(sub.id)
+    await applyStripeSubscription(closed)
+    canceled = true
+  }
+  logger.info('stripe : remboursement effectué', { userId, amount: refund.amount, canceled })
+  return { refundedCents: refund.amount, canceled }
 }
 
 export async function getSubscriptionView(userId: string): Promise<SubscriptionView> {

@@ -43,9 +43,15 @@ Commission d'Evoliia : `STRIPE_APPLICATION_FEE_PERCENT` (0 à 30, **zéro par d�
 La prendre est une décision commerciale, pas un réglage du code ; la fiche du catalogue
 promet d'en informer le créateur avant.
 
-Non couvert (volontairement, pour l'instant) : les remboursements se font depuis le
-tableau de bord Stripe du créateur et ne sont pas rapatriés ; les achats intégrés iPhone
-et Android restent hors périmètre.
+### Remboursements
+
+| Qui | Où | Ce qui se passe |
+|---|---|---|
+| Le créateur | Onglet Monétisation, bouton « Rembourser » | `POST /api/projects/<id>/ventes/<vente>/remboursement`. Paiement unique : remboursement total, ou partiel (`amountCents`). Abonnement : résiliation immédiate et remboursement de la dernière facture (relue chez Stripe). La commission d'Evoliia, s'il y en a eu une, est restituée (`refund_application_fee`) : on ne garde pas une commission sur une vente annulée. L'argent repart du compte Stripe du créateur. |
+| Le créateur | Son tableau de bord Stripe | L'événement `charge.refunded` est rapatrié par le webhook Connect : la vente passe à « remboursé » (ou garde le montant partiel). Un paiement unique est retrouvé par ses métadonnées ; une facture d'abonnement est remontée jusqu'à l'abonnement, qui les porte. |
+| L'administrateur d'Evoliia | Back-office, bouton « Rembourser » sur un abonné Stripe | `POST /api/admin/users/<id>/remboursement` : remboursement de la dernière facture et fermeture immédiate de l'offre. C'est l'argent d'Evoliia qui repart : administrateur seulement. Un remboursement fait depuis le tableau de bord Stripe d'Evoliia est seulement journalisé ; fermer l'offre reste une décision du back-office. |
+
+Non couvert : les achats intégrés iPhone et Android restent hors périmètre.
 
 ## Ce que ça coûte à Evoliia
 
@@ -70,11 +76,11 @@ Dans le tableau de bord Stripe :
 1. Webhook « compte » sur `https://evoliia.com/api/stripe/webhook`, événements
    `checkout.session.completed`, `customer.subscription.created`,
    `customer.subscription.updated`, `customer.subscription.deleted`,
-   `invoice.payment_failed`.
+   `invoice.payment_failed`, `charge.refunded`.
 2. Webhook « comptes connectés » (option *Listen to events on connected accounts*) sur
    `https://evoliia.com/api/stripe/webhook/connect`, événements
    `checkout.session.completed`, `customer.subscription.updated`,
-   `customer.subscription.deleted`.
+   `customer.subscription.deleted`, `charge.refunded`.
 3. Portail client : activer et choisir ce que le client peut faire (moyen de paiement,
    factures, résiliation).
 4. Connect : compléter le profil de plateforme, type de comptes « standard ».

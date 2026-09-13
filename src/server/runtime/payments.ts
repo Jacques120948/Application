@@ -106,6 +106,7 @@ export async function startAppCheckout(
     endUserId: endUser.id,
     planId: plan.id,
     planName: plan.name.slice(0, 120),
+    feePercent: String(feePercent),
   }
 
   const session = await stripe.checkout.sessions.create(
@@ -158,12 +159,14 @@ function metadataOf(source: { metadata?: Stripe.Metadata | null } | null | undef
   const projectId = meta.projectId
   const ownerId = meta.ownerId
   if (projectId === undefined || ownerId === undefined) return null
+  const feePercent = Number(meta.feePercent ?? '0')
   return {
     projectId,
     ownerId,
     endUserId: meta.endUserId ?? null,
     planId: meta.planId ?? 'offre',
     planName: meta.planName ?? 'Offre',
+    feePercent: Number.isFinite(feePercent) ? feePercent : 0,
   }
 }
 
@@ -214,17 +217,21 @@ export async function handleConnectEvent(
           .catch(() => null)
         currentPeriodEnd = periodEndOf(sub)
       }
+      const amountCents = session.amount_total ?? 0
       const data = {
         projectId: meta.projectId,
         endUserId: meta.endUserId,
         planId: meta.planId,
         planName: meta.planName,
         mode: session.mode,
-        amountCents: session.amount_total ?? 0,
+        amountCents,
         currency: (session.currency ?? 'eur').toUpperCase(),
         status: session.mode === 'subscription' ? 'active' : 'paid',
         stripeAccountId: event.account as string,
         stripeSubscriptionId: subscriptionId,
+        stripePaymentIntentId:
+          typeof session.payment_intent === 'string' ? session.payment_intent : (session.payment_intent?.id ?? null),
+        applicationFeeCents: Math.round((amountCents * meta.feePercent) / 100),
         currentPeriodEnd,
       }
       await withOwnerRuntimeScope(meta.ownerId, meta.projectId, async (tx) => {
@@ -263,9 +270,164 @@ export async function handleConnectEvent(
       )
       return 'handled'
     }
+    case 'charge.refunded': {
+      /*
+       * Un remboursement fait depuis le tableau de bord Stripe du créateur arrive ici et
+       * est rapatrié. Celui fait depuis Evoliia y arrive aussi : la vente est alors déjà
+       * marquée, et la mise à jour ne change rien.
+       */
+      const charge = event.data.object
+      const located = await locateCharge(stripe, charge, event.account)
+      if (located === null) return 'ignored'
+      if (!(await accountMatches(located.ownerId, event.account))) return 'ignored'
+      const fully = charge.refunded || charge.amount_refunded >= charge.amount
+      await withOwnerRuntimeScope(located.ownerId, located.projectId, (tx) =>
+        tx.appPurchase.updateMany({
+          where: {
+            projectId: located.projectId,
+            stripeAccountId: event.account as string,
+            ...(located.paymentIntentId !== null
+              ? { stripePaymentIntentId: located.paymentIntentId }
+              : { stripeSubscriptionId: located.subscriptionId as string }),
+          },
+          data: {
+            refundedCents: charge.amount_refunded,
+            refundedAt: new Date(),
+            ...(fully ? { status: 'refunded' } : {}),
+          },
+        }),
+      )
+      logger.info('paiement app : remboursement rapatrié', { projectId: located.projectId, fully })
+      return 'handled'
+    }
     default:
       return 'ignored'
   }
+}
+
+/**
+ * Retrouve le projet et la vente derrière un paiement remboursé.
+ *
+ * Un paiement unique porte nos métadonnées. Une facture d'abonnement n'en porte pas :
+ * on remonte à la facture, puis à l'abonnement, qui les porte.
+ */
+async function locateCharge(
+  stripe: Stripe,
+  charge: Stripe.Charge,
+  account: string | undefined,
+): Promise<{ projectId: string; ownerId: string; paymentIntentId: string | null; subscriptionId: string | null } | null> {
+  const paymentIntentId =
+    typeof charge.payment_intent === 'string' ? charge.payment_intent : (charge.payment_intent?.id ?? null)
+  const direct = metadataOf(charge)
+  if (direct !== null) return { ...direct, paymentIntentId, subscriptionId: null }
+  if (paymentIntentId === null || account === undefined) return null
+
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId, {}, { stripeAccount: account }).catch(() => null)
+  const viaIntent = metadataOf(intent)
+  if (viaIntent !== null) return { ...viaIntent, paymentIntentId, subscriptionId: null }
+
+  const customer = typeof charge.customer === 'string' ? charge.customer : (charge.customer?.id ?? null)
+  if (customer === null) return null
+  const invoices = await stripe.invoices
+    .list({ customer, limit: 20, expand: ['data.payments'] }, { stripeAccount: account })
+    .catch(() => null)
+  const invoice = invoices?.data.find((candidate) =>
+    candidate.payments?.data.some((payment) => {
+      const intentOf = payment.payment.payment_intent
+      return (typeof intentOf === 'string' ? intentOf : intentOf?.id) === paymentIntentId
+    }),
+  )
+  const subscriptionRef =
+    invoice?.parent?.subscription_details?.subscription ??
+    (invoice as unknown as { subscription?: string | Stripe.Subscription } | undefined)?.subscription
+  const subscriptionId = typeof subscriptionRef === 'string' ? subscriptionRef : (subscriptionRef?.id ?? null)
+  if (subscriptionId === null) return null
+  const sub =
+    typeof subscriptionRef === 'string'
+      ? await stripe.subscriptions.retrieve(subscriptionId, {}, { stripeAccount: account }).catch(() => null)
+      : subscriptionRef
+  const viaSub = metadataOf(sub)
+  return viaSub === null ? null : { ...viaSub, paymentIntentId: null, subscriptionId }
+}
+
+export const refundInput = z.object({
+  /** Montant partiel en centimes ; absent : tout. */
+  amountCents: z.number().int().min(1).max(100_000_000).optional(),
+})
+
+/**
+ * Le créateur rembourse un client, depuis Evoliia.
+ *
+ * Paiement unique : remboursement, total ou partiel. Abonnement : résiliation immédiate
+ * et remboursement de la dernière facture. Dans les deux cas la commission d'Evoliia, s'il
+ * y en a eu une, est restituée : on ne garde pas une commission sur une vente annulée.
+ * L'argent part du compte Stripe du créateur, comme il y était arrivé.
+ */
+export async function refundPurchase(
+  stripe: Stripe,
+  ownerId: string,
+  projectId: string,
+  purchaseId: string,
+  input: z.infer<typeof refundInput> = {},
+): Promise<SalesView['purchases'][number]> {
+  const purchase = await withOwnerRuntimeScope(ownerId, projectId, async (tx) => {
+    await requireOwnedProject(tx, projectId, ownerId)
+    return tx.appPurchase.findFirst({ where: { id: purchaseId, projectId } })
+  })
+  if (purchase === null) throw notFound("Cette vente n'existe pas.")
+  if (purchase.status === 'refunded') throw validation('Cette vente est déjà remboursée.')
+
+  const credential = await useCredential(ownerId, 'stripe', { target: 'APP' })
+  if (credential === null || credential.secret !== purchase.stripeAccountId) {
+    throw validation("Cette vente n'a pas été encaissée sur le compte Stripe relié.")
+  }
+  const options = { stripeAccount: purchase.stripeAccountId }
+  const remaining = purchase.amountCents - purchase.refundedCents
+  const amount = input.amountCents ?? remaining
+  if (amount > remaining) throw validation(`Il reste au plus ${remaining} centimes à rembourser.`)
+
+  let paymentIntentId = purchase.stripePaymentIntentId
+  if (purchase.mode === 'subscription') {
+    if (purchase.stripeSubscriptionId === null) throw validation("Cet abonnement n'a pas de référence Stripe.")
+    const sub = await stripe.subscriptions.retrieve(
+      purchase.stripeSubscriptionId,
+      { expand: ['latest_invoice.payments'] },
+      options,
+    )
+    const invoice = typeof sub.latest_invoice === 'string' ? null : sub.latest_invoice
+    const payment = invoice?.payments?.data.find((candidate) => candidate.status === 'paid')
+    const ref = payment?.payment.payment_intent
+    paymentIntentId = typeof ref === 'string' ? ref : (ref?.id ?? null)
+    if (sub.status !== 'canceled') await stripe.subscriptions.cancel(sub.id, {}, options)
+  }
+  if (paymentIntentId === null) throw validation('Aucun paiement à rembourser sur cette vente.')
+
+  await stripe.refunds.create(
+    {
+      payment_intent: paymentIntentId,
+      amount,
+      ...(purchase.applicationFeeCents > 0 ? { refund_application_fee: true } : {}),
+      metadata: { projectId, purchaseId },
+    },
+    options,
+  )
+
+  const refundedCents = purchase.refundedCents + amount
+  const fully = refundedCents >= purchase.amountCents || purchase.mode === 'subscription'
+  const updated = await withOwnerRuntimeScope(ownerId, projectId, (tx) =>
+    tx.appPurchase.update({
+      where: { id: purchase.id },
+      data: {
+        refundedCents,
+        refundedAt: new Date(),
+        stripePaymentIntentId: paymentIntentId,
+        ...(fully ? { status: 'refunded' } : {}),
+      },
+      select: PURCHASE_SELECT,
+    }),
+  )
+  logger.info('paiement app : remboursé', { projectId, purchaseId, amount, fully })
+  return purchaseView(updated)
 }
 
 function periodEndOf(sub: Stripe.Subscription | null): Date | null {
@@ -279,17 +441,70 @@ function periodEndOf(sub: Stripe.Subscription | null): Date | null {
 export type SalesView = {
   available: boolean
   connected: boolean
-  totals: { count: number; amountCents: number; currency: string | null; activeSubscriptions: number }
+  totals: {
+    count: number
+    amountCents: number
+    refundedCents: number
+    currency: string | null
+    activeSubscriptions: number
+  }
   purchases: Array<{
     id: string
     email: string | null
     planName: string
     mode: string
     amountCents: number
+    refundedCents: number
     currency: string
     status: string
     createdAt: string
+    /** Un remboursement est possible depuis Evoliia. */
+    refundable: boolean
   }>
+}
+
+const PURCHASE_SELECT = {
+  id: true,
+  planName: true,
+  mode: true,
+  amountCents: true,
+  refundedCents: true,
+  currency: true,
+  status: true,
+  createdAt: true,
+  stripePaymentIntentId: true,
+  stripeSubscriptionId: true,
+  endUser: { select: { email: true } },
+} as const
+
+type PurchaseRow = {
+  id: string
+  planName: string
+  mode: string
+  amountCents: number
+  refundedCents: number
+  currency: string
+  status: string
+  createdAt: Date
+  stripePaymentIntentId: string | null
+  stripeSubscriptionId: string | null
+  endUser: { email: string } | null
+}
+
+function purchaseView(row: PurchaseRow): SalesView['purchases'][number] {
+  const reference = row.mode === 'subscription' ? row.stripeSubscriptionId : row.stripePaymentIntentId
+  return {
+    id: row.id,
+    email: row.endUser?.email ?? null,
+    planName: row.planName,
+    mode: row.mode,
+    amountCents: row.amountCents,
+    refundedCents: row.refundedCents,
+    currency: row.currency,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    refundable: row.status !== 'refunded' && reference !== null && row.amountCents > row.refundedCents,
+  }
 }
 
 /** Les ventes d'une application, pour son créateur. */
@@ -302,16 +517,7 @@ export async function listSales(ownerId: string, projectId: string): Promise<Sal
       where: { projectId },
       orderBy: { createdAt: 'desc' },
       take: 200,
-      select: {
-        id: true,
-        planName: true,
-        mode: true,
-        amountCents: true,
-        currency: true,
-        status: true,
-        createdAt: true,
-        endUser: { select: { email: true } },
-      },
+      select: PURCHASE_SELECT,
     })
   })
   const counted = rows.filter((row) => row.status !== 'refunded')
@@ -320,19 +526,12 @@ export async function listSales(ownerId: string, projectId: string): Promise<Sal
     connected,
     totals: {
       count: counted.length,
-      amountCents: counted.reduce((sum, row) => sum + row.amountCents, 0),
-      currency: counted[0]?.currency ?? null,
+      // Encaissé net des remboursements, y compris partiels.
+      amountCents: rows.reduce((sum, row) => sum + row.amountCents - row.refundedCents, 0),
+      refundedCents: rows.reduce((sum, row) => sum + row.refundedCents, 0),
+      currency: rows[0]?.currency ?? null,
       activeSubscriptions: rows.filter((row) => row.mode === 'subscription' && row.status === 'active').length,
     },
-    purchases: rows.slice(0, 50).map((row) => ({
-      id: row.id,
-      email: row.endUser?.email ?? null,
-      planName: row.planName,
-      mode: row.mode,
-      amountCents: row.amountCents,
-      currency: row.currency,
-      status: row.status,
-      createdAt: row.createdAt.toISOString(),
-    })),
+    purchases: rows.slice(0, 50).map(purchaseView),
   }
 }

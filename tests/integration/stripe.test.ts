@@ -12,6 +12,7 @@ import {
   ensureStripePrice,
   getSubscriptionView,
   handleStripeEvent,
+  refundLastPayment,
   startCheckout,
 } from '@/server/billing/stripe/subscriptions'
 import { completeStripeOnboarding, startStripeOnboarding } from '@/server/integrations/providers/stripe'
@@ -20,6 +21,7 @@ import {
   handleConnectEvent,
   listSales,
   paymentContext,
+  refundPurchase,
   startAppCheckout,
 } from '@/server/runtime/payments'
 import type { RuntimeSpecContext } from '@/server/runtime/context'
@@ -36,6 +38,7 @@ import { parseAppSpec } from '@/server/spec/validate'
  */
 
 const PAID_PLAN = 'launch'
+const ZERO_PLAN = 'test-stripe-zero'
 const SPEC = parseAppSpec({
   ...DEMO_APPS[0]!.spec,
   name: 'Boutique de test',
@@ -77,6 +80,7 @@ function fakeSubscription(params: {
 
 const created = {
   sessions: [] as Array<{ params: Stripe.Checkout.SessionCreateParams; options?: Stripe.RequestOptions }>,
+  refunds: [] as Array<{ payment_intent: string; amount?: number; refund_application_fee?: boolean }>,
   accounts: 0,
 }
 
@@ -102,7 +106,16 @@ const fake = {
   subscriptions: {
     retrieve: vi.fn(),
     update: vi.fn(),
+    cancel: vi.fn(async (id: string) => ({ id, object: 'subscription', status: 'canceled', items: { data: [] }, metadata: {} })),
   },
+  refunds: {
+    create: vi.fn(async (params: { payment_intent: string; amount?: number }) => {
+      created.refunds.push(params)
+      return { id: next('re'), amount: params.amount ?? 0 }
+    }),
+  },
+  paymentIntents: { retrieve: vi.fn(async () => ({ metadata: {} })) },
+  invoices: { list: vi.fn(async () => ({ data: [] })) },
   billingPortal: { sessions: { create: vi.fn(async () => ({ url: 'https://portail.stripe.test' })) } },
   accounts: {
     create: vi.fn(async () => {
@@ -191,9 +204,20 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
+  /*
+   * Le voisin reçoit une offre de test sans connexion possible, plutôt que l'offre
+   * gratuite : une autre suite modifie celle-ci en parallèle, et ce test ne doit dépendre
+   * que de lui-même.
+   */
+  const free = DEFAULT_PLANS.find((plan) => plan.id === FREE_PLAN_ID)!
+  await prisma.plan.upsert({
+    where: { id: ZERO_PLAN },
+    update: { maxConnections: 0 },
+    create: { ...free, id: ZERO_PLAN, name: 'Sans connexion (test)', features: [], maxConnections: 0, isActive: false, currency: 'EUR', interval: 'month' },
+  })
   clearAll()
   creator = await creerCreateur('builder')
-  neighbour = await creerCreateur(null)
+  neighbour = await creerCreateur(ZERO_PLAN)
   projectId = await publier(creator)
   endUserId = await withRuntimeScope(projectId, async (tx) =>
     (
@@ -213,6 +237,7 @@ afterAll(async () => {
     data: { stripeProductId: null, stripePriceId: null, stripePriceFingerprint: null },
   }).catch(() => undefined)
   await prisma.user.deleteMany({ where: { id: { in: [creator, neighbour] } } }).catch(() => undefined)
+  await prisma.plan.delete({ where: { id: ZERO_PLAN } }).catch(() => undefined)
   await prisma.$disconnect()
 })
 
@@ -335,6 +360,29 @@ describe('Abonnements Evoliia', () => {
     expect((await getSubscriptionView(subscriber)).status).toBe('FREE')
   })
 
+  it('rembourse la dernière facture d’un abonné et ferme son offre, depuis le back-office', async () => {
+    const paying = await creerCreateur(null)
+    const customer = `cus_${randomUUID()}`
+    await prisma.user.update({ where: { id: paying }, data: { stripeCustomerId: customer } })
+    const sub = fakeSubscription({ customer, priceId, userId: paying, planId: PAID_PLAN })
+    await applyStripeSubscription(sub)
+    expect((await getEffectivePlan(paying)).id).toBe(PAID_PLAN)
+
+    vi.mocked(fake.subscriptions.retrieve).mockResolvedValueOnce({
+      ...sub,
+      latest_invoice: { payments: { data: [{ status: 'paid', payment: { type: 'payment_intent', payment_intent: 'pi_evoliia_1' } }] } },
+    } as never)
+    vi.mocked(fake.refunds.create).mockResolvedValueOnce({ id: 're_evoliia', amount: 3400 } as never)
+    vi.mocked(fake.subscriptions.cancel).mockResolvedValueOnce({ ...sub, status: 'canceled' } as never)
+    const result = await refundLastPayment(fake, paying, { cancel: true })
+    expect(result).toEqual({ refundedCents: 3400, canceled: true })
+    expect(fake.refunds.create).toHaveBeenLastCalledWith({ payment_intent: 'pi_evoliia_1', metadata: { userId: paying } })
+    expect(fake.subscriptions.cancel).toHaveBeenCalledWith(sub.id)
+    expect((await getSubscriptionView(paying)).status).toBe('FREE')
+    await expect(refundLastPayment(fake, paying, { cancel: true })).rejects.toMatchObject({ code: 'VALIDATION' })
+    await prisma.user.delete({ where: { id: paying } })
+  })
+
   it('n’accepte au webhook qu’un événement signé', async () => {
     const { POST } = await import('@/app/api/stripe/webhook/route')
     const payload = JSON.stringify(event('product.created', { id: 'prod_signe' }))
@@ -443,6 +491,7 @@ describe('Stripe Connect — le créateur encaisse ses clients', () => {
       amount_total: 1500,
       currency: 'eur',
       subscription: null,
+      payment_intent: 'pi_vente_1',
       metadata: last.params.metadata,
     }
     // Un autre compte connecté qui rejouerait ces métadonnées est ignoré.
@@ -488,6 +537,66 @@ describe('Stripe Connect — le créateur encaisse ses clients', () => {
     sales = await listSales(creator, projectId)
     expect(sales.totals.activeSubscriptions).toBe(0)
     expect(sales.purchases.find((row) => row.mode === 'subscription')?.status).toBe('canceled')
+  })
+
+  it('rembourse un paiement unique depuis Evoliia, commission comprise', async () => {
+    const before = await listSales(creator, projectId)
+    const sale = before.purchases.find((row) => row.mode === 'payment')!
+    expect(sale.refundable).toBe(true)
+
+    // Un voisin ne rembourse pas ce qui n'est pas à lui.
+    await expect(refundPurchase(fake, neighbour, projectId, sale.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(refundPurchase(fake, creator, projectId, sale.id, { amountCents: 99_999 })).rejects.toMatchObject({
+      code: 'VALIDATION',
+    })
+
+    const partial = await refundPurchase(fake, creator, projectId, sale.id, { amountCents: 500 })
+    expect(partial).toMatchObject({ status: 'paid', refundedCents: 500, refundable: true })
+    const full = await refundPurchase(fake, creator, projectId, sale.id)
+    expect(full).toMatchObject({ status: 'refunded', refundedCents: 1500, refundable: false })
+    expect(created.refunds.slice(-2)).toEqual([
+      { payment_intent: 'pi_vente_1', amount: 500, refund_application_fee: true, metadata: { projectId, purchaseId: sale.id } },
+      { payment_intent: 'pi_vente_1', amount: 1000, refund_application_fee: true, metadata: { projectId, purchaseId: sale.id } },
+    ])
+    await expect(refundPurchase(fake, creator, projectId, sale.id)).rejects.toMatchObject({ code: 'VALIDATION' })
+
+    const after = await listSales(creator, projectId)
+    expect(after.totals.refundedCents).toBe(1500)
+    expect(after.totals.amountCents).toBe(before.totals.amountCents - 1500)
+  })
+
+  it('rapatrie un remboursement fait depuis le tableau de bord Stripe du créateur', async () => {
+    const endUser = { id: endUserId, email: 'client@exemple.test', displayName: null }
+    await startAppCheckout(fake, runtime(creator, projectId), endUser, 'pack')
+    const last = created.sessions.at(-1)!
+    const session = {
+      id: 'cs_vente_3',
+      object: 'checkout.session',
+      mode: 'payment',
+      payment_status: 'paid',
+      amount_total: 1500,
+      currency: 'eur',
+      subscription: null,
+      payment_intent: 'pi_vente_3',
+      metadata: last.params.metadata,
+    }
+    await handleConnectEvent(fake, event('checkout.session.completed', session, 'acct_test_1'))
+
+    const charge = {
+      id: 'ch_3',
+      object: 'charge',
+      amount: 1500,
+      amount_refunded: 1500,
+      refunded: true,
+      payment_intent: 'pi_vente_3',
+      customer: null,
+      metadata: last.params.metadata,
+    }
+    expect(await handleConnectEvent(fake, event('charge.refunded', charge, 'acct_autre'))).toBe('ignored')
+    expect(await handleConnectEvent(fake, event('charge.refunded', charge, 'acct_test_1'))).toBe('handled')
+    const sales = await listSales(creator, projectId)
+    expect(sales.purchases.find((row) => row.email !== null && row.status === 'refunded' && row.refundedCents === 1500)).toBeDefined()
+    expect(sales.purchases.filter((row) => row.status === 'refunded')).toHaveLength(2)
   })
 
   it('ne montre les ventes qu’au créateur de l’application', async () => {

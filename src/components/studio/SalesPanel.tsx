@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardBody, LinkButton, Notice } from '@/components/ui'
+import { Button, Card, CardBody, LinkButton, Notice } from '@/components/ui'
 import type { SalesView } from '@/server/runtime/payments'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -22,6 +22,53 @@ const STATUS_LABEL: Record<string, string> = {
 export function SalesPanel({ projectId, locale }: { projectId: string; locale: string }) {
   const [sales, setSales] = useState<SalesView | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  /**
+   * Rembourser depuis Evoliia. Une confirmation avant : l'argent repart du compte du
+   * créateur et un abonnement remboursé est résilié sur-le-champ.
+   */
+  async function refund(purchase: SalesView['purchases'][number]) {
+    const what =
+      purchase.mode === 'subscription'
+        ? `Résilier l’abonnement de ${purchase.email ?? 'ce client'} et rembourser sa dernière facture ?`
+        : `Rembourser ${new Intl.NumberFormat(locale, { style: 'currency', currency: purchase.currency }).format(
+            (purchase.amountCents - purchase.refundedCents) / 100,
+          )} à ${purchase.email ?? 'ce client'} ?`
+    if (!window.confirm(what)) return
+    setBusy(purchase.id)
+    setError(null)
+    const response = await fetch(`/api/projects/${projectId}/ventes/${purchase.id}/remboursement`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const body = (await response.json().catch(() => ({}))) as {
+      message?: string
+      purchase?: SalesView['purchases'][number]
+    }
+    setBusy(null)
+    if (!response.ok || body.purchase === undefined) {
+      setError(body.message ?? 'Le remboursement n’a pas abouti.')
+      return
+    }
+    const refunded = body.purchase
+    setSales((current) => {
+      if (current === null) return current
+      const purchases = current.purchases.map((row) => (row.id === refunded.id ? refunded : row))
+      return {
+        ...current,
+        purchases,
+        totals: {
+          ...current.totals,
+          amountCents: purchases.reduce((sum, row) => sum + row.amountCents - row.refundedCents, 0),
+          refundedCents: purchases.reduce((sum, row) => sum + row.refundedCents, 0),
+          count: purchases.filter((row) => row.status !== 'refunded').length,
+          activeSubscriptions: purchases.filter((row) => row.mode === 'subscription' && row.status === 'active').length,
+        },
+      }
+    })
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -92,10 +139,17 @@ export function SalesPanel({ projectId, locale }: { projectId: string; locale: s
               <p className="m-0 text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">Abonnés actifs</p>
               <p className="m-0 mt-1 text-xl font-semibold">{sales.totals.activeSubscriptions}</p>
             </div>
+            {sales.totals.refundedCents > 0 && sales.totals.currency !== null ? (
+              <div>
+                <p className="m-0 text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">Remboursé</p>
+                <p className="m-0 mt-1 text-xl font-semibold">{money(sales.totals.refundedCents, sales.totals.currency)}</p>
+              </div>
+            ) : null}
           </div>
           <p className="mt-3 text-xs text-[var(--color-ink-faint)]">
-            Montants confirmés par Stripe, avant ses frais. Les remboursements se font depuis
-            votre tableau de bord Stripe.
+            Montants confirmés par Stripe, nets des remboursements, avant les frais Stripe.
+            Un remboursement fait ici part de votre compte Stripe ; un remboursement fait
+            depuis Stripe apparaît ici aussi.
           </p>
         </CardBody>
       </Card>
@@ -116,8 +170,20 @@ export function SalesPanel({ projectId, locale }: { projectId: string; locale: s
                   </span>
                   <span className="text-[var(--color-ink-soft)]">
                     {STATUS_LABEL[purchase.status] ?? purchase.status}
+                    {purchase.refundedCents > 0 && purchase.status !== 'refunded'
+                      ? ` · ${money(purchase.refundedCents, purchase.currency)} remboursés`
+                      : ''}
                   </span>
                   <span className="tabular-nums font-medium">{money(purchase.amountCents, purchase.currency)}</span>
+                  {purchase.refundable ? (
+                    <Button
+                      variant="secondary"
+                      disabled={busy !== null}
+                      onClick={() => void refund(purchase)}
+                    >
+                      {busy === purchase.id ? 'Remboursement…' : 'Rembourser'}
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>

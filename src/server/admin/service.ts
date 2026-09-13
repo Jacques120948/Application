@@ -1,3 +1,5 @@
+import type { Stripe } from '@/server/billing/stripe/client'
+import { refundLastPayment } from '@/server/billing/stripe/subscriptions'
 import { z } from 'zod'
 import { FEATURE_IDS } from '@/server/billing/features'
 import { FLAGS, readFlags, setFlag, type FlagName } from '@/server/settings/flags'
@@ -132,7 +134,7 @@ export async function listUsers(input: z.infer<typeof userSearchInput>) {
       role: true,
       createdAt: true,
       disabledAt: true,
-      subscription: { select: { planId: true, status: true } },
+      subscription: { select: { planId: true, status: true, stripeSubscriptionId: true } },
       wallet: { select: { balance: true, monthlyGrant: true } },
     },
   })
@@ -146,8 +148,25 @@ export async function listUsers(input: z.infer<typeof userSearchInput>) {
     disabled: user.disabledAt !== null,
     planId: user.subscription?.planId ?? FREE_PLAN_ID,
     subscriptionStatus: user.subscription?.status ?? null,
+    /** Abonnement payé par Stripe : un remboursement est possible depuis le back-office. */
+    managedByStripe: user.subscription?.stripeSubscriptionId != null,
     credits: user.wallet?.balance ?? 0,
   }))
+}
+
+export const refundInput = z.object({
+  /** Fermer l'abonnement en même temps que rembourser. */
+  cancel: z.boolean().default(true),
+})
+
+/** Rembourse la dernière facture d'un abonné Stripe. L'argent d'Evoliia repart : administrateur seulement. */
+export async function refundUserPayment(stripe: Stripe, userId: string, input: z.infer<typeof refundInput>) {
+  const admin = await requireAdmin()
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+  if (user === null) throw notFound("Ce compte n'existe pas.")
+  const result = await refundLastPayment(stripe, userId, { cancel: input.cancel })
+  logger.info('remboursement accordé', { adminId: admin.id, userId, ...result })
+  return result
 }
 
 export const setPlanInput = z.object({

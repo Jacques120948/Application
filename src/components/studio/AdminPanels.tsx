@@ -48,6 +48,7 @@ export type AdminUser = {
   disabled: boolean
   planId: string
   subscriptionStatus: string | null
+  managedByStripe?: boolean
   credits: number
 }
 
@@ -319,6 +320,34 @@ export function UserTable({ users, plans }: { users: AdminUser[]; plans: AdminPl
     setSavedId(userId)
   }
 
+  /**
+   * Rembourser la dernière facture d'un abonné Stripe et fermer son offre. C'est l'argent
+   * d'Evoliia qui repart : une confirmation avant, et un message clair après.
+   */
+  async function refund(user: AdminUser) {
+    if (!window.confirm(`Rembourser la dernière facture de ${user.email} et fermer son abonnement ?`)) return
+    setBusyId(user.id)
+    setError(null)
+    setSavedId(null)
+    const response = await fetch(`/api/admin/users/${user.id}/remboursement`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cancel: true }),
+    })
+    const body = (await response.json().catch(() => ({}))) as { message?: string; refundedCents?: number }
+    setBusyId(null)
+    if (!response.ok) {
+      setError(body.message ?? "Le remboursement n'a pas abouti.")
+      return
+    }
+    setRows((current) =>
+      current.map((row) =>
+        row.id === user.id ? { ...row, planId: 'free', subscriptionStatus: null, managedByStripe: false } : row,
+      ),
+    )
+    setSavedId(user.id)
+  }
+
   if (rows.length === 0) {
     return <p className="text-sm text-[var(--color-ink-soft)]">Aucun compte pour le moment.</p>
   }
@@ -365,6 +394,15 @@ export function UserTable({ users, plans }: { users: AdminUser[]; plans: AdminPl
                         </option>
                       ))}
                     </Select>
+                    {user.managedByStripe === true ? (
+                      <Button
+                        variant="secondary"
+                        disabled={busyId === user.id}
+                        onClick={() => void refund(user)}
+                      >
+                        Rembourser
+                      </Button>
+                    ) : null}
                     {savedId === user.id ? (
                       <span className="text-xs text-[var(--color-positive)]">enregistré</span>
                     ) : null}
