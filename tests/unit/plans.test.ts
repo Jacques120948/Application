@@ -36,6 +36,37 @@ describe('offres', () => {
     expect(new Set(DEFAULT_PLANS.map((plan) => plan.id)).size).toBe(DEFAULT_PLANS.length)
   })
 
+  /**
+   * La grille tarifaire liste désormais les crédits, le nombre d'applications et l'espace
+   * d'images. Si deux offres voisines annonçaient les mêmes chiffres, la plus chère
+   * n'aurait plus de raison d'être lisible : payer davantage doit se voir ligne à ligne.
+   */
+  it('donne strictement plus à chaque palier payant', () => {
+    const paid = DEFAULT_PLANS.filter((plan) => plan.priceCents > 0).sort(
+      (a, b) => a.priceCents - b.priceCents,
+    )
+    const mesures = ['monthlyCredits', 'maxProjects', 'storageBytes'] as const
+    const regressions = paid.flatMap((plan, index) => {
+      if (index === 0) return []
+      const precedent = paid[index - 1]!
+      return mesures
+        .filter((mesure) => plan[mesure] <= precedent[mesure])
+        .map((mesure) => `${plan.id} n'augmente pas ${mesure} par rapport à ${precedent.id}`)
+    })
+    expect(regressions).toEqual([])
+  })
+
+  /**
+   * L'espace d'images est borné par offre parce que c'est la seule dépense qui grandirait
+   * avec l'usage. Une offre sans borne rouvrirait la porte qu'il a fallu fermer.
+   */
+  it('borne l’espace d’images de toute offre qui construit', () => {
+    const sansBorne = DEFAULT_PLANS.filter(
+      (plan) => plan.allowBuild && plan.storageBytes <= 0,
+    ).map((plan) => plan.id)
+    expect(sansBorne).toEqual([])
+  })
+
   it('ne recommande qu’une seule offre', () => {
     expect(DEFAULT_PLANS.filter((plan) => plan.isRecommended)).toHaveLength(1)
   })

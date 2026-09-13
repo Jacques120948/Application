@@ -155,6 +155,9 @@ export const fr = {
   'landing.launchLimitTitle': 'Ce que nous ne faisons pas',
   'landing.launchLimitBody':
     "Rien n’est publié, rien n’est programmé : les réseaux sociaux ne sont pas reliés. Le kit se relit, se corrige et se copie. Aucune statistique n’est inventée, et aucun avis client n’est écrit à votre place.",
+  'landing.launchSendTitle': 'Puis vous l’envoyez',
+  'landing.launchSendBody':
+    "Une fois la semaine approuvée, elle part en un clic dans votre espace Postelya, où vous choisissez le moment de chaque publication. Rien ne part sans votre accord. Aucune statistique n’est inventée, et aucun avis client n’est écrit à votre place.",
   'landing.launchIncluded': 'Compris à partir de l’offre Launch.',
 
   'landing.pricingLaunchKit': 'Kit de lancement marketing',
@@ -164,7 +167,7 @@ export const fr = {
     "De vraies applications, pas des maquettes. Chacune est publiée par le moteur d’Evoliia et s’ouvre dans votre navigateur.",
   'landing.showcaseMobileLabel': 'La même application sur téléphone',
   'landing.showcaseNote':
-    "Ce sont des applications web, pensées pour être lisibles sur téléphone. Elles ne sont pas publiées sur l’App Store ni sur Google Play : ces boutiques décident seules, et nous ne promettons rien à leur place.",
+    "Ce sont des applications web. Sur téléphone, elles s’ajoutent à l’écran d’accueil depuis le navigateur : icône, nom, ouverture en plein écran, sans barre d’adresse. Elles ne passent pas par l’App Store ni par Google Play, où ces boutiques décident seules et où nous ne promettons rien à leur place.",
 
   'landing.compareTitle': 'Plus qu’un générateur d’applications',
   'landing.compareBody':
@@ -195,6 +198,8 @@ export const fr = {
   'landing.pricingNoBuild': "S'arrête avant la construction",
   'landing.pricingBuild': 'Construction et mise en ligne',
   'landing.pricingDomain': 'Adresse personnalisée',
+  'landing.pricingInstall': 'Installable sur l’écran d’accueil',
+  'landing.pricingImages': '{size} d’images à vous',
   'landing.pricingExport': 'Export du code',
   'landing.pricingMobile': 'Préparation pour mobile',
   'landing.pricingRecommended': 'Le plus choisi',
@@ -224,7 +229,7 @@ export const fr = {
     "Non. Vous décrivez ce que vous voulez en français, Evoliia construit l’application et vous la modifiez en écrivant vos demandes. Vous ne voyez jamais de code.",
   'landing.faq2Q': 'Que peut-on créer exactement ?',
   'landing.faq2A':
-    "Des applications web : outils métier, sites d’inscription ou de réservation, catalogues, espaces membres, petits SaaS. Elles s’affichent aussi bien sur ordinateur que sur téléphone.",
+    "Des applications web : outils métier, sites d’inscription ou de réservation, catalogues, espaces membres, petits SaaS. Elles s’affichent aussi bien sur ordinateur que sur téléphone, où elles peuvent s’installer sur l’écran d’accueil comme n’importe quelle application.",
   'landing.faq3Q': 'Et si je n’ai aucune idée ?',
   'landing.faq3A':
     "C’est le cas le plus fréquent, et c’est le point de départ prévu. Evoliia part de votre objectif et de ce que vous savez faire, puis vous propose des idées chiffrées à comparer.",
@@ -233,7 +238,7 @@ export const fr = {
     "Rien ne l’empêche techniquement : vous définissez un prix et des offres. Trouver des clients reste votre travail, et aucun revenu n’est garanti.",
   'landing.faq5Q': 'Mon application sera-t-elle sur l’App Store ?',
   'landing.faq5A':
-    "Pas aujourd’hui. Evoliia crée des applications web, consultables depuis n’importe quel navigateur, y compris sur téléphone. La publication sur les boutiques mobiles dépend d’Apple et de Google, qui décident seuls.",
+    "Pas aujourd’hui, et vos clients n’en ont pas besoin pour l’installer. Depuis le navigateur de leur téléphone, ils l’ajoutent à leur écran d’accueil : elle prend son icône, son nom, et s’ouvre en plein écran. Ni compte de développeur, ni frais annuels, ni délai de validation. La publication sur les boutiques mobiles, elle, dépend d’Apple et de Google, qui décident seuls.",
   'landing.faq6Q': 'À qui appartiennent mes données ?',
   'landing.faq6A':
     "À vous. Chaque application est isolée des autres, et les données de vos utilisateurs restent celles de votre projet.",

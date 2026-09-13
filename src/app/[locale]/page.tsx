@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listPublicPlans } from '@/server/billing/plans'
 import { customersNeededFor, formatAmount } from '@/server/business/economics'
+import { isEnabled } from '@/server/settings/flags'
 import { DEMO_APPS } from '@/server/demos/catalog'
 import { Logo } from '@/components/marketing/Logo'
 import { BrowserFrame, PhoneFrame } from '@/components/marketing/DeviceFrame'
@@ -26,6 +27,17 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const t = getTranslator(resolveLocale((await params).locale))
   return { title: t('landing.metaTitle'), description: t('landing.metaDescription') }
+}
+
+/**
+ * Espace d'images d'une offre, en toutes lettres.
+ *
+ * Arrondi volontairement : « 250 Mo » se retient, « 250.0 Mo » fait comptable et n'apprend
+ * rien de plus à qui compare deux offres.
+ */
+function storageLabel(bytes: number): string {
+  const megabytes = Math.round(bytes / (1024 * 1024))
+  return megabytes >= 1024 ? `${Math.round(megabytes / 1024)} Go` : `${megabytes} Mo`
 }
 
 /** Objectif de référence des exemples chiffrés : mille euros de chiffre d'affaires mensuel. */
@@ -86,7 +98,13 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   if (user !== null) redirect(`/${locale}/dashboard`)
 
   const t = getTranslator(locale)
-  const plans = await listPublicPlans()
+  const [plans, socialOpen] = await Promise.all([
+    listPublicPlans(),
+    // La page d'accueil ne décrit pas un produit imaginé mais celui de cette installation.
+    // Tant que l'envoi vers Postelya est fermé, elle annonce que rien n'est publié ; le jour
+    // où il s'ouvre, elle le dit, sans qu'une ligne soit à réécrire.
+    isEnabled('socialPublishing'),
+  ])
 
   // Deux entrées distinctes : l'une conduit au parcours guidé, l'autre à la description
   // directe. Le bouton d'en-tête, lui, laisse choisir une fois le compte créé.
@@ -586,9 +604,10 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         </div>
 
         {/*
-          Ce qui vient du parcours, et ce que nous ne faisons pas : les deux côte à côte.
-          Annoncer la seconde colonne aussi clairement que la première évite la déception
-          de celui qui croirait acheter une publication automatique.
+          Ce qui vient du parcours, et ce qu'il advient du kit : les deux côte à côte.
+          La seconde carte dit la vérité de cette installation, et non une intention. Tant
+          que l'envoi est fermé, elle annonce qu'aucune publication n'a lieu, ce qui évite
+          la déception de celui qui croirait acheter une publication automatique.
         */}
         <div className="mt-5 grid gap-5 md:grid-cols-2">
           <div className="rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
@@ -601,10 +620,10 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           </div>
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
             <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
-              {t('landing.launchLimitTitle')}
+              {socialOpen ? t('landing.launchSendTitle') : t('landing.launchLimitTitle')}
             </h3>
             <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {t('landing.launchLimitBody')}
+              {socialOpen ? t('landing.launchSendBody') : t('landing.launchLimitBody')}
             </p>
           </div>
         </div>
@@ -685,7 +704,12 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                   ? t('landing.pricingProjectsOne')
                   : t('landing.pricingProjects', { count: plan.maxProjects })
                 : t('landing.pricingNoBuild'),
-              ...(plan.allowBuild ? [t('landing.pricingBuild')] : []),
+              ...(plan.allowBuild
+                ? [t('landing.pricingBuild'), t('landing.pricingInstall')]
+                : []),
+              ...(plan.storageBytes > 0
+                ? [t('landing.pricingImages', { size: storageLabel(plan.storageBytes) })]
+                : []),
               ...(plan.features.includes(LAUNCH_KIT_FEATURE)
                 ? [t('landing.pricingLaunchKit')]
                 : []),

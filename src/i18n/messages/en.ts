@@ -139,7 +139,7 @@ export const en: Record<keyof typeof fr, string> = {
     'Real apps, not mockups. Each one is published by the Evoliia engine and opens in your browser.',
   'landing.showcaseMobileLabel': 'The same app on a phone',
   'landing.showcaseNote':
-    'These are web apps, designed to read well on a phone. They are not published on the App Store or Google Play: those stores decide alone, and we promise nothing on their behalf.',
+    'These are web apps. On a phone they add themselves to the home screen straight from the browser: icon, name, full screen, no address bar. They do not go through the App Store or Google Play, where those stores decide alone and we promise nothing on their behalf.',
 
   'landing.compareTitle': 'More than an app builder',
   'landing.compareBody':
@@ -199,7 +199,7 @@ export const en: Record<keyof typeof fr, string> = {
     'No. You describe what you want in plain words, Evoliia builds the app, and you change it by writing your requests. You never see code.',
   'landing.faq2Q': 'What exactly can I build?',
   'landing.faq2A':
-    'Web apps: trade tools, sign-up or booking sites, catalogues, member areas, small SaaS products. They display on a computer as well as on a phone.',
+    'Web apps: trade tools, sign-up or booking sites, catalogues, member areas, small SaaS products. They display on a computer as well as on a phone, where they can be installed on the home screen like any other app.',
   'landing.faq3Q': 'What if I have no idea at all?',
   'landing.faq3A':
     'That is the most common case, and it is the intended starting point. Evoliia starts from your goal and what you know how to do, then suggests costed ideas to compare.',
@@ -208,7 +208,7 @@ export const en: Record<keyof typeof fr, string> = {
     'Nothing stops you technically: you set a price and plans. Finding customers is still your work, and no income is guaranteed.',
   'landing.faq5Q': 'Will my app be on the App Store?',
   'landing.faq5A':
-    'Not today. Evoliia builds web apps, reachable from any browser, including on a phone. Publishing to mobile stores depends on Apple and Google, who decide alone.',
+    'Not today, and your customers do not need it to install it. From the browser on their phone they add it to their home screen: it takes its icon, its name, and opens full screen. No developer account, no yearly fee, no review delay. Publishing to the mobile stores does depend on Apple and Google, who decide alone.',
   'landing.faq6Q': 'Who owns my data?',
   'landing.faq6A':
     'You do. Each app is isolated from the others, and your users data stays with your project.',
@@ -313,7 +313,12 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.launchLimitTitle': 'What we do not do',
   'landing.launchLimitBody':
     "Nothing is published, nothing is scheduled: social networks are not connected. The kit is there to be read, corrected and copied. No statistic is invented, and no customer review is written on your behalf.",
+  'landing.launchSendTitle': 'Then you send it',
+  'landing.launchSendBody':
+    "Once the week is approved, one click drops it into your Postelya workspace, where you choose when each post goes out. Nothing leaves without your say-so. No statistic is invented, and no customer review is written on your behalf.",
   'landing.launchIncluded': 'Included from the Launch plan.',
 
   'landing.pricingLaunchKit': 'Marketing launch kit',
+  'landing.pricingInstall': 'Installs on the home screen',
+  'landing.pricingImages': '{size} of images of your own',
 }
