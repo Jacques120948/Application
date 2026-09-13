@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { DEFAULT_PLANS, PLANNED_PLAN_CAPABILITIES } from '../src/server/billing/plans'
+import { activerRadarEtLiaUneFois } from '../src/server/billing/activation'
 import { seedDemoApps } from './seed-demos'
 
 /**
@@ -65,6 +66,12 @@ async function main(): Promise<void> {
 
   console.log(`Offres initialisées : ${DEFAULT_PLANS.map((plan) => plan.id).join(', ')}`)
   if (retired.count > 0) console.log(`Offres retirées du catalogue : ${retired.count}`)
+
+  // Ouverture du Radar et de Lia : une fois par installation, jamais rejouée ensuite, pour
+  // que l'exploitant reste maître de ses offres après ce premier geste.
+  const ouverture = await activerRadarEtLiaUneFois(prisma)
+  if (ouverture === null) console.log('Radar et Lia : ouverture déjà faite, offres laissées telles quelles.')
+  else for (const ligne of ouverture) console.log(`Radar et Lia ouverts — ${ligne}`)
 
   await seedDemoApps(prisma)
   await promoteAdmin()
