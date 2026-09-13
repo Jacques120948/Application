@@ -115,3 +115,75 @@ export const FORMAT_LABEL: Record<(typeof FORMATS)[number], string> = {
 }
 
 export const DAY_LABEL = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
+
+// ───────────────────── Variations d'une publication ──────────────────────────
+
+/**
+ * Réseaux pour lesquels une publication peut être adaptée.
+ *
+ * Même liste que chez le moteur, et volontairement courte : en promettre un que le moteur
+ * ne connaît pas produirait un texte inadapté sans que rien ne le signale.
+ */
+export const NETWORKS = ['INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'TIKTOK'] as const
+
+export const VARIATION_INTENTS = [
+  'REWRITE',
+  'SHORTEN',
+  'LENGTHEN',
+  'TONE',
+  'NETWORK',
+] as const
+
+export type Network = (typeof NETWORKS)[number]
+export type VariationIntent = (typeof VARIATION_INTENTS)[number]
+
+export const NETWORK_LABEL: Record<Network, string> = {
+  INSTAGRAM: 'Instagram',
+  FACEBOOK: 'Facebook',
+  LINKEDIN: 'LinkedIn',
+  TIKTOK: 'TikTok',
+}
+
+export const INTENT_LABEL: Record<VariationIntent, string> = {
+  REWRITE: 'Dire autrement',
+  SHORTEN: 'Raccourcir',
+  LENGTHEN: 'Développer',
+  TONE: 'Changer de ton',
+  NETWORK: 'Adapter à un réseau',
+}
+
+export const variationSchema = z.object({
+  label: z.string().min(1).max(120),
+  caption: z.string().min(1).max(2200),
+  hashtags: z.array(z.string().max(60)).max(30),
+  cta: z.string().max(200),
+})
+
+export const variationsSchema = z.object({
+  variations: z.array(variationSchema).min(1).max(3),
+})
+
+export type Variation = z.infer<typeof variationSchema>
+
+// ──────────────────────────── Calendrier du mois ─────────────────────────────
+
+export const monthlyPostSchema = z.object({
+  week: z.number().int().min(1).max(5),
+  day: z.number().int().min(0).max(6),
+  time: z.string().min(1).max(10),
+  angleKey: z.enum(ANGLE_KEYS),
+  objective: z.enum(OBJECTIVE_KEYS),
+  format: z.enum(FORMATS),
+  caption: z.string().min(1).max(2200),
+  hashtags: z.array(z.string().max(60)).max(30),
+  cta: z.string().max(200),
+})
+
+export const monthlyPlanSchema = z.object({
+  theme: z.string().min(1).max(400),
+  posts: z.array(monthlyPostSchema).min(4).max(25),
+})
+
+export type MonthlyPost = z.infer<typeof monthlyPostSchema>
+export type MonthlyPlan = z.infer<typeof monthlyPlanSchema>

@@ -11,6 +11,12 @@ import {
   LAUNCH_KIT_FEATURE,
 } from '@/server/marketing/launch-kit'
 import { isEngineAvailable } from '@/server/marketing/engine'
+import {
+  FEATURE_MONTH,
+  FEATURE_VARIATIONS,
+  MONTH_ESTIMATED_CREDITS,
+  VARIATION_ESTIMATED_CREDITS,
+} from '@/server/marketing/atelier'
 import { listConnections } from '@/server/integrations/service'
 import { isEnabled } from '@/server/settings/flags'
 import { Shell } from '@/components/studio/Shell'
@@ -81,6 +87,16 @@ export default async function MarketingPage({
             credits={wallet.balance}
             estimatedCredits={LAUNCH_KIT_ESTIMATED_CREDITS}
             socialLinked={socialLinked}
+            atelier={{
+              variations: {
+                open: entitlements.granted.includes(FEATURE_VARIATIONS),
+                estimatedCredits: VARIATION_ESTIMATED_CREDITS,
+              },
+              month: {
+                open: entitlements.granted.includes(FEATURE_MONTH),
+                estimatedCredits: MONTH_ESTIMATED_CREDITS,
+              },
+            }}
           />
         ) : (
           <Card>

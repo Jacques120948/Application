@@ -8,7 +8,9 @@ import {
   FORMAT_LABEL,
   OBJECTIVE_LABEL,
   type LaunchKit,
+  type MonthlyPlan,
 } from '@/lib/marketing'
+import { MonthBoard, PostVariations } from './KitAtelier'
 
 /**
  * Kit de lancement.
@@ -26,6 +28,14 @@ export type KitState = {
   approvedAt: string | null
   sentToSocialAt: string | null
   creditsSpent: number
+  /** Le mois, quand il a été préparé. */
+  month: MonthlyPlan | null
+}
+
+/** Ce que l'offre ouvre dans l'atelier, et à quel prix annoncé. */
+export type AtelierAccess = {
+  variations: { open: boolean; estimatedCredits: number }
+  month: { open: boolean; estimatedCredits: number }
 }
 
 export function LaunchKitBoard({
@@ -35,6 +45,7 @@ export function LaunchKitBoard({
   credits,
   estimatedCredits,
   socialLinked,
+  atelier,
 }: {
   projectId: string
   initialKit: KitState | null
@@ -43,6 +54,7 @@ export function LaunchKitBoard({
   estimatedCredits: number
   /** Un espace Postelya est relié : sans lui, l'envoi n'a nulle part où aller. */
   socialLinked: boolean
+  atelier: AtelierAccess
 }) {
   const [kit, setKit] = useState(initialKit)
   const [busy, setBusy] = useState<
@@ -343,11 +355,46 @@ export function LaunchKitBoard({
                     {post.hashtags.map((tag) => `#${tag}`).join(' ')}
                   </p>
                 ) : null}
+                {atelier.variations.open ? (
+                  <PostVariations
+                    index={index}
+                    kitId={kit.id}
+                    projectId={projectId}
+                    credits={credits}
+                    estimatedCredits={atelier.variations.estimatedCredits}
+                    onApply={(variation) =>
+                      edit({
+                        ...content,
+                        week: content.week.map((entry, position) =>
+                          position === index
+                            ? {
+                                ...entry,
+                                caption: variation.caption,
+                                hashtags: variation.hashtags,
+                                cta: variation.cta,
+                              }
+                            : entry,
+                        ),
+                      })
+                    }
+                  />
+                ) : null}
               </CardBody>
             </Card>
           ))}
         </div>
       </section>
+
+      {atelier.month.open ? (
+        <MonthBoard
+          kitId={kit.id}
+          projectId={projectId}
+          initialPlan={kit.month}
+          credits={credits}
+          estimatedCredits={atelier.month.estimatedCredits}
+          approved={kit.approvedAt !== null}
+        />
+      ) : null}
 
       <p className="text-xs text-[var(--color-ink-faint)]">
         Préparé le {new Date(kit.approvedAt ?? Date.now()).toLocaleDateString('fr-CH')} ·{' '}

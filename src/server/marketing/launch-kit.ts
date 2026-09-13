@@ -9,9 +9,10 @@ import { getEntitlements } from '@/server/billing/entitlements'
 import { LAUNCH_KIT_FEATURE, requireFeature } from '@/server/billing/features'
 import { costMicros } from '@/server/ai/routing'
 import { appSpecSchema } from '@/server/spec/schema'
-import { launchKitSchema, type LaunchKit } from '@/lib/marketing'
+import { launchKitSchema, type LaunchKit, type MonthlyPlan } from '@/lib/marketing'
 import { toBrandContext } from './context'
 import { isEngineAvailable, requestLaunchKit } from './engine'
+import { readMonth } from './atelier'
 
 /**
  * Kit de lancement d'un projet.
@@ -48,6 +49,8 @@ export type KitView = {
   sentToSocialAt: string | null
   createdAt: string
   creditsSpent: number
+  /** Le mois, quand il a été préparé. Voir atelier.ts. */
+  month: MonthlyPlan | null
 }
 
 export const approveInput = z.object({ kitId: z.string().uuid() })
@@ -82,6 +85,7 @@ export async function getLatestKit(userId: string, projectId: string): Promise<K
     sentToSocialAt: row.sentToSocialAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     creditsSpent: row.creditsSpent,
+    month: readMonth(row.month),
   }
 }
 
@@ -222,6 +226,7 @@ export async function createLaunchKit(userId: string, projectId: string): Promis
     sentToSocialAt: null,
     createdAt: saved.createdAt.toISOString(),
     creditsSpent: credits,
+    month: null,
   }
 }
 
@@ -251,6 +256,7 @@ export async function updateKit(
     sentToSocialAt: updated.sentToSocialAt?.toISOString() ?? null,
     createdAt: updated.createdAt.toISOString(),
     creditsSpent: updated.creditsSpent,
+    month: readMonth(updated.month),
   }
 }
 

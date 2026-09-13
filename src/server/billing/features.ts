@@ -59,15 +59,17 @@ export const FEATURES: readonly Feature[] = [
     id: 'social_calendar',
     group: 'social',
     label: 'Calendrier mensuel',
-    summary: 'Le mois complet plutôt que la semaine.',
-    status: 'prevu',
+    summary:
+      'Quatre semaines qui progressent — se faire connaître, prouver, lever les objections, inviter — à partir des angles que vous avez retenus.',
+    status: 'live',
   },
   {
     id: 'social_content_generation',
     group: 'social',
     label: 'Génération de contenus',
-    summary: 'Réécriture, variations, adaptation du ton, plusieurs réseaux.',
-    status: 'prevu',
+    summary:
+      'Chaque publication se réécrit, se raccourcit, se développe, change de ton ou s’adapte à un autre réseau. Vous choisissez la version qui vous ressemble.',
+    status: 'live',
   },
   {
     id: 'social_agent',
