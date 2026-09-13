@@ -4,6 +4,7 @@ import { resolveLocale } from '@/i18n'
 import { AppError } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
+import { getEffectivePlan } from '@/server/billing/plans'
 import { isAiAvailable } from '@/server/ai/client'
 import { getProject, listChatMessages } from '@/server/projects/service'
 import { Shell } from '@/components/studio/Shell'
@@ -28,9 +29,10 @@ export default async function ProjectPage({
     throw error
   }
 
-  const [messages, wallet] = await Promise.all([
+  const [messages, wallet, plan] = await Promise.all([
     listChatMessages(user.id, id),
     getWallet(user.id),
+    getEffectivePlan(user.id),
   ])
 
   return (
@@ -63,6 +65,40 @@ export default async function ProjectPage({
           </div>
         </div>
       )}
+
+      {/*
+        Emporter son travail. Les deux téléchargements sont des liens ordinaires plutôt
+        qu'un bouton avec du JavaScript : le navigateur sait déjà enregistrer un fichier,
+        et une archive de plusieurs mégaoctets n'a rien à faire en mémoire dans un onglet.
+      */}
+      {plan.allowExport || plan.allowMobilePrep ? (
+        <div className="mx-auto mb-6 flex w-full max-w-5xl flex-wrap items-center justify-between gap-3 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+          <p className="m-0 text-sm">
+            <span className="font-medium">Emporter votre travail.</span>{' '}
+            <span className="text-[var(--color-ink-soft)]">
+              Vos pages, vos images et vos données, dans un dossier qui s’ouvre sans nous.
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {plan.allowExport ? (
+              <a
+                href={`/api/projects/${project.id}/export`}
+                className="inline-flex items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] no-underline transition hover:border-[var(--color-brand)] hover:text-[var(--color-brand-strong)]"
+              >
+                Télécharger mon site
+              </a>
+            ) : null}
+            {plan.allowMobilePrep ? (
+              <a
+                href={`/api/projects/${project.id}/mobile`}
+                className="inline-flex items-center justify-center rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium text-[var(--color-ink)] no-underline transition hover:border-[var(--color-brand)] hover:text-[var(--color-brand-strong)]"
+              >
+                Dossier pour les boutiques
+              </a>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
       <ProjectWorkspace
         projectId={project.id}
         locale={locale}

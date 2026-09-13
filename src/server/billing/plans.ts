@@ -98,7 +98,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     storageBytes: 250 * MEGABYTE,
     monthlyCredits: 350,
     allowBuild: true,
-    allowExport: false,
+    allowExport: true,
     allowCustomDomain: true,
     allowMobilePrep: false,
     isRecommended: true,
@@ -115,9 +115,9 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     storageBytes: 1024 * MEGABYTE,
     monthlyCredits: 800,
     allowBuild: true,
-    allowExport: false,
+    allowExport: true,
     allowCustomDomain: true,
-    allowMobilePrep: false,
+    allowMobilePrep: true,
     isRecommended: false,
     sortOrder: 3,
   },
@@ -125,16 +125,32 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
 
 export const FREE_PLAN_ID = 'free'
 
+/** Capacité d'offre, au sens d'un interrupteur booléen de la table `Plan`. */
+export type PlanCapability =
+  | 'allowBuild'
+  | 'allowCustomDomain'
+  | 'allowExport'
+  | 'allowMobilePrep'
+
 /**
  * Capacités réellement construites aujourd'hui.
  *
- * Une offre ne doit jamais annoncer autre chose que ce que le produit sait faire. L'export
- * du code et la préparation pour mobile sont prévus, mais rien ne les met en œuvre : ils
- * restent donc désactivés partout, et un test le vérifie (tests/unit/plans.test.ts).
+ * Une offre ne doit jamais annoncer autre chose que ce que le produit sait faire. La règle
+ * est née d'un vrai défaut : la grille tarifaire annonçait « Export du code » et
+ * « Préparation pour mobile », deux cases cochées en base sans une ligne derrière. Les
+ * deux existent désormais — l'export produit un site qui s'ouvre depuis un dossier, la
+ * préparation mobile un dossier de publication — et la liste des capacités seulement
+ * prévues est vide. Elle reste là : la prochaine capacité imaginée s'y écrira avant d'être
+ * construite, et le test l'empêchera d'être vendue entre-temps.
  */
-export const IMPLEMENTED_PLAN_CAPABILITIES = ['allowBuild', 'allowCustomDomain'] as const
+export const IMPLEMENTED_PLAN_CAPABILITIES: readonly PlanCapability[] = [
+  'allowBuild',
+  'allowCustomDomain',
+  'allowExport',
+  'allowMobilePrep',
+]
 
-export const PLANNED_PLAN_CAPABILITIES = ['allowExport', 'allowMobilePrep'] as const
+export const PLANNED_PLAN_CAPABILITIES: readonly PlanCapability[] = []
 
 /** Renvoie le plan effectif d'un utilisateur, en retombant sur l'offre gratuite. */
 export async function getEffectivePlan(userId: string) {
