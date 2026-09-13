@@ -19,7 +19,7 @@ import { AppError } from '@/lib/errors'
 
 export type FeatureStatus = 'live' | 'prevu'
 
-export type FeatureGroup = 'social' | 'equipe'
+export type FeatureGroup = 'social' | 'equipe' | 'radar' | 'support'
 
 export type Feature = {
   id: string
@@ -97,6 +97,27 @@ export const FEATURES: readonly Feature[] = [
     group: 'equipe',
     label: 'Noah — Référencement',
     summary: 'Le travail de visibilité sur les moteurs de recherche.',
+    status: 'live',
+  },
+  /*
+   * Deux modules à part entière. Ils ne sont ajoutés à aucune offre ici : c'est
+   * l'exploitant qui décide, depuis le back-office, et les quotas mensuels qui les bornent
+   * se règlent au même endroit.
+   */
+  {
+    id: 'radar',
+    group: 'radar',
+    label: 'Radar d’opportunités',
+    summary:
+      'Des opportunités adaptées à votre profil, expliquées, comparables et enregistrables. Chaque recherche est bornée par un quota mensuel.',
+    status: 'live',
+  },
+  {
+    id: 'lia_support',
+    group: 'support',
+    label: 'Lia — Support client',
+    summary:
+      'Une assistante dans vos applications, qui répond depuis votre base de connaissances, dit quand elle ne sait pas, et transmet le reste en ticket.',
     status: 'live',
   },
   {

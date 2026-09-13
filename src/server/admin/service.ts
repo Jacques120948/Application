@@ -44,6 +44,14 @@ export const planUpdateInput = z.object({
   /** Espace d'images, en mégaoctets. Converti en octets avant écriture. */
   storageMegabytes: z.number().int().min(0).max(20_000),
   monthlyCredits: z.number().int().min(0).max(1_000_000),
+  /*
+   * Quotas mensuels des deux modules. Bornés haut, jamais illimités : un quota qu'on peut
+   * régler à « sans limite » finit par l'être un jour, et c'est ce jour-là que la facture
+   * arrive.
+   */
+  radarRunsPerMonth: z.number().int().min(0).max(1_000),
+  liaAnswersPerMonth: z.number().int().min(0).max(100_000),
+  liaConversationsPerMonth: z.number().int().min(0).max(100_000),
   allowBuild: z.boolean(),
   allowCustomDomain: z.boolean(),
   isRecommended: z.boolean(),

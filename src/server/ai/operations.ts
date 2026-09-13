@@ -21,6 +21,8 @@ import {
   BLUEPRINT_SYSTEM,
   ANALYTICS_AGENT_SYSTEM,
   COACH_SYSTEM,
+  RADAR_COMPARE_SYSTEM,
+  RADAR_SYSTEM,
   SEO_AGENT_SYSTEM,
   SOCIAL_AGENT_SYSTEM,
   EDIT_SYSTEM,
@@ -43,6 +45,10 @@ import {
   type Ideas,
   type IdeaValidation,
   type SpecSheet,
+  radarSchema,
+  radarComparisonSchema,
+  type RadarOutput,
+  type RadarComparison,
 } from './schemas'
 
 /**
@@ -548,6 +554,71 @@ export async function suggestIdeas(
       `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
       asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
       "Propose des idées d'applications adaptées à ce profil.",
+    ].join('\n\n'),
+  })
+}
+
+/**
+ * Profil étendu, tel que le Radar le reçoit.
+ *
+ * Le profil de base plus ce que le Radar exploite en plus. Tout y est facultatif : la
+ * personne qui n'a rien précisé reçoit des opportunités valables, seulement moins fines.
+ */
+export type RadarProfileInput = CreatorProfileInput & {
+  experienceYears: number | null
+  knownSectors: string
+  technicalLevel: string
+  entrepreneurExperience: string
+  marketScope: string
+  productPreference: string
+  willingToProspect: boolean | null
+}
+
+/**
+ * Une recherche du Radar.
+ *
+ * Les titres déjà vus sont transmis en donnée : c'est la première ligne de défense contre
+ * la répétition. La seconde est l'empreinte lexicale, côté service, pour ce que le modèle
+ * aurait reformulé sans le savoir.
+ */
+export async function runRadar(
+  userId: string,
+  profile: RadarProfileInput,
+  seenTitles: string[],
+  locale: string,
+): Promise<RunResult<RadarOutput>> {
+  return runSingleCall({
+    accounting: { userId, operation: 'radar' },
+    system: RADAR_SYSTEM,
+    schema: radarSchema,
+    userContent: [
+      `Langue des textes à produire : ${locale}.`,
+      `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
+      asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
+      seenTitles.length === 0
+        ? "Cette personne n'a encore vu aucune opportunité."
+        : asUserData('opportunites_deja_vues_a_ne_pas_reproposer', seenTitles.join('\n')),
+      'Propose cinq opportunités adaptées à ce profil, expliquées.',
+    ].join('\n\n'),
+  })
+}
+
+/** Synthèse d'une comparaison entre deux ou trois opportunités déjà enregistrées. */
+export async function compareOpportunities(
+  userId: string,
+  profile: RadarProfileInput,
+  opportunities: Array<Record<string, unknown>>,
+  locale: string,
+): Promise<RunResult<RadarComparison>> {
+  return runSingleCall({
+    accounting: { userId, operation: 'radarCompare' },
+    system: RADAR_COMPARE_SYSTEM,
+    schema: radarComparisonSchema,
+    userContent: [
+      `Langue des textes à produire : ${locale}.`,
+      asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
+      asUserData('opportunites_a_comparer', JSON.stringify(opportunities, null, 2)),
+      'Compare ces opportunités par priorité, sans en élire une.',
     ].join('\n\n'),
   })
 }

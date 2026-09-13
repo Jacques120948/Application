@@ -37,6 +37,16 @@ export type CreditedOperation =
   | 'monthlyPlan'
   /** Une question posée à l'un des trois spécialistes marketing. */
   | 'specialist'
+  /** Une recherche du Radar : cinq opportunités structurées et expliquées. */
+  | 'radar'
+  /** La synthèse d'une comparaison entre deux ou trois opportunités. */
+  | 'radarCompare'
+  /** Une réponse de Lia à un visiteur, payée par le créateur de l'application. */
+  | 'liaAnswer'
+  /** Une FAQ proposée depuis l'application, à relire avant publication. */
+  | 'liaFaq'
+  /** Analyse par lot des conversations : ce que les clients demandent (V2). */
+  | 'liaInsights'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -71,6 +81,20 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    * phrases : c'est plus qu'une réponse de coach, moins qu'une génération.
    */
   specialist: 2,
+  /*
+   * Le Radar produit cinq opportunités structurées avec leurs raisons : c'est le même
+   * ordre de grandeur qu'une recherche d'idées, dont il est l'héritier.
+   */
+  radar: 3,
+  radarCompare: 2,
+  /*
+   * Une réponse de Lia est courte et fondée sur une entrée retrouvée : le plancher est
+   * celui de l'assistant qu'elle prolonge. Le vrai garde-fou est le quota mensuel de
+   * l'offre, pas ce plancher.
+   */
+  liaAnswer: 1,
+  liaFaq: 3,
+  liaInsights: 3,
 }
 
 /**

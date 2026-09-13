@@ -32,6 +32,13 @@ export type PlanDefaults = {
    * nombre de clients. La borner par offre est ce qui permet d'annoncer un prix fixe.
    */
   storageBytes: number
+  /**
+   * Quotas mensuels des deux modules. Une recherche du Radar partout — l'exemple donné pour
+   * l'offre gratuite — et rien pour Lia : c'est l'exploitant qui ouvre, depuis le back-office.
+   */
+  radarRunsPerMonth: number
+  liaAnswersPerMonth: number
+  liaConversationsPerMonth: number
   monthlyCredits: number
   allowBuild: boolean
   allowExport: boolean
@@ -59,6 +66,9 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxConnections: 0,
     features: DEFAULT_PLAN_FEATURES['free'] ?? [],
     storageBytes: 0,
+    radarRunsPerMonth: 1,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
     // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
     // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
@@ -79,6 +89,9 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxConnections: 1,
     features: DEFAULT_PLAN_FEATURES['launch'] ?? [],
     storageBytes: 50 * MEGABYTE,
+    radarRunsPerMonth: 1,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -96,6 +109,9 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxConnections: 3,
     features: DEFAULT_PLAN_FEATURES['builder'] ?? [],
     storageBytes: 250 * MEGABYTE,
+    radarRunsPerMonth: 1,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: true,
@@ -113,6 +129,9 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     maxConnections: 10,
     features: DEFAULT_PLAN_FEATURES['business'] ?? [],
     storageBytes: 1024 * MEGABYTE,
+    radarRunsPerMonth: 1,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: true,

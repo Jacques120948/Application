@@ -97,6 +97,16 @@ describe('règles de dépendance', () => {
       'integrationCredential',
       'integrationEvent',
       'agentNote',
+      'radarRun',
+      'radarFeedback',
+      'radarSignal',
+      'supportSettings',
+      'supportKnowledgeEntry',
+      'supportConversation',
+      'supportMessage',
+      'supportTicket',
+      'supportInsight',
+      'notification',
     ]
     // Ces deux fichiers lisent délibérément des applications publiées, qui sont publiques.
     const allowed = new Set([

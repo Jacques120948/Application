@@ -8,6 +8,7 @@ import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listProjects } from '@/server/projects/service'
 import { getCreatorStats, getCreditHistory } from '@/server/business/stats'
 import { listIdeas } from '@/server/business/ideas'
+import { countNewOpportunities } from '@/server/radar/service'
 import { env } from '@/lib/env'
 import { getCreatorOverview } from '@/server/business/overview'
 import { OBJECTIVE_DISCLAIMER } from '@/server/business/economics'
@@ -46,13 +47,14 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
    * l'absence d'idées n'est pas une erreur, c'est simplement un parcours qui commence
    * autrement.
    */
-  const [stats, credits, ideas] = await Promise.all([
+  const [stats, credits, ideas, radarNew] = await Promise.all([
     getCreatorStats(
       user.id,
       projects.map((project) => project.id),
     ),
     getCreditHistory(user.id),
     listIdeas(user.id).catch(() => []),
+    countNewOpportunities(user.id).catch(() => null),
   ])
   const pendingIdeas = ideas.filter((idea) => idea.status === 'PROPOSED').slice(0, 3)
   const appUrl = env.appUrl.replace(/\/$/, '')
@@ -290,6 +292,19 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                 défaut de rétrécir sous la taille de son contenu, si bien qu'un titre long
                 poussait la ligne hors de la carte au lieu d'être abrégé.
               */}
+              {radarNew !== null ? (
+                <p className="mt-3 flex flex-wrap items-baseline justify-between gap-2 rounded-[var(--radius-control)] bg-[var(--color-brand-soft)] px-3 py-2 text-sm">
+                  <span>
+                    {radarNew > 0
+                      ? t('dashboard.radarNew', { count: radarNew })
+                      : t('dashboard.radarNone')}
+                  </span>
+                  <a href={`/${locale}/radar`} className="font-medium text-[var(--color-brand-strong)] no-underline">
+                    {t('dashboard.radarOpen')}
+                  </a>
+                </p>
+              ) : null}
+
               {pendingIdeas.length === 0 ? (
                 <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
                   Aucune idée en attente. Vous pouvez en chercher de nouvelles à tout moment,

@@ -29,6 +29,16 @@ const PROTECTED_TABLES = [
   'MarketingKit',
   'MediaAsset',
   'AgentNote',
+  'RadarRun',
+  'RadarFeedback',
+  'RadarSignal',
+  'SupportSettings',
+  'SupportKnowledgeEntry',
+  'SupportConversation',
+  'SupportMessage',
+  'SupportTicket',
+  'SupportInsight',
+  'Notification',
 ] as const
 
 type RoleRow = { role: string; bypassrls: boolean }

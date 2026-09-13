@@ -100,6 +100,69 @@ export const ideasSchema = z
 export type Ideas = z.infer<typeof ideasSchema>
 
 /**
+ * Une opportunité du Radar.
+ *
+ * C'est une idée, avec ce qui la rend explicable : pourquoi elle convient à CETTE
+ * personne, pourquoi maintenant, ce qu'il faudrait vérifier avant d'y croire. Le modèle
+ * qualifie les composantes — demande, concurrence, complexité, monétisation — mais ne
+ * pondère rien : le score est calculé par la plateforme (server/radar/score.ts).
+ */
+export const radarSuggestionSchema = ideaSuggestionSchema
+  .omit({ opportunityScore: true })
+  .extend({
+    /** Le modèle ne note pas : il qualifie. La note vient de la plateforme. */
+    monetizationLevel: z.enum(LEVELS),
+    /**
+     * Pourquoi cette personne. Des phrases qui citent des faits de son profil, pas des
+     * généralités : « Vous avez douze ans dans le bâtiment », jamais « Ce secteur est
+     * porteur ».
+     */
+    whyYou: z.array(z.string().min(10).max(220)).min(2).max(4),
+    /**
+     * Pourquoi maintenant. En V1 c'est une interprétation, et l'écran le dit ; la V2 y
+     * accrochera des signaux observés, avec leur source et leur date.
+     */
+    whyNow: z.string().min(10).max(400),
+    keyAdvantage: z.string().min(10).max(220),
+    mainRisk: z.string().min(10).max(220),
+    /** Ce qu'il faudrait vérifier avant d'y croire. Des questions, pas des affirmations. */
+    validationQuestions: z.array(z.string().min(10).max(200)).min(2).max(4),
+  })
+  .strict()
+
+export type RadarSuggestion = z.infer<typeof radarSuggestionSchema>
+
+export const radarSchema = z
+  .object({ opportunities: z.array(radarSuggestionSchema).min(3).max(6) })
+  .strict()
+
+export type RadarOutput = z.infer<typeof radarSchema>
+
+/**
+ * Synthèse d'une comparaison. Elle conclut au conditionnel et par priorité — « si votre
+ * priorité est X, A semble la plus cohérente » — jamais par un classement absolu.
+ */
+export const radarComparisonSchema = z
+  .object({
+    /** Une phrase par priorité possible : rapidité, revenu, simplicité, secteur connu. */
+    byPriority: z
+      .array(
+        z.object({
+          priority: z.string().min(3).max(60),
+          pick: z.string().min(1).max(120),
+          because: z.string().min(10).max(300),
+        }),
+      )
+      .min(2)
+      .max(4),
+    /** Ce que les opportunités ont en commun et qui mérite attention. */
+    caution: z.string().min(10).max(300),
+  })
+  .strict()
+
+export type RadarComparison = z.infer<typeof radarComparisonSchema>
+
+/**
  * Rapport de validation d'une idée choisie.
  *
  * Objectif : éviter de construire à l'aveugle. Le rapport doit pouvoir conclure

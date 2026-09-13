@@ -28,6 +28,36 @@ export const FLAGS = {
     /** Par défaut éteint : une fonction s'allume quand elle marche, pas avant. */
     fallback: false,
   },
+  /*
+   * Les deux modules et leurs secondes versions. Les V1 sont ouvertes : elles sont
+   * construites, testées, et bornées par les quotas des offres. Les V2 restent fermées tant
+   * que leurs sources extérieures et leurs analyses périodiques ne sont pas branchées.
+   * Chacun se coupe d'un clic sans retirer une ligne de code.
+   */
+  radar: {
+    key: 'flag.radar',
+    label: 'Radar d’opportunités',
+    help: 'Le module Radar, pour les offres qui l’ouvrent. Fermer ici le ferme pour tout le monde.',
+    fallback: true,
+  },
+  radarV2: {
+    key: 'flag.radar.v2',
+    label: 'Radar — veille périodique et signaux extérieurs',
+    help: 'Recherches hebdomadaires, signaux extérieurs, apprentissage des préférences. À ouvrir une fois une source branchée.',
+    fallback: false,
+  },
+  liaSupport: {
+    key: 'flag.lia',
+    label: 'Lia — Support client',
+    help: 'L’assistante de support dans les applications créées, pour les offres qui l’ouvrent.',
+    fallback: true,
+  },
+  liaV2: {
+    key: 'flag.lia.v2',
+    label: 'Lia — analyse des conversations',
+    help: 'Questions fréquentes, fonctions demandées, bugs possibles, tirés des conversations par lot.',
+    fallback: false,
+  },
 } as const
 
 export type FlagName = keyof typeof FLAGS

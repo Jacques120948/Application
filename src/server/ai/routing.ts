@@ -76,6 +76,17 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
    * même. Le modèle rapide est le bon compromis pour une réponse de six phrases.
    */
   specialist: { model: MODELS.fast, maxTokens: 1_200, effort: 'medium' },
+  // Comme la recherche d'idées : décider quoi construire demande du raisonnement.
+  radar: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'medium' },
+  radarCompare: { model: MODELS.fast, maxTokens: 2_000, effort: 'medium' },
+  /*
+   * Lia répond depuis des entrées déjà écrites : elle reformule, elle n'invente pas. Le
+   * modèle économique suffit, et c'est celui qu'il faut pour un volume déclenché par les
+   * visiteurs d'autrui.
+   */
+  liaAnswer: { model: MODELS.economical, maxTokens: 600, effort: 'low' },
+  liaFaq: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
+  liaInsights: { model: MODELS.fast, maxTokens: 6_000, effort: 'medium' },
 }
 
 export type TokenUsage = {

@@ -27,6 +27,9 @@ export type AdminPlan = {
   sortOrder: number
   features: string[]
   storageBytes: number
+  radarRunsPerMonth: number
+  liaAnswersPerMonth: number
+  liaConversationsPerMonth: number
 }
 
 /** Catalogue des fonctions, passé par le serveur : il n'est pas dupliqué ici. */
@@ -89,6 +92,9 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         maxConnections: Number(form.get('maxConnections')),
         storageMegabytes: Number(form.get('storageMegabytes')),
         monthlyCredits: Number(form.get('monthlyCredits')),
+        radarRunsPerMonth: Number(form.get('radarRunsPerMonth')),
+        liaAnswersPerMonth: Number(form.get('liaAnswersPerMonth')),
+        liaConversationsPerMonth: Number(form.get('liaConversationsPerMonth')),
         allowBuild: form.get('allowBuild') === 'on',
         allowCustomDomain: form.get('allowCustomDomain') === 'on',
         isRecommended: form.get('isRecommended') === 'on',
@@ -186,6 +192,44 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
                 max={100}
                 required
                 defaultValue={plan.sortOrder}
+              />
+            </Field>
+          </div>
+
+          {/*
+            Les quotas des deux modules. Ils ne disent pas si la fonction est ouverte —
+            c'est la case correspondante plus bas — mais combien de fois par mois elle
+            peut servir. Une fonction ouverte à quota zéro se présente comme fermée.
+          */}
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Field label="Recherches Radar par mois" hint="Chaque recherche appelle le modèle.">
+              <Input
+                name="radarRunsPerMonth"
+                type="number"
+                min={0}
+                max={1000}
+                required
+                defaultValue={plan.radarRunsPerMonth}
+              />
+            </Field>
+            <Field label="Réponses de Lia par mois" hint="Payées par le créateur de l’application.">
+              <Input
+                name="liaAnswersPerMonth"
+                type="number"
+                min={0}
+                max={100000}
+                required
+                defaultValue={plan.liaAnswersPerMonth}
+              />
+            </Field>
+            <Field label="Conversations Lia par mois">
+              <Input
+                name="liaConversationsPerMonth"
+                type="number"
+                min={0}
+                max={100000}
+                required
+                defaultValue={plan.liaConversationsPerMonth}
               />
             </Field>
           </div>

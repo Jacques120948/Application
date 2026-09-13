@@ -53,22 +53,35 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   disabledAt      DateTime?
+  /// Alertes du Radar : nouvelles opportunités correspondant au profil.
+  radarAlerts     Boolean   @default(true)
+  /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
+  supportAlerts   Boolean   @default(true)
 
-  sessions          Session[]
-  projects          Project[]
-  connections       IntegrationConnection[]
-  integrationEvents IntegrationEvent[]
-  marketingKits     MarketingKit[]
-  medias            MediaAsset[]
-  agentNotes        AgentNote[]
-  profile           CreatorProfile?
-  ideas             Idea[]
-  tokens            VerificationToken[]
-  subscription      Subscription?
-  wallet            CreditWallet?
-  creditEntries     CreditLedger[]
-  aiUsage           AiUsage[]
-  chatMessages      ChatMessage[]
+  sessions             Session[]
+  projects             Project[]
+  connections          IntegrationConnection[]
+  integrationEvents    IntegrationEvent[]
+  marketingKits        MarketingKit[]
+  medias               MediaAsset[]
+  agentNotes           AgentNote[]
+  radarRuns            RadarRun[]
+  radarFeedback        RadarFeedback[]
+  radarSignals         RadarSignal[]
+  supportSettings      SupportSettings[]
+  supportKnowledge     SupportKnowledgeEntry[]
+  supportConversations SupportConversation[]
+  supportTickets       SupportTicket[]
+  supportInsights      SupportInsight[]
+  notifications        Notification[]
+  profile              CreatorProfile?
+  ideas                Idea[]
+  tokens               VerificationToken[]
+  subscription         Subscription?
+  wallet               CreditWallet?
+  creditEntries        CreditLedger[]
+  aiUsage              AiUsage[]
+  chatMessages         ChatMessage[]
 
   @@index([createdAt])
 }
@@ -119,33 +132,37 @@ model SiteSetting {
 }
 
 model Plan {
-  id                String   @id
-  name              String
-  description       String
-  priceCents        Int
-  currency          String   @default("EUR")
-  interval          String   @default("month")
-  maxProjects       Int
+  id                       String   @id
+  name                     String
+  description              String
+  priceCents               Int
+  currency                 String   @default("EUR")
+  interval                 String   @default("month")
+  maxProjects              Int
   /// Connexions externes autorisées. Modifiable depuis le back-office, comme le reste.
-  maxConnections    Int      @default(0)
+  maxConnections           Int      @default(0)
   /// Fonctions ouvertes par cette offre, par identifiant (voir server/billing/features.ts).
   /// Source de vérité des droits : le code ne décide jamais d'après le nom de l'offre.
-  features          String[] @default([])
+  features                 String[] @default([])
   /// Espace d'images autorisé, en octets. Borne la seule dépense qui grandirait sinon
   /// avec l'usage plutôt qu'avec le nombre de clients.
-  storageBytes      Int      @default(0)
-  monthlyCredits    Int
-  allowExport       Boolean  @default(false)
-  allowCustomDomain Boolean  @default(false)
-  allowMobilePrep   Boolean  @default(false)
+  storageBytes             Int      @default(0)
+  /// Quotas mensuels des deux modules. Réglables depuis le back-office, comme le reste.
+  radarRunsPerMonth        Int      @default(1)
+  liaAnswersPerMonth       Int      @default(0)
+  liaConversationsPerMonth Int      @default(0)
+  monthlyCredits           Int
+  allowExport              Boolean  @default(false)
+  allowCustomDomain        Boolean  @default(false)
+  allowMobilePrep          Boolean  @default(false)
   /// Permet de générer réellement une application. L'offre gratuite s'arrête avant.
-  allowBuild        Boolean  @default(true)
+  allowBuild               Boolean  @default(true)
   /// Mise en avant dans la grille tarifaire.
-  isRecommended     Boolean  @default(false)
-  isActive          Boolean  @default(true)
-  sortOrder         Int      @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  isRecommended            Boolean  @default(false)
+  isActive                 Boolean  @default(true)
+  sortOrder                Int      @default(0)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   subscriptions Subscription[]
 }
@@ -301,27 +318,39 @@ model AiUsage {
  * garanti : il sert uniquement à cadrer le choix d'idée, le modèle économique et le prix.
  */
 model CreatorProfile {
-  id               String    @id @default(uuid()) @db.Uuid
-  userId           String    @unique @db.Uuid
+  id                     String    @id @default(uuid()) @db.Uuid
+  userId                 String    @unique @db.Uuid
   /// Objectif de chiffre d'affaires mensuel visé, en centimes.
-  monthlyGoalCents Int
-  weeklyHours      Int
-  budgetCents      Int
+  monthlyGoalCents       Int
+  weeklyHours            Int
+  budgetCents            Int
   /// Monnaie de tous les montants du parcours. Aucune conversion n'est faite.
-  currency         String    @default("EUR")
-  country          String    @default("France")
-  skills           String    @default("")
-  interests        String    @default("")
-  sector           String    @default("")
+  currency               String    @default("EUR")
+  country                String    @default("France")
+  skills                 String    @default("")
+  interests              String    @default("")
+  sector                 String    @default("")
   /// particuliers | professionnels | les-deux
-  audience         String    @default("particuliers")
+  audience               String    @default("particuliers")
   /// simple | ambitieux
-  ambition         String    @default("simple")
+  ambition               String    @default("simple")
   /// subscription | one_time | freemium | indifferent
-  preferredModel   String    @default("indifferent")
-  completedAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  preferredModel         String    @default("indifferent")
+  /// Ce que le Radar peut exploiter en plus. Tout est facultatif : rien n'est redemandé.
+  experienceYears        Int?
+  knownSectors           String    @default("")
+  /// debutant | intermediaire | avance
+  technicalLevel         String    @default("debutant")
+  /// aucune | premiere | confirmee
+  entrepreneurExperience String    @default("aucune")
+  /// local | francophone | international
+  marketScope            String    @default("francophone")
+  /// saas | application | outil_metier | marketplace | indifferent
+  productPreference      String    @default("indifferent")
+  willingToProspect      Boolean?
+  completedAt            DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -330,6 +359,10 @@ enum IdeaStatus {
   PROPOSED
   SELECTED
   DISCARDED
+  /// Mise de côté par le créateur : ni retenue, ni écartée.
+  SAVED
+  /// Sortie de la vue courante sans être écartée. Un « pas maintenant ».
+  ARCHIVED
 }
 
 /**
@@ -374,12 +407,30 @@ model Idea {
   specSheet             Json?
   specSheetAt           DateTime?
   status                IdeaStatus @default(PROPOSED)
+  /// D'où vient l'idée : parcours | radar | radar_projet.
+  source                String     @default("parcours")
+  /// Recherche du Radar qui l'a produite, quand c'est le cas.
+  runId                 String?    @db.Uuid
+  /// Pourquoi elle est proposée à cette personne : phrases lisibles, jamais un score nu.
+  fitReasons            Json?
+  /// Les cinq composantes du score, sur dix, pondérées par la plateforme.
+  subScores             Json?
+  /// Empreinte lexicale : ne pas reproposer la même idée sous un autre titre.
+  fingerprint           String?
+  rejectReason          String?
+  savedAt               DateTime?
+  archivedAt            DateTime?
   createdAt             DateTime   @default(now())
 
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project Project?
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project  Project?
+  feedback RadarFeedback[]
+  signals  RadarSignal[]
 
   @@index([userId, createdAt])
+  @@index([userId, status, createdAt])
+  @@index([userId, fingerprint])
+  @@index([runId])
 }
 
 // ──────────────────────────────── Projets ────────────────────────────────────
@@ -411,18 +462,25 @@ model Project {
   updatedAt          DateTime      @updatedAt
   deletedAt          DateTime?
 
-  owner       User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  sourceIdea  Idea?                   @relation(fields: [ideaId], references: [id], onDelete: SetNull)
-  versions    ProjectVersion[]
-  messages    ChatMessage[]
-  checks      ProjectCheck[]
-  records     AppRecord[]
-  endUsers    AppEndUser[]
-  events      AppEvent[]
-  connections IntegrationConnection[]
-  marketing   MarketingKit[]
-  medias      MediaAsset[]
-  agentNotes  AgentNote[]
+  owner                User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  sourceIdea           Idea?                   @relation(fields: [ideaId], references: [id], onDelete: SetNull)
+  versions             ProjectVersion[]
+  messages             ChatMessage[]
+  checks               ProjectCheck[]
+  records              AppRecord[]
+  endUsers             AppEndUser[]
+  events               AppEvent[]
+  connections          IntegrationConnection[]
+  marketing            MarketingKit[]
+  medias               MediaAsset[]
+  agentNotes           AgentNote[]
+  radarRuns            RadarRun[]
+  supportSettings      SupportSettings?
+  supportKnowledge     SupportKnowledgeEntry[]
+  supportConversations SupportConversation[]
+  supportMessages      SupportMessage[]
+  supportTickets       SupportTicket[]
+  supportInsights      SupportInsight[]
 
   @@index([ownerId, updatedAt])
 }
@@ -498,9 +556,11 @@ model AppEndUser {
   createdAt    DateTime  @default(now())
   lastSeenAt   DateTime?
 
-  project  Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  records  AppRecord[]
-  sessions AppEndUserSession[]
+  project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  records              AppRecord[]
+  sessions             AppEndUserSession[]
+  supportConversations SupportConversation[]
+  supportTickets       SupportTicket[]
 
   @@unique([projectId, email])
 }
@@ -641,4 +701,229 @@ model AgentNote {
 
   @@index([projectId, createdAt])
   @@index([projectId, agent, createdAt])
+}
+
+// ═══════════════════════════════ Radar ════════════════════════════════════
+
+/// Une recherche du Radar : le profil tel qu'il était, et ce qu'elle a coûté.
+model RadarRun {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  /// manual | scheduled | project
+  trigger         String   @default("manual")
+  projectId       String?  @db.Uuid
+  profileSnapshot Json
+  ideaCount       Int      @default(0)
+  model           String   @default("")
+  costMicros      Int      @default(0)
+  creditsSpent    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+/// Ce que le créateur pense d'une proposition. Sert à affiner, jamais à profiler.
+model RadarFeedback {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  ideaId    String   @db.Uuid
+  /// interested | not_for_me
+  verdict   String
+  /// too_complex | not_my_sector | too_competitive | too_expensive | no_b2b | other
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  idea Idea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ideaId])
+  @@index([userId, createdAt])
+}
+
+/// Signal extérieur observé (V2). Source, date, confiance : jamais une interprétation.
+model RadarSignal {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @db.Uuid
+  ideaId     String?  @db.Uuid
+  source     String
+  /// search_trend | regulation | new_entrant | news | other
+  type       String
+  url        String?
+  summary    String
+  /// 0 à 100, déclarée par l'adaptateur.
+  confidence Int      @default(50)
+  observedAt DateTime
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  idea Idea? @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+
+  @@index([userId, observedAt])
+  @@index([ideaId])
+}
+
+// ════════════════════════════════ Lia ═════════════════════════════════════
+
+/// Réglages de Lia pour une application. Une ligne par projet.
+model SupportSettings {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  projectId       String   @unique @db.Uuid
+  enabled         Boolean  @default(false)
+  displayName     String   @default("Lia")
+  greeting        String   @default("Bonjour 👋 Comment puis-je vous aider ?")
+  /// bottom-right | bottom-left
+  position        String   @default("bottom-right")
+  accentColor     String?
+  escalationEmail String?
+  retentionDays   Int      @default(90)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Ce que Lia a le droit de dire. Une entrée générée naît en brouillon.
+model SupportKnowledgeEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  /// manual | generated | spec
+  kind      String   @default("manual")
+  question  String
+  answer    String
+  keywords  String   @default("")
+  /// draft | published | disabled
+  status    String   @default("draft")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status])
+  @@index([userId, createdAt])
+}
+
+/// Une conversation entre un visiteur et Lia.
+model SupportConversation {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  projectId     String   @db.Uuid
+  endUserId     String?  @db.Uuid
+  /// Empreinte du visiteur anonyme : relie ses messages, ne retient rien de lui.
+  visitorHash   String
+  /// open | escalated | closed
+  status        String   @default("open")
+  category      String?
+  messageCount  Int      @default(0)
+  answeredCount Int      @default(0)
+  /// +1 utile, -1 pas utile.
+  satisfaction  Int?
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  endUser  AppEndUser?      @relation(fields: [endUserId], references: [id], onDelete: SetNull)
+  messages SupportMessage[]
+  tickets  SupportTicket[]
+
+  @@index([projectId, createdAt])
+  @@index([projectId, status])
+  @@index([projectId, visitorHash])
+  @@index([userId, createdAt])
+}
+
+model SupportMessage {
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @db.Uuid
+  conversationId String   @db.Uuid
+  /// visitor | lia | owner
+  role           String
+  content        String
+  /// Vrai quand Lia s'est appuyée sur une entrée de la base.
+  grounded       Boolean  @default(false)
+  sources        Json?
+  createdAt      DateTime @default(now())
+
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversation SupportConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([projectId, createdAt])
+}
+
+/// Une demande que Lia n'a pas su traiter, transmise au propriétaire.
+model SupportTicket {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  projectId      String    @db.Uuid
+  conversationId String?   @db.Uuid
+  endUserId      String?   @db.Uuid
+  email          String?
+  subject        String
+  category       String    @default("autre")
+  /// low | normal | high
+  priority       String    @default("normal")
+  /// open | in_progress | resolved | closed
+  status         String    @default("open")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  resolvedAt     DateTime?
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversation SupportConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  endUser      AppEndUser?          @relation(fields: [endUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status, createdAt])
+  @@index([userId, createdAt])
+}
+
+/// Ce que les conversations révèlent, analysées par lot (V2).
+model SupportInsight {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  projectId  String   @db.Uuid
+  /// frequent_question | feature_request | potential_bug | unanswered
+  kind       String
+  title      String
+  count      Int      @default(1)
+  examples   Json     @default("[]")
+  /// new | roadmap | dismissed
+  status     String   @default("new")
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, status, lastSeenAt])
+  @@index([userId])
+}
+
+// ═══════════════════════════ Notifications ════════════════════════════════
+
+/// Une notification interne. Une seule table : une seule cloche suffit.
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  /// radar_new | support_ticket | support_insight | support_unanswered
+  kind      String
+  title     String
+  body      String    @default("")
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
 }

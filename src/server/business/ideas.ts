@@ -198,7 +198,8 @@ export async function listIdeas(userId: string): Promise<ScoredIdea[]> {
   const profile = await requireProfile(userId)
   const rows = await withUserScope(userId, (tx) =>
     tx.idea.findMany({
-      where: { userId, status: { not: 'DISCARDED' } },
+      // Les opportunités du Radar ont leur propre écran ; ici, le parcours seulement.
+      where: { userId, source: 'parcours', status: { not: 'DISCARDED' } },
       orderBy: [{ status: 'asc' }, { opportunityScore: 'desc' }],
       take: 40,
       include: { project: { select: { id: true } } },
