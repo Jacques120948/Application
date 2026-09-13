@@ -515,6 +515,8 @@ export const fr = {
   'landing.pricingImages': '{size} d’images à vous',
   'landing.pricingLaunchKit': 'Kit de lancement marketing',
   'landing.pricingExport': 'Export du code',
+  'landing.pricingRadar': 'Radar d’opportunités : {count} recherche(s) par mois',
+  'landing.pricingLia': 'Lia, support client dans vos applications : {count} réponses par mois',
   'landing.pricingMobile': 'Préparation pour mobile',
   'landing.pricingRecommended': 'Le plus choisi',
   'landing.pricingCtaFree': 'Commencer gratuitement',

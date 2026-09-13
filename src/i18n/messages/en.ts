@@ -489,6 +489,8 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.pricingImages': '{size} of images of your own',
   'landing.pricingLaunchKit': 'Marketing launch kit',
   'landing.pricingExport': 'Code export',
+  'landing.pricingRadar': 'Opportunity Radar: {count} search(es) per month',
+  'landing.pricingLia': 'Lia, customer support in your apps: {count} answers per month',
   'landing.pricingMobile': 'Mobile preparation',
   'landing.pricingRecommended': 'Most chosen',
   'landing.pricingCtaFree': 'Start for free',

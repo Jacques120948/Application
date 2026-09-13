@@ -611,6 +611,12 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
               ...(plan.allowCustomDomain ? [t('landing.pricingDomain')] : []),
               ...(plan.allowMobilePrep ? [t('landing.pricingMobile')] : []),
               ...(plan.allowExport ? [t('landing.pricingExport')] : []),
+              ...(plan.features.includes('radar') && plan.radarRunsPerMonth > 0
+                ? [t('landing.pricingRadar', { count: plan.radarRunsPerMonth })]
+                : []),
+              ...(plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0
+                ? [t('landing.pricingLia', { count: plan.liaAnswersPerMonth })]
+                : []),
             ]
             return (
               <div

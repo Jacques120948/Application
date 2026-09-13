@@ -154,9 +154,11 @@ export function liveFeatures(): Feature[] {
  * l'intention commerciale.
  */
 export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
-  free: [],
-  launch: ['social_launch_basic', 'social_angles', 'social_week'],
+  free: ['radar'],
+  launch: ['radar', 'lia_support', 'social_launch_basic', 'social_angles', 'social_week'],
   builder: [
+    'radar',
+    'lia_support',
     'social_launch_basic',
     'social_angles',
     'social_week',
@@ -166,6 +168,8 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'social_analytics_basic',
   ],
   business: [
+    'radar',
+    'lia_support',
     'social_launch_basic',
     'social_angles',
     'social_week',
