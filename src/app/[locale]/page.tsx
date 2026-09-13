@@ -10,6 +10,7 @@ import { DEMO_APPS } from '@/server/demos/catalog'
 import { isEnabled } from '@/server/settings/flags'
 import { Logo } from '@/components/marketing/Logo'
 import { BrowserFrame, PhoneFrame } from '@/components/marketing/DeviceFrame'
+import { ModuleGrid, ModuleShowcase, type Showcase, type Tile } from '@/components/marketing/modules'
 import {
   Check,
   CheckList,
@@ -115,7 +116,79 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     { label: t('landing.navHow'), href: '#fonctionnement' },
     { label: t('landing.navExamples'), href: '#exemples' },
     { label: t('landing.navFeatures'), href: '#fonctionnalites' },
+    { label: t('landing.navModules'), href: '#modules' },
     { label: t('landing.navPricing'), href: '#tarifs' },
+  ]
+
+  /*
+   * « Compris dans… » : lu dans les offres réelles, jamais écrit en dur. La première offre
+   * (par ordre d'affichage) qui ouvre un module donne son nom ; si c'est l'offre gratuite,
+   * on dit « toutes les offres ». Un module qu'aucune offre n'ouvre ne porte pas de badge.
+   */
+  const includedIn = (test: (plan: (typeof plans)[number]) => boolean): string | null => {
+    const first = plans.find(test)
+    if (first === undefined) return null
+    return first.priceCents === 0 ? t('landing.modulesAllPlans') : t('landing.modulesFrom', { plan: first.name })
+  }
+  const everywhere = plans.length > 0 ? t('landing.modulesAllPlans') : null
+  const showcase: Showcase[] = [
+    {
+      icon: 'radar',
+      eyebrow: t('landing.modRadarEyebrow'),
+      title: t('landing.modRadarTitle'),
+      body: t('landing.modRadarBody'),
+      bullets: [t('landing.modRadar1'), t('landing.modRadar2'), t('landing.modRadar3'), t('landing.modRadar4')],
+      included: includedIn((plan) => plan.features.includes('radar') && plan.radarRunsPerMonth > 0),
+      desktop: { src: '/modules/radar.webp', alt: t('landing.modRadarEyebrow'), caption: 'evoliia.com/radar' },
+    },
+    {
+      icon: 'wand',
+      eyebrow: t('landing.modBuildEyebrow'),
+      title: t('landing.modBuildTitle'),
+      body: t('landing.modBuildBody'),
+      bullets: [t('landing.modBuild1'), t('landing.modBuild2'), t('landing.modBuild3'), t('landing.modBuild4')],
+      included: includedIn((plan) => plan.allowBuild),
+      desktop: { src: '/modules/atelier.webp', alt: t('landing.modBuildEyebrow') },
+    },
+    {
+      icon: 'chat',
+      eyebrow: t('landing.modLiaEyebrow'),
+      title: t('landing.modLiaTitle'),
+      body: t('landing.modLiaBody'),
+      bullets: [t('landing.modLia1'), t('landing.modLia2'), t('landing.modLia3'), t('landing.modLia4')],
+      included: includedIn((plan) => plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0),
+      desktop: { src: '/modules/support.webp', alt: t('landing.modLiaEyebrow') },
+      phone: { src: '/modules/lia-mobile.webp', alt: t('landing.modLiaEyebrow') },
+    },
+    {
+      icon: 'megaphone',
+      eyebrow: t('landing.modLaunchEyebrow'),
+      title: t('landing.modLaunchTitle'),
+      body: t('landing.modLaunchBody'),
+      bullets: [t('landing.modLaunch1'), t('landing.modLaunch2'), t('landing.modLaunch3'), t('landing.modLaunch4')],
+      included: includedIn((plan) => plan.features.includes(LAUNCH_KIT_FEATURE)),
+      desktop: { src: '/modules/equipe.webp', alt: t('landing.modLaunchEyebrow') },
+    },
+  ]
+  const tiles: Tile[] = [
+    { icon: 'target', title: t('landing.tileGoalTitle'), body: t('landing.tileGoalBody'), included: everywhere },
+    { icon: 'bulb', title: t('landing.tileIdeasTitle'), body: t('landing.tileIdeasBody'), included: everywhere },
+    { icon: 'search', title: t('landing.tileAnalysisTitle'), body: t('landing.tileAnalysisBody'), included: everywhere },
+    { icon: 'radar', title: t('landing.tileRadarTitle'), body: t('landing.tileRadarBody'), included: includedIn((plan) => plan.features.includes('radar') && plan.radarRunsPerMonth > 0) },
+    { icon: 'document', title: t('landing.tileSpecTitle'), body: t('landing.tileSpecBody'), included: everywhere },
+    { icon: 'wand', title: t('landing.tileBuildTitle'), body: t('landing.tileBuildBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'palette', title: t('landing.tileDesignTitle'), body: t('landing.tileDesignBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'users', title: t('landing.tileUsersTitle'), body: t('landing.tileUsersBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'coins', title: t('landing.tileMoneyTitle'), body: t('landing.tileMoneyBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'shield', title: t('landing.tileTestsTitle'), body: t('landing.tileTestsBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'rocket', title: t('landing.tilePublishTitle'), body: t('landing.tilePublishBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'download', title: t('landing.tileExportTitle'), body: t('landing.tileExportBody'), included: includedIn((plan) => plan.allowExport || plan.allowMobilePrep) },
+    { icon: 'plug', title: t('landing.tileConnectTitle'), body: t('landing.tileConnectBody'), included: includedIn((plan) => plan.maxConnections > 0) },
+    { icon: 'lifebuoy', title: t('landing.tileCoachTitle'), body: t('landing.tileCoachBody'), included: everywhere },
+    { icon: 'chart', title: t('landing.tileDashboardTitle'), body: t('landing.tileDashboardBody'), included: everywhere },
+    { icon: 'megaphone', title: t('landing.tileKitTitle'), body: t('landing.tileKitBody'), included: includedIn((plan) => plan.features.includes(LAUNCH_KIT_FEATURE)) },
+    { icon: 'team', title: t('landing.tileTeamTitle'), body: t('landing.tileTeamBody'), included: includedIn((plan) => plan.features.includes('marketing_team')) },
+    { icon: 'chat', title: t('landing.tileLiaTitle'), body: t('landing.tileLiaBody'), included: includedIn((plan) => plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0) },
   ]
 
   const flow = [
@@ -537,6 +610,44 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           </ul>
         </Panel>
       </Section>
+
+      {/* ──────────────────── 8 bis. La vitrine des modules ───────────────── */}
+      <section id="modules" className="relative isolate scroll-mt-20 overflow-hidden text-white [background-image:var(--gradient-night)]">
+        {/* Deux halos fixes : ils donnent de la profondeur au fond sans rien animer. */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -left-32 top-24 h-96 w-96 rounded-full opacity-40 blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(248,24,120,0.8), transparent 65%)' }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-32 bottom-32 h-[28rem] w-[28rem] rounded-full opacity-40 blur-3xl"
+          style={{ background: 'radial-gradient(circle, rgba(151,5,244,0.9), transparent 65%)' }}
+        />
+        <div className="mx-auto w-full max-w-6xl px-5 py-16 sm:py-20 lg:py-28">
+          <Eyebrow tone="light">{t('landing.modulesEyebrow')}</Eyebrow>
+          <h2 className="mt-3 max-w-3xl text-balance text-[1.9rem] font-semibold leading-[1.1] tracking-tight sm:text-5xl">
+            {t('landing.modulesTitle')}
+            <br />
+            <span className="text-gradient-brand">{t('landing.modulesTitleAccent')}</span>
+          </h2>
+          <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/75 sm:text-lg">
+            {t('landing.modulesBody')}
+          </p>
+
+          <div className="mt-14 sm:mt-20">
+            <ModuleShowcase items={showcase} />
+          </div>
+
+          <div className="mt-20 border-t border-white/10 pt-14 sm:mt-28">
+            <h3 className="m-0 text-balance text-2xl font-semibold sm:text-3xl">{t('landing.modulesGridTitle')}</h3>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/70">{t('landing.modulesGridBody')}</p>
+            <div className="mt-8">
+              <ModuleGrid tiles={tiles} />
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* ────────────────────── 9. Préparer son lancement ─────────────────── */}
       <Section
