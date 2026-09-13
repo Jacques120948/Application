@@ -57,6 +57,8 @@ model User {
   radarAlerts     Boolean   @default(true)
   /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
   supportAlerts   Boolean   @default(true)
+  /// Client Stripe correspondant, créé au premier paiement.
+  stripeCustomerId String?  @unique
 
   sessions             Session[]
   projects             Project[]
@@ -161,6 +163,11 @@ model Plan {
   isRecommended            Boolean  @default(false)
   isActive                 Boolean  @default(true)
   sortOrder                Int      @default(0)
+  /// Produit et tarif Stripe, créés à la demande. L'empreinte dit pour quel prix, quelle
+  /// monnaie et quelle période le tarif a été créé.
+  stripeProductId          String?
+  stripePriceId            String?
+  stripePriceFingerprint   String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
@@ -182,6 +189,8 @@ model Subscription {
   stripeCustomerId     String?
   stripeSubscriptionId String?
   currentPeriodEnd     DateTime?
+  /// Résiliation demandée : l'offre reste active jusqu'à la fin de la période payée.
+  cancelAtPeriodEnd    Boolean            @default(false)
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -189,6 +198,15 @@ model Subscription {
   plan Plan @relation(fields: [planId], references: [id])
 
   @@index([planId])
+  @@index([stripeSubscriptionId])
+}
+
+/// Un événement Stripe reçu. Retenu pour n'être traité qu'une fois. Table globale.
+model StripeEvent {
+  id         String   @id
+  type       String
+  account    String?
+  receivedAt DateTime @default(now())
 }
 
 /// Solde de crédits IA. Cache : la vérité est la somme de CreditLedger.
@@ -464,6 +482,7 @@ model Project {
 
   owner                User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   sourceIdea           Idea?                   @relation(fields: [ideaId], references: [id], onDelete: SetNull)
+  purchases            AppPurchase[]
   versions             ProjectVersion[]
   messages             ChatMessage[]
   checks               ProjectCheck[]
@@ -561,8 +580,39 @@ model AppEndUser {
   sessions             AppEndUserSession[]
   supportConversations SupportConversation[]
   supportTickets       SupportTicket[]
+  purchases            AppPurchase[]
 
   @@unique([projectId, email])
+}
+
+/// Un achat fait par l'utilisateur d'une application créée, sur le compte Stripe du
+/// créateur. L'argent ne transite jamais par Evoliia : on ne garde ici que la trace.
+model AppPurchase {
+  id                   String    @id @default(uuid()) @db.Uuid
+  projectId            String    @db.Uuid
+  endUserId            String?   @db.Uuid
+  /// Offre de l'application (identifiant et nom dans l'AppSpec au moment de l'achat).
+  planId               String
+  planName             String
+  /// payment | subscription
+  mode                 String
+  amountCents          Int       @default(0)
+  currency             String
+  /// paid | active | past_due | canceled | refunded
+  status               String    @default("paid")
+  stripeAccountId      String
+  stripeSessionId      String    @unique
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  endUser AppEndUser? @relation(fields: [endUserId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, status, createdAt])
+  @@index([endUserId])
+  @@index([stripeSubscriptionId])
 }
 
 model AppEndUserSession {

@@ -217,6 +217,10 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                 <span className="text-xs text-[var(--color-ink-soft)]">
                   Recharge le{' '}
                   {new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(wallet.resetsAt)}
+                  {' · '}
+                  <a href={`/${locale}/abonnement`} className="text-[var(--color-brand-strong)] no-underline">
+                    {t('nav.subscription')}
+                  </a>
                 </span>
               </div>
 

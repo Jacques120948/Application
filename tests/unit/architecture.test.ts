@@ -91,6 +91,7 @@ describe('règles de dépendance', () => {
       'appEndUser',
       'appEndUserSession',
       'appEvent',
+      'appPurchase',
       'idea',
       'creatorProfile',
       'integrationConnection',

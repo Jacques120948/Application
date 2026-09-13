@@ -21,6 +21,44 @@ export const en: Record<keyof typeof fr, string> = {
   'nav.register': 'Create account',
   'nav.admin': 'Administration',
   'nav.radar': 'Radar',
+  'nav.subscription': 'Subscription',
+
+  // ── Subscription ─────────────────────────────────────────────────────────
+  'subscription.title': 'Your subscription',
+  'subscription.subtitle':
+    'Switch plans whenever you like. Payment is handled by Stripe: Evoliia never sees your card.',
+  'subscription.current': 'Current plan',
+  'subscription.statusFREE': 'Free plan',
+  'subscription.statusACTIVE': 'Active',
+  'subscription.statusTRIALING': 'Trial period',
+  'subscription.statusPAST_DUE': 'Payment pending',
+  'subscription.statusCANCELED': 'Cancelled',
+  'subscription.renewsOn': 'Renews on {date}',
+  'subscription.endsOn': 'Ends on {date}',
+  'subscription.cancelScheduled': 'Cancellation scheduled: your plan stays open until the end of the paid period.',
+  'subscription.pastDue':
+    'The last payment did not go through. Update your payment method from the portal to keep your plan.',
+  'subscription.manual': 'This plan was assigned to you directly. To change it, get in touch with us.',
+  'subscription.choose': 'Choose this plan',
+  'subscription.change': 'Switch to this plan',
+  'subscription.yours': 'Your plan',
+  'subscription.free': 'Free',
+  'subscription.perMonth': 'per month',
+  'subscription.perYear': 'per year',
+  'subscription.portal': 'Invoices and payment method',
+  'subscription.cancel': 'Cancel at end of period',
+  'subscription.resume': 'Resume my subscription',
+  'subscription.working': 'One moment…',
+  'subscription.succeeded': 'Thank you! Your plan is open and your credits are in.',
+  'subscription.pending':
+    'Payment received. Your plan opens in a few seconds; reload the page if nothing changes.',
+  'subscription.canceledCheckout': 'Payment abandoned. Nothing was charged.',
+  'subscription.unavailable':
+    'Online payment is not switched on for this installation. Plans can still be browsed; yours is assigned by the team.',
+  'subscription.prorata': 'A plan change mid-period is prorated by Stripe.',
+  'subscription.credits': '{count} credits per month',
+  'subscription.projects': 'Up to {count} app(s)',
+  'subscription.error': 'This operation did not go through.',
 
   'radar.title': 'Opportunity Radar',
   'radar.subtitle': 'Discover project ideas that fit your profile, your skills and your goals.',
@@ -579,6 +617,8 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.pricingCtaPaid': 'Create my account',
   'landing.pricingPaymentNote':
     'Online payment is not switched on yet for this installation. Create your account for free: you will pick your plan the day it is, without losing any of your work.',
+  'landing.pricingStripeNote':
+    'Secure card payment through Stripe, no commitment: switch or cancel your plan whenever you like from your account.',
   'landing.pricingNote':
     'Credits cover the operations that call on artificial intelligence. A search for ideas uses about a dozen, building an app about twenty.',
 

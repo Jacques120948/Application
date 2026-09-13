@@ -21,6 +21,7 @@ const PROTECTED_TABLES = [
   'AppEndUser',
   'AppEndUserSession',
   'AppEvent',
+  'AppPurchase',
   'CreatorProfile',
   'Idea',
   'IntegrationConnection',

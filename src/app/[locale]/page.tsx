@@ -5,6 +5,7 @@ import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listPublicPlans } from '@/server/billing/plans'
+import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { customersNeededFor, formatAmount } from '@/server/business/economics'
 import { DEMO_APPS } from '@/server/demos/catalog'
 import { isEnabled } from '@/server/settings/flags'
@@ -781,7 +782,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           {t('landing.pricingNote')}
         </p>
         <p className="mt-3 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
-          {t('landing.pricingPaymentNote')}
+          {isStripeAvailable() ? t('landing.pricingStripeNote') : t('landing.pricingPaymentNote')}
         </p>
       </Section>
 

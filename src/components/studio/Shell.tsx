@@ -47,6 +47,9 @@ export function Shell({
             <a href={`/${locale}/connexions`} className="text-[var(--color-ink-soft)] no-underline">
               Connexions
             </a>
+            <a href={`/${locale}/abonnement`} className="text-[var(--color-ink-soft)] no-underline">
+              {t('nav.subscription')}
+            </a>
             {isAdmin ? (
               <a
                 href={`/${locale}/administration`}

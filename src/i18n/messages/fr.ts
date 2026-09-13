@@ -21,6 +21,46 @@ export const fr = {
   'nav.register': 'Créer un compte',
   'nav.admin': 'Administration',
   'nav.radar': 'Radar',
+  'nav.subscription': 'Abonnement',
+
+  // ── Abonnement ───────────────────────────────────────────────────────────
+  'subscription.title': 'Votre abonnement',
+  'subscription.subtitle':
+    'Changez d’offre quand vous voulez. Le paiement est confié à Stripe : Evoliia ne voit jamais votre carte.',
+  'subscription.current': 'Offre actuelle',
+  'subscription.statusFREE': 'Offre gratuite',
+  'subscription.statusACTIVE': 'Active',
+  'subscription.statusTRIALING': 'Période d’essai',
+  'subscription.statusPAST_DUE': 'Paiement en attente',
+  'subscription.statusCANCELED': 'Résiliée',
+  'subscription.renewsOn': 'Renouvellement le {date}',
+  'subscription.endsOn': 'Se termine le {date}',
+  'subscription.cancelScheduled': 'Résiliation programmée : votre offre reste ouverte jusqu’à la fin de la période payée.',
+  'subscription.pastDue':
+    'Le dernier paiement n’a pas abouti. Mettez votre moyen de paiement à jour depuis le portail pour garder votre offre.',
+  'subscription.manual':
+    'Cette offre vous a été attribuée directement. Pour en changer, écrivez-nous.',
+  'subscription.choose': 'Choisir cette offre',
+  'subscription.change': 'Passer à cette offre',
+  'subscription.yours': 'Votre offre',
+  'subscription.free': 'Gratuit',
+  'subscription.perMonth': 'par mois',
+  'subscription.perYear': 'par an',
+  'subscription.portal': 'Factures et moyen de paiement',
+  'subscription.cancel': 'Résilier à la fin de la période',
+  'subscription.resume': 'Reprendre mon abonnement',
+  'subscription.working': 'Un instant…',
+  'subscription.succeeded': 'Merci ! Votre offre est ouverte et vos crédits sont là.',
+  'subscription.pending':
+    'Paiement reçu. Votre offre s’ouvre dans quelques secondes ; rechargez la page si rien ne change.',
+  'subscription.canceledCheckout': 'Paiement abandonné. Rien n’a été débité.',
+  'subscription.unavailable':
+    'Le paiement en ligne n’est pas activé sur cette installation. Les offres restent consultables ; la vôtre est attribuée par l’équipe.',
+  'subscription.prorata':
+    'Un changement d’offre en cours de période est calculé au prorata par Stripe.',
+  'subscription.credits': '{count} crédits par mois',
+  'subscription.projects': 'Jusqu’à {count} application(s)',
+  'subscription.error': 'Cette opération n’a pas abouti.',
 
   // ── Radar d'opportunités ─────────────────────────────────────────────────
   'radar.title': 'Radar d’opportunités',
@@ -605,6 +645,8 @@ export const fr = {
   'landing.pricingCtaPaid': 'Créer mon compte',
   'landing.pricingPaymentNote':
     "Le paiement en ligne n’est pas encore activé sur cette installation. Créez votre compte gratuitement : vous choisirez votre offre le jour où il le sera, sans rien perdre de votre travail.",
+  'landing.pricingStripeNote':
+    'Paiement sécurisé par Stripe, par carte, sans engagement : vous changez ou résiliez votre offre quand vous voulez depuis votre espace.',
   'landing.pricingNote':
     "Les crédits couvrent les opérations qui font appel à l’intelligence artificielle. Une recherche d’idées en consomme une douzaine, la construction d’une application une vingtaine.",
 

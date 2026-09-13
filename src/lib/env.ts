@@ -77,6 +77,29 @@ export const env = {
   get emailFrom(): string | undefined {
     return read('EMAIL_FROM')
   },
+  /**
+   * Stripe. Sans clé secrète, aucun paiement n'est proposé nulle part : la page des offres
+   * dit que le paiement en ligne n'est pas activé, et les routes de paiement répondent
+   * « introuvable ». Les secrets de signature des webhooks sont distincts : un pour les
+   * abonnements Evoliia, un pour les comptes connectés des créateurs.
+   */
+  get stripeSecretKey(): string | undefined {
+    return read('STRIPE_SECRET_KEY')
+  },
+  get stripeWebhookSecret(): string | undefined {
+    return read('STRIPE_WEBHOOK_SECRET')
+  },
+  get stripeConnectWebhookSecret(): string | undefined {
+    return read('STRIPE_CONNECT_WEBHOOK_SECRET')
+  },
+  /**
+   * Commission d'Evoliia sur les ventes faites dans les applications créées, en pour cent.
+   * Zéro par défaut : la prendre est une décision commerciale du propriétaire, pas du code.
+   */
+  get stripeApplicationFeePercent(): number {
+    const value = Number(read('STRIPE_APPLICATION_FEE_PERCENT') ?? '0')
+    return Number.isFinite(value) ? Math.min(30, Math.max(0, value)) : 0
+  },
   get appUrl(): string {
     return read('APP_URL') ?? 'http://localhost:3000'
   },
