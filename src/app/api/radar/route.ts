@@ -6,7 +6,11 @@ import { SUPPORTED_LOCALES } from '@/i18n/config'
 
 export const maxDuration = 90
 
-const input = z.object({ locale: z.enum(SUPPORTED_LOCALES).default('fr') })
+const input = z.object({
+  locale: z.enum(SUPPORTED_LOCALES).default('fr'),
+  /** V2 : chercher autour d'un projet existant. */
+  projectId: z.string().uuid().optional(),
+})
 
 /**
  * Le Radar d'opportunités.
@@ -29,7 +33,11 @@ export async function POST(request: Request) {
     assertSameOrigin(request)
     const user = await requireUser()
     const body = input.parse(await readJson(request))
-    return ok(await runRadar(user.id, body.locale, 'manual'))
+    return ok(
+      body.projectId === undefined
+        ? await runRadar(user.id, body.locale, 'manual')
+        : await runRadar(user.id, body.locale, 'project', { projectId: body.projectId }),
+    )
   } catch (error) {
     return fail(error)
   }

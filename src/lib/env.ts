@@ -54,6 +54,17 @@ export const env = {
    * installation neuve sans écrire de SQL. Le rôle reste stocké en base, cette variable
    * ne fait que le poser la première fois.
    */
+  /**
+   * Jeton du planificateur, pour les routes appelées par une tâche périodique (Radar V2).
+   *
+   * Non défini, ces routes n'existent pas : elles répondent 404. C'est le réglage par
+   * défaut, parce qu'une recherche automatique pour chaque personne a un coût, et que
+   * l'ouvrir est une décision du propriétaire, pas du code.
+   */
+  get cronSecret(): string | undefined {
+    const value = read('CRON_SECRET')
+    return value !== undefined && value.length >= 32 ? value : undefined
+  },
   get adminEmail(): string | undefined {
     const value = read('ADMIN_EMAIL')
     return value?.trim().toLowerCase()

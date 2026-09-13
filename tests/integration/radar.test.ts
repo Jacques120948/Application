@@ -9,13 +9,20 @@ import { DEFAULT_PLANS } from '@/server/billing/plans'
 import { AppError } from '@/lib/errors'
 import type { RadarSuggestion } from '@/server/ai/schemas'
 import { improveProfile, missingPrecisions, readRadarProfile } from '@/server/radar/profile'
+import { readPreferenceHints } from '@/server/radar/preferences'
+import { runScheduledRadar } from '@/server/radar/scheduled'
+import { setFlag } from '@/server/settings/flags'
+import { countUnread, listNotifications } from '@/server/notifications/service'
+import { POST as cronRadar } from '@/app/api/cron/radar/route'
 import { radarQuota } from '@/server/radar/quota'
 import {
   compare,
   getRadarOverview,
+  readRadarAlerts,
   recordFeedback,
   runRadar,
   setOpportunityStatus,
+  setRadarAlerts,
 } from '@/server/radar/service'
 import * as operations from '@/server/ai/operations'
 
@@ -94,6 +101,7 @@ const SUGGESTIONS: RadarSuggestion[] = [
 
 let userA: string
 let userB: string
+let userC: string
 
 async function creerPersonne(): Promise<string> {
   const account = await register(
@@ -147,15 +155,19 @@ beforeAll(async () => {
   clearAll()
   userA = await creerPersonne()
   userB = await creerPersonne()
-  await prisma.subscription.upsert({
-    where: { userId: userA },
-    create: { userId: userA, planId: PLAN_ID, status: 'ACTIVE' },
-    update: { planId: PLAN_ID, status: 'ACTIVE' },
-  })
+  userC = await creerPersonne()
+  for (const userId of [userA, userC]) {
+    await prisma.subscription.upsert({
+      where: { userId },
+      create: { userId, planId: PLAN_ID, status: 'ACTIVE' },
+      update: { planId: PLAN_ID, status: 'ACTIVE' },
+    })
+  }
 }, 60_000)
 
 afterAll(async () => {
-  await prisma.user.deleteMany({ where: { id: { in: [userA, userB] } } }).catch(() => undefined)
+  await setFlag('radarV2', false)
+  await prisma.user.deleteMany({ where: { id: { in: [userA, userB, userC] } } }).catch(() => undefined)
   await prisma.plan.delete({ where: { id: PLAN_ID } }).catch(() => undefined)
   await prisma.$disconnect()
 })
@@ -322,5 +334,126 @@ describe('Radar d’opportunités', () => {
     expect(missingPrecisions(after)).toEqual([])
     expect(after.monthlyGoalCents).toBe(100_000)
     expect(after.technicalLevel).toBe('debutant')
+  })
+})
+
+describe('Radar V2 : autour d’un projet, avis, recherche périodique', () => {
+  let projectId: string
+
+  it('refuse la recherche autour d’un projet tant que le drapeau est fermé', async () => {
+    await setFlag('radarV2', false)
+    projectId = await withUserScope(userC, async (tx) => {
+      const project = await tx.project.create({
+        data: {
+          ownerId: userC,
+          name: 'Planning de salon',
+          slug: `radar-projet-${randomUUID()}`,
+          idea: 'Un agenda en ligne pour salons de coiffure',
+          draftSpec: { name: 'Planning de salon', description: 'Réservation en ligne pour salons.' },
+        },
+        select: { id: true },
+      })
+      return project.id
+    })
+    await expect(runRadar(userC, 'fr', 'project', { projectId })).rejects.toMatchObject({
+      code: 'UNSUPPORTED_REQUEST',
+    })
+    await setFlag('radarV2', true)
+  })
+
+  it('résume les avis en indices pour le modèle', async () => {
+    const hints = await readPreferenceHints(userA)
+    expect(hints.some((line) => line.startsWith('A trouvé intéressant'))).toBe(true)
+    expect(hints.some((line) => line.startsWith('A enregistré'))).toBe(true)
+    expect(await readPreferenceHints(userC)).toEqual([])
+  })
+
+  it('cherche autour d’un projet, en marquant la source et le projet', async () => {
+    askRadar.mockResolvedValueOnce({
+      value: { opportunities: [{ ...SUGGESTIONS[1]!, title: 'Rappels de rendez-vous pour salons' }] },
+      creditsSpent: 3,
+      balance: 9,
+    })
+    const result = await runRadar(userC, 'fr', 'project', { projectId })
+    expect(result.opportunities).toHaveLength(1)
+    const context = askRadar.mock.calls.at(-1)?.[4]
+    expect(context?.project?.name).toBe('Planning de salon')
+    expect(context?.project?.description).toBe('Réservation en ligne pour salons.')
+    expect(context?.signals).toEqual([])
+
+    const [rows, runs] = await withUserScope(userC, (tx) =>
+      Promise.all([
+        tx.idea.findMany({ where: { userId: userC }, select: { source: true, runId: true } }),
+        tx.radarRun.findMany({ where: { userId: userC }, select: { id: true, projectId: true, trigger: true } }),
+      ]),
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.source).toBe('radar_projet')
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toMatchObject({ id: rows[0]?.runId, projectId, trigger: 'project' })
+
+    // Le projet d'une autre personne n'existe pas.
+    await expect(runRadar(userA, 'fr', 'project', { projectId })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('laisse la personne choisir la recherche mensuelle', async () => {
+    expect(await readRadarAlerts(userC)).toBe(true)
+    await setRadarAlerts(userC, false)
+    expect(await readRadarAlerts(userC)).toBe(false)
+    await setRadarAlerts(userC, true)
+  })
+
+  it('cherche seule une fois par période, prévient, et ignore qui ne peut pas', async () => {
+    askRadar.mockResolvedValue({
+      value: { opportunities: [{ ...SUGGESTIONS[0]!, title: 'Caisse simplifiée pour salons de coiffure', problem: 'Encaisser et suivre la journée sans logiciel lourd.' }] },
+      creditsSpent: 3,
+      balance: 6,
+    })
+    const outcome = await runScheduledRadar({ limit: 500 })
+    askRadar.mockReset()
+
+    // A est au bout de son quota, B n'a pas le Radar : ni l'un ni l'autre n'a coûté.
+    expect(outcome.skipped.find((s) => s.userId === userA)?.reason).toBe('quota_reached')
+    expect(outcome.skipped.find((s) => s.userId === userB)?.reason).toBe('not_in_plan')
+
+    const runs = await withUserScope(userC, (tx) =>
+      tx.radarRun.findMany({ where: { userId: userC, trigger: 'scheduled' } }),
+    )
+    expect(runs).toHaveLength(1)
+    expect(await countUnread(userC)).toBe(1)
+    const [notification] = await listNotifications(userC)
+    expect(notification).toMatchObject({ kind: 'radar_new', href: '/fr/radar' })
+
+    // Une seconde passe dans la même période ne relance rien.
+    const again = await runScheduledRadar({ limit: 500 })
+    expect(again.skipped.find((s) => s.userId === userC)?.reason).toBe('already_ran_this_period')
+    expect(askRadar).not.toHaveBeenCalled()
+  })
+
+  it('ne répond au planificateur qu’avec le jeton, et n’existe pas sans lui', async () => {
+    delete process.env.CRON_SECRET
+    const absent = await cronRadar(new Request('http://localhost/api/cron/radar', { method: 'POST' }))
+    expect(absent.status).toBe(404)
+
+    process.env.CRON_SECRET = 'jeton-du-planificateur-de-plus-de-32-caracteres'
+    const wrong = await cronRadar(
+      new Request('http://localhost/api/cron/radar', {
+        method: 'POST',
+        headers: { authorization: 'Bearer mauvais' },
+      }),
+    )
+    expect(wrong.status).toBe(401)
+
+    const right = await cronRadar(
+      new Request('http://localhost/api/cron/radar', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${process.env.CRON_SECRET}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ limit: 1 }),
+      }),
+    )
+    delete process.env.CRON_SECRET
+    expect(right.status).toBe(200)
+    const body = (await right.json()) as { examined: number }
+    expect(body.examined).toBeLessThanOrEqual(1)
   })
 })

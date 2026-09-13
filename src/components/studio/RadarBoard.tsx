@@ -339,6 +339,10 @@ export function RadarBoard({
   searchCredits,
   compareCredits,
   credits,
+  v2 = false,
+  alerts = false,
+  projects = [],
+  signalSources = [],
 }: {
   locale: string
   initialOpportunities: OpportunityView[]
@@ -349,6 +353,11 @@ export function RadarBoard({
   searchCredits: number
   compareCredits: number
   credits: number
+  /** Drapeau radarV2 : recherche autour d'un projet, alerte mensuelle, signaux. */
+  v2?: boolean
+  alerts?: boolean
+  projects?: Array<{ id: string; name: string }>
+  signalSources?: Array<{ id: string; label: string; configured: boolean }>
 }) {
   // Les catalogues sont des objets purs : le traducteur se construit ici, côté client, car
   // une fonction ne traverse pas la frontière serveur → client.
@@ -361,19 +370,34 @@ export function RadarBoard({
   const [selected, setSelected] = useState<string[]>([])
   const [comparison, setComparison] = useState<ComparisonView | null>(null)
   const [missing, setMissing] = useState(missingPrecisions)
+  const [projectId, setProjectId] = useState('')
+  const [alertsOn, setAlertsOn] = useState(alerts)
   const [improving, setImproving] = useState(false)
   const [profileSaved, setProfileSaved] = useState(false)
 
   const canSearch = aiAvailable && quota.remaining > 0 && credits >= searchCredits && busy === null
 
-  async function search() {
+  async function toggleAlerts(enabled: boolean) {
+    setAlertsOn(enabled)
+    const response = await fetch('/api/radar/alertes', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    })
+    if (!response.ok) {
+      setAlertsOn(!enabled)
+      setError(t('radar.error'))
+    }
+  }
+
+  async function search(aroundProjectId?: string) {
     setBusy('search')
     setError(null)
     setNotice(null)
     const response = await fetch('/api/radar', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ locale }),
+      body: JSON.stringify(aroundProjectId === undefined ? { locale } : { locale, projectId: aroundProjectId }),
     })
     const body = (await response.json()) as {
       opportunities?: OpportunityView[]
@@ -496,7 +520,7 @@ export function RadarBoard({
               <Button type="button" variant="secondary" onClick={() => setImproving((v) => !v)}>
                 {t('radar.improve')}{missing.length > 0 ? ` (${missing.length})` : ''}
               </Button>
-              <Button type="button" onClick={search} disabled={!canSearch}>
+              <Button type="button" onClick={() => void search()} disabled={!canSearch}>
                 {busy === 'search' ? t('radar.searching') : `${t('radar.search')} · ${searchCredits}`}
               </Button>
             </div>
@@ -510,6 +534,55 @@ export function RadarBoard({
           {error !== null ? <Notice tone="critical">{error}</Notice> : null}
           {notice !== null ? <Notice tone="neutral">{notice}</Notice> : null}
           {profileSaved ? <Notice tone="positive">{t('radar.profileSaved')}</Notice> : null}
+
+          {v2 ? (
+            <div className="grid gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] p-4">
+              {projects.length > 0 ? (
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="min-w-0 flex-1">
+                    <Field label={t('radar.aroundProject')} hint={t('radar.aroundProjectHint')}>
+                      <Select value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+                        <option value="">{t('radar.chooseProject')}</option>
+                        {projects.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.name}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={!canSearch || projectId === ''}
+                    onClick={() => void search(projectId)}
+                  >
+                    {busy === 'search' ? t('radar.searching') : `${t('radar.searchAround')} · ${searchCredits}`}
+                  </Button>
+                </div>
+              ) : null}
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={alertsOn}
+                  onChange={(event) => void toggleAlerts(event.target.checked)}
+                />
+                <span>
+                  {t('radar.alerts')}{' '}
+                  <span className="text-[var(--color-ink-soft)]">{t('radar.alertsHint')}</span>
+                </span>
+              </label>
+              {signalSources.length > 0 ? (
+                <p className="m-0 text-xs text-[var(--color-ink-faint)]">
+                  {t('radar.signals')} ·{' '}
+                  {signalSources
+                    .map((source) => `${source.label} — ${source.configured ? t('radar.signalConfigured') : t('radar.signalMissing')}`)
+                    .join(' · ')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {improving ? (
             <form

@@ -581,25 +581,57 @@ export type RadarProfileInput = CreatorProfileInput & {
  * la répétition. La seconde est l'empreinte lexicale, côté service, pour ce que le modèle
  * aurait reformulé sans le savoir.
  */
+/**
+ * Ce que la V2 ajoute à une recherche. Tout est facultatif et tout arrive au modèle sous
+ * étiquette de donnée : des indices tirés des avis, des signaux extérieurs datés, un
+ * projet existant autour duquel chercher.
+ */
+export type RadarContext = {
+  hints: string[]
+  signals: string[]
+  project: { name: string; idea: string; description: string } | null
+}
+
 export async function runRadar(
   userId: string,
   profile: RadarProfileInput,
   seenTitles: string[],
   locale: string,
+  context: RadarContext = { hints: [], signals: [], project: null },
 ): Promise<RunResult<RadarOutput>> {
+  const parts = [
+    `Langue des textes à produire : ${locale}.`,
+    `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
+    asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
+    seenTitles.length === 0
+      ? "Cette personne n'a encore vu aucune opportunité."
+      : asUserData('opportunites_deja_vues_a_ne_pas_reproposer', seenTitles.join('\n')),
+  ]
+  if (context.hints.length > 0) {
+    parts.push(
+      asUserData('retours_precedents', context.hints.join('\n')),
+      'Tiens compte de ces retours : évite ce qui a été écarté, rapproche-toi de ce qui a plu.',
+    )
+  }
+  if (context.signals.length > 0) {
+    parts.push(
+      asUserData('signaux_observes', context.signals.join('\n')),
+      "Ces signaux sont des observations datées, pas des certitudes. Ne t'appuie dessus que pour « pourquoi maintenant », en les citant comme signaux.",
+    )
+  }
+  if (context.project !== null) {
+    parts.push(
+      asUserData('projet_existant', JSON.stringify(context.project, null, 2)),
+      'Propose des opportunités voisines de ce projet : une extension, une déclinaison pour une clientèle proche, un service complémentaire. Pas une copie du projet.',
+    )
+  } else {
+    parts.push('Propose cinq opportunités adaptées à ce profil, expliquées.')
+  }
   return runSingleCall({
     accounting: { userId, operation: 'radar' },
     system: RADAR_SYSTEM,
     schema: radarSchema,
-    userContent: [
-      `Langue des textes à produire : ${locale}.`,
-      `Monnaie de tous les montants : ${profile.currency}. Aucune conversion.`,
-      asUserData('profil_du_createur', JSON.stringify(profile, null, 2)),
-      seenTitles.length === 0
-        ? "Cette personne n'a encore vu aucune opportunité."
-        : asUserData('opportunites_deja_vues_a_ne_pas_reproposer', seenTitles.join('\n')),
-      'Propose cinq opportunités adaptées à ce profil, expliquées.',
-    ].join('\n\n'),
+    userContent: parts.join('\n\n'),
   })
 }
 

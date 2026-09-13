@@ -10,7 +10,10 @@ import {
   RADAR_ESTIMATED_CREDITS,
   RADAR_FEATURE,
   getRadarOverview,
+  readRadarAlerts,
 } from '@/server/radar/service'
+import { signalSourcesStatus } from '@/server/radar/signals'
+import { listProjects } from '@/server/projects/service'
 import { Shell } from '@/components/studio/Shell'
 import { Card } from '@/components/ui'
 import { RadarBoard } from '@/components/studio/RadarBoard'
@@ -72,7 +75,11 @@ export default async function RadarPage({ params }: { params: Promise<{ locale: 
     )
   }
 
-  const overview = await getRadarOverview(user.id)
+  const [overview, v2] = await Promise.all([getRadarOverview(user.id), isEnabled('radarV2')])
+  // La V2 n'est lue que si elle est ouverte : rien de plus n'est chargé sinon.
+  const [alerts, projects] = v2
+    ? await Promise.all([readRadarAlerts(user.id), listProjects(user.id)])
+    : [false, []]
 
   return (
     <Shell {...shell}>
@@ -89,6 +96,10 @@ export default async function RadarPage({ params }: { params: Promise<{ locale: 
           searchCredits={RADAR_ESTIMATED_CREDITS}
           compareCredits={COMPARE_ESTIMATED_CREDITS}
           credits={wallet.balance}
+          v2={v2}
+          alerts={alerts}
+          projects={projects.map((project) => ({ id: project.id, name: project.name }))}
+          signalSources={v2 ? signalSourcesStatus() : []}
         />
       </div>
     </Shell>

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { AppError, notFound, validation } from '@/lib/errors'
+import { prisma } from '@/server/db/client'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { isAiAvailable } from '@/server/ai/client'
@@ -12,6 +13,8 @@ import { customersNeededFor } from '@/server/business/economics'
 import { isEnabled } from '@/server/settings/flags'
 import { fingerprint, looksAlike, opportunityScore, profileFit, subScores, type SubScores } from './score'
 import { missingPrecisions, readRadarProfile, toRadarProfile, type ProfileRow } from './profile'
+import { readPreferenceHints } from './preferences'
+import { collectSignals, describeSignals } from './signals'
 import { assertRadarQuota, radarQuota, type QuotaState } from './quota'
 
 /**
@@ -331,17 +334,49 @@ export async function getRadarOverview(userId: string): Promise<RadarOverview> {
  * `trigger` distingue une recherche demandée d'une recherche périodique (V2) : la seconde
  * n'écrit rien quand elle ne trouve rien de nouveau, et prévient quand elle trouve.
  */
+export type RadarTrigger = 'manual' | 'scheduled' | 'project'
+
 export async function runRadar(
   userId: string,
   locale: string,
-  trigger: 'manual' | 'scheduled' = 'manual',
+  trigger: RadarTrigger = 'manual',
+  options: { projectId?: string } = {},
 ): Promise<{ opportunities: Opportunity[]; creditsSpent: number; quota: QuotaState; skipped: number }> {
   await assertRadarOpen(userId)
   if (!isAiAvailable()) {
     throw new AppError('AI_UNAVAILABLE', "Le Radar a besoin du copilote, qui n'est pas configuré ici.")
   }
+  // Tout ce qui suit la V1 est derrière le second drapeau : une recherche autour d'un
+  // projet, les indices tirés des avis, les signaux extérieurs.
+  const v2 = await isEnabled('radarV2')
+  if (trigger === 'project' && !v2) {
+    throw new AppError('UNSUPPORTED_REQUEST', "La recherche autour d'un projet n'est pas encore ouverte.")
+  }
   const profile = await readRadarProfile(userId)
+
+  // Le projet avant le quota : un projet qui n'existe pas n'est pas une recherche.
+  const project =
+    trigger === 'project'
+      ? await withUserScope(userId, (tx) =>
+          tx.project.findFirst({
+            where: { id: options.projectId ?? '', ownerId: userId, deletedAt: null },
+            select: { id: true, name: true, idea: true, draftSpec: true },
+          }),
+        )
+      : null
+  if (trigger === 'project' && project === null) throw notFound("Ce projet n'existe pas.")
   await assertRadarQuota(userId)
+
+  const [hints, signals] = v2
+    ? await Promise.all([
+        readPreferenceHints(userId),
+        collectSignals(userId, {
+          topic: project?.name ?? `${profile.sector} ${profile.interests}`.trim(),
+          locale,
+          scope: profile.marketScope,
+        }),
+      ])
+    : [[], []]
 
   // Ce qu'elle a déjà vu : titres transmis au modèle, empreintes gardées pour le filet.
   const vues = await withUserScope(userId, (tx) =>
@@ -354,7 +389,19 @@ export async function runRadar(
   )
   const empreintesVues = vues.map((idee) => idee.fingerprint ?? fingerprint(idee.title, idee.problem))
 
-  const result = await askRadar(userId, toRadarProfile(profile), vues.map((idee) => idee.title), locale)
+  const spec = project?.draftSpec as { description?: unknown } | null
+  const result = await askRadar(userId, toRadarProfile(profile), vues.map((idee) => idee.title), locale, {
+    hints,
+    signals: describeSignals(signals),
+    project:
+      project === null
+        ? null
+        : {
+            name: project.name,
+            idea: project.idea,
+            description: typeof spec?.description === 'string' ? spec.description : '',
+          },
+  })
 
   // Filet lexical : ce que le modèle a reformulé sans le savoir est écarté ici.
   const retenues: RadarSuggestion[] = []
@@ -378,6 +425,7 @@ export async function runRadar(
       data: {
         userId,
         trigger,
+        projectId: project?.id ?? null,
         profileSnapshot: toRadarProfile(profile) as unknown as Prisma.InputJsonValue,
         ideaCount: retenues.length,
         creditsSpent: result.creditsSpent,
@@ -404,7 +452,7 @@ export async function runRadar(
     }
     return {
       userId,
-      source: 'radar',
+      source: trigger === 'project' ? 'radar_projet' : 'radar',
       runId: run.id,
       title: s.title,
       problem: s.problem,
@@ -559,3 +607,13 @@ export async function compare(
 }
 
 export { type ProfileRow }
+
+/** Recevoir ou non la recherche mensuelle automatique et son avis (V2). */
+export async function setRadarAlerts(userId: string, enabled: boolean): Promise<void> {
+  await prisma.user.update({ where: { id: userId }, data: { radarAlerts: enabled } })
+}
+
+export async function readRadarAlerts(userId: string): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { radarAlerts: true } })
+  return user?.radarAlerts ?? false
+}
