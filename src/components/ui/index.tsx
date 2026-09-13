@@ -16,11 +16,20 @@ function cx(...values: Array<string | false | null | undefined>): string {
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
 type ButtonSize = 'medium' | 'large'
 
+/**
+ * Le bouton principal porte le dégradé de la marque plutôt qu'un aplat.
+ *
+ * `--gradient-cta` est l'étroit, du rose au violet, où un texte blanc reste lisible sur
+ * toute la longueur ; le spectre complet ferait joli et rendrait le libellé illisible au
+ * passage du jaune. Au survol, la luminosité monte légèrement : une transition de couleur
+ * ne fonctionne pas sur un dégradé, un filtre si.
+ */
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary: 'bg-[var(--color-brand)] text-white hover:bg-[var(--color-brand-strong)]',
+  primary:
+    'text-white [background-image:var(--gradient-cta)] shadow-[0_8px_20px_-10px_rgba(151,5,244,0.7)] hover:brightness-110',
   secondary:
-    'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-line)] hover:border-[var(--color-ink-faint)]',
-  ghost: 'bg-transparent text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]',
+    'bg-[var(--color-surface)] text-[var(--color-ink)] border border-[var(--color-line)] hover:border-[var(--color-brand)] hover:text-[var(--color-brand-strong)]',
+  ghost: 'bg-transparent text-[var(--color-ink-soft)] hover:text-[var(--color-brand-strong)]',
   danger: 'bg-[var(--color-critical)] text-white hover:opacity-90',
 }
 
@@ -39,7 +48,7 @@ export function Button({
     <button
       {...props}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-medium transition-colors',
+        'inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-medium transition',
         'disabled:cursor-not-allowed disabled:opacity-50',
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
@@ -59,7 +68,7 @@ export function LinkButton({
     <a
       {...props}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-medium transition-colors no-underline',
+        'inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] font-medium transition no-underline',
         BUTTON_VARIANTS[variant],
         BUTTON_SIZES[size],
         className,

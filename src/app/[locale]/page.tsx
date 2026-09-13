@@ -192,10 +192,19 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         className="on-night relative overflow-hidden text-white"
         style={{ background: 'var(--gradient-night)' }}
       >
+        {/*
+          Deux halos colorés plutôt qu'un. Un seul laissait la moitié gauche du héros éteinte,
+          et c'est justement là que se trouve le titre : la lueur chaude le porte.
+        */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-56 right-[-15%] h-[640px] w-[640px] rounded-full opacity-40 blur-3xl"
+          className="pointer-events-none absolute -top-56 right-[-15%] h-[640px] w-[640px] rounded-full opacity-45 blur-3xl"
           style={{ background: 'var(--gradient-brand)' }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-[-30%] left-[-20%] h-[560px] w-[560px] rounded-full opacity-30 blur-3xl"
+          style={{ background: 'radial-gradient(circle, #f81878 0%, #fc7a3b 45%, transparent 72%)' }}
         />
         <div className="relative mx-auto grid w-full max-w-6xl gap-14 px-5 py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center lg:py-28">
           <div>
@@ -593,7 +602,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           ].map((card) => (
             <div
               key={card.title}
-              className="reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6"
+              className="edge-brand reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6 pt-7"
             >
               <h3 className="m-0 text-base font-semibold">{card.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
@@ -722,7 +731,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                 key={plan.id}
                 className={
                   plan.isRecommended
-                    ? 'relative flex flex-col rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-canvas)] p-6 shadow-[0_18px_40px_-24px_rgba(91,75,232,0.65)]'
+                    ? 'ring-brand [--ring-fill:var(--color-canvas)] relative flex flex-col rounded-[var(--radius-card)] p-6 shadow-[0_22px_48px_-26px_rgba(151,5,244,0.6)]'
                     : 'relative flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-6'
                 }
               >
@@ -814,8 +823,16 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
       </Section>
 
       {/* ─────────────────────── 12. Appel final ────────────────────────── */}
-      <section className="on-night text-white" style={{ background: 'var(--gradient-night)' }}>
-        <div className="mx-auto w-full max-w-3xl px-5 py-20 text-center sm:py-24">
+      <section
+        className="on-night relative overflow-hidden text-white"
+        style={{ background: 'var(--gradient-night)' }}
+      >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full opacity-35 blur-3xl"
+          style={{ background: 'var(--gradient-brand)' }}
+        />
+        <div className="relative mx-auto w-full max-w-3xl px-5 py-20 text-center sm:py-24">
           <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
             {t('landing.finalTitle')}
           </h2>

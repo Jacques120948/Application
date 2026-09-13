@@ -57,7 +57,7 @@ export async function generateViewport({
   const { slug } = await params
   const app = await getPublishedApp(slug).catch(() => null)
   return {
-    themeColor: app?.spec.theme.colors.primary ?? '#0b1033',
+    themeColor: app?.spec.theme.colors.primary ?? '#17062f',
     width: 'device-width',
     initialScale: 1,
   }

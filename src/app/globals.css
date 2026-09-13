@@ -6,31 +6,45 @@
  * Une seule échelle de couleurs, d'espacements et de rayons. Les composants ne
  * définissent jamais de valeur arbitraire : ils consomment ces jetons.
  *
- * La palette reprend le logo Evoliia : une feuille en dégradé violet → bleu → cyan
- * posée sur un bleu nuit profond. Le violet porte l'action, le cyan reste décoratif
- * (son contraste sur blanc est insuffisant pour du texte), le bleu nuit sert de fond
- * aux sections mises en avant.
+ * La palette reprend l'icône Evoliia, qui traverse tout le spectre : jaune, orange, rose,
+ * magenta, violet, et un bleu qui couve dessous. C'est une palette de réseau social plutôt
+ * que de logiciel de gestion, et c'est voulu : ce que l'on construit ici se montre.
+ *
+ * Trois rôles, et il ne faut pas les mélanger.
+ *
+ * Le **violet** porte l'action. C'est le seul de la famille à tenir un texte blanc à
+ * 4,5:1, donc le seul qui puisse être un bouton ou un lien.
+ *
+ * Le **rose**, l'**orange** et le **jaune** sont décoratifs. Leur contraste sur blanc est
+ * insuffisant pour du texte : ils vivent dans les dégradés, les halos et les pastilles,
+ * jamais sous une phrase à lire.
+ *
+ * Le **prune sombre** remplace l'ancien bleu nuit : un fond neutre resterait froid à côté
+ * de cette famille, alors qu'un prune la prolonge.
  */
 
 @theme {
-  --color-ink: #0e1235;
-  --color-ink-soft: #4a5378;
-  --color-ink-faint: #757fa6;
-  --color-canvas: #f7f8fd;
+  --color-ink: #1c0b38;
+  --color-ink-soft: #5d4b7d;
+  --color-ink-faint: #8d7cab;
+  --color-canvas: #fdf9ff;
   --color-surface: #ffffff;
-  --color-line: #e4e7f4;
+  --color-line: #efe5f8;
 
-  --color-brand: #5b4be8;
-  --color-brand-strong: #4436c9;
-  --color-brand-soft: #eeebff;
+  --color-brand: #9705f4;
+  --color-brand-strong: #7a04c6;
+  --color-brand-soft: #f7ebff;
 
-  /* Cyan du logo. Décoratif uniquement : jamais du texte sur fond clair. */
-  --color-accent: #22b8e6;
-  --color-accent-soft: #e6f7fd;
+  /* Rose de l'icône. Décoratif : jamais du texte sur fond clair. */
+  --color-accent: #f81878;
+  --color-accent-soft: #ffebf3;
+  /* Les deux extrémités chaudes, pour les touches lumineuses. Même règle. */
+  --color-accent-warm: #fc7a3b;
+  --color-accent-sun: #fddd30;
 
-  --color-night: #0b1033;
-  --color-night-soft: #161c4a;
-  --color-night-line: #2a3168;
+  --color-night: #17062f;
+  --color-night-soft: #2c0a56;
+  --color-night-line: #46216f;
 
   --color-positive: #15803d;
   --color-positive-soft: #f0fdf4;
@@ -39,8 +53,11 @@
   --color-critical: #b91c1c;
   --color-critical-soft: #fef2f2;
 
-  --radius-card: 14px;
-  --radius-control: 10px;
+  /* Des angles plus ronds qu'un logiciel de gestion : on est du côté de l'application
+     qu'on montre, pas du tableur. */
+  --radius-card: 20px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
 
   --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
@@ -48,9 +65,31 @@
 :root {
   color-scheme: light;
 
-  /* Dégradé de la feuille du logo, réutilisé pour les aplats et les titres. */
-  --gradient-brand: linear-gradient(135deg, #7b5cff 0%, #4c6bff 48%, #37c6f0 100%);
-  --gradient-night: linear-gradient(160deg, #0b1033 0%, #1a1f56 55%, #241a5e 100%);
+  /*
+   * Le spectre complet de l'icône. Réservé aux grandes surfaces décoratives : halos,
+   * anneaux, filets. Jamais derrière un texte, ses arrêts clairs ne le porteraient pas.
+   */
+  --gradient-brand: linear-gradient(
+    135deg,
+    #fddd30 0%,
+    #fc8f38 17%,
+    #f81878 40%,
+    #e8039a 58%,
+    #a90ff0 80%,
+    #4217fc 100%
+  );
+
+  /*
+   * Dégradé des boutons. Volontairement plus étroit que le précédent : sur toute sa
+   * longueur, du rose au violet, un texte blanc reste à 4,64:1. Y ajouter l'orange ou le
+   * jaune ferait joli et rendrait le libellé illisible.
+   */
+  --gradient-cta: linear-gradient(115deg, #e0186e 0%, #c41ba8 50%, #8818f8 100%);
+
+  /* Pour les grands titres posés sur fond sombre : que des arrêts lumineux. */
+  --gradient-headline: linear-gradient(100deg, #fddd30 0%, #fc8f38 26%, #f81878 58%, #fc2bda 100%);
+
+  --gradient-night: linear-gradient(160deg, #17062f 0%, #360a63 52%, #1d0848 100%);
 }
 
 html,
@@ -75,10 +114,38 @@ body {
 
 /* Réservé aux grands titres : le dégradé remplace la couleur du texte. */
 .text-gradient-brand {
-  background: var(--gradient-brand);
+  background: var(--gradient-headline);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/*
+ * Anneau dégradé, comme autour d'une photo de profil.
+ *
+ * Deux fonds superposés : le premier s'arrête à la boîte de contenu, le second occupe la
+ * bordure. C'est ce qui permet un contour en dégradé sans image ni pseudo-élément, et
+ * l'intérieur reste opaque, donc lisible.
+ */
+.ring-brand {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--ring-fill, var(--color-surface)), var(--ring-fill, var(--color-surface)))
+      padding-box,
+    var(--gradient-brand) border-box;
+}
+
+/* Filet coloré en haut d'une carte : la couleur signale sans envahir. */
+.edge-brand {
+  position: relative;
+  overflow: hidden;
+}
+.edge-brand::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: var(--gradient-brand);
 }
 
 /* Sur fond nuit, le focus blanc reste visible. */
