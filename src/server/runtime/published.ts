@@ -16,12 +16,14 @@ export type PublishedApp = {
   slug: string
   spec: AppSpec
   versionId: string
+  /** Propriétaire : c'est son compte Stripe qui encaisse, ses crédits que l'assistant consomme. */
+  ownerId: string
 }
 
 export async function getPublishedApp(slug: string): Promise<PublishedApp> {
   const project = await prisma.project.findFirst({
     where: { slug, publishedAt: { not: null }, deletedAt: null },
-    select: { id: true, slug: true, publishedVersionId: true },
+    select: { id: true, slug: true, publishedVersionId: true, ownerId: true },
   })
   if (!project || project.publishedVersionId === null) {
     throw notFound("Cette application n'existe pas ou n'est plus en ligne.")
@@ -40,6 +42,7 @@ export async function getPublishedApp(slug: string): Promise<PublishedApp> {
     slug: project.slug,
     spec: parseAppSpec(version.spec),
     versionId: version.id,
+    ownerId: project.ownerId,
   }
 }
 

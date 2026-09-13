@@ -29,6 +29,7 @@ export type ProviderCard = {
     accountLabel: string | null
     connectedAt: string
     hint: string | null
+    lastError?: string | null
   } | null
 }
 
@@ -43,10 +44,15 @@ export function ConnectionsBoard({
   cards,
   categories,
   maxConnections,
+  locale = 'fr',
+  notice = null,
 }: {
   cards: ProviderCard[]
   categories: Array<{ id: string; label: string }>
   maxConnections: number
+  locale?: string
+  /** Message au retour d'une autorisation chez un fournisseur. */
+  notice?: { tone: 'positive' | 'caution' | 'critical'; text: string } | null
 }) {
   const [rows, setRows] = useState(cards)
   const [busy, setBusy] = useState<string | null>(null)
@@ -94,6 +100,27 @@ export function ConnectionsBoard({
     )
   }
 
+  /**
+   * Autorisation chez le fournisseur : le serveur prépare l'adresse, le navigateur y va.
+   * Rien n'est saisi ici — c'est chez le fournisseur que la personne s'identifie.
+   */
+  async function authorize(providerId: string) {
+    setBusy(providerId)
+    setError(null)
+    const response = await fetch(`/api/connexions/${providerId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ locale }),
+    })
+    const body = (await response.json().catch(() => ({}))) as { message?: string; url?: string }
+    if (!response.ok || body.url === undefined) {
+      setBusy(null)
+      setError(body.message ?? "L'autorisation n'a pas pu commencer.")
+      return
+    }
+    window.location.assign(body.url)
+  }
+
   async function unlink(connectionId: string) {
     setBusy(connectionId)
     setError(null)
@@ -116,6 +143,7 @@ export function ConnectionsBoard({
   return (
     <div className="grid gap-8">
       {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+      {notice !== null ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
 
       <Notice tone="neutral" title="Vos comptes restent les vôtres">
         Evoliia ne demande jamais vos mots de passe et ne recopie pas vos fichiers. Vous
@@ -185,6 +213,19 @@ export function ConnectionsBoard({
                             {busy === row.connection.id ? 'Déconnexion…' : 'Déconnecter'}
                           </Button>
                         </div>
+                      ) : row.status === 'available' && row.credential === 'OAUTH' ? (
+                        <div className="grid gap-2">
+                          {row.connection?.status === 'ERROR' && row.connection.lastError !== null ? (
+                            <p className="m-0 text-xs text-[var(--color-caution)]">{row.connection.lastError}</p>
+                          ) : null}
+                          <Button disabled={busy === row.id} onClick={() => void authorize(row.id)}>
+                            {busy === row.id
+                              ? 'Redirection…'
+                              : row.connection?.status === 'ERROR'
+                                ? 'Reprendre la connexion'
+                                : `Connecter ${row.name}`}
+                          </Button>
+                        </div>
                       ) : row.status === 'available' && row.keyHelp !== null ? (
                         opened === row.id ? (
                           <form
@@ -238,9 +279,11 @@ export function ConnectionsBoard({
                         <ComingSoon
                           what={`Connexion à ${row.name}`}
                           when={
-                            row.credential === 'OAUTH'
-                              ? 'la déclaration de l’application chez le fournisseur reste à faire'
-                              : 'ce service sera ouvert après validation'
+                            row.id === 'stripe'
+                              ? 'le paiement en ligne n’est pas activé sur cette installation'
+                              : row.credential === 'OAUTH'
+                                ? 'la déclaration de l’application chez le fournisseur reste à faire'
+                                : 'ce service sera ouvert après validation'
                           }
                         />
                       )}

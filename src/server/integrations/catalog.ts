@@ -144,21 +144,21 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     summary: 'Encaisser les paiements de vos propres clients.',
     usage:
       'Votre application encaisse sur VOTRE compte Stripe. L’argent ne transite jamais par Evoliia.',
-    status: 'planned',
+    status: 'available',
     credential: 'OAUTH',
     connectionTarget: 'APP',
     scopes: ['read_write'],
     costToEvoliia: 'aucun',
     costToCreator: 'selon-usage',
     costNotice:
-      'Stripe prélève sa commission sur chaque paiement, sur votre compte. Evoliia ne prend rien au passage.',
+      'Stripe prélève sa commission sur chaque paiement, sur votre compte. Evoliia ne prend aucune commission par défaut ; si cela changeait, vous en seriez informé avant.',
     freeQuota: 'Aucun abonnement. Stripe se rémunère à la transaction, chez le créateur.',
     webhooks: true,
     providerReview:
-      "Compte de plateforme Stripe Connect à créer. En mode « Stripe fixe les prix », les frais sont facturés au compte connecté et la plateforme ne supporte ni frais de compte ni frais de versement.",
+      "Compte de plateforme Stripe Connect, comptes connectés de type standard : le créateur reste titulaire de son compte Stripe, avec son propre tableau de bord. Les frais Stripe sont facturés au compte connecté ; Evoliia ne supporte ni frais de compte ni frais de versement.",
     risk:
       "Le vrai risque est juridique, pas technique : encaisser pour le compte d'autrui ferait d'Evoliia un intermédiaire financier. Le mode standard, où le créateur reste titulaire, l'évite.",
-    reviewedOn: '2026-09-12',
+    reviewedOn: '2026-09-13',
   },
   {
     id: 'anthropic',

@@ -319,10 +319,6 @@ export function MonetizationPanel({ spec, send }: { spec: AppSpec; send: PatchSe
       ))}
 
       <ComingSoon
-        what="Encaisser réellement les paiements (Stripe)"
-        when="prévu en phase 2, l'architecture de paiement est déjà en place"
-      />
-      <ComingSoon
         what="Achats intégrés iPhone et Android"
         when="prévu en phase 3 — Stripe ne peut pas être utilisé librement dans une application mobile"
       />

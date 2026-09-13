@@ -7,6 +7,7 @@ import { getEffectivePlan } from '@/server/billing/plans'
 import { findProvider, INTEGRATION_PROVIDERS, type IntegrationProvider } from './catalog'
 import { findVerifier } from './verify'
 import { isEnabled } from '@/server/settings/flags'
+import { isStripeAvailable } from '@/server/billing/stripe/client'
 
 /**
  * Fournisseurs suspendus à un interrupteur d'exploitation.
@@ -17,8 +18,10 @@ import { isEnabled } from '@/server/settings/flags'
  */
 const GATED: Record<string, 'socialPublishing'> = { postelya: 'socialPublishing' }
 
-async function isProviderOpen(provider: IntegrationProvider): Promise<boolean> {
+export async function isProviderOpen(provider: IntegrationProvider): Promise<boolean> {
   if (provider.status !== 'available') return false
+  // Stripe Connect n'existe que si Evoliia a son propre compte de plateforme configuré.
+  if (provider.id === 'stripe' && !isStripeAvailable()) return false
   const flag = GATED[provider.id]
   return flag === undefined ? true : isEnabled(flag)
 }
@@ -177,16 +180,7 @@ export async function connectWithApiKey(
     )
   }
 
-  const plan = await getEffectivePlan(userId)
-  const existing = await countConnections(userId)
-  if (existing >= plan.maxConnections) {
-    throw new AppError(
-      'PLAN_LIMIT',
-      plan.maxConnections === 0
-        ? "Votre offre actuelle ne permet pas de connecter de service extérieur."
-        : `Votre offre permet ${plan.maxConnections} connexion(s). Déconnectez-en une ou changez d'offre.`,
-    )
-  }
+  await assertConnectionSlot(userId, provider.id)
 
   /*
    * La clé est vérifiée auprès du fournisseur AVANT d'être écrite. Une clé fautive
@@ -207,21 +201,66 @@ export async function connectWithApiKey(
     ? verdict.secret
     : input.apiKey
 
-  /*
-   * Reconnecter le même service remplace l'ancienne connexion plutôt que d'en empiler une
-   * seconde. La recherche est faite à la main : une clé unique portant une colonne
-   * nullable ne se prête pas à un upsert.
-   */
+  return storeConnection(userId, provider, {
+    kind: 'API_KEY',
+    secret,
+    accountLabel,
+  })
+}
+
+/**
+ * Une place de plus dans l'offre ?
+ *
+ * Reconnecter un service déjà connecté ne compte pas pour une connexion de plus : on
+ * remplace, on n'empile pas.
+ */
+export async function assertConnectionSlot(userId: string, providerId: string): Promise<void> {
+  const plan = await getEffectivePlan(userId)
+  const { total, same } = await withUserScope(userId, async (tx) => ({
+    total: await tx.integrationConnection.count({ where: { userId, disconnectedAt: null } }),
+    same: await tx.integrationConnection.count({
+      where: { userId, providerId, disconnectedAt: null },
+    }),
+  }))
+  if (same === 0 && total >= plan.maxConnections) {
+    throw new AppError(
+      'PLAN_LIMIT',
+      plan.maxConnections === 0
+        ? "Votre offre actuelle ne permet pas de connecter de service extérieur."
+        : `Votre offre permet ${plan.maxConnections} connexion(s). Déconnectez-en une ou changez d'offre.`,
+    )
+  }
+}
+
+/**
+ * Enregistre (ou remplace) la connexion d'un fournisseur, avec son secret chiffré.
+ *
+ * Reconnecter le même service remplace l'ancienne connexion plutôt que d'en empiler une
+ * seconde. La recherche est faite à la main : une clé unique portant une colonne
+ * nullable ne se prête pas à un upsert. C'est le seul chemin d'écriture d'un secret,
+ * quel que soit le fournisseur ou son mode d'autorisation.
+ */
+export async function storeConnection(
+  userId: string,
+  provider: IntegrationProvider,
+  params: {
+    kind: 'API_KEY' | 'OAUTH'
+    secret: string
+    accountLabel: string | null
+    /** `ERROR` pour une autorisation commencée mais pas terminée, avec la raison. */
+    status?: 'CONNECTED' | 'ERROR'
+    lastError?: string | null
+    expiresAt?: Date | null
+  },
+): Promise<ConnectionView> {
   const target = provider.connectionTarget
+  const status = params.status ?? 'CONNECTED'
+  const lastError = status === 'CONNECTED' ? null : (params.lastError ?? null)
+  const expiresAt = params.expiresAt ?? null
 
   const created = await withUserScope(userId, async (tx) => {
     const previous = await tx.integrationConnection.findFirst({
-      where: {
-        userId,
-        providerId: provider.id,
-        target,
-        projectId: null,
-      },
+      where: { userId, providerId: provider.id, target, projectId: null },
       select: { id: true },
     })
 
@@ -233,19 +272,22 @@ export async function connectWithApiKey(
               providerId: provider.id,
               target,
               projectId: null,
-              status: 'CONNECTED',
+              status,
               scopes: [...provider.scopes],
-              accountLabel,
+              accountLabel: params.accountLabel,
+              lastError,
+              expiresAt,
             },
             select: { id: true, connectedAt: true },
           })
         : await tx.integrationConnection.update({
             where: { id: previous.id },
             data: {
-              status: 'CONNECTED',
+              status,
               scopes: [...provider.scopes],
-              accountLabel,
-              lastError: null,
+              accountLabel: params.accountLabel,
+              lastError,
+              expiresAt,
               disconnectedAt: null,
               connectedAt: new Date(),
             },
@@ -255,38 +297,58 @@ export async function connectWithApiKey(
     await tx.integrationCredential.upsert({
       where: { connectionId: connection.id },
       update: {
-        kind: 'API_KEY',
-        secret: encryptSecret(secret),
+        kind: params.kind,
+        secret: encryptSecret(params.secret),
         refreshSecret: null,
-        hint: secretHint(secret),
+        hint: secretHint(params.secret),
       },
       create: {
         connectionId: connection.id,
-        kind: 'API_KEY',
-        secret: encryptSecret(secret),
-        hint: secretHint(secret),
+        kind: params.kind,
+        secret: encryptSecret(params.secret),
+        hint: secretHint(params.secret),
       },
     })
 
     return connection
   })
 
-  await record(userId, provider.id, 'connected', undefined, created.id)
+  await record(userId, provider.id, status === 'CONNECTED' ? 'connected' : 'pending', undefined, created.id)
 
   return {
     id: created.id,
     providerId: provider.id,
     target,
     projectId: null,
-    status: 'CONNECTED',
+    status,
     scopes: [...provider.scopes],
-    accountLabel,
+    accountLabel: params.accountLabel,
     connectedAt: created.connectedAt.toISOString(),
     lastUsedAt: null,
-    expiresAt: null,
-    lastError: null,
-    hint: secretHint(secret),
+    expiresAt: expiresAt?.toISOString() ?? null,
+    lastError,
+    hint: secretHint(params.secret),
   }
+}
+
+/** Une connexion active existe-t-elle ? Ne touche pas aux secrets. */
+export async function hasConnection(
+  userId: string,
+  providerId: string,
+  options: { target?: 'EVOLIIA' | 'APP' } = {},
+): Promise<boolean> {
+  const count = await withUserScope(userId, (tx) =>
+    tx.integrationConnection.count({
+      where: {
+        userId,
+        providerId,
+        status: 'CONNECTED',
+        disconnectedAt: null,
+        ...(options.target === undefined ? {} : { target: options.target }),
+      },
+    }),
+  )
+  return count > 0
 }
 
 /**
@@ -330,14 +392,19 @@ export async function disconnect(userId: string, connectionId: string): Promise<
 export async function useCredential(
   userId: string,
   providerId: string,
-  options: { target?: 'EVOLIIA' | 'APP'; projectId?: string | null } = {},
+  options: {
+    target?: 'EVOLIIA' | 'APP'
+    projectId?: string | null
+    /** Lire aussi une autorisation commencée mais pas terminée (reprise d'inscription). */
+    includePending?: boolean
+  } = {},
 ): Promise<{ connectionId: string; secret: string } | null> {
   const found = await withUserScope(userId, async (tx) => {
     const connection = await tx.integrationConnection.findFirst({
       where: {
         userId,
         providerId,
-        status: 'CONNECTED',
+        status: options.includePending === true ? { in: ['CONNECTED', 'ERROR'] } : 'CONNECTED',
         disconnectedAt: null,
         ...(options.target === undefined ? {} : { target: options.target }),
         ...(options.projectId === undefined ? {} : { projectId: options.projectId }),

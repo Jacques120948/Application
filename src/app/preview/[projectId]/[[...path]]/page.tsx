@@ -3,6 +3,7 @@ import { AppError } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
 import { resolveRuntimeSpec } from '@/server/runtime/context'
 import { getEndUser } from '@/server/runtime/end-users'
+import { paymentContext } from '@/server/runtime/payments'
 import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
 import { LiaWidget } from '@/components/runtime/LiaWidget'
@@ -39,7 +40,11 @@ export default async function PreviewPage({
     runtime.spec.pages.find((candidate) => candidate.path === HOME_PATH)
   if (page === undefined) notFound()
 
-  const [endUser, lia] = await Promise.all([getEndUser(runtime.projectId), readPublicSupportSettings(runtime.projectId)])
+  const [endUser, lia, payments] = await Promise.all([
+    getEndUser(runtime.projectId),
+    readPublicSupportSettings(runtime.projectId),
+    paymentContext(runtime, null),
+  ])
 
   return (
     <>
@@ -51,6 +56,7 @@ export default async function PreviewPage({
         basePath: `/preview/${runtime.projectId}`,
         endUserEmail: endUser?.email ?? null,
         preview: true,
+        payments: { enabled: payments.enabled, purchase: null, returned: null },
       }}
     />
     {lia !== null ? (

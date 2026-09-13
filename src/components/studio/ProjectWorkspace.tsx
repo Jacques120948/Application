@@ -8,6 +8,7 @@ import type { PatchOperation } from '@/server/spec/patch'
 import { Badge, Button, Card, CardBody, ComingSoon, Notice } from '@/components/ui'
 import { ChatPanel } from './ChatPanel'
 import { ChecksPanel, DesignPanel, FeaturesPanel, MonetizationPanel } from './panels'
+import { SalesPanel } from './SalesPanel'
 import { MediaPanel } from './MediaPanel'
 import { ProgressSteps } from './ProgressSteps'
 import { SupportPanel } from './SupportPanel'
@@ -353,6 +354,9 @@ export function ProjectWorkspace({
             {tab === 'monetization' ? (
               <div className="p-4">
                 <MonetizationPanel spec={spec} send={sendPatch} />
+                <div className="mt-5">
+                  <SalesPanel projectId={projectId} locale={locale} />
+                </div>
               </div>
             ) : null}
 

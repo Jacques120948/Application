@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { AppError } from '@/lib/errors'
 import { getPublishedApp, recordVisit } from '@/server/runtime/published'
 import { getEndUser } from '@/server/runtime/end-users'
+import { paymentContext } from '@/server/runtime/payments'
 import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
 import { LiaWidget } from '@/components/runtime/LiaWidget'
@@ -67,10 +68,13 @@ export async function generateViewport({
 
 export default async function PublishedAppPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string; path?: string[] }>
+  searchParams: Promise<{ paiement?: string }>
 }) {
   const { slug, path } = await params
+  const { paiement } = await searchParams
 
   let app
   try {
@@ -86,6 +90,7 @@ export default async function PublishedAppPage({
 
   await recordVisit(app.projectId, wanted)
   const [endUser, lia] = await Promise.all([getEndUser(app.projectId), readPublicSupportSettings(app.projectId)])
+  const payments = await paymentContext({ projectId: app.projectId, ownerId: app.ownerId }, endUser?.id ?? null)
 
   return (
     <>
@@ -97,6 +102,11 @@ export default async function PublishedAppPage({
         basePath: `/a/${app.slug}`,
         endUserEmail: endUser?.email ?? null,
         preview: false,
+        payments: {
+          enabled: payments.enabled,
+          purchase: payments.purchase,
+          returned: paiement === 'succes' ? 'succes' : paiement === 'annule' ? 'annule' : null,
+        },
       }}
     />
     {lia !== null ? (

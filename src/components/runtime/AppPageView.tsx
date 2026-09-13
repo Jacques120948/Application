@@ -16,6 +16,14 @@ import { InstallPrompt } from './InstallPrompt'
  * React, donc échappé. Les liens sont déjà restreints par le schéma à https et mailto.
  */
 
+export type RuntimePayments = {
+  /** Le créateur a relié son compte Stripe : les offres payantes se choisissent vraiment. */
+  enabled: boolean
+  purchase: { planId: string; planName: string; status: string } | null
+  /** Retour d'une page de paiement Stripe (`?paiement=`). */
+  returned: 'succes' | 'annule' | null
+}
+
 export type RuntimeContext = {
   projectId: string
   /** Base des liens internes : `/a/<slug>` en production, `/preview/<id>` en aperçu. */
@@ -23,6 +31,7 @@ export type RuntimeContext = {
   endUserEmail: string | null
   /** En aperçu, on signale que l'on regarde le brouillon et non la version en ligne. */
   preview: boolean
+  payments?: RuntimePayments
 }
 
 export function AppPageView({
@@ -497,63 +506,7 @@ function BlockView({
       return (
         <Band position={position} wide>
           {block.title !== undefined ? <Heading>{block.title}</Heading> : null}
-          {spec.monetization.plans.length === 0 ? (
-            <p className="text-lg opacity-70">Cette application est gratuite.</p>
-          ) : (
-            <div className={`grid gap-5 ${columnsFor(spec.monetization.plans.length)}`}>
-              {spec.monetization.plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`${CARD} flex flex-col`}
-                  style={{
-                    ...cardStyle,
-                    // L'offre mise en avant est plus haute et plus marquée. Trois cartes
-                    // identiques ne guident personne vers un choix.
-                    ...(plan.highlighted
-                      ? {
-                          borderColor: 'var(--app-primary)',
-                          borderWidth: '2px',
-                          boxShadow: 'var(--app-shadow-lg)',
-                        }
-                      : {}),
-                  }}
-                >
-                  <h3 className="m-0 text-lg" style={{ fontWeight: 'var(--app-heading-weight)' }}>
-                    {plan.name}
-                  </h3>
-                  <p
-                    className="m-0 mt-3 text-3xl tracking-tight"
-                    style={{ fontWeight: 'var(--app-heading-weight)' }}
-                  >
-                    {formatPrice(plan.priceCents, spec.monetization.currency)}
-                    <span className="text-base font-normal opacity-60">
-                      {plan.interval === 'month'
-                        ? ' / mois'
-                        : plan.interval === 'year'
-                          ? ' / an'
-                          : ''}
-                    </span>
-                  </p>
-                  <ul className="mt-5 grid list-none gap-2 p-0 text-sm opacity-80">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex gap-2">
-                        <span aria-hidden="true" style={{ color: 'var(--app-primary)' }}>
-                          ✓
-                        </span>
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-          {block.note !== undefined ? (
-            <p className="mt-6 text-sm opacity-70">{block.note}</p>
-          ) : null}
-          <p className="mt-2 text-xs opacity-55">
-            Le paiement en ligne n&apos;est pas encore activé sur cette application.
-          </p>
+          <PricingCards spec={spec} context={context} note={block.note} />
         </Band>
       )
 
@@ -645,6 +598,154 @@ function BlockView({
         </Band>
       )
   }
+}
+
+/**
+ * Les offres d'une application, et le bouton qui mène au paiement.
+ *
+ * Le paiement n'a lieu que si le créateur a relié son compte Stripe : sinon la grille
+ * reste informative et le dit. Le visiteur doit avoir un compte dans l'application pour
+ * acheter — un achat sans personne à qui le rattacher ne servirait à rien.
+ */
+function PricingCards({
+  spec,
+  context,
+  note,
+}: {
+  spec: AppSpec
+  context: RuntimeContext
+  note: string | undefined
+}) {
+  const payments = context.payments
+  const enabled = payments?.enabled === true
+  const [busy, setBusy] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(
+    payments?.returned === 'succes'
+      ? 'Merci ! Votre paiement a bien été reçu.'
+      : payments?.returned === 'annule'
+        ? 'Paiement abandonné. Rien n’a été débité.'
+        : null,
+  )
+  const authPage = spec.pages.find((page) => page.blocks.some((block) => block.type === 'auth'))
+
+  async function choose(planId: string) {
+    if (context.endUserEmail === null) {
+      setMessage('Créez un compte ou connectez-vous pour choisir cette offre.')
+      return
+    }
+    setBusy(planId)
+    setMessage(null)
+    const response = await fetch(`/api/app/${context.projectId}/paiement`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ planId }),
+    })
+    const body = (await response.json().catch(() => ({}))) as { message?: string; url?: string }
+    if (!response.ok || body.url === undefined) {
+      setBusy(null)
+      setMessage(body.message ?? 'Le paiement n’a pas pu commencer.')
+      return
+    }
+    window.location.assign(body.url)
+  }
+
+  return (
+    <>
+      {message !== null ? (
+        <p
+          className="mb-6 rounded-[var(--app-radius)] border px-4 py-3 text-sm"
+          style={{ borderColor: 'var(--app-primary)', background: 'var(--app-surface)' }}
+        >
+          {message}
+          {context.endUserEmail === null && authPage !== undefined ? (
+            <>
+              {' '}
+              <a href={`${context.basePath}/${authPage.path}`} style={{ color: 'var(--app-primary)' }}>
+                Se connecter
+              </a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
+      {spec.monetization.plans.length === 0 ? (
+        <p className="text-lg opacity-70">Cette application est gratuite.</p>
+      ) : (
+        <div className={`grid gap-5 ${columnsFor(spec.monetization.plans.length)}`}>
+          {spec.monetization.plans.map((plan) => {
+            const mine = payments?.purchase?.planId === plan.id
+            return (
+              <div
+                key={plan.id}
+                className={`${CARD} flex flex-col`}
+                style={{
+                  ...cardStyle,
+                  // L'offre mise en avant est plus haute et plus marquée. Trois cartes
+                  // identiques ne guident personne vers un choix.
+                  ...(plan.highlighted || mine
+                    ? {
+                        borderColor: 'var(--app-primary)',
+                        borderWidth: '2px',
+                        boxShadow: 'var(--app-shadow-lg)',
+                      }
+                    : {}),
+                }}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="m-0 text-lg" style={{ fontWeight: 'var(--app-heading-weight)' }}>
+                    {plan.name}
+                  </h3>
+                  {mine ? (
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                      style={{ background: 'var(--app-gradient)' }}
+                    >
+                      Votre offre
+                    </span>
+                  ) : null}
+                </div>
+                <p
+                  className="m-0 mt-3 text-3xl tracking-tight"
+                  style={{ fontWeight: 'var(--app-heading-weight)' }}
+                >
+                  {formatPrice(plan.priceCents, spec.monetization.currency)}
+                  <span className="text-base font-normal opacity-60">
+                    {plan.interval === 'month' ? ' / mois' : plan.interval === 'year' ? ' / an' : ''}
+                  </span>
+                </p>
+                <ul className="mt-5 grid list-none gap-2 p-0 text-sm opacity-80">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex gap-2">
+                      <span aria-hidden="true" style={{ color: 'var(--app-primary)' }}>
+                        ✓
+                      </span>
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                {enabled && plan.priceCents > 0 && !mine ? (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void choose(plan.id)}
+                    className="mt-6 w-full cursor-pointer rounded-full border-0 px-5 py-3 text-sm font-semibold text-white transition-transform duration-200 hover:-translate-y-0.5 disabled:opacity-60"
+                    style={{ background: 'var(--app-gradient)', boxShadow: 'var(--app-shadow)' }}
+                  >
+                    {busy === plan.id ? 'Redirection…' : 'Choisir cette offre'}
+                  </button>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {note !== undefined ? <p className="mt-6 text-sm opacity-70">{note}</p> : null}
+      <p className="mt-2 text-xs opacity-55">
+        {enabled
+          ? `Paiement sécurisé par Stripe, directement auprès de ${spec.name}.`
+          : "Le paiement en ligne n'est pas encore activé sur cette application."}
+      </p>
+    </>
+  )
 }
 
 function formatPrice(cents: number, currency: string): string {

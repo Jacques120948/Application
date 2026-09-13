@@ -14,12 +14,24 @@ import { ConnectionsBoard, type ProviderCard } from '@/components/studio/Connect
  * La page ne lit que la table des connexions : les secrets ne sont jamais chargés pour être
  * affichés, et ne quittent donc jamais le serveur.
  */
+const STRIPE_NOTICES: Record<string, { tone: 'positive' | 'caution' | 'critical'; text: string }> = {
+  connecte: { tone: 'positive', text: 'Votre compte Stripe est relié. Vos applications peuvent encaisser.' },
+  incomplet: {
+    tone: 'caution',
+    text: "L'inscription Stripe n'est pas terminée. Reprenez-la quand vous voulez depuis la carte Stripe.",
+  },
+  erreur: { tone: 'critical', text: "Le retour de Stripe n'a pas pu être vérifié. Réessayez." },
+}
+
 export default async function ConnectionsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>
+  searchParams: Promise<{ stripe?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
+  const { stripe } = await searchParams
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
 
@@ -49,6 +61,7 @@ export default async function ConnectionsPage({
             accountLabel: connection.accountLabel,
             connectedAt: connection.connectedAt,
             hint: connection.hint,
+            lastError: connection.lastError,
           },
   }))
 
@@ -72,6 +85,8 @@ export default async function ConnectionsPage({
           cards={cards}
           categories={categories}
           maxConnections={plan.maxConnections}
+          locale={locale}
+          notice={stripe === undefined ? null : (STRIPE_NOTICES[stripe] ?? null)}
         />
       </div>
     </Shell>
