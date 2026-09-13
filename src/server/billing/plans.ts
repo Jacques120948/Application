@@ -103,7 +103,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
   {
     id: 'builder',
     name: 'Builder',
-    description: 'Plusieurs projets, accompagnement au lancement et adresse personnalisée.',
+    description: 'Plusieurs projets, accompagnement au lancement et export de votre site.',
     priceCents: 5900,
     maxProjects: 5,
     maxConnections: 3,
@@ -115,7 +115,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: true,
-    allowCustomDomain: true,
+    allowCustomDomain: false,
     allowMobilePrep: false,
     isRecommended: true,
     sortOrder: 2,
@@ -135,7 +135,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: true,
-    allowCustomDomain: true,
+    allowCustomDomain: false,
     allowMobilePrep: true,
     isRecommended: false,
     sortOrder: 3,
@@ -164,12 +164,16 @@ export type PlanCapability =
  */
 export const IMPLEMENTED_PLAN_CAPABILITIES: readonly PlanCapability[] = [
   'allowBuild',
-  'allowCustomDomain',
   'allowExport',
   'allowMobilePrep',
 ]
 
-export const PLANNED_PLAN_CAPABILITIES: readonly PlanCapability[] = []
+/**
+ * Le nom de domaine personnalisé n'existe pas encore : l'atelier l'annonce comme « prévu »,
+ * aucune route ne le sert. Tant qu'il est ici, le démarrage l'éteint sur toutes les offres
+ * et la grille tarifaire ne l'affiche pas.
+ */
+export const PLANNED_PLAN_CAPABILITIES: readonly PlanCapability[] = ['allowCustomDomain']
 
 /** Renvoie le plan effectif d'un utilisateur, en retombant sur l'offre gratuite. */
 export async function getEffectivePlan(userId: string) {

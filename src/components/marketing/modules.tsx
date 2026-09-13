@@ -33,6 +33,9 @@ export type IconName =
   | 'chat'
   | 'megaphone'
   | 'team'
+  | 'blocks'
+  | 'lock'
+  | 'globe'
 
 const PATHS: Record<IconName, ReactNode> = {
   target: (
@@ -137,6 +140,27 @@ const PATHS: Record<IconName, ReactNode> = {
   megaphone: (
     <>
       <path d="M4 10v4h3l7 4V6l-7 4zM17 9a4 4 0 0 1 0 6M7 14v5h3" />
+    </>
+  ),
+  blocks: (
+    <>
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+      <path d="M17 13v8M13 17h8" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="5" y="10" width="14" height="11" rx="2" />
+      <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+      <circle cx="12" cy="15.5" r="1.2" fill="currentColor" stroke="none" />
+    </>
+  ),
+  globe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
     </>
   ),
   team: (

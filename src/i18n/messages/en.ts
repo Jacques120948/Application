@@ -536,7 +536,7 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.tileExportTitle': 'Export and mobile',
   'landing.tileExportBody': 'Download your complete site, and a folder ready for the app stores.',
   'landing.tileConnectTitle': 'Connections',
-  'landing.tileConnectBody': 'Link your own services and your own AI key. Your secrets stay encrypted server-side.',
+  'landing.tileConnectBody': 'Your own AI key for your apps’ assistant, your Postelya space to publish. Google Drive, Sheets, Calendar, Stripe, Notion and Dropbox are announced, not yet connected.',
   'landing.tileCoachTitle': 'Built-in coach',
   'landing.tileCoachBody': 'On every screen, a coach who knows where you are and tells you what to do next.',
   'landing.tileDashboardTitle': 'Dashboard',
@@ -549,6 +549,12 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.tileKitBody': 'Angles, seven posts and a first week, prepared from your project.',
   'landing.tileTeamTitle': 'Marketing team',
   'landing.tileTeamBody': 'Three specialists who read your real data: social networks, search ranking, analysis.',
+  'landing.tileBlocksTitle': 'Ready-made blocks',
+  'landing.tileBlocksBody': 'Hero, text, features, FAQ, figures, call to action, pricing, form, data list, account, assistant: eleven blocks the AI assembles and you adjust.',
+  'landing.tileSecurityTitle': 'Security and data',
+  'landing.tileSecurityBody': 'Every account and every app is isolated down to the database. Your secrets are encrypted server-side. You can delete everything.',
+  'landing.tileLanguagesTitle': 'French and English',
+  'landing.tileLanguagesBody': 'The interface exists in both languages, and your app is created in the one you use.',
 
   'landing.pricingTitle': 'What it costs',
   'landing.pricingBody':

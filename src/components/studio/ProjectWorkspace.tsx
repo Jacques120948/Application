@@ -385,11 +385,7 @@ export function ProjectWorkspace({
                 </p>
                 <ComingSoon
                   what="Connecter votre propre nom de domaine"
-                  when="prévu en phase 2"
-                />
-                <ComingSoon
-                  what="Préparation App Store et Google Play"
-                  when="prévu en phase 3 — être prêt pour la soumission ne signifie pas être approuvé par Apple ou Google"
+                  when="prévu en phase 2 — en attendant, votre application vit à son adresse evoliia.com/a/…"
                 />
               </div>
             ) : null}

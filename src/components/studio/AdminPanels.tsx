@@ -21,7 +21,6 @@ export type AdminPlan = {
   maxConnections: number
   monthlyCredits: number
   allowBuild: boolean
-  allowCustomDomain: boolean
   isRecommended: boolean
   isActive: boolean
   sortOrder: number
@@ -96,7 +95,6 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         liaAnswersPerMonth: Number(form.get('liaAnswersPerMonth')),
         liaConversationsPerMonth: Number(form.get('liaConversationsPerMonth')),
         allowBuild: form.get('allowBuild') === 'on',
-        allowCustomDomain: form.get('allowCustomDomain') === 'on',
         isRecommended: form.get('isRecommended') === 'on',
         isActive: form.get('isActive') === 'on',
         sortOrder: Number(form.get('sortOrder')),
@@ -236,11 +234,6 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
 
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <Toggle name="allowBuild" label="Peut construire une application" checked={plan.allowBuild} />
-            <Toggle
-              name="allowCustomDomain"
-              label="Adresse personnalisée"
-              checked={plan.allowCustomDomain}
-            />
             <Toggle name="isRecommended" label="Mise en avant sur la page d’accueil" checked={plan.isRecommended} />
             <Toggle name="isActive" label="Visible publiquement" checked={plan.isActive} />
           </div>

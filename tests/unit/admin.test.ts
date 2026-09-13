@@ -19,7 +19,6 @@ describe('validation du back-office', () => {
     liaAnswersPerMonth: 500,
     liaConversationsPerMonth: 100,
     allowBuild: true,
-    allowCustomDomain: true,
     isRecommended: true,
     isActive: true,
     sortOrder: 2,

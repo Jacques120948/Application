@@ -561,7 +561,7 @@ export const fr = {
   'landing.tileExportTitle': 'Export et mobile',
   'landing.tileExportBody': 'Téléchargez votre site complet, et un dossier prêt pour les boutiques d’applications.',
   'landing.tileConnectTitle': 'Connexions',
-  'landing.tileConnectBody': 'Reliez vos propres services et votre propre clé d’IA. Vos secrets restent chiffrés côté serveur.',
+  'landing.tileConnectBody': 'Votre propre clé d’IA pour l’assistant de vos applications, votre espace Postelya pour publier. Google Drive, Sheets, Agenda, Stripe, Notion et Dropbox sont annoncés, pas encore branchés.',
   'landing.tileCoachTitle': 'Coach intégré',
   'landing.tileCoachBody': 'À chaque écran, un coach qui sait où vous en êtes et vous dit quoi faire ensuite.',
   'landing.tileDashboardTitle': 'Tableau de bord',
@@ -574,6 +574,12 @@ export const fr = {
   'landing.tileKitBody': 'Angles, sept publications et première semaine, préparés à partir de votre projet.',
   'landing.tileTeamTitle': 'Équipe marketing',
   'landing.tileTeamBody': 'Trois spécialistes qui lisent vos données réelles : réseaux sociaux, référencement, analyse.',
+  'landing.tileBlocksTitle': 'Blocs prêts à l’emploi',
+  'landing.tileBlocksBody': 'Accueil, texte, fonctionnalités, FAQ, chiffres, appel à l’action, tarifs, formulaire, liste de données, compte, assistant : onze blocs que l’IA assemble et que vous réglez.',
+  'landing.tileSecurityTitle': 'Sécurité et données',
+  'landing.tileSecurityBody': 'Chaque compte et chaque application sont cloisonnés jusque dans la base. Vos secrets sont chiffrés côté serveur. Vous pouvez tout supprimer.',
+  'landing.tileLanguagesTitle': 'Français et anglais',
+  'landing.tileLanguagesBody': 'L’interface existe dans les deux langues, et votre application est créée dans celle que vous utilisez.',
 
   // ── Tarifs ───────────────────────────────────────────────────────────────
   'landing.pricingTitle': 'Combien ça coûte',

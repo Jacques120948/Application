@@ -177,6 +177,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     { icon: 'radar', title: t('landing.tileRadarTitle'), body: t('landing.tileRadarBody'), included: includedIn((plan) => plan.features.includes('radar') && plan.radarRunsPerMonth > 0) },
     { icon: 'document', title: t('landing.tileSpecTitle'), body: t('landing.tileSpecBody'), included: everywhere },
     { icon: 'wand', title: t('landing.tileBuildTitle'), body: t('landing.tileBuildBody'), included: includedIn((plan) => plan.allowBuild) },
+    { icon: 'blocks', title: t('landing.tileBlocksTitle'), body: t('landing.tileBlocksBody'), included: includedIn((plan) => plan.allowBuild) },
     { icon: 'palette', title: t('landing.tileDesignTitle'), body: t('landing.tileDesignBody'), included: includedIn((plan) => plan.allowBuild) },
     { icon: 'users', title: t('landing.tileUsersTitle'), body: t('landing.tileUsersBody'), included: includedIn((plan) => plan.allowBuild) },
     { icon: 'coins', title: t('landing.tileMoneyTitle'), body: t('landing.tileMoneyBody'), included: includedIn((plan) => plan.allowBuild) },
@@ -189,6 +190,8 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     { icon: 'megaphone', title: t('landing.tileKitTitle'), body: t('landing.tileKitBody'), included: includedIn((plan) => plan.features.includes(LAUNCH_KIT_FEATURE)) },
     { icon: 'team', title: t('landing.tileTeamTitle'), body: t('landing.tileTeamBody'), included: includedIn((plan) => plan.features.includes('marketing_team')) },
     { icon: 'chat', title: t('landing.tileLiaTitle'), body: t('landing.tileLiaBody'), included: includedIn((plan) => plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0) },
+    { icon: 'lock', title: t('landing.tileSecurityTitle'), body: t('landing.tileSecurityBody'), included: everywhere },
+    { icon: 'globe', title: t('landing.tileLanguagesTitle'), body: t('landing.tileLanguagesBody'), included: everywhere },
   ]
 
   const flow = [

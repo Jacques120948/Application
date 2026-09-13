@@ -53,7 +53,6 @@ export const planUpdateInput = z.object({
   liaAnswersPerMonth: z.number().int().min(0).max(100_000),
   liaConversationsPerMonth: z.number().int().min(0).max(100_000),
   allowBuild: z.boolean(),
-  allowCustomDomain: z.boolean(),
   isRecommended: z.boolean(),
   isActive: z.boolean(),
   sortOrder: z.number().int().min(0).max(100),
