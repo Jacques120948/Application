@@ -5,6 +5,8 @@ import { getPublishedApp, recordVisit } from '@/server/runtime/published'
 import { getEndUser } from '@/server/runtime/end-users'
 import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
+import { LiaWidget } from '@/components/runtime/LiaWidget'
+import { readPublicSupportSettings } from '@/server/support/settings'
 
 /** Runtime public d'une application publiée. Sert la version figée, jamais le brouillon. */
 
@@ -83,9 +85,10 @@ export default async function PublishedAppPage({
   if (page === undefined) notFound()
 
   await recordVisit(app.projectId, wanted)
-  const endUser = await getEndUser(app.projectId)
+  const [endUser, lia] = await Promise.all([getEndUser(app.projectId), readPublicSupportSettings(app.projectId)])
 
   return (
+    <>
     <AppPageView
       spec={app.spec}
       page={page}
@@ -96,5 +99,18 @@ export default async function PublishedAppPage({
         preview: false,
       }}
     />
+    {lia !== null ? (
+      <LiaWidget
+        projectId={app.projectId}
+        locale={app.spec.locale}
+        displayName={lia.displayName}
+        greeting={lia.greeting}
+        position={lia.position}
+        accentColor={lia.accentColor}
+        hasAccount={endUser !== null}
+        theme={app.spec.theme}
+      />
+    ) : null}
+    </>
   )
 }

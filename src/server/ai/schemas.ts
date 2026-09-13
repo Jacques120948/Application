@@ -404,3 +404,72 @@ export type AppPlan = z.infer<typeof appPlanSchema>
 export const pageContentSchema = z.object({ blocks: z.array(blockSchema).min(1).max(10) }).strict()
 
 export type PageContent = z.infer<typeof pageContentSchema>
+
+// ═══════════════════════════ Lia — support client ═══════════════════════════
+
+/** Catégories d'une demande de support, partagées par Lia, les tickets et les analyses. */
+export const SUPPORT_CATEGORIES = ['usage', 'account', 'billing', 'bug', 'feature', 'other'] as const
+export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number]
+
+/**
+ * Réponse de Lia. Structurée, parce que le refus doit être une décision explicite du
+ * modèle et non une phrase à deviner : `canAnswer` à faux, et l'écran propose de
+ * transmettre la demande au créateur.
+ */
+export const liaAnswerSchema = z
+  .object({
+    /** Quatre phrases au maximum, sans formatage. */
+    answer: z.string().min(1).max(900),
+    /** Vrai seulement si la réponse repose sur la base de connaissances fournie. */
+    canAnswer: z.boolean(),
+    /** Numéros (à partir de 1) des entrées de la base utilisées. Vide si aucune. */
+    usedEntries: z.array(z.number().int().min(1).max(20)).max(6),
+    category: z.enum(SUPPORT_CATEGORIES),
+  })
+  .strict()
+
+export type LiaAnswer = z.infer<typeof liaAnswerSchema>
+
+/** Questions-réponses proposées à partir du contenu d'une application. Naissent en brouillon. */
+export const liaFaqSchema = z
+  .object({
+    entries: z
+      .array(
+        z
+          .object({
+            question: z.string().min(1).max(160),
+            answer: z.string().min(1).max(600),
+            keywords: z.array(z.string().min(1).max(30)).min(1).max(8),
+          })
+          .strict(),
+      )
+      .min(3)
+      .max(15),
+  })
+  .strict()
+
+export type LiaFaq = z.infer<typeof liaFaqSchema>
+
+export const INSIGHT_KINDS = ['frequent_question', 'feature_request', 'potential_bug', 'unanswered'] as const
+
+/** Ce qu'un lot de conversations révèle (V2). */
+export const liaInsightsSchema = z
+  .object({
+    insights: z
+      .array(
+        z
+          .object({
+            kind: z.enum(INSIGHT_KINDS),
+            title: z.string().min(1).max(140),
+            /** Nombre de conversations concernées, tel que le modèle l'a compté. */
+            count: z.number().int().min(1).max(500),
+            /** Reformulations courtes, jamais de citation littérale ni de donnée personnelle. */
+            examples: z.array(z.string().min(1).max(160)).max(3),
+          })
+          .strict(),
+      )
+      .max(12),
+  })
+  .strict()
+
+export type LiaInsights = z.infer<typeof liaInsightsSchema>

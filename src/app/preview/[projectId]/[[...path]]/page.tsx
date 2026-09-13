@@ -5,6 +5,8 @@ import { resolveRuntimeSpec } from '@/server/runtime/context'
 import { getEndUser } from '@/server/runtime/end-users'
 import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
+import { LiaWidget } from '@/components/runtime/LiaWidget'
+import { readPublicSupportSettings } from '@/server/support/settings'
 
 /**
  * Aperçu du brouillon, réservé au propriétaire.
@@ -37,9 +39,10 @@ export default async function PreviewPage({
     runtime.spec.pages.find((candidate) => candidate.path === HOME_PATH)
   if (page === undefined) notFound()
 
-  const endUser = await getEndUser(runtime.projectId)
+  const [endUser, lia] = await Promise.all([getEndUser(runtime.projectId), readPublicSupportSettings(runtime.projectId)])
 
   return (
+    <>
     <AppPageView
       spec={runtime.spec}
       page={page}
@@ -50,5 +53,18 @@ export default async function PreviewPage({
         preview: true,
       }}
     />
+    {lia !== null ? (
+      <LiaWidget
+        projectId={runtime.projectId}
+        locale={runtime.spec.locale}
+        displayName={lia.displayName}
+        greeting={lia.greeting}
+        position={lia.position}
+        accentColor={lia.accentColor}
+        hasAccount={endUser !== null}
+        theme={runtime.spec.theme}
+      />
+    ) : null}
+    </>
   )
 }

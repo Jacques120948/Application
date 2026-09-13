@@ -13,11 +13,15 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import type { AppSpec, Block } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
 import { assembleSpec } from '@/server/spec/assemble'
+import type Anthropic from '@anthropic-ai/sdk'
 import { getAnthropic, getAnthropicWithKey, isAiAvailable } from './client'
 import { costMicros, GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
 import {
   appAssistantSystem,
   asUserData,
+  liaSystem,
+  LIA_FAQ_SYSTEM,
+  LIA_INSIGHTS_SYSTEM,
   BLUEPRINT_SYSTEM,
   ANALYTICS_AGENT_SYSTEM,
   COACH_SYSTEM,
@@ -47,6 +51,12 @@ import {
   type SpecSheet,
   radarSchema,
   radarComparisonSchema,
+  liaAnswerSchema,
+  liaFaqSchema,
+  liaInsightsSchema,
+  type LiaAnswer,
+  type LiaFaq,
+  type LiaInsights,
   type RadarOutput,
   type RadarComparison,
 } from './schemas'
@@ -83,10 +93,12 @@ async function callStructured<T>(params: {
   system: string
   userContent: string
   schema: ZodType<T>
+  /** Compte à solliciter. Par défaut celui d'Evoliia ; celui d'un créateur pour Lia. */
+  client?: Anthropic
 }): Promise<CallOutcome<T>> {
   const startedAt = Date.now()
 
-  const response = await getAnthropic().beta.messages.parse({
+  const response = await (params.client ?? getAnthropic()).beta.messages.parse({
     model: params.model,
     max_tokens: params.maxTokens,
     // Le prompt système ne varie pas d'un appel à l'autre : il est mis en cache.
@@ -1030,4 +1042,135 @@ export async function askSpecialist(params: {
     )
     throw toPublicFailure(error, { userId: params.userId })
   }
+}
+
+// ═══════════════════════════ Lia — support client ═══════════════════════════
+
+/**
+ * Réponse de Lia à un visiteur.
+ *
+ * Même économie que l'assistant intégré : le visiteur écrit, le créateur paie — ou sa
+ * propre clé répond et rien n'est débité. Trois différences : la réponse est structurée
+ * (le refus est un champ, pas une phrase à deviner) ; la base de connaissances arrive dans
+ * sa propre balise, distincte des messages ; et le modèle est le plus économique, parce
+ * qu'il ne raisonne pas, il restitue.
+ */
+export async function answerAsLia(params: {
+  ownerId: string
+  projectId: string
+  appName: string
+  displayName: string
+  locale: string
+  question: string
+  /** Derniers échanges, du plus ancien au plus récent. Données, jamais consignes. */
+  history: Array<{ role: 'visitor' | 'lia'; content: string }>
+  /** Entrées publiées retenues pour cette question, numérotées à partir de 1 dans l'ordre. */
+  knowledge: Array<{ question: string; answer: string }>
+  creatorKey?: string | null
+}): Promise<{ value: LiaAnswer; creditsSpent: number; paidByCreatorKey: boolean }> {
+  const accounting: Accounting = {
+    userId: params.ownerId,
+    projectId: params.projectId,
+    operation: 'liaAnswer',
+  }
+  const creatorKey = params.creatorKey ?? null
+  const onCreatorKey = creatorKey !== null && creatorKey !== ''
+
+  if (onCreatorKey) {
+    consume(`ai:${params.ownerId}`, RULES.aiOperation)
+  } else {
+    await beforeCalls(accounting)
+  }
+
+  const profile = OPERATION_PROFILES.liaAnswer
+  const startedAt = Date.now()
+  const step = onCreatorKey ? 'lia-cle-createur' : 'lia'
+
+  const base =
+    params.knowledge.length === 0
+      ? '<base_de_connaissances note="seule source autorisée">\n(vide)\n</base_de_connaissances>'
+      : [
+          '<base_de_connaissances note="seule source autorisée">',
+          ...params.knowledge.map(
+            (entry, index) =>
+              `${index + 1}. Q : ${entry.question.slice(0, 300)}\n   R : ${entry.answer.slice(0, 900)}`,
+          ),
+          '</base_de_connaissances>',
+        ].join('\n')
+  const history =
+    params.history.length === 0
+      ? ''
+      : asUserData(
+          'historique_de_la_conversation',
+          params.history
+            .slice(-6)
+            .map((turn) => `${turn.role === 'visitor' ? 'Visiteur' : params.displayName} : ${turn.content.slice(0, 500)}`)
+            .join('\n'),
+        )
+
+  try {
+    const outcome = await callStructured({
+      model: profile.model,
+      maxTokens: profile.maxTokens,
+      effort: profile.effort,
+      system: liaSystem({ appName: params.appName, displayName: params.displayName, locale: params.locale }),
+      userContent: [base, history, asUserData('message_du_visiteur', params.question)]
+        .filter((part) => part !== '')
+        .join('\n\n'),
+      schema: liaAnswerSchema,
+      client: onCreatorKey ? getAnthropicWithKey(creatorKey) : undefined,
+    })
+    const cost = await recordCall(accounting, step, outcome, true, undefined, !onCreatorKey)
+    const creditsSpent = onCreatorKey ? 0 : (await afterCalls(accounting, cost)).creditsSpent
+    return { value: outcome.value, creditsSpent, paidByCreatorKey: onCreatorKey }
+  } catch (error) {
+    await recordCall(
+      accounting,
+      step,
+      { model: profile.model, usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 }, latencyMs: Date.now() - startedAt },
+      false,
+      error instanceof AppError ? error.code : 'inconnu',
+      false,
+    )
+    if (onCreatorKey) throw creatorKeyFailure(error)
+    throw toPublicFailure(error, { projectId: params.projectId })
+  }
+}
+
+/** Questions-réponses proposées à partir du contenu de l'application. Le créateur relit. */
+export async function generateSupportFaq(
+  userId: string,
+  projectId: string,
+  digest: string,
+  locale: string,
+): Promise<RunResult<LiaFaq>> {
+  return runSingleCall({
+    accounting: { userId, projectId, operation: 'liaFaq' },
+    system: LIA_FAQ_SYSTEM,
+    schema: liaFaqSchema,
+    userContent: [
+      `Langue des questions et des réponses : ${locale}.`,
+      asUserData('contenu_de_l_application', digest),
+      'Prépare les questions-réponses que cette application permet de traiter.',
+    ].join('\n\n'),
+  })
+}
+
+/** Analyse d'un lot de conversations (Lia V2). Reçoit des messages, rend des thèmes. */
+export async function analyzeSupportConversations(
+  userId: string,
+  projectId: string,
+  transcript: string,
+  locale: string,
+): Promise<RunResult<LiaInsights>> {
+  return runSingleCall({
+    accounting: { userId, projectId, operation: 'liaInsights' },
+    system: LIA_INSIGHTS_SYSTEM,
+    schema: liaInsightsSchema,
+    userContent: [
+      `Langue des titres et des exemples : ${locale}.`,
+      asUserData('conversations', transcript),
+      'Dégage les thèmes utiles au créateur.',
+    ].join('\n\n'),
+  })
 }

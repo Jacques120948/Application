@@ -30,6 +30,10 @@ export const RULES = {
   appWrite: { limit: 60, windowMs: 60_000 },
   /** Questions à l'assistant d'une application, par visiteur. */
   appAssistant: { limit: 10, windowMs: 5 * 60_000, blockMs: 10 * 60_000 },
+  /** Messages à Lia, par visiteur et par application. */
+  liaMessage: { limit: 12, windowMs: 5 * 60_000, blockMs: 10 * 60_000 },
+  /** Tickets ouverts depuis le widget, par visiteur : quelques-uns suffisent. */
+  liaTicket: { limit: 3, windowMs: 60 * 60_000, blockMs: 60 * 60_000 },
 } as const satisfies Record<string, RateLimitRule>
 
 function prune(now: number): void {

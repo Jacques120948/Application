@@ -9,14 +9,20 @@ import { isAiAvailable } from '@/server/ai/client'
 import { getProject, listChatMessages } from '@/server/projects/service'
 import { Shell } from '@/components/studio/Shell'
 import { ProjectWorkspace } from '@/components/studio/ProjectWorkspace'
+import { isEnabled } from '@/server/settings/flags'
+import { FAQ_ESTIMATED_CREDITS } from '@/server/support/knowledge'
+import { INSIGHTS_ESTIMATED_CREDITS } from '@/server/support/insights'
 import { LinkButton } from '@/components/ui'
 
 export default async function ProjectPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>
+  searchParams: Promise<{ onglet?: string }>
 }) {
   const { locale: rawLocale, id } = await params
+  const { onglet } = await searchParams
   const locale = resolveLocale(rawLocale)
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
@@ -29,10 +35,11 @@ export default async function ProjectPage({
     throw error
   }
 
-  const [messages, wallet, plan] = await Promise.all([
+  const [messages, wallet, plan, liaV2] = await Promise.all([
     listChatMessages(user.id, id),
     getWallet(user.id),
     getEffectivePlan(user.id),
+    isEnabled('liaV2'),
   ])
 
   return (
@@ -116,6 +123,8 @@ export default async function ProjectPage({
         }
         aiAvailable={isAiAvailable()}
         alreadyTested={project.hasBeenTested}
+        initialTab={onglet === 'support' ? 'support' : 'assistant'}
+        support={{ liaV2, faqCredits: FAQ_ESTIMATED_CREDITS, insightsCredits: INSIGHTS_ESTIMATED_CREDITS }}
       />
     </Shell>
   )

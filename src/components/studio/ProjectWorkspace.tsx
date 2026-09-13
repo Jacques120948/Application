@@ -10,6 +10,7 @@ import { ChatPanel } from './ChatPanel'
 import { ChecksPanel, DesignPanel, FeaturesPanel, MonetizationPanel } from './panels'
 import { MediaPanel } from './MediaPanel'
 import { ProgressSteps } from './ProgressSteps'
+import { SupportPanel } from './SupportPanel'
 
 /**
  * Espace de travail d'un projet (sections 6, 7 et 28).
@@ -50,6 +51,7 @@ type Tab =
   | 'tests'
   | 'publish'
   | 'versions'
+  | 'support'
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'assistant', label: "Modifier avec l'IA" },
@@ -61,6 +63,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'tests', label: 'Tests' },
   { id: 'publish', label: 'Publication' },
   { id: 'versions', label: 'Versions' },
+  { id: 'support', label: 'Support' },
 ]
 
 const DEVICES = {
@@ -80,9 +83,15 @@ export function ProjectWorkspace({
   publishedUrl,
   aiAvailable,
   alreadyTested,
+  initialTab = 'assistant',
+  support,
 }: {
   projectId: string
   locale: string
+  /** Onglet ouvert à l'arrivée, par exemple depuis une notification (`?onglet=support`). */
+  initialTab?: Tab
+  /** Lia : le drapeau de la V2 et les coûts annoncés. L'accès est lu par le panneau lui-même. */
+  support: { liaV2: boolean; faqCredits: number; insightsCredits: number }
   initialSpec: AppSpec
   initialReport: CheckReport
   initialMessages: Message[]
@@ -94,7 +103,8 @@ export function ProjectWorkspace({
   const router = useRouter()
   const [spec, setSpec] = useState(initialSpec)
   const [report, setReport] = useState<CheckReport>(initialReport)
-  const [tab, setTab] = useState<Tab>('assistant')
+  const [tab, setTab] = useState<Tab>(initialTab)
+  const [builderDraft, setBuilderDraft] = useState('')
   const [device, setDevice] = useState<DeviceKey>('phone')
   const [previewKey, setPreviewKey] = useState(0)
   const [versions, setVersions] = useState<Version[] | null>(null)
@@ -255,6 +265,7 @@ export function ProjectWorkspace({
                 <ChatPanel
                   projectId={projectId}
                   initialMessages={initialMessages}
+                  initialDraft={builderDraft}
                   onApplied={() => {
                     reloadPreview()
                     router.refresh()
@@ -381,6 +392,20 @@ export function ProjectWorkspace({
                   when="prévu en phase 3 — être prêt pour la soumission ne signifie pas être approuvé par Apple ou Google"
                 />
               </div>
+            ) : null}
+
+            {tab === 'support' ? (
+              <SupportPanel
+                projectId={projectId}
+                locale={locale}
+                liaV2={support.liaV2}
+                faqCredits={support.faqCredits}
+                insightsCredits={support.insightsCredits}
+                onSendToBuilder={(text) => {
+                  setBuilderDraft(text)
+                  setTab('assistant')
+                }}
+              />
             ) : null}
 
             {tab === 'versions' ? (

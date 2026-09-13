@@ -13,19 +13,26 @@ export function ChatPanel({
   projectId,
   initialMessages,
   onApplied,
+  initialDraft = '',
 }: {
   projectId: string
   initialMessages: Message[]
   onApplied: () => void
+  /** Une demande préparée ailleurs (une analyse de Lia, par exemple) : proposée, jamais envoyée seule. */
+  initialDraft?: string
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(initialDraft)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // On fait défiler le conteneur de la conversation, jamais la page : `scrollIntoView`
   // ferait remonter toute la fenêtre et chasserait l'aperçu hors de l'écran.
+  useEffect(() => {
+    if (initialDraft !== '') setDraft(initialDraft)
+  }, [initialDraft])
+
   useEffect(() => {
     const container = scrollRef.current
     if (container !== null) container.scrollTop = container.scrollHeight
