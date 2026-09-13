@@ -1,23 +1,45 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
+import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listPublicPlans } from '@/server/billing/plans'
 import { customersNeededFor, formatAmount } from '@/server/business/economics'
-import { isEnabled } from '@/server/settings/flags'
 import { DEMO_APPS } from '@/server/demos/catalog'
+import { isEnabled } from '@/server/settings/flags'
 import { Logo } from '@/components/marketing/Logo'
 import { BrowserFrame, PhoneFrame } from '@/components/marketing/DeviceFrame'
+import {
+  Check,
+  CheckList,
+  DemoGallery,
+  DoorCards,
+  Eyebrow,
+  FlowRail,
+  NumberedSteps,
+  Panel,
+  Section,
+  Timeline,
+} from '@/components/marketing/landing'
+import { LandingHeader } from '@/components/marketing/LandingHeader'
 import { LinkButton } from '@/components/ui'
 
 /**
  * Page publique.
  *
- * Elle montre d'abord, elle explique ensuite. Les captures sont celles des applications de
- * démonstration réellement publiées par le moteur (voir server/demos/catalog.ts) : aucune
- * maquette inventée, aucun faux témoignage, aucun faux client. La grille tarifaire est lue
- * en base, et les nombres de clients sont calculés par server/business/economics.ts.
+ * Elle raconte une chose et une seule : on peut arriver ici sans idée. C'est la différence
+ * d'Evoliia avec un générateur d'applications, et tout l'ordre des sections en découle —
+ * l'envie, puis le profil, puis les trois portes d'entrée, et seulement ensuite ce que la
+ * plateforme sait construire.
+ *
+ * Rien n'y est inventé. Les captures sont celles des démonstrations réellement publiées par
+ * le moteur (voir server/demos/catalog.ts), la grille tarifaire est lue en base, les nombres
+ * de clients sont calculés par server/business/economics.ts, et il n'y a ni témoignage, ni
+ * logo client, ni compteur d'utilisateurs : nous n'en avons pas.
+ *
+ * La mise en forme est déléguée à components/marketing/landing.tsx. Ici ne restent que le
+ * contenu et son ordre.
  */
 
 export async function generateMetadata({
@@ -25,9 +47,30 @@ export async function generateMetadata({
 }: {
   params: Promise<{ locale: string }>
 }): Promise<Metadata> {
-  const t = getTranslator(resolveLocale((await params).locale))
-  return { title: t('landing.metaTitle'), description: t('landing.metaDescription') }
+  const locale = resolveLocale((await params).locale)
+  const t = getTranslator(locale)
+  const title = t('landing.metaTitle')
+  const description = t('landing.metaDescription')
+  return {
+    title,
+    description,
+    alternates: { canonical: `/${locale}`, languages: { fr: '/fr', en: '/en' } },
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+      locale: locale === 'fr' ? 'fr_FR' : 'en_US',
+      siteName: t('common.appName'),
+      // Capture d'une démonstration réelle, recadrée au format attendu par les réseaux.
+      // Aucune maquette inventée, là non plus.
+      images: [{ url: '/partage.jpg', width: 1200, height: 630, alt: title }],
+    },
+    twitter: { card: 'summary_large_image', title, description, images: ['/partage.jpg'] },
+  }
 }
+
+/** Objectif de référence des exemples chiffrés : mille euros de chiffre d'affaires mensuel. */
+const REFERENCE_GOAL_CENTS = 100_000
 
 /**
  * Espace d'images d'une offre, en toutes lettres.
@@ -38,58 +81,6 @@ export async function generateMetadata({
 function storageLabel(bytes: number): string {
   const megabytes = Math.round(bytes / (1024 * 1024))
   return megabytes >= 1024 ? `${Math.round(megabytes / 1024)} Go` : `${megabytes} Mo`
-}
-
-/** Objectif de référence des exemples chiffrés : mille euros de chiffre d'affaires mensuel. */
-const REFERENCE_GOAL_CENTS = 100_000
-
-function Check({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 20 20" className={className ?? 'mt-0.5 h-4 w-4 shrink-0'} aria-hidden="true">
-      <path
-        d="M4 10.5l4 4 8-9"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function Section({
-  id,
-  title,
-  body,
-  tone = 'canvas',
-  children,
-}: {
-  id?: string
-  title: string
-  body?: string
-  tone?: 'canvas' | 'surface'
-  children: React.ReactNode
-}) {
-  const shell =
-    tone === 'surface'
-      ? 'border-y border-[var(--color-line)] bg-[var(--color-surface)]'
-      : 'bg-[var(--color-canvas)]'
-  return (
-    <section id={id} className={`scroll-mt-20 ${shell}`}>
-      <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:py-24">
-        <h2 className="max-w-3xl text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-          {title}
-        </h2>
-        {body !== undefined ? (
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-[var(--color-ink-soft)]">
-            {body}
-          </p>
-        ) : null}
-        <div className="mt-12">{children}</div>
-      </div>
-    </section>
-  )
 }
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
@@ -106,11 +97,64 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     isEnabled('socialPublishing'),
   ])
 
+  /*
+   * Bêta privée. L'installation exige un code d'accès quand SIGNUP_CODE est définie ; la
+   * page le dit avant le clic, plutôt que de laisser la personne le découvrir devant le
+   * formulaire. Le jour du lancement public, retirer la variable suffit : ce paragraphe
+   * disparaît de lui-même.
+   */
+  const privateBeta = env.signupCode !== undefined
+
   // Deux entrées distinctes : l'une conduit au parcours guidé, l'autre à la description
   // directe. Le bouton d'en-tête, lui, laisse choisir une fois le compte créé.
   const signUp = `/${locale}/inscription`
   const findIdea = `/${locale}/inscription?suite=objectif`
   const haveIdea = `/${locale}/inscription?suite=idee`
+
+  const navLinks = [
+    { label: t('landing.navHow'), href: '#fonctionnement' },
+    { label: t('landing.navExamples'), href: '#exemples' },
+    { label: t('landing.navFeatures'), href: '#fonctionnalites' },
+    { label: t('landing.navPricing'), href: '#tarifs' },
+  ]
+
+  const flow = [
+    { title: t('landing.flow1Title'), body: t('landing.flow1Body') },
+    { title: t('landing.flow2Title'), body: t('landing.flow2Body') },
+    { title: t('landing.flow3Title'), body: t('landing.flow3Body') },
+    { title: t('landing.flow4Title'), body: t('landing.flow4Body') },
+    { title: t('landing.flow5Title'), body: t('landing.flow5Body') },
+  ]
+
+  const doors = [
+    {
+      title: t('landing.door1Title'),
+      body: t('landing.door1Body'),
+      cta: t('landing.door1Cta'),
+      href: findIdea,
+    },
+    {
+      title: t('landing.door2Title'),
+      body: t('landing.door2Body'),
+      cta: t('landing.door2Cta'),
+      href: haveIdea,
+    },
+    {
+      title: t('landing.door3Title'),
+      body: t('landing.door3Body'),
+      cta: t('landing.door3Cta'),
+      href: findIdea,
+    },
+  ]
+
+  const timeline = [
+    t('landing.timeline1'),
+    t('landing.timeline2'),
+    t('landing.timeline3'),
+    t('landing.timeline4'),
+    t('landing.timeline5'),
+    t('landing.timeline6'),
+  ]
 
   const steps = [
     { title: t('landing.step1Title'), body: t('landing.step1Body') },
@@ -118,14 +162,6 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     { title: t('landing.step3Title'), body: t('landing.step3Body') },
     { title: t('landing.step4Title'), body: t('landing.step4Body') },
     { title: t('landing.step5Title'), body: t('landing.step5Body') },
-    { title: t('landing.step6Title'), body: t('landing.step6Body') },
-    { title: t('landing.step7Title'), body: t('landing.step7Body') },
-  ]
-
-  const promises = [
-    { title: t('landing.honest1Title'), body: t('landing.honest1Body') },
-    { title: t('landing.honest2Title'), body: t('landing.honest2Body') },
-    { title: t('landing.honest3Title'), body: t('landing.honest3Body') },
   ]
 
   const faq = [
@@ -149,52 +185,44 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     customers: customersNeededFor(REFERENCE_GOAL_CENTS, project.priceCents, 'month') ?? 0,
   }))
 
-  const heroShots = DEMO_APPS.filter((demo) =>
-    ['devisflow', 'fitpilot', 'bookizy'].includes(demo.slug),
-  )
-  const showcase = DEMO_APPS.filter((demo) => ['immotrack', 'studyflow'].includes(demo.slug))
+  const demos = DEMO_APPS.map((demo) => ({
+    slug: demo.slug,
+    name: demo.spec.name,
+    category: demo.category,
+    summary: demo.summary,
+    priceLabel: demo.priceLabel,
+    shot: `/demos/${demo.slug}-desktop.webp`,
+    shotAlt: demo.shotAlt,
+  }))
+
+  const hero = DEMO_APPS.find((demo) => demo.slug === 'devisflow')
+  const heroPhone = DEMO_APPS.find((demo) => demo.slug === 'fitpilot')
   const cooksy = DEMO_APPS.find((demo) => demo.slug === 'cooksy')
 
   return (
     <div className="min-h-screen">
-      {/* ─────────────────────────── En-tête ─────────────────────────── */}
-      <header className="sticky top-0 z-30 border-b border-[var(--color-line)] bg-[color-mix(in_srgb,var(--color-surface)_88%,transparent)] backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-5 py-3">
+      <LandingHeader
+        links={navLinks}
+        loginLabel={t('nav.login')}
+        loginHref={`/${locale}/connexion`}
+        startLabel={t('landing.navStart')}
+        startHref={signUp}
+        menuLabel={t('landing.navOpenMenu')}
+        brand={
           <a href={`/${locale}`} className="text-[var(--color-ink)] no-underline">
-            <Logo
-              id="mark-header"
-              wordmark={t('common.appName')}
-              wordmarkClassName="hidden sm:inline"
-            />
+            <Logo id="mark-header" wordmark={t('common.appName')} />
           </a>
-          <nav className="ml-6 hidden items-center gap-6 text-sm lg:flex">
-            <a href="#creer" className="text-[var(--color-ink-soft)] no-underline">
-              {t('landing.navCreate')}
-            </a>
-            <a href="#fonctionnement" className="text-[var(--color-ink-soft)] no-underline">
-              {t('landing.navHow')}
-            </a>
-            <a href="#tarifs" className="text-[var(--color-ink-soft)] no-underline">
-              {t('landing.navPricing')}
-            </a>
-          </nav>
-          <div className="ml-auto flex items-center gap-2">
-            <LinkButton href={`/${locale}/connexion`} variant="ghost">
-              {t('nav.login')}
-            </LinkButton>
-            <LinkButton href={signUp}>{t('nav.register')}</LinkButton>
-          </div>
-        </div>
-      </header>
+        }
+      />
 
-      {/* ──────────────────────────── 1. Hero ─────────────────────────── */}
+      {/* ─────────────────────────── 1. Premier écran ─────────────────────── */}
       <section
         className="on-night relative overflow-hidden text-white"
         style={{ background: 'var(--gradient-night)' }}
       >
         {/*
-          Deux halos colorés plutôt qu'un. Un seul laissait la moitié gauche du héros éteinte,
-          et c'est justement là que se trouve le titre : la lueur chaude le porte.
+          Deux halos colorés plutôt qu'un. Un seul laissait la moitié gauche du héros
+          éteinte, et c'est justement là que se trouve le titre : la lueur chaude le porte.
         */}
         <div
           aria-hidden="true"
@@ -206,158 +234,264 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           className="pointer-events-none absolute bottom-[-30%] left-[-20%] h-[560px] w-[560px] rounded-full opacity-30 blur-3xl"
           style={{ background: 'radial-gradient(circle, #f81878 0%, #fc7a3b 45%, transparent 72%)' }}
         />
-        <div className="relative mx-auto grid w-full max-w-6xl gap-14 px-5 py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:items-center lg:py-28">
+
+        <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-5 py-16 sm:py-20 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] lg:items-center lg:gap-14 lg:py-28">
           <div>
-            <span className="inline-flex items-center rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
+            <span className="inline-flex items-center rounded-[var(--radius-pill)] border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
               {t('landing.eyebrow')}
             </span>
-            <h1 className="mt-5 text-balance text-[2.1rem] font-semibold leading-[1.1] tracking-tight sm:text-[2.6rem] xl:text-[3rem]">
+            <h1 className="mt-5 text-balance text-[2rem] font-semibold leading-[1.12] tracking-tight sm:text-[2.7rem] xl:text-[3.1rem]">
               {t('landing.heroTitle')}
               <br />
               <span className="text-gradient-brand">{t('landing.heroTitleAccent')}</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-white/75">
+            <p className="mt-5 max-w-xl text-base leading-relaxed text-white/75 sm:mt-6 sm:text-lg">
               {t('landing.heroBody')}
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
+            <p className="mt-3 max-w-xl text-sm text-white/55">{t('landing.heroSub')}</p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <LinkButton href={findIdea} size="large">
                 {t('landing.ctaFindIdea')}
               </LinkButton>
               <a
                 href={haveIdea}
-                className="inline-flex items-center justify-center rounded-[var(--radius-control)] border border-white/25 px-6 py-3 text-base font-medium text-white no-underline transition-colors hover:bg-white/10"
+                className="inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-white/25 px-6 py-3 text-base font-medium text-white no-underline transition-colors hover:bg-white/10"
               >
                 {t('landing.ctaHaveIdea')}
+                <span aria-hidden="true">→</span>
               </a>
             </div>
-            <p className="mt-6 text-sm text-white/55">{t('landing.heroNote')}</p>
+            <p className="mt-5 text-sm text-white/55">{t('landing.heroNote')}</p>
+            {privateBeta ? (
+              <p className="mt-3 inline-flex rounded-[var(--radius-control)] border border-white/20 bg-white/5 px-3 py-2 text-sm text-white/70">
+                {t('landing.heroBeta')}
+              </p>
+            ) : null}
           </div>
 
-          {/* Montage : trois applications de démonstration, réellement en ligne. */}
-          <div className="relative">
-            <div className="grid gap-4 sm:grid-cols-[1.35fr_1fr] sm:items-start">
-              {heroShots[0] !== undefined ? (
+          {/* Montage : deux applications de démonstration, réellement en ligne. */}
+          <div>
+            <div className="relative">
+              {hero !== undefined ? (
                 <BrowserFrame
-                  src={`/demos/${heroShots[0].slug}-desktop.webp`}
-                  alt={heroShots[0].shotAlt}
-                  caption={`evoliia.com/a/${heroShots[0].slug}`}
+                  src={`/demos/${hero.slug}-desktop.webp`}
+                  alt={hero.shotAlt}
+                  caption={`evoliia.com/a/${hero.slug}`}
                   priority
-                  className="sm:col-span-2"
                 />
               ) : null}
-              {heroShots[1] !== undefined ? (
-                <BrowserFrame
-                  src={`/demos/${heroShots[1].slug}-desktop.webp`}
-                  alt={heroShots[1].shotAlt}
-                  caption={`evoliia.com/a/${heroShots[1].slug}`}
-                />
-              ) : null}
-              {heroShots[2] !== undefined ? (
+              {heroPhone !== undefined ? (
                 <PhoneFrame
-                  src={`/demos/${heroShots[2].slug}-mobile.webp`}
-                  alt={heroShots[2].shotAlt}
-                  cropHeight={300}
-                  className="mx-auto w-36 sm:w-full sm:max-w-[190px]"
+                  src={`/demos/${heroPhone.slug}-mobile.webp`}
+                  alt={heroPhone.shotAlt}
+                  cropHeight={172}
+                  className="absolute -bottom-14 -left-6 hidden w-28 sm:block lg:w-32"
                 />
               ) : null}
             </div>
-            <p className="mt-5 text-center text-xs text-white/50">
+            <p className="mt-24 text-center text-xs text-white/45">
               {t('landing.heroShotsCaption')}
             </p>
           </div>
         </div>
       </section>
 
-      {/* ───────────────────── 2. Que pouvez-vous créer ? ──────────────── */}
-      <Section id="creer" title={t('landing.buildTitle')} body={t('landing.buildBody')}>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {DEMO_APPS.map((demo, index) => (
-            <article
-              key={demo.slug}
-              className="reveal flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)]"
-            >
-              <img
-                src={`/demos/${demo.slug}-desktop.webp`}
-                alt={demo.shotAlt}
-                width={1280}
-                height={860}
-                loading={index < 2 ? 'eager' : 'lazy'}
-                decoding="async"
-                className="block aspect-[1280/860] w-full border-b border-[var(--color-line)] object-cover object-top"
-              />
-              <div className="flex flex-1 flex-col p-5">
-                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">
-                  {demo.category}
-                </span>
-                <h3 className="mt-2 text-lg font-semibold">{demo.spec.name}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                  {demo.summary}
-                </p>
-                <p className="mt-3 text-sm font-medium text-[var(--color-brand-strong)]">
-                  {demo.priceLabel}
-                </p>
-                <div className="mt-5 flex flex-wrap items-center gap-3 pt-1">
-                  <a
-                    href={`/a/${demo.slug}`}
-                    className="text-sm font-medium text-[var(--color-brand)]"
-                  >
-                    {t('landing.buildOpen')} →
-                  </a>
-                  <a
-                    href={findIdea}
-                    className="text-sm text-[var(--color-ink-soft)] no-underline hover:text-[var(--color-ink)]"
-                  >
-                    {t('landing.buildSimilar')}
-                  </a>
+      {/* ──────────────── 2. Une envie suffit, le parcours en bref ────────── */}
+      <Section title={t('landing.flowTitle')} body={t('landing.flowBody')}>
+        <FlowRail steps={flow} />
+      </Section>
+
+      {/* ──────────────── 3. Vous n'avez pas besoin d'une idée ───────────── */}
+      <Section title={t('landing.noIdeaTitle')} body={t('landing.noIdeaBody')} tone="surface">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-stretch">
+          <Panel tone="canvas" className="flex flex-col">
+            <Eyebrow>{t('landing.profileLabel')}</Eyebrow>
+            <dl className="mt-4 mb-0 grid gap-3 text-sm">
+              {[
+                { label: t('landing.profileJob'), value: t('landing.profileJobValue') },
+                {
+                  label: t('landing.profileExperience'),
+                  value: t('landing.profileExperienceValue'),
+                },
+                { label: t('landing.profileTime'), value: t('landing.profileTimeValue') },
+                { label: t('landing.profileBudget'), value: t('landing.profileBudgetValue') },
+                { label: t('landing.profileGoal'), value: t('landing.profileGoalValue') },
+              ].map((row) => (
+                <div
+                  key={row.label}
+                  className="flex items-baseline justify-between gap-4 border-b border-[var(--color-line)] pb-2 last:border-0"
+                >
+                  <dt className="text-[var(--color-ink-soft)]">{row.label}</dt>
+                  <dd className="m-0 text-right font-medium">{row.value}</dd>
                 </div>
-              </div>
-            </article>
-          ))}
+              ))}
+            </dl>
+            <p className="mt-5 mb-0 flex items-center gap-2 text-sm text-[var(--color-brand-strong)]">
+              <span
+                aria-hidden="true"
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ background: 'var(--gradient-cta)' }}
+              />
+              {t('landing.noIdeaAnalysing')}
+            </p>
+          </Panel>
+
+          <div
+            className="reveal rounded-[var(--radius-card)] p-6 text-white sm:p-7"
+            style={{ background: 'var(--gradient-night)' }}
+          >
+            <Eyebrow tone="light">{t('landing.suggestionLabel')}</Eyebrow>
+            <h3 className="mt-3 mb-0 text-xl font-semibold text-balance">
+              {t('landing.suggestionName')}
+            </h3>
+            <dl className="mt-6 mb-0 grid gap-5 sm:grid-cols-2">
+              {[
+                { label: t('landing.suggestionScore'), value: t('landing.suggestionScoreValue') },
+                {
+                  label: t('landing.suggestionDifficulty'),
+                  value: t('landing.suggestionDifficultyValue'),
+                },
+                { label: t('landing.suggestionMarket'), value: t('landing.suggestionMarketValue') },
+                { label: t('landing.suggestionModel'), value: t('landing.suggestionModelValue') },
+                { label: t('landing.suggestionTime'), value: t('landing.suggestionTimeValue') },
+                {
+                  label: t('landing.suggestionCompetition'),
+                  value: t('landing.suggestionCompetitionValue'),
+                },
+              ].map((row) => (
+                <div key={row.label} className="min-w-0">
+                  <dt className="text-xs text-white/55">{row.label}</dt>
+                  <dd className="m-0 mt-1 text-base font-semibold">{row.value}</dd>
+                </div>
+              ))}
+            </dl>
+            <LinkButton href={findIdea} className="mt-7">
+              {t('landing.suggestionCta')}
+            </LinkButton>
+            <p className="mt-5 mb-0 border-t border-white/15 pt-4 text-xs leading-relaxed text-white/50">
+              {t('landing.suggestionDisclaimer')}
+            </p>
+          </div>
         </div>
-        <p className="mt-8 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
-          {t('landing.buildNote')}
+      </Section>
+
+      {/* ──────────────────── 4. Les trois portes d'entrée ────────────────── */}
+      <Section title={t('landing.doorsTitle')} body={t('landing.doorsBody')}>
+        <DoorCards doors={doors} />
+
+        {/* Ce que la troisième porte veut dire, en arithmétique plutôt qu'en promesse. */}
+        <div className="mt-12">
+          <h3 className="m-0 text-lg font-semibold">{t('landing.projectsTitle')}</h3>
+          <p className="mt-2 mb-0 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
+            {t('landing.projectsBody')}
+          </p>
+          <p className="mt-4 mb-0 text-sm font-medium text-[var(--color-brand-strong)]">
+            {t('landing.projectsGoal')}
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {projects.map((project) => (
+              <Panel key={project.name} className="p-5">
+                <h4 className="m-0 text-sm font-semibold">{project.name}</h4>
+                <p className="mt-3 mb-0 text-2xl font-semibold tracking-tight">
+                  {formatAmount(project.priceCents)}
+                  <span className="ml-1 text-sm font-normal text-[var(--color-ink-faint)]">
+                    {t('landing.pricingPerMonth')}
+                  </span>
+                </p>
+                <p className="mt-3 mb-0 text-sm text-[var(--color-ink-soft)]">
+                  {t('landing.projectsCustomers', { count: project.customers })}
+                </p>
+                <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">
+                  {t('landing.projectsDifficulty')} : {project.difficulty}
+                </p>
+              </Panel>
+            ))}
+          </div>
+          <p className="mt-5 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
+            {t('landing.projectsNote')}
+          </p>
+        </div>
+      </Section>
+
+      {/* ─────────── 5. Pas seulement une application, un projet ─────────── */}
+      <Section
+        title={t('landing.projectTitle')}
+        titleAccent={t('landing.projectTitleAccent')}
+        tone="surface"
+      >
+        <Timeline
+          steps={timeline}
+          covered={t('landing.timelineEvoliia')}
+          others={t('landing.timelineOthers')}
+        />
+        <div className="mt-10 grid gap-5 md:grid-cols-2">
+          <Panel tone="canvas" edge>
+            <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('landing.projectLead')}
+            </p>
+          </Panel>
+          <Panel tone="canvas" edge>
+            <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('landing.projectLead2')}
+            </p>
+          </Panel>
+        </div>
+      </Section>
+
+      {/* ───────────────────────── 6. Créé avec Evoliia ───────────────────── */}
+      <Section id="exemples" title={t('landing.showcaseTitle')} body={t('landing.showcaseBody')}>
+        <DemoGallery
+          demos={demos}
+          openLabel={t('landing.buildOpen')}
+          createLabel={t('landing.buildSimilar')}
+          createHref={haveIdea}
+        />
+        <p className="mt-8 mb-0 text-sm font-medium text-[var(--color-ink-soft)]">
+          {t('landing.showcaseDemoNote')}
+        </p>
+        <p className="mt-3 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
+          {t('landing.showcaseNote')}
         </p>
       </Section>
 
-      {/* ──────────────── 3. Une phrase → une vraie application ─────────── */}
+      {/* ──────────────────────── 7. Comment ça marche ────────────────────── */}
       <Section
-        title={t('landing.oneLineTitle')}
-        body={t('landing.oneLineBody')}
+        id="fonctionnement"
+        title={t('landing.howTitle')}
+        body={t('landing.howBody')}
         tone="surface"
+      >
+        <NumberedSteps steps={steps} />
+      </Section>
+
+      {/* ───────────────────── 8. Ce qu'Evoliia sait faire ────────────────── */}
+      <Section
+        id="fonctionnalites"
+        title={t('landing.featuresTitle')}
+        body={t('landing.featuresBody')}
       >
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start">
           <div className="reveal">
-            <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">
-              {t('landing.oneLinePromptLabel')}
-            </span>
-            <blockquote className="mt-3 rounded-[var(--radius-card)] border border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-5 text-lg leading-relaxed">
+            <Eyebrow>{t('landing.oneLinePromptLabel')}</Eyebrow>
+            <blockquote className="mt-3 mb-0 rounded-[var(--radius-card)] border border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-5 text-base leading-relaxed sm:text-lg">
               « {t('landing.oneLinePrompt')} »
             </blockquote>
-
-            <ul className="mt-6 grid gap-2 text-sm text-[var(--color-ink-soft)]">
-              {[
+            <CheckList
+              className="mt-6 text-[var(--color-ink-soft)]"
+              items={[
                 t('landing.oneLineFeature1'),
                 t('landing.oneLineFeature2'),
                 t('landing.oneLineFeature3'),
                 t('landing.oneLineFeature4'),
                 t('landing.oneLineFeature5'),
                 t('landing.oneLineFeature6'),
-              ].map((feature) => (
-                <li key={feature} className="flex gap-2">
-                  <span className="text-[var(--color-brand)]">
-                    <Check />
-                  </span>
-                  <span>{feature}</span>
-                </li>
-              ))}
-            </ul>
-
+              ]}
+            />
           </div>
 
           <div className="reveal">
-            <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">
-              {t('landing.oneLineResultLabel')}
-            </span>
+            <Eyebrow>{t('landing.oneLineResultLabel')}</Eyebrow>
             {cooksy !== undefined ? (
               <>
                 <div className="mt-3 grid gap-4 sm:grid-cols-[1.5fr_0.5fr] sm:items-end">
@@ -374,220 +508,37 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                 </div>
                 <a
                   href={`/a/${cooksy.slug}`}
-                  className="mt-5 inline-block text-sm font-medium text-[var(--color-brand)]"
+                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-brand-strong)] no-underline"
                 >
-                  {t('landing.oneLineOpen')} →
+                  {t('landing.oneLineOpen')}
+                  <span aria-hidden="true">→</span>
                 </a>
               </>
             ) : null}
           </div>
         </div>
 
-        <div className="reveal mt-10 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-6">
+        <Panel tone="canvas" className="mt-10">
           <h3 className="m-0 text-base font-semibold">{t('landing.oneLineEditTitle')}</h3>
-          <p className="mt-1 max-w-2xl text-sm text-[var(--color-ink-soft)]">
+          <p className="mt-1 mb-0 max-w-2xl text-sm text-[var(--color-ink-soft)]">
             {t('landing.oneLineEditBody')}
           </p>
-          <ul className="mt-5 grid gap-3 sm:grid-cols-3">
-            {[
-              t('landing.oneLineEdit1'),
-              t('landing.oneLineEdit2'),
-              t('landing.oneLineEdit3'),
-            ].map((edit) => (
-              <li
-                key={edit}
-                className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-3 text-sm"
-              >
-                « {edit} »
-              </li>
-            ))}
-          </ul>
-        </div>
-      </Section>
-
-      {/* ─────────────── 4. Vous n'avez pas encore d'idée ─────────────── */}
-      <Section title={t('landing.noIdeaTitle')} body={t('landing.noIdeaBody')}>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-stretch">
-          <div className="reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
-            <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">
-              {t('landing.profileLabel')}
-            </span>
-            <dl className="mt-4 grid gap-3 text-sm">
-              {[
-                { label: t('landing.profileJob'), value: t('landing.profileJobValue') },
-                {
-                  label: t('landing.profileExperience'),
-                  value: t('landing.profileExperienceValue'),
-                },
-                { label: t('landing.profileTime'), value: t('landing.profileTimeValue') },
-                { label: t('landing.profileBudget'), value: t('landing.profileBudgetValue') },
-                { label: t('landing.profileGoal'), value: t('landing.profileGoalValue') },
-              ].map((row) => (
-                <div
-                  key={row.label}
-                  className="flex items-baseline justify-between gap-4 border-b border-[var(--color-line)] pb-2 last:border-0"
+          <ul className="m-0 mt-5 grid list-none gap-3 p-0 sm:grid-cols-3">
+            {[t('landing.oneLineEdit1'), t('landing.oneLineEdit2'), t('landing.oneLineEdit3')].map(
+              (edit) => (
+                <li
+                  key={edit}
+                  className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-3 text-sm"
                 >
-                  <dt className="text-[var(--color-ink-soft)]">{row.label}</dt>
-                  <dd className="font-medium">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-
-          <div
-            className="reveal rounded-[var(--radius-card)] p-6 text-white"
-            style={{ background: 'var(--gradient-night)' }}
-          >
-            <span className="text-xs font-medium uppercase tracking-wide text-white/60">
-              {t('landing.suggestionLabel')}
-            </span>
-            <h3 className="mt-3 text-xl font-semibold">{t('landing.suggestionName')}</h3>
-            <dl className="mt-6 grid gap-5 sm:grid-cols-2">
-              {[
-                { label: t('landing.suggestionScore'), value: t('landing.suggestionScoreValue') },
-                {
-                  label: t('landing.suggestionDifficulty'),
-                  value: t('landing.suggestionDifficultyValue'),
-                },
-                { label: t('landing.suggestionPrice'), value: t('landing.suggestionPriceValue') },
-                { label: t('landing.suggestionTarget'), value: t('landing.suggestionTargetValue') },
-              ].map((row) => (
-                <div key={row.label}>
-                  <dt className="text-xs text-white/55">{row.label}</dt>
-                  <dd className="mt-1 text-base font-semibold">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <LinkButton href={findIdea} className="mt-7">
-              {t('landing.suggestionCta')}
-            </LinkButton>
-            <p className="mt-5 border-t border-white/15 pt-4 text-xs leading-relaxed text-white/50">
-              {t('landing.suggestionDisclaimer')}
-            </p>
-          </div>
-        </div>
+                  « {edit} »
+                </li>
+              ),
+            )}
+          </ul>
+        </Panel>
       </Section>
 
-      {/* ────────────── 5. Quel projet pourriez-vous lancer ? ───────────── */}
-      <Section
-        title={t('landing.projectsTitle')}
-        body={t('landing.projectsBody')}
-        tone="surface"
-      >
-        <p className="-mt-6 mb-6 text-sm font-medium text-[var(--color-brand-strong)]">
-          {t('landing.projectsGoal')}
-        </p>
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-          {projects.map((project) => (
-            <div
-              key={project.name}
-              className="reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-5"
-            >
-              <h3 className="m-0 text-base font-semibold">{project.name}</h3>
-              <p className="mt-3 text-2xl font-semibold tracking-tight">
-                {formatAmount(project.priceCents)}
-                <span className="ml-1 text-sm font-normal text-[var(--color-ink-faint)]">
-                  {t('landing.pricingPerMonth')}
-                </span>
-              </p>
-              <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
-                {t('landing.projectsCustomers', { count: project.customers })}
-              </p>
-              <p className="mt-1 text-xs text-[var(--color-ink-faint)]">
-                {t('landing.projectsDifficulty')} : {project.difficulty}
-              </p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-8 flex flex-wrap items-center gap-5">
-          <LinkButton href={findIdea} size="large">
-            {t('landing.projectsCta')}
-          </LinkButton>
-        </div>
-        <p className="mt-6 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
-          {t('landing.projectsNote')}
-        </p>
-      </Section>
-
-      {/* ──────────────── 6. Comment fonctionne Evoliia ─────────────────── */}
-      <Section id="fonctionnement" title={t('landing.howTitle')} body={t('landing.howBody')}>
-        <ol className="grid list-none gap-5 p-0 sm:grid-cols-2 lg:grid-cols-3">
-          {steps.map((step, index) => (
-            <li
-              key={step.title}
-              className="reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5"
-            >
-              <span
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white"
-                style={{ background: 'var(--gradient-brand)' }}
-              >
-                {index + 1}
-              </span>
-              <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                {step.body}
-              </p>
-            </li>
-          ))}
-        </ol>
-      </Section>
-
-      {/* ───────────────────── 7. Créé avec Evoliia ─────────────────────── */}
-      <section className="on-night text-white" style={{ background: 'var(--gradient-night)' }}>
-        <div className="mx-auto w-full max-w-6xl px-5 py-20 sm:py-24">
-          <h2 className="max-w-3xl text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
-            {t('landing.showcaseTitle')}
-          </h2>
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-white/70">
-            {t('landing.showcaseBody')}
-          </p>
-
-          <div className="mt-12 grid gap-12">
-            {showcase.map((demo) => (
-              <div
-                key={demo.slug}
-                className="reveal grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_220px]"
-              >
-                <BrowserFrame
-                  src={`/demos/${demo.slug}-desktop.webp`}
-                  alt={demo.shotAlt}
-                  caption={`evoliia.com/a/${demo.slug}`}
-                  className="w-full"
-                />
-                <div>
-                  <PhoneFrame
-                    src={`/demos/${demo.slug}-mobile.webp`}
-                    alt={demo.shotAlt}
-                    cropHeight={360}
-                    className="mx-auto w-40 lg:w-full"
-                  />
-                  <p className="mt-3 text-center text-xs text-white/50">
-                    {t('landing.showcaseMobileLabel')}
-                  </p>
-                  <p className="mt-4 text-center text-sm font-semibold lg:text-left">
-                    {demo.spec.name}
-                  </p>
-                  <p className="mt-1 text-center text-xs text-white/60 lg:text-left">
-                    {demo.category}
-                  </p>
-                  <a
-                    href={`/a/${demo.slug}`}
-                    className="mt-3 block text-center text-sm font-medium text-white lg:text-left"
-                  >
-                    {t('landing.buildOpen')} →
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-12 max-w-3xl text-sm leading-relaxed text-white/50">
-            {t('landing.showcaseNote')}
-          </p>
-        </div>
-      </section>
-
-      {/* ───────────────── 8. Préparer son lancement ────────────────────── */}
+      {/* ────────────────────── 9. Préparer son lancement ─────────────────── */}
       <Section
         id="lancement"
         title={t('landing.launchTitle')}
@@ -600,111 +551,48 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             { title: t('landing.launchIdeasTitle'), body: t('landing.launchIdeasBody') },
             { title: t('landing.launchWeekTitle'), body: t('landing.launchWeekBody') },
           ].map((card) => (
-            <div
-              key={card.title}
-              className="edge-brand reveal rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6 pt-7"
-            >
+            <Panel key={card.title} tone="canvas" edge>
               <h3 className="m-0 text-base font-semibold">{card.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
                 {card.body}
               </p>
-            </div>
+            </Panel>
           ))}
         </div>
 
         {/*
-          Ce qui vient du parcours, et ce qu'il advient du kit : les deux côte à côte.
-          La seconde carte dit la vérité de cette installation, et non une intention. Tant
-          que l'envoi est fermé, elle annonce qu'aucune publication n'a lieu, ce qui évite
-          la déception de celui qui croirait acheter une publication automatique.
+          Ce qui vient du parcours, et ce qu'il advient du kit : les deux côte à côte. La
+          seconde carte dit la vérité de cette installation, et non une intention. Tant que
+          l'envoi est fermé, elle annonce qu'aucune publication n'a lieu, ce qui évite la
+          déception de celui qui croirait acheter une publication automatique.
         */}
         <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <div className="rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
+          <div className="reveal rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
             <h3 className="m-0 text-base font-semibold text-[var(--color-brand-strong)]">
               {t('landing.launchSourceTitle')}
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
               {t('landing.launchSourceBody')}
             </p>
           </div>
-          <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+          <Panel tone="canvas">
             <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
               {socialOpen ? t('landing.launchSendTitle') : t('landing.launchLimitTitle')}
             </h3>
-            <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
               {socialOpen ? t('landing.launchSendBody') : t('landing.launchLimitBody')}
             </p>
-          </div>
+          </Panel>
         </div>
 
-        <p className="mt-6 text-sm text-[var(--color-ink-soft)]">
+        <p className="mt-6 mb-0 text-sm text-[var(--color-ink-soft)]">
           {t('landing.launchIncluded')}
         </p>
       </Section>
 
-      {/* ─────────── 9. Plus qu'un générateur d'applications ───────────── */}
-      <Section title={t('landing.compareTitle')} body={t('landing.compareBody')}>
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
-              {t('landing.compareLeftTitle')}
-            </h3>
-            <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
-              {t('landing.compareLeftIntro')}
-            </p>
-            <ul className="mt-4 grid gap-2 text-sm text-[var(--color-ink-soft)]">
-              {[
-                t('landing.compareLeft1'),
-                t('landing.compareLeft2'),
-                t('landing.compareLeft3'),
-                t('landing.compareLeft4'),
-              ].map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span aria-hidden="true" className="text-[var(--color-ink-faint)]">
-                    —
-                  </span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-brand-strong)]">
-              {t('landing.compareRightTitle')}
-            </h3>
-            <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
-              {t('landing.compareRightIntro')}
-            </p>
-            <ul className="mt-4 grid gap-2 text-sm">
-              {[
-                t('landing.compareRight1'),
-                t('landing.compareRight2'),
-                t('landing.compareRight3'),
-                t('landing.compareRight4'),
-                t('landing.compareRight5'),
-                t('landing.compareRight6'),
-              ].map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="text-[var(--color-brand)]">
-                    <Check />
-                  </span>
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Section>
-
-      {/* ─────────────────────────── 9. Tarifs ──────────────────────────── */}
-      <Section
-        id="tarifs"
-        title={t('landing.pricingTitle')}
-        body={t('landing.pricingBody')}
-        tone="surface"
-      >
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+      {/* ──────────────────────────── 10. Tarifs ──────────────────────────── */}
+      <Section id="tarifs" title={t('landing.pricingTitle')} body={t('landing.pricingBody')}>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {plans.map((plan) => {
             const features = [
               t('landing.pricingCredits', { count: plan.monthlyCredits }),
@@ -713,9 +601,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                   ? t('landing.pricingProjectsOne')
                   : t('landing.pricingProjects', { count: plan.maxProjects })
                 : t('landing.pricingNoBuild'),
-              ...(plan.allowBuild
-                ? [t('landing.pricingBuild'), t('landing.pricingInstall')]
-                : []),
+              ...(plan.allowBuild ? [t('landing.pricingBuild'), t('landing.pricingInstall')] : []),
               ...(plan.storageBytes > 0
                 ? [t('landing.pricingImages', { size: storageLabel(plan.storageBytes) })]
                 : []),
@@ -731,42 +617,33 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                 key={plan.id}
                 className={
                   plan.isRecommended
-                    ? 'ring-brand [--ring-fill:var(--color-canvas)] relative flex flex-col rounded-[var(--radius-card)] p-6 shadow-[0_22px_48px_-26px_rgba(151,5,244,0.6)]'
-                    : 'relative flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-6'
+                    ? 'ring-brand [--ring-fill:var(--color-surface)] relative flex flex-col rounded-[var(--radius-card)] p-6 shadow-[0_22px_48px_-26px_rgba(151,5,244,0.6)]'
+                    : 'relative flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6'
                 }
               >
                 {plan.isRecommended ? (
                   <span
-                    className="absolute -top-3 left-6 rounded-full px-2.5 py-1 text-xs font-semibold text-white"
-                    style={{ background: 'var(--gradient-brand)' }}
+                    className="absolute -top-3 left-6 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold text-white"
+                    style={{ background: 'var(--gradient-cta)' }}
                   >
                     {t('landing.pricingRecommended')}
                   </span>
                 ) : null}
-                <h3 className="text-base font-semibold">{plan.name}</h3>
-                <p className="mt-3 text-3xl font-semibold tracking-tight">
+                <h3 className="m-0 text-base font-semibold">{plan.name}</h3>
+                <p className="mt-3 mb-0 text-3xl font-semibold tracking-tight">
                   {plan.priceCents === 0
                     ? t('landing.pricingFree')
                     : formatAmount(plan.priceCents, plan.currency)}
                 </p>
                 {plan.priceCents > 0 ? (
-                  <p className="text-xs text-[var(--color-ink-faint)]">
+                  <p className="m-0 text-xs text-[var(--color-ink-faint)]">
                     {t('landing.pricingPerMonth')}
                   </p>
                 ) : null}
-                <p className="mt-4 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                <p className="mt-4 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
                   {plan.description}
                 </p>
-                <ul className="mt-5 mb-6 grid gap-2 text-sm text-[var(--color-ink-soft)]">
-                  {features.map((feature) => (
-                    <li key={feature} className="flex gap-2">
-                      <span className="text-[var(--color-brand)]">
-                        <Check />
-                      </span>
-                      <span>{feature}</span>
-                    </li>
-                  ))}
-                </ul>
+                <CheckList items={features} className="mt-5 mb-6 text-[var(--color-ink-soft)]" />
                 <LinkButton
                   href={findIdea}
                   variant={plan.isRecommended ? 'primary' : 'secondary'}
@@ -780,49 +657,62 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             )
           })}
         </div>
-        <p className="mt-8 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
+        <p className="mt-8 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
           {t('landing.pricingNote')}
         </p>
-        <p className="mt-3 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
+        <p className="mt-3 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
           {t('landing.pricingPaymentNote')}
         </p>
       </Section>
 
-      {/* ────────────────────── 10. Transparence ────────────────────────── */}
-      <Section title={t('landing.honestTitle')} body={t('landing.honestBody')}>
-        <div className="grid gap-5 md:grid-cols-3">
-          {promises.map((item) => (
-            <div
-              key={item.title}
-              className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6"
-            >
-              <h3 className="m-0 text-base font-semibold">{item.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                {item.body}
-              </p>
-            </div>
+      {/* ───────────────────────── 11. Transparence ───────────────────────── */}
+      <Section title={t('landing.honestTitle')} body={t('landing.honestBody')} tone="surface">
+        <div className="grid gap-5 md:grid-cols-2">
+          {[
+            t('landing.honest1'),
+            t('landing.honest2'),
+            t('landing.honest3'),
+            t('landing.honest4'),
+          ].map((promise) => (
+            <Panel key={promise} tone="canvas" className="flex gap-3 py-5">
+              <span className="mt-0.5 text-[var(--color-brand)]">
+                <Check className="h-5 w-5 shrink-0" />
+              </span>
+              <p className="m-0 text-sm leading-relaxed">{promise}</p>
+            </Panel>
           ))}
         </div>
+        <p className="mt-6 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
+          {t('landing.honestNote')}
+        </p>
       </Section>
 
-      {/* ──────────────────────────── 11. FAQ ───────────────────────────── */}
-      <Section title={t('landing.faqTitle')} tone="surface">
+      {/* ─────────────────────────────── 12. FAQ ──────────────────────────── */}
+      <Section title={t('landing.faqTitle')}>
         <div className="grid max-w-3xl gap-3">
           {faq.map((item) => (
             <details
               key={item.q}
-              className="group rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-5 py-4"
+              className="group rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] px-5 py-4"
             >
-              <summary className="cursor-pointer list-none text-base font-medium marker:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium marker:hidden">
                 {item.q}
+                <span
+                  aria-hidden="true"
+                  className="shrink-0 text-[var(--color-ink-faint)] transition-transform group-open:rotate-45"
+                >
+                  +
+                </span>
               </summary>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--color-ink-soft)]">{item.a}</p>
+              <p className="mt-3 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                {item.a}
+              </p>
             </details>
           ))}
         </div>
       </Section>
 
-      {/* ─────────────────────── 12. Appel final ────────────────────────── */}
+      {/* ───────────────────────── 13. Dernier appel ──────────────────────── */}
       <section
         className="on-night relative overflow-hidden text-white"
         style={{ background: 'var(--gradient-night)' }}
@@ -833,30 +723,33 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           style={{ background: 'var(--gradient-brand)' }}
         />
         <div className="relative mx-auto w-full max-w-3xl px-5 py-20 text-center sm:py-24">
-          <h2 className="text-balance text-3xl font-semibold tracking-tight sm:text-4xl">
+          <h2 className="text-balance text-[1.75rem] font-semibold leading-[1.15] tracking-tight sm:text-4xl">
             {t('landing.finalTitle')}
+            <br />
+            <span className="text-gradient-brand">{t('landing.finalTitleAccent')}</span>
           </h2>
-          <p className="mx-auto mt-4 max-w-xl text-white/70">{t('landing.finalBody')}</p>
+          <p className="mx-auto mt-5 max-w-xl text-white/70">{t('landing.finalBody')}</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">
             <LinkButton href={findIdea} size="large">
-              {t('landing.finalCta')}
+              {t('landing.ctaFindIdea')}
             </LinkButton>
             <a
               href={haveIdea}
-              className="inline-flex items-center justify-center rounded-[var(--radius-control)] border border-white/25 px-6 py-3 text-base font-medium text-white no-underline transition-colors hover:bg-white/10"
+              className="inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-white/25 px-6 py-3 text-base font-medium text-white no-underline transition-colors hover:bg-white/10"
             >
               {t('landing.ctaHaveIdea')}
+              <span aria-hidden="true">→</span>
             </a>
           </div>
           <p className="mt-6 text-sm text-white/55">{t('landing.heroNote')}</p>
         </div>
       </section>
 
-      {/* ─────────────────────────── Pied ──────────────────────────────── */}
+      {/* ──────────────────────────────── Pied ────────────────────────────── */}
       <footer className="mx-auto w-full max-w-6xl px-5 py-12">
         <div className="flex flex-wrap items-center gap-6">
           <Logo id="mark-footer" wordmark={t('common.appName')} />
-          <p className="max-w-md text-sm text-[var(--color-ink-soft)]">
+          <p className="m-0 max-w-md text-sm text-[var(--color-ink-soft)]">
             {t('landing.footerTagline')}
           </p>
         </div>
@@ -870,9 +763,9 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
           <a href={`/${locale}/confidentialite`} className="no-underline">
             {t('landing.footerPrivacy')}
           </a>
-          <p className="m-0 ml-auto text-xs text-[var(--color-ink-faint)]">
-            © {new Date().getFullYear()} Evoliia. {t('landing.footerRights')}
-          </p>
+          <span className="ml-auto text-[var(--color-ink-faint)]">
+            © {new Date().getFullYear()} {t('common.appName')}. {t('landing.footerRights')}
+          </span>
         </div>
       </footer>
     </div>

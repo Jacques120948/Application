@@ -39,8 +39,34 @@ export function resolveLocale(value: string | undefined | null): Locale {
   return value !== null && value !== undefined && isLocale(value) ? value : DEFAULT_LOCALE
 }
 
-/** Négociation depuis l'en-tête Accept-Language, sans dépendance externe. */
+/**
+ * Langue réellement affichée pour une adresse donnée.
+ *
+ * `/de` existe encore, mais son catalogue est vide : la page qui s'y affiche est
+ * française. Déclarer « de » à cet endroit tromperait les lecteurs d'écran, qui
+ * prononceraient du français à l'allemande. Tant que la traduction n'est pas faite, c'est
+ * le français qui est annoncé, parce que c'est le français qui est lu.
+ */
+export function renderedLocale(locale: Locale): Locale {
+  return LOCALE_COMPLETENESS[locale] === 'complete' ? locale : DEFAULT_LOCALE
+}
+
+/** Langues réellement traduites de bout en bout. Les seules vers lesquelles on oriente. */
+export function completeLocales(): Locale[] {
+  return SUPPORTED_LOCALES.filter((locale) => LOCALE_COMPLETENESS[locale] === 'complete')
+}
+
+/**
+ * Négociation depuis l'en-tête Accept-Language, sans dépendance externe.
+ *
+ * Une langue seulement prévue n'est jamais choisie ici. Envoyer un visiteur allemand vers
+ * `/de` lui donnerait la page française avec une adresse allemande ; l'envoyer vers la
+ * langue complète la plus proche de ce qu'il demande lui donne une page entière. Il peut
+ * toujours atteindre `/de` en le tapant, et il y trouvera le français, cohérent de bout en
+ * bout.
+ */
 export function negotiateLocale(acceptLanguage: string | null): Locale {
+  const offered = completeLocales()
   if (!acceptLanguage) return DEFAULT_LOCALE
   const ranked = acceptLanguage
     .split(',')
@@ -53,7 +79,7 @@ export function negotiateLocale(acceptLanguage: string | null): Locale {
 
   for (const { tag } of ranked) {
     const base = tag.split('-')[0] ?? ''
-    if (isLocale(base)) return base
+    if (isLocale(base) && offered.includes(base)) return base
   }
   return DEFAULT_LOCALE
 }

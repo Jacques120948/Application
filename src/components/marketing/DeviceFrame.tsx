@@ -27,7 +27,7 @@ export function BrowserFrame({
 }) {
   return (
     <figure
-      className={`m-0 overflow-hidden rounded-[var(--radius-card)] border border-black/10 bg-white shadow-[0_24px_60px_-32px_rgba(14,18,53,0.55)] ${className ?? ''}`}
+      className={`m-0 overflow-hidden rounded-[var(--radius-card)] border border-black/10 bg-white shadow-[0_24px_60px_-32px_rgba(28,11,56,0.55)] ${className ?? ''}`}
     >
       <div className="flex items-center gap-1.5 border-b border-black/5 bg-[#f4f5fb] px-3 py-2">
         <Dot color="#ff5f57" />
@@ -65,7 +65,7 @@ export function PhoneFrame({
 }) {
   return (
     <figure
-      className={`m-0 overflow-hidden rounded-[28px] border-[6px] border-[#11162f] bg-[#11162f] shadow-[0_30px_60px_-30px_rgba(14,18,53,0.7)] ${className ?? ''}`}
+      className={`m-0 overflow-hidden rounded-[28px] border-[6px] border-[#1c0b38] bg-[#1c0b38] shadow-[0_30px_60px_-30px_rgba(28,11,56,0.7)] ${className ?? ''}`}
     >
       <img
         src={src}

@@ -21,34 +21,163 @@ export const fr = {
   'nav.register': 'Créer un compte',
   'nav.admin': 'Administration',
 
-  'landing.navCreate': 'Que créer',
+  // ── Navigation et référencement ──────────────────────────────────────────
   'landing.navHow': 'Comment ça marche',
+  'landing.navExamples': 'Exemples',
+  'landing.navFeatures': 'Fonctionnalités',
   'landing.navPricing': 'Tarifs',
-  'landing.metaTitle': "Evoliia — Créer une application avec l'IA, sans savoir coder",
+  'landing.navStart': 'Commencer',
+  'landing.navOpenMenu': 'Ouvrir le menu',
+  'landing.metaTitle': 'Evoliia | Trouvez, créez et lancez votre application avec l’IA',
   'landing.metaDescription':
-    "Evoliia vous aide à trouver une idée, à vérifier son potentiel, à créer votre application web et à préparer son lancement. Sans écrire une ligne de code.",
+    "Evoliia vous aide à trouver une idée d’application, analyser son potentiel, la créer sans coder et préparer son lancement. De l’idée au projet, accompagné par l’IA.",
 
-  'landing.eyebrow': 'Votre idée mérite plus qu’un simple prototype',
-  'landing.heroTitle': 'Transformez une idée en application.',
-  'landing.heroTitleAccent': 'Sans savoir coder.',
+  // ── Premier écran ────────────────────────────────────────────────────────
+  'landing.eyebrow': 'L’IA qui vous aide à trouver, créer et lancer votre application',
+  'landing.heroTitle': 'Vous voulez lancer une application.',
+  'landing.heroTitleAccent': 'Même si vous ne savez pas encore laquelle.',
   'landing.heroBody':
-    "Evoliia vous aide à trouver une idée, à vérifier son potentiel, à construire votre application et à préparer son lancement.",
-  'landing.ctaFindIdea': 'Trouver mon idée',
+    "Evoliia analyse votre profil, trouve des idées adaptées, vérifie leur potentiel, construit votre application et vous aide à préparer son lancement.",
+  'landing.heroSub': 'Aucune ligne de code. Aucune idée nécessaire pour commencer.',
+  'landing.ctaFindIdea': 'Trouver mon idée gratuitement',
   'landing.ctaHaveIdea': 'J’ai déjà une idée',
-  'landing.heroNote': 'Gratuit pour commencer · Aucune carte bancaire requise',
+  'landing.heroNote': 'Gratuit pour commencer · Simple · Sans coder',
+  'landing.heroBeta':
+    "Evoliia est en bêta privée : un code d’accès est nécessaire pour créer un compte.",
   'landing.heroShotsCaption': 'Applications de démonstration réellement créées avec Evoliia.',
 
-  'landing.buildTitle': 'Que pouvez-vous créer avec Evoliia ?',
-  'landing.buildBody':
-    "D’un outil métier à votre prochain micro-SaaS, tout part d’une simple idée. Voici six applications construites avec le moteur d’Evoliia : elles sont en ligne, vous pouvez les ouvrir.",
-  'landing.buildBadge': 'Exemple créé avec Evoliia',
-  'landing.buildOpen': 'Voir l’exemple',
-  'landing.buildSimilar': 'Créer quelque chose de similaire',
-  'landing.buildNote':
-    "Ce sont des démonstrations publiées par nos soins, pas des clients. Les tarifs affichés illustrent un modèle économique possible, jamais un revenu constaté.",
+  // ── Le parcours, en un coup d'œil ────────────────────────────────────────
+  'landing.flowTitle': 'Une envie suffit. Evoliia s’occupe du reste.',
+  'landing.flowBody':
+    "Vous n’avez pas besoin d’arriver avec un cahier des charges. Vous arrivez avec une envie, et chaque étape prépare la suivante.",
+  'landing.flow1Title': 'Votre profil',
+  'landing.flow1Body': 'Votre métier, votre temps, votre budget, votre objectif.',
+  'landing.flow2Title': 'Des idées adaptées',
+  'landing.flow2Body': 'Plusieurs pistes qui correspondent à ce que vous savez faire.',
+  'landing.flow3Title': 'Analyse du potentiel',
+  'landing.flow3Body': 'Demande, concurrence, obligations, coûts cachés.',
+  'landing.flow4Title': 'Création',
+  'landing.flow4Body': 'L’application est construite, puis modifiée en conversation.',
+  'landing.flow5Title': 'Lancement',
+  'landing.flow5Body': 'Mise en ligne, prix, et de quoi parler de votre projet.',
 
-  'landing.oneLineTitle': 'Une idée suffit pour commencer.',
-  'landing.oneLineBody':
+  // ── Vous n'avez pas encore d'idée ────────────────────────────────────────
+  'landing.noIdeaTitle': 'Vous n’avez même pas besoin d’avoir une idée.',
+  'landing.noIdeaBody':
+    "Parlez-nous simplement de vous, de vos compétences, du temps que vous pouvez consacrer à votre projet, de votre budget et de votre objectif. Evoliia peut ensuite proposer des idées adaptées à votre profil.",
+  'landing.noIdeaDemoLabel': 'Exemple de démonstration',
+  'landing.noIdeaAnalysing': 'Evoliia analyse votre profil…',
+  'landing.profileLabel': 'Votre profil',
+  'landing.profileJob': 'Métier',
+  'landing.profileJobValue': 'Boulanger',
+  'landing.profileExperience': 'Expérience',
+  'landing.profileExperienceValue': '12 ans',
+  'landing.profileTime': 'Temps disponible',
+  'landing.profileTimeValue': '4 h par semaine',
+  'landing.profileBudget': 'Budget',
+  'landing.profileBudgetValue': '100 €',
+  'landing.profileGoal': 'Objectif',
+  'landing.profileGoalValue': '500 € par mois',
+  'landing.suggestionLabel': 'Idée proposée',
+  'landing.suggestionName': 'Calculateur de coûts et de marges pour petites boulangeries',
+  'landing.suggestionScore': 'Potentiel estimé par Evoliia',
+  'landing.suggestionScoreValue': '82 sur 100',
+  'landing.suggestionDifficulty': 'Difficulté',
+  'landing.suggestionDifficultyValue': 'Facile',
+  'landing.suggestionMarket': 'Marché potentiel',
+  'landing.suggestionMarketValue': 'Boulangeries indépendantes',
+  'landing.suggestionModel': 'Modèle économique possible',
+  'landing.suggestionModelValue': 'Abonnement, 14,90 € par mois',
+  'landing.suggestionTime': 'Temps de réalisation',
+  'landing.suggestionTimeValue': 'Quelques jours',
+  'landing.suggestionCompetition': 'Concurrence',
+  'landing.suggestionCompetitionValue': 'Peu d’outils dédiés',
+  'landing.suggestionCta': 'Trouver des idées adaptées à mon profil',
+  'landing.suggestionDisclaimer':
+    "Exemple de démonstration, pas un profil réel. Le potentiel est une estimation d’Evoliia, jamais une prévision ni une garantie de revenu.",
+
+  // ── Les trois portes d'entrée ────────────────────────────────────────────
+  'landing.doorsTitle': 'Où en êtes-vous aujourd’hui ?',
+  'landing.doorsBody': 'Les trois chemins mènent au même endroit : un projet à vous.',
+  'landing.door1Title': 'Je n’ai aucune idée',
+  'landing.door1Body':
+    "Evoliia analyse votre profil et vous aide à découvrir des opportunités adaptées à vos compétences, votre temps et votre budget.",
+  'landing.door1Cta': 'Trouver mon idée',
+  'landing.door2Title': 'J’ai déjà une idée',
+  'landing.door2Body':
+    "Décrivez votre projet. Evoliia vous aide à analyser son potentiel, clarifier le concept et préparer sa création.",
+  'landing.door2Cta': 'Analyser mon idée',
+  'landing.door3Title': 'Je veux créer un revenu complémentaire',
+  'landing.door3Body':
+    "Partez de votre objectif financier et découvrez quels types de projets pourraient correspondre à votre situation.",
+  'landing.door3Cta': 'Explorer les possibilités',
+
+  // ── Ce qu'un objectif de revenu représente, en clients ───────────────────
+  'landing.projectsTitle': 'Ce qu’un objectif représente, en clients',
+  'landing.projectsBody':
+    "Chaque idée proposée est chiffrée de la même façon : un prix, et le nombre de clients qu’il faudrait pour atteindre votre objectif.",
+  'landing.projectsGoal': 'Pour 1 000 € de chiffre d’affaires mensuel',
+  'landing.projectsCustomers': 'environ {count} clients',
+  'landing.projectsDifficulty': 'Difficulté',
+  'landing.projectsNote':
+    "Exemples purement arithmétiques, calculés à partir du prix affiché. Ce ne sont ni des prévisions, ni des garanties de revenu.",
+  'landing.project1Name': 'Assistant devis pour artisans',
+  'landing.project2Name': 'Application de suivi d’entraînement',
+  'landing.project3Name': 'Gestion de locations saisonnières',
+  'landing.project4Name': 'Fiches éducatives pour les familles',
+  'landing.difficultyEasy': 'Facile',
+  'landing.difficultyMedium': 'Moyenne',
+
+  // ── Un projet, pas seulement une application ─────────────────────────────
+  'landing.projectTitle': 'Pas seulement une application.',
+  'landing.projectTitleAccent': 'Un projet à lancer.',
+  'landing.projectLead':
+    "Les outils classiques commencent lorsque vous savez déjà quoi construire. Evoliia peut vous accompagner avant même que vous ayez trouvé votre idée.",
+  'landing.projectLead2':
+    "Il vous aide ensuite à structurer le projet, construire l’application et préparer les premières actions pour la faire connaître.",
+  'landing.timeline1': 'Idée',
+  'landing.timeline2': 'Validation',
+  'landing.timeline3': 'Application',
+  'landing.timeline4': 'Modèle économique',
+  'landing.timeline5': 'Lancement',
+  'landing.timeline6': 'Acquisition',
+  'landing.timelineEvoliia': 'Evoliia vous accompagne sur toute cette ligne, dès l’idée.',
+  'landing.timelineOthers':
+    'Un générateur d’applications, lui, commence à l’étape « Application ».',
+
+  // ── Les démonstrations ───────────────────────────────────────────────────
+  'landing.showcaseTitle': 'Créé avec Evoliia',
+  'landing.showcaseBody':
+    "Découvrez différents types de projets qu’il est possible d’imaginer et de construire avec Evoliia. Chacun est en ligne : vous pouvez l’ouvrir.",
+  'landing.showcaseMobileLabel': 'La même application sur téléphone',
+  'landing.buildOpen': 'Voir la démo',
+  'landing.buildSimilar': 'Créer quelque chose de similaire',
+  'landing.showcaseDemoNote': 'Exemples de démonstration créés avec Evoliia, pas des clients.',
+  'landing.showcaseNote':
+    "Ce sont des applications web. Sur téléphone, elles s’ajoutent à l’écran d’accueil depuis le navigateur : icône, nom, ouverture en plein écran, sans barre d’adresse. Elles ne passent pas par l’App Store ni par Google Play, où ces boutiques décident seules et où nous ne promettons rien à leur place.",
+
+  // ── Les cinq temps du parcours ───────────────────────────────────────────
+  'landing.howTitle': 'De votre première idée à votre lancement',
+  'landing.howBody':
+    "Cinq temps, dans cet ordre. Chacun sert à ne pas gaspiller le suivant : on ne construit qu’une fois la question du client réglée.",
+  'landing.step1Title': 'Comprendre votre objectif',
+  'landing.step1Body':
+    'Evoliia commence par votre situation et ce que vous voulez accomplir.',
+  'landing.step2Title': 'Trouver ou analyser une idée',
+  'landing.step2Body':
+    'Découvrez des opportunités, ou testez le potentiel de votre propre idée.',
+  'landing.step3Title': 'Structurer le projet',
+  'landing.step3Body': 'Cible, fonctionnalités, modèle économique et positionnement.',
+  'landing.step4Title': 'Construire',
+  'landing.step4Body':
+    'Transformez le projet en application, sans avoir besoin de coder.',
+  'landing.step5Title': 'Préparer le lancement',
+  'landing.step5Body':
+    'Evoliia vous aide à réfléchir au prix, au positionnement et aux premières actions marketing.',
+
+  // ── Ce que la plateforme sait faire ──────────────────────────────────────
+  'landing.featuresTitle': 'Ce qu’Evoliia sait faire',
+  'landing.featuresBody':
     "Vous décrivez ce que vous voulez, en français, comme vous le diriez à quelqu’un. Evoliia construit l’application, puis vous la modifiez en continuant la conversation.",
   'landing.oneLinePromptLabel': 'Ce que vous écrivez',
   'landing.oneLinePrompt':
@@ -68,75 +197,7 @@ export const fr = {
   'landing.oneLineEdit3': 'Ajoute une page À propos.',
   'landing.oneLineOpen': 'Ouvrir cette application',
 
-  'landing.noIdeaTitle': 'Vous n’avez même pas besoin d’avoir une idée.',
-  'landing.noIdeaBody':
-    "C’est la différence qui compte. Evoliia commence par comprendre votre métier, votre expérience, le temps dont vous disposez, votre budget et l’objectif que vous visez. Les idées viennent ensuite.",
-  'landing.profileLabel': 'Votre profil',
-  'landing.profileJob': 'Métier',
-  'landing.profileJobValue': 'Boulanger',
-  'landing.profileExperience': 'Expérience',
-  'landing.profileExperienceValue': '12 ans',
-  'landing.profileTime': 'Temps disponible',
-  'landing.profileTimeValue': '4 h par semaine',
-  'landing.profileBudget': 'Budget',
-  'landing.profileBudgetValue': '100 €',
-  'landing.profileGoal': 'Objectif',
-  'landing.profileGoalValue': '500 € par mois',
-  'landing.suggestionLabel': 'Evoliia propose',
-  'landing.suggestionName': 'Calculateur de coûts et de marges pour petites boulangeries',
-  'landing.suggestionScore': 'Potentiel',
-  'landing.suggestionScoreValue': '82 sur 100',
-  'landing.suggestionDifficulty': 'Difficulté',
-  'landing.suggestionDifficultyValue': 'Facile',
-  'landing.suggestionPrice': 'Prix envisagé',
-  'landing.suggestionPriceValue': '14,90 € par mois',
-  'landing.suggestionTarget': 'Cible',
-  'landing.suggestionTargetValue': 'Boulangeries indépendantes',
-  'landing.suggestionCta': 'Étudier cette idée',
-  'landing.suggestionDisclaimer':
-    "Simulation d’illustration. Le score et les montants sont des calculs, jamais une prévision ni une garantie de revenu.",
-
-  'landing.projectsTitle': 'Quel projet pourriez-vous lancer ?',
-  'landing.projectsBody':
-    "Chaque idée proposée est chiffrée de la même façon : un prix, et le nombre de clients qu’il faudrait pour atteindre votre objectif.",
-  'landing.projectsGoal': 'Pour 1 000 € de chiffre d’affaires mensuel',
-  'landing.projectsCustomers': 'environ {count} clients',
-  'landing.projectsDifficulty': 'Difficulté',
-  'landing.projectsNote':
-    "Exemples purement arithmétiques, calculés à partir du prix affiché. Ce ne sont ni des prévisions, ni des garanties de revenu.",
-  'landing.projectsCta': 'Découvrir les idées adaptées à mon profil',
-  'landing.project1Name': 'Assistant devis pour artisans',
-  'landing.project2Name': 'Application de suivi d’entraînement',
-  'landing.project3Name': 'Gestion de locations saisonnières',
-  'landing.project4Name': 'Fiches éducatives pour les familles',
-  'landing.difficultyEasy': 'Facile',
-  'landing.difficultyMedium': 'Moyenne',
-
-  'landing.howTitle': 'Comment fonctionne Evoliia',
-  'landing.howBody':
-    "Sept étapes, dans cet ordre. Chacune sert à ne pas gaspiller la suivante : on ne construit qu’une fois la question du client réglée, et on ne lance qu’une fois l’application en ligne.",
-  'landing.step1Title': 'Votre objectif',
-  'landing.step1Body':
-    "Le montant que vous aimeriez atteindre, le temps dont vous disposez, votre budget de départ. Tout part de là.",
-  'landing.step2Title': 'Des idées chiffrées',
-  'landing.step2Body':
-    "Plusieurs pistes adaptées à votre profil, chacune avec son prix conseillé et le nombre de clients qu’il faudrait pour atteindre votre objectif.",
-  'landing.step3Title': 'La validation',
-  'landing.step3Body':
-    "Demande réelle, concurrence, obligations légales, coûts cachés. L’analyse a le droit de vous déconseiller une idée.",
-  'landing.step4Title': 'Le cahier des charges',
-  'landing.step4Body':
-    "Ce qui sera construit, ce qui est volontairement reporté, et ce qui dépend d’un service extérieur. Vous le lisez avant de lancer.",
-  'landing.step5Title': 'La construction',
-  'landing.step5Body':
-    "L’application est générée, vérifiée, et vous la voyez se dessiner. Vous la modifiez en écrivant ce que vous voulez changer.",
-  'landing.step6Title': 'La mise en ligne',
-  'landing.step6Body':
-    "Une adresse à partager, une page de vente, et le suivi de ce qui se passe réellement : visites, inscriptions, paiements.",
-  'landing.step7Title': 'Le lancement',
-  'landing.step7Body':
-    "Construire une application ne la fait pas connaître. Vos angles marketing, vos idées de publications et votre première semaine, préparés à partir de ce que vous avez déjà décrit.",
-
+  // ── Préparer son lancement ───────────────────────────────────────────────
   'landing.launchTitle': 'Une fois en ligne, il faut se faire connaître',
   'landing.launchBody':
     "C’est là que la plupart des projets s’arrêtent : l’application existe, et personne ne sait quoi en dire. Evoliia prépare de quoi commencer, sans vous demander de tout réécrire.",
@@ -160,33 +221,7 @@ export const fr = {
     "Une fois la semaine approuvée, elle part en un clic dans votre espace Postelya, où vous choisissez le moment de chaque publication. Rien ne part sans votre accord. Aucune statistique n’est inventée, et aucun avis client n’est écrit à votre place.",
   'landing.launchIncluded': 'Compris à partir de l’offre Launch.',
 
-  'landing.pricingLaunchKit': 'Kit de lancement marketing',
-
-  'landing.showcaseTitle': 'Créé avec Evoliia',
-  'landing.showcaseBody':
-    "De vraies applications, pas des maquettes. Chacune est publiée par le moteur d’Evoliia et s’ouvre dans votre navigateur.",
-  'landing.showcaseMobileLabel': 'La même application sur téléphone',
-  'landing.showcaseNote':
-    "Ce sont des applications web. Sur téléphone, elles s’ajoutent à l’écran d’accueil depuis le navigateur : icône, nom, ouverture en plein écran, sans barre d’adresse. Elles ne passent pas par l’App Store ni par Google Play, où ces boutiques décident seules et où nous ne promettons rien à leur place.",
-
-  'landing.compareTitle': 'Plus qu’un générateur d’applications',
-  'landing.compareBody':
-    'Générer du code ne répond qu’à une partie du problème. Reste à savoir quoi construire, pour qui, et à quel prix.',
-  'landing.compareLeftTitle': 'Un générateur d’applications',
-  'landing.compareLeftIntro': 'Vous devez déjà savoir :',
-  'landing.compareLeft1': 'ce que vous voulez créer',
-  'landing.compareLeft2': 'quelles fonctions sont nécessaires',
-  'landing.compareLeft3': 'comment le vendre, et à quel prix',
-  'landing.compareLeft4': 'comment trouver vos premiers clients',
-  'landing.compareRightTitle': 'Evoliia',
-  'landing.compareRightIntro': 'Nous vous aidons à :',
-  'landing.compareRight1': 'trouver une idée adaptée à votre profil',
-  'landing.compareRight2': 'vérifier son potentiel avant de construire',
-  'landing.compareRight3': 'définir ce que fera la première version',
-  'landing.compareRight4': 'créer l’application',
-  'landing.compareRight5': 'préparer sa monétisation',
-  'landing.compareRight6': 'préparer son lancement',
-
+  // ── Tarifs ───────────────────────────────────────────────────────────────
   'landing.pricingTitle': 'Combien ça coûte',
   'landing.pricingBody':
     "Vous ne payez qu’au moment de construire. Définir votre objectif, recevoir des idées et en faire analyser une ne coûte rien.",
@@ -194,35 +229,36 @@ export const fr = {
   'landing.pricingPerMonth': 'par mois',
   'landing.pricingCredits': '{count} crédits par mois',
   'landing.pricingProjectsOne': 'Une application',
-  'landing.pricingProjects': "Jusqu'à {count} applications",
-  'landing.pricingNoBuild': "S'arrête avant la construction",
+  'landing.pricingProjects': 'Jusqu’à {count} applications',
+  'landing.pricingNoBuild': 'S’arrête avant la construction',
   'landing.pricingBuild': 'Construction et mise en ligne',
   'landing.pricingDomain': 'Adresse personnalisée',
   'landing.pricingInstall': 'Installable sur l’écran d’accueil',
   'landing.pricingImages': '{size} d’images à vous',
+  'landing.pricingLaunchKit': 'Kit de lancement marketing',
   'landing.pricingExport': 'Export du code',
   'landing.pricingMobile': 'Préparation pour mobile',
   'landing.pricingRecommended': 'Le plus choisi',
   'landing.pricingCtaFree': 'Commencer gratuitement',
   'landing.pricingCtaPaid': 'Créer mon compte',
   'landing.pricingPaymentNote':
-    "Le paiement en ligne n'est pas encore activé sur cette installation. Créez votre compte gratuitement : vous choisirez votre offre le jour où il le sera, sans rien perdre de votre travail.",
+    "Le paiement en ligne n’est pas encore activé sur cette installation. Créez votre compte gratuitement : vous choisirez votre offre le jour où il le sera, sans rien perdre de votre travail.",
   'landing.pricingNote':
-    "Les crédits couvrent les opérations qui font appel à l'intelligence artificielle. Une recherche d'idées en consomme une douzaine, la construction d'une application une vingtaine.",
+    "Les crédits couvrent les opérations qui font appel à l’intelligence artificielle. Une recherche d’idées en consomme une douzaine, la construction d’une application une vingtaine.",
 
-  'landing.honestTitle': 'Ce que nous ne vous promettrons jamais',
+  // ── Transparence ─────────────────────────────────────────────────────────
+  'landing.honestTitle': 'Une plateforme transparente dès le départ',
   'landing.honestBody':
-    "Un outil honnête vaut mieux qu'un outil enthousiaste. Voici ce que vous ne lirez jamais ici.",
-  'landing.honest1Title': 'Aucun revenu garanti',
-  'landing.honest1Body':
-    "Nous ne vous dirons jamais combien vous allez gagner. Nous calculons combien de clients il faudrait, à quel prix. Ce que vous en ferez dépend de votre marché et de votre travail.",
-  'landing.honest2Title': 'Aucune promesse sur les stores',
-  'landing.honest2Body':
-    "Personne ne peut garantir qu'Apple ou Google accepteront une application. Nous vous disons ce qu'ils exigent, et ce qu'il reste à faire de votre côté.",
-  'landing.honest3Title': 'Aucun coût caché',
-  'landing.honest3Body':
-    "Quand une idée suppose un compte extérieur, une validation ou un abonnement payant, c'est écrit avant la construction, pas découvert après.",
+    "Ce que vous lisez ici est vérifiable dans le produit. Voici ce sur quoi vous pouvez compter.",
+  'landing.honest1': 'Les estimations sont clairement identifiées comme telles',
+  'landing.honest2': 'Les coûts externes éventuels sont expliqués avant la construction',
+  'landing.honest3': 'Vous restez informé des étapes nécessaires à la publication',
+  'landing.honest4':
+    'Vous savez ce qui dépend d’Evoliia et ce qui dépend de services extérieurs',
+  'landing.honestNote':
+    "Nous ne promettons aucun revenu, et aucune acceptation par l’App Store ou Google Play : ces boutiques décident seules.",
 
+  // ── Questions fréquentes ─────────────────────────────────────────────────
   'landing.faqTitle': 'Questions fréquentes',
   'landing.faq1Q': 'Faut-il savoir coder ?',
   'landing.faq1A':
@@ -243,10 +279,11 @@ export const fr = {
   'landing.faq6A':
     "À vous. Chaque application est isolée des autres, et les données de vos utilisateurs restent celles de votre projet.",
 
-  'landing.finalTitle': 'Commencez par une question, pas par une idée',
+  // ── Dernier appel ────────────────────────────────────────────────────────
+  'landing.finalTitle': 'Votre prochaine application peut commencer par une simple idée.',
+  'landing.finalTitleAccent': 'Ou même par l’envie d’en trouver une.',
   'landing.finalBody':
-    'Quelques minutes suffisent pour définir votre objectif et recevoir vos premières pistes chiffrées.',
-  'landing.finalCta': 'Commencer gratuitement',
+    "Evoliia vous accompagne pour passer de « j’aimerais créer quelque chose » à un véritable projet.",
   'landing.footerTagline':
     "Evoliia accompagne les personnes qui veulent créer un revenu complémentaire sans savoir coder.",
   'landing.footerLegal': 'Mentions légales',
