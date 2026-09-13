@@ -37,6 +37,7 @@ export type AgentView = {
   id: AgentId
   name: string
   role: string
+  avatar: string
   summary: string
   starters: string[]
   /** Ouvert par l'offre de la personne. Un spécialiste fermé s'affiche sans se cacher. */
@@ -118,6 +119,7 @@ export async function getDesk(userId: string, projectId: string): Promise<AgentD
       id: agent.id,
       name: agent.name,
       role: agent.role,
+      avatar: agent.avatar,
       summary: agent.summary,
       starters: [...agent.starters],
       open: entitlements.granted.includes(agent.feature),

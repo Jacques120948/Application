@@ -29,6 +29,11 @@ export type Agent = {
   /** Prénom affiché. Un interlocuteur se retient mieux qu'un intitulé de fonction. */
   name: string
   role: string
+  /**
+   * Portrait, servi depuis /public/equipe. Un visage se reconnaît avant un prénom : c'est
+   * ce qui fait qu'on sait à qui l'on parle, comme dans une messagerie d'équipe.
+   */
+  avatar: string
   /** Ce qu'il sait faire, en une phrase, pour l'écran de choix. */
   summary: string
   /** Identifiant de la fonction qui l'ouvre. Voir server/billing/features.ts. */
@@ -41,6 +46,7 @@ export const AGENTS: readonly Agent[] = [
   {
     id: 'social',
     name: 'Tom',
+    avatar: '/equipe/tom.webp',
     role: 'Réseaux sociaux',
     summary:
       'Il connaît votre kit de lancement, ce que vous avez approuvé et ce qui est déjà parti. Il prépare la suite plutôt que de recommencer.',
@@ -54,6 +60,7 @@ export const AGENTS: readonly Agent[] = [
   {
     id: 'seo',
     name: 'Noah',
+    avatar: '/equipe/noah.webp',
     role: 'Référencement',
     summary:
       'Il lit les pages réellement publiées : leurs titres, leurs textes, leurs adresses. Il dit ce qui manque pour être trouvé.',
@@ -67,6 +74,7 @@ export const AGENTS: readonly Agent[] = [
   {
     id: 'analytics',
     name: 'Mila',
+    avatar: '/equipe/mila.webp',
     role: 'Analyse',
     summary:
       'Elle lit vos chiffres réels : visites, pages consultées, inscriptions, données enregistrées. Elle ne devine rien.',

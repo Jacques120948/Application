@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge, Button, Card, CardBody, Notice, Textarea } from '@/components/ui'
+import { Button, Card, CardBody, Notice, Textarea } from '@/components/ui'
 
 /**
  * Le bureau des trois spécialistes.
@@ -25,6 +25,7 @@ export type AgentState = {
   role: string
   summary: string
   starters: string[]
+  avatar: string
   open: boolean
   availableWith: string | null
 }
@@ -45,6 +46,33 @@ function formatDate(iso: string): string {
     month: '2-digit',
     year: 'numeric',
   })
+}
+
+/**
+ * Le portrait d'un spécialiste. Rond, comme dans une messagerie : c'est le code visuel que
+ * tout le monde lit sans l'apprendre. Un spécialiste fermé est en demi-teinte, pas caché.
+ */
+function Avatar({
+  src,
+  name,
+  size = 'medium',
+  muted = false,
+}: {
+  src: string
+  name: string
+  size?: 'small' | 'medium' | 'large'
+  muted?: boolean
+}) {
+  const dimension = size === 'large' ? 'h-16 w-16' : size === 'small' ? 'h-8 w-8' : 'h-12 w-12'
+  return (
+    <img
+      src={src}
+      alt={`Portrait de ${name}`}
+      width={64}
+      height={64}
+      className={`${dimension} shrink-0 rounded-full object-cover ring-2 ring-[var(--color-surface)] shadow-[0_6px_16px_-8px_rgba(151,5,244,0.6)] ${muted ? 'opacity-60 grayscale' : ''}`}
+    />
+  )
 }
 
 export function TeamBoard({
@@ -117,11 +145,22 @@ export function TeamBoard({
                   : 'border-[var(--color-line)] bg-[var(--color-surface)] hover:border-[var(--color-brand)]'
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-base font-semibold">{candidate.name}</span>
-                {candidate.open ? null : <Badge tone="neutral">Fermé</Badge>}
+              <div className="flex items-center gap-3">
+                <Avatar src={candidate.avatar} name={candidate.name} size="large" muted={!candidate.open} />
+                <div className="min-w-0">
+                  <span className="block text-base font-semibold">{candidate.name}</span>
+                  <span className="block text-xs text-[var(--color-ink-faint)]">{candidate.role}</span>
+                  <span className="mt-1 inline-flex items-center gap-1.5 text-xs">
+                    <span
+                      aria-hidden="true"
+                      className={`inline-block h-2 w-2 rounded-full ${candidate.open ? 'bg-[var(--color-positive)]' : 'bg-[var(--color-ink-faint)]'}`}
+                    />
+                    <span className={candidate.open ? 'text-[var(--color-positive)]' : 'text-[var(--color-ink-faint)]'}>
+                      {candidate.open ? 'Disponible' : 'Fermé'}
+                    </span>
+                  </span>
+                </div>
               </div>
-              <p className="m-0 mt-0.5 text-xs text-[var(--color-ink-faint)]">{candidate.role}</p>
               <p className="m-0 mt-3 text-sm leading-relaxed text-[var(--color-ink-soft)]">
                 {candidate.summary}
               </p>
@@ -134,9 +173,12 @@ export function TeamBoard({
         <Card>
           <CardBody className="grid gap-4">
             <div>
-              <h2 className="m-0 text-lg font-semibold">
-                Poser une question à {agent.name}
-              </h2>
+              <div className="flex items-center gap-3">
+                <Avatar src={agent.avatar} name={agent.name} />
+                <h2 className="m-0 text-lg font-semibold">
+                  Poser une question à {agent.name}
+                </h2>
+              </div>
               <p className="m-0 mt-1 text-sm text-[var(--color-ink-soft)]">
                 {agent.name} ne lit que les faits réels de ce projet. S’il manque une donnée,
                 il le dit plutôt que de la deviner.
@@ -222,9 +264,17 @@ export function TeamBoard({
                     {formatDate(note.createdAt)} · {note.creditsSpent} crédits
                   </span>
                 </div>
-                <p className="m-0 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                  {note.answer}
-                </p>
+                <div className="flex items-start gap-3">
+                  {agent !== undefined ? <Avatar src={agent.avatar} name={agent.name} size="small" /> : null}
+                  <div className="min-w-0 flex-1 rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3">
+                    <span className="mb-1 block text-xs font-semibold text-[var(--color-brand-strong)]">
+                      {note.agentName}
+                    </span>
+                    <p className="m-0 whitespace-pre-line text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                      {note.answer}
+                    </p>
+                  </div>
+                </div>
               </CardBody>
             </Card>
           ))}
