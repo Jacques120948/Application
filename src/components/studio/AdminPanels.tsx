@@ -442,3 +442,73 @@ export function LegalIdentityForm({ identity }: { identity: LegalIdentity }) {
     </Card>
   )
 }
+
+export type AdminFlag = { name: string; label: string; help: string; enabled: boolean }
+
+/**
+ * Interrupteurs d'exploitation.
+ *
+ * Séparés des offres, et c'est volontaire : une offre dit ce qu'un client a le droit
+ * d'utiliser, un interrupteur dit si la fonction existe sur cette installation. Le second
+ * l'emporte toujours sur le premier, et le panneau le rappelle.
+ */
+export function FlagEditor({ flags }: { flags: AdminFlag[] }) {
+  return (
+    <div className="grid gap-4">
+      {flags.map((flag) => (
+        <FlagCard key={flag.name} flag={flag} />
+      ))}
+    </div>
+  )
+}
+
+function FlagCard({ flag }: { flag: AdminFlag }) {
+  const [enabled, setEnabled] = useState(flag.enabled)
+  const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
+  const [error, setError] = useState<string | null>(null)
+
+  async function toggle(next: boolean) {
+    setStatus('busy')
+    setError(null)
+    const response = await fetch('/api/admin/flags', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: flag.name, enabled: next }),
+    })
+    const body = (await response.json()) as { message?: string }
+    if (!response.ok) {
+      setError(body.message ?? "Le changement n'a pas abouti.")
+      setStatus('idle')
+      return
+    }
+    setEnabled(next)
+    setStatus('saved')
+  }
+
+  return (
+    <Card>
+      <CardBody className="grid gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h3 className="m-0 text-base font-semibold">{flag.label}</h3>
+          <Badge tone={enabled ? 'positive' : 'neutral'}>{enabled ? 'Ouverte' : 'Fermée'}</Badge>
+        </div>
+        <p className="m-0 text-sm text-[var(--color-ink-soft)]">{flag.help}</p>
+        {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+        {status === 'saved' ? (
+          <Notice tone="positive">
+            Enregistré. Le changement vaut immédiatement, sans redéploiement.
+          </Notice>
+        ) : null}
+        <div>
+          <Button
+            variant={enabled ? 'secondary' : 'primary'}
+            disabled={status === 'busy'}
+            onClick={() => void toggle(!enabled)}
+          >
+            {status === 'busy' ? 'Enregistrement…' : enabled ? 'Fermer' : 'Ouvrir'}
+          </Button>
+        </div>
+      </CardBody>
+    </Card>
+  )
+}

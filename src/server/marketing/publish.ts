@@ -3,6 +3,7 @@ import { AppError, notFound, validation } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { useCredential } from '@/server/integrations/service'
+import { isEnabled } from '@/server/settings/flags'
 import { launchKitSchema, type ScheduledPost } from '@/lib/marketing'
 
 /**
@@ -58,6 +59,17 @@ export function nextOccurrence(post: ScheduledPost, from: Date): Date | null {
 export type SendResult = { created: number; alreadyThere: number; workspace: string }
 
 export async function sendWeekToSocial(userId: string, kitId: string): Promise<SendResult> {
+  /*
+   * Vérifié côté serveur et pas seulement à l'écran : un bouton caché n'empêche pas
+   * d'appeler la route, et une fonction éteinte doit l'être pour de bon.
+   */
+  if (!(await isEnabled('socialPublishing'))) {
+    throw new AppError(
+      'UNSUPPORTED_REQUEST',
+      "L'envoi vers Postelya n'est pas encore ouvert. Il le sera dès que la publication sur les réseaux sera autorisée.",
+    )
+  }
+
   const url = process.env.SOCIAL_ENGINE_URL
   const secret = process.env.SOCIAL_ENGINE_SECRET
   if (!url || !secret || secret.length < 32) {

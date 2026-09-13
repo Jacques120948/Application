@@ -12,6 +12,7 @@ import {
 } from '@/server/marketing/launch-kit'
 import { isEngineAvailable } from '@/server/marketing/engine'
 import { listConnections } from '@/server/integrations/service'
+import { isEnabled } from '@/server/settings/flags'
 import { Shell } from '@/components/studio/Shell'
 import { LaunchKitBoard } from '@/components/studio/LaunchKitBoard'
 import { Card, CardBody, LinkButton, Notice } from '@/components/ui'
@@ -46,9 +47,15 @@ export default async function MarketingPage({
   // La liste des connexions ne touche jamais la table des secrets : savoir qu'un espace
   // est relié ne demande pas de lire l'autorisation.
   const connections = allowed ? await listConnections(user.id) : []
+  /*
+   * Deux conditions, et les deux comptent : l'espace doit être relié, et la fonction doit
+   * être ouverte sur cette installation. Un espace relié alors que la publication n'est pas
+   * encore autorisée ne mène nulle part.
+   */
   const socialLinked =
+    (await isEnabled('socialPublishing')) &&
     connections.find((entry) => entry.provider.id === 'postelya')?.connection?.status ===
-    'CONNECTED'
+      'CONNECTED'
   const locked = entitlements.locked.find((entry) => entry.feature.id === LAUNCH_KIT_FEATURE)
 
   return (

@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
 import {
   getAdminOverview,
+  listFlags,
   listPlans,
   listUsers,
   readLegalIdentity,
@@ -15,6 +16,7 @@ import {
   AdminPlan,
   AdminUser,
   LegalIdentityForm,
+  FlagEditor,
   PlanEditor,
   UserTable,
 } from '@/components/studio/AdminPanels'
@@ -35,12 +37,13 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
   if (user.role !== 'ADMIN') notFound()
 
   const t = getTranslator(locale)
-  const [overview, plans, users, identity, wallet] = await Promise.all([
+  const [overview, plans, users, identity, wallet, flags] = await Promise.all([
     getAdminOverview(),
     listPlans(),
     listUsers({ query: '', take: 50 }),
     readLegalIdentity(),
     getWallet(user.id),
+    listFlags(),
   ])
 
   const figures = [
@@ -78,6 +81,14 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
           que vous collectez des adresses e-mail.
         </p>
         <LegalIdentityForm identity={identity} />
+
+        <h2 className="mt-12 mb-1 text-lg font-semibold">Les fonctions de l’installation</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Une fonction fermée l’est pour tout le monde, quelle que soit l’offre. Ce réglage
+          existe pour celles qui dépendent d’une autorisation extérieure : elles s’ouvrent
+          le jour où elle arrive, sans redéploiement.
+        </p>
+        <FlagEditor flags={flags} />
 
         <h2 className="mt-12 mb-1 text-lg font-semibold">Les offres</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">

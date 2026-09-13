@@ -6,6 +6,22 @@ import { logger } from '@/server/observability/logger'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { findProvider, INTEGRATION_PROVIDERS, type IntegrationProvider } from './catalog'
 import { findVerifier } from './verify'
+import { isEnabled } from '@/server/settings/flags'
+
+/**
+ * Fournisseurs suspendus à un interrupteur d'exploitation.
+ *
+ * Un fournisseur peut être construit, testé et pourtant fermé : celui-ci dépend d'une
+ * autorisation extérieure qui n'est pas encore arrivée. Il apparaît alors comme à venir,
+ * ce qui est exactement ce qu'il est.
+ */
+const GATED: Record<string, 'socialPublishing'> = { postelya: 'socialPublishing' }
+
+async function isProviderOpen(provider: IntegrationProvider): Promise<boolean> {
+  if (provider.status !== 'available') return false
+  const flag = GATED[provider.id]
+  return flag === undefined ? true : isEnabled(flag)
+}
 
 /**
  * Gestionnaire d'intégrations.
@@ -103,10 +119,18 @@ export async function listConnections(userId: string): Promise<CatalogueEntry[]>
     ]),
   )
 
-  return INTEGRATION_PROVIDERS.map((provider) => ({
-    provider,
-    connection: byProvider.get(provider.id) ?? null,
-  }))
+  /*
+   * Un fournisseur fermé par interrupteur est présenté comme à venir. Sa connexion déjà
+   * établie reste visible : la cacher donnerait l'impression d'avoir été déconnecté.
+   */
+  return Promise.all(
+    INTEGRATION_PROVIDERS.map(async (provider) => ({
+      provider: (await isProviderOpen(provider))
+        ? provider
+        : { ...provider, status: 'planned' as const },
+      connection: byProvider.get(provider.id) ?? null,
+    })),
+  )
 }
 
 /** Connexions actives, pour la limite d'offre. */
@@ -144,7 +168,7 @@ export async function connectWithApiKey(
 ): Promise<ConnectionView> {
   const provider = findProvider(input.providerId)
   if (provider === undefined) throw notFound("Ce service n'existe pas dans le catalogue.")
-  if (provider.status !== 'available') {
+  if (!(await isProviderOpen(provider))) {
     throw validation("Ce service n'est pas encore connectable. Il arrive bientôt.")
   }
   if (provider.credential !== 'API_KEY') {

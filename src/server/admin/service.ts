@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { FEATURE_IDS } from '@/server/billing/features'
+import { FLAGS, readFlags, setFlag, type FlagName } from '@/server/settings/flags'
 import { prisma } from '@/server/db/client'
 import { notFound } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
@@ -198,4 +199,38 @@ export async function updateLegalIdentity(
   const admin = await requireAdmin()
   await saveLegalIdentity(input)
   logger.info('identité légale enregistrée', { adminId: admin.id })
+}
+
+// ──────────────────────────── Interrupteurs ──────────────────────────────────
+
+export const flagInput = z.object({
+  name: z.enum(Object.keys(FLAGS) as [FlagName, ...FlagName[]]),
+  enabled: z.boolean(),
+})
+
+export async function listFlags() {
+  await requireAdmin()
+  const state = await readFlags()
+  return (Object.keys(FLAGS) as FlagName[]).map((name) => ({
+    name,
+    label: FLAGS[name].label,
+    help: FLAGS[name].help,
+    enabled: state[name],
+  }))
+}
+
+/**
+ * Allume ou éteint une fonction pour toute l'installation.
+ *
+ * À distinguer des droits par abonnement : ceux-ci disent ce qu'une offre ouvre, un
+ * interrupteur dit si la fonction existe du tout. Éteinte, elle l'est pour tout le monde.
+ */
+export async function updateFlag(input: z.infer<typeof flagInput>) {
+  const admin = await requireAdmin()
+  await setFlag(input.name, input.enabled)
+  logger.info('interrupteur basculé', {
+    adminId: admin.id,
+    flag: input.name,
+    enabled: input.enabled,
+  })
 }

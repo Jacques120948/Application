@@ -8,6 +8,7 @@ import { register } from '@/server/auth/service'
 import { decryptSecret } from '@/lib/crypto'
 import { connectWithApiKey, disconnect, listConnections } from '@/server/integrations/service'
 import { sendWeekToSocial } from '@/server/marketing/publish'
+import { setFlag } from '@/server/settings/flags'
 import { DEMO_APPS } from '@/server/demos/catalog'
 
 /**
@@ -98,12 +99,17 @@ beforeAll(async () => {
   process.env.SOCIAL_ENGINE_URL = `http://127.0.0.1:${port}`
   process.env.SOCIAL_ENGINE_SECRET = SECRET
 
+  // La fonction est éteinte par défaut sur une installation neuve : on l'ouvre pour la
+  // suite, et un test vérifie plus bas qu'éteinte elle ferme réellement la porte.
+  await setFlag('socialPublishing', true)
+
   email = `liaison-${Date.now()}@exemple.test`
   userId = (await register({ email, password: 'motdepasse-2026-solide', locale: 'fr' })).userId
   await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 2 } })
 }, 30_000)
 
 afterAll(async () => {
+  await setFlag('socialPublishing', false)
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await prisma.user.deleteMany({ where: { email } })
   await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 0 } })
@@ -246,5 +252,38 @@ describe('dépôt d’une semaine', () => {
     await disconnect(userId, link!.id)
 
     await expect(sendWeekToSocial(userId, kitId)).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
+  })
+})
+
+describe('interrupteur d’exploitation', () => {
+  it('ferme la porte des deux côtés quand la fonction est éteinte', async () => {
+    /*
+     * Une fonction éteinte doit l'être pour de bon : cacher le bouton ne suffit pas, la
+     * route reste appelable. Le service refuse donc de son côté, et le fournisseur cesse
+     * d'être connectable.
+     */
+    await setFlag('socialPublishing', false)
+
+    const entries = await listConnections(userId)
+    const postelya = entries.find((entry) => entry.provider.id === 'postelya')
+    expect(postelya?.provider.status).toBe('planned')
+
+    await expect(
+      connectWithApiKey(userId, { providerId: 'postelya', apiKey: CODE }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+
+    // Et l'envoi, qui est la porte qui compte vraiment.
+    const kit = await withUserScope(userId, (tx) =>
+      tx.marketingKit.findFirstOrThrow({ where: { userId }, select: { id: true } }),
+    )
+    await expect(sendWeekToSocial(userId, kit.id)).rejects.toMatchObject({
+      code: 'UNSUPPORTED_REQUEST',
+    })
+
+    await setFlag('socialPublishing', true)
+    const reopened = await listConnections(userId)
+    expect(reopened.find((entry) => entry.provider.id === 'postelya')?.provider.status).toBe(
+      'available',
+    )
   })
 })
