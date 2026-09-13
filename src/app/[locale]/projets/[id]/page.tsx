@@ -50,9 +50,17 @@ export default async function ProjectPage({
               Préparons maintenant son lancement.
             </span>
           </p>
-          <LinkButton href={`/${locale}/projets/${project.id}/marketing`}>
-            Préparer mon lancement
-          </LinkButton>
+          <div className="flex flex-wrap gap-2">
+            <LinkButton href={`/${locale}/projets/${project.id}/marketing`}>
+              Préparer mon lancement
+            </LinkButton>
+            <LinkButton
+              href={`/${locale}/projets/${project.id}/equipe`}
+              variant="secondary"
+            >
+              Voir mon équipe marketing
+            </LinkButton>
+          </div>
         </div>
       )}
       <ProjectWorkspace

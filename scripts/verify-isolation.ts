@@ -28,6 +28,7 @@ const PROTECTED_TABLES = [
   'IntegrationEvent',
   'MarketingKit',
   'MediaAsset',
+  'AgentNote',
 ] as const
 
 type RoleRow = { role: string; bypassrls: boolean }

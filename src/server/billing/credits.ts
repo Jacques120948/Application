@@ -31,6 +31,12 @@ export type CreditedOperation =
   | 'coach'
   /** Kit de lancement marketing, produit par le moteur social. */
   | 'launchKit'
+  /** Une semaine réécrite, déclinée ou adaptée à un autre réseau. */
+  | 'contentVariation'
+  /** Un mois de publications, plutôt qu'une semaine. */
+  | 'monthlyPlan'
+  /** Une question posée à l'un des trois spécialistes marketing. */
+  | 'specialist'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -49,6 +55,22 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    * court ; c'est LAUNCH_KIT_ESTIMATED_CREDITS qui est annoncé au créateur.
    */
   launchKit: 5,
+  /*
+   * Une variation reprend une publication existante et la réécrit : l'entrée est courte,
+   * la sortie aussi. Le plancher est celui d'une opération cadrée par le schéma.
+   */
+  contentVariation: 2,
+  /*
+   * Un mois est environ quatre fois une semaine. Le kit complet coûte 11 crédits mesurés,
+   * dont la semaine n'est qu'une part : le plancher est posé à 12 et le coût réel, comme
+   * partout, est celui des jetons effectivement consommés.
+   */
+  monthlyPlan: 12,
+  /*
+   * Une question à un spécialiste. Le contexte est un extrait de faits, la réponse fait six
+   * phrases : c'est plus qu'une réponse de coach, moins qu'une génération.
+   */
+  specialist: 2,
 }
 
 /**

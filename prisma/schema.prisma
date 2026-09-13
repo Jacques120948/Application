@@ -60,6 +60,7 @@ model User {
   integrationEvents IntegrationEvent[]
   marketingKits     MarketingKit[]
   medias            MediaAsset[]
+  agentNotes        AgentNote[]
   profile           CreatorProfile?
   ideas             Idea[]
   tokens            VerificationToken[]
@@ -421,6 +422,7 @@ model Project {
   connections IntegrationConnection[]
   marketing   MarketingKit[]
   medias      MediaAsset[]
+  agentNotes  AgentNote[]
 
   @@index([ownerId, updatedAt])
 }
@@ -554,27 +556,27 @@ model AppEvent {
 /// Ce que le moteur renvoie n'est pas stocké chez lui : il est sans état. La seule copie
 /// vit ici, dans la base d'Evoliia, sous la même règle de cloisonnement que le reste.
 model MarketingKit {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @db.Uuid
-  projectId     String    @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @db.Uuid
+  projectId      String    @db.Uuid
   /// Version du contrat du moteur, pour relire un ancien kit sans se tromper de forme.
-  engineVersion String
+  engineVersion  String
   /// Le kit lui-même : bénéfices, angles, idées, semaine. Modifiable par le créateur.
-  content       Json
-  model         String
-  inputTokens   Int       @default(0)
-  outputTokens  Int       @default(0)
-  cachedTokens  Int       @default(0)
+  content        Json
+  model          String
+  inputTokens    Int       @default(0)
+  outputTokens   Int       @default(0)
+  cachedTokens   Int       @default(0)
   /// Coût réel de l'appel, en micro-dollars. Alimente le calcul de marge par offre.
-  costMicros    Int       @default(0)
-  creditsSpent  Int       @default(0)
+  costMicros     Int       @default(0)
+  creditsSpent   Int       @default(0)
   /// Posé quand le créateur a relu et validé. Rien n'est publié sans ce geste.
-  approvedAt    DateTime?
+  approvedAt     DateTime?
   /// Posé quand la semaine a été déposée en brouillon dans l'espace Postelya du créateur.
   /// Sert à le dire à l'écran, pas à empêcher un second envoi : celui-ci est sans effet.
   sentToSocialAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -612,4 +614,29 @@ model MediaAsset {
 
   @@index([projectId, createdAt])
   @@index([userId])
+}
+
+/// Note d'un spécialiste marketing sur un projet.
+///
+/// Les trois métiers — social, référencement, lecture des résultats — regardent le même
+/// projet. Ce qui les relie est ici : la phrase que chacun retient, et que les autres
+/// reçoivent à leur tour. C'est ce qui distingue une équipe de trois assistants séparés.
+model AgentNote {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  projectId    String   @db.Uuid
+  /// Spécialiste : social, seo ou analytics.
+  agent        String
+  question     String
+  answer       String
+  /// Ce que ce spécialiste retient pour ses collègues, en une phrase.
+  takeaway     String?
+  creditsSpent Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([projectId, agent, createdAt])
 }

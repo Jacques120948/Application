@@ -96,6 +96,7 @@ describe('règles de dépendance', () => {
       'integrationConnection',
       'integrationCredential',
       'integrationEvent',
+      'agentNote',
     ]
     // Ces deux fichiers lisent délibérément des applications publiées, qui sont publiques.
     const allowed = new Set([

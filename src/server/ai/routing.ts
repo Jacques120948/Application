@@ -66,6 +66,16 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   // Le modèle est en réalité choisi par le moteur social, qui exécute l'appel. Ce profil
   // sert de référence de coût et de garde-fou si le moteur revenait un jour sur place.
   launchKit: { model: MODELS.fast, maxTokens: 8_000, effort: 'medium' },
+  // Comme le kit : c'est le moteur social qui exécute et choisit son modèle. Ce profil
+  // sert de référence de coût.
+  contentVariation: { model: MODELS.fast, maxTokens: 3_000, effort: 'medium' },
+  monthlyPlan: { model: MODELS.fast, maxTokens: 16_000, effort: 'medium' },
+  /*
+   * Les spécialistes raisonnent sur des faits chiffrés et doivent savoir dire « ces chiffres
+   * ne permettent pas de conclure ». Le modèle économique s'en tire mal : il conclut quand
+   * même. Le modèle rapide est le bon compromis pour une réponse de six phrases.
+   */
+  specialist: { model: MODELS.fast, maxTokens: 1_200, effort: 'medium' },
 }
 
 export type TokenUsage = {

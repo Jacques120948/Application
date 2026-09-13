@@ -74,7 +74,7 @@ export const FEATURES: readonly Feature[] = [
     group: 'equipe',
     label: 'Tom — Social Media Manager',
     summary: 'Un interlocuteur qui prépare vos semaines et garde le fil de ce qui a déjà été publié.',
-    status: 'prevu',
+    status: 'live',
   },
   {
     id: 'social_analytics_basic',
@@ -88,21 +88,21 @@ export const FEATURES: readonly Feature[] = [
     group: 'equipe',
     label: 'Équipe marketing',
     summary: 'Une coordination entre les différents métiers du marketing.',
-    status: 'prevu',
+    status: 'live',
   },
   {
     id: 'seo_agent',
     group: 'equipe',
     label: 'Noah — Référencement',
     summary: 'Le travail de visibilité sur les moteurs de recherche.',
-    status: 'prevu',
+    status: 'live',
   },
   {
     id: 'analytics_agent',
     group: 'equipe',
     label: 'Mila — Analyse',
     summary: 'La lecture des résultats et les recommandations qui en découlent.',
-    status: 'prevu',
+    status: 'live',
   },
 ]
 

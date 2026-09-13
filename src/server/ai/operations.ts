@@ -19,7 +19,10 @@ import {
   appAssistantSystem,
   asUserData,
   BLUEPRINT_SYSTEM,
+  ANALYTICS_AGENT_SYSTEM,
   COACH_SYSTEM,
+  SEO_AGENT_SYSTEM,
+  SOCIAL_AGENT_SYSTEM,
   EDIT_SYSTEM,
   GENERATE_PAGE_SYSTEM,
   GENERATE_PLAN_SYSTEM,
@@ -807,6 +810,113 @@ export async function askCoach(params: {
     await recordCall(
       accounting,
       'coach',
+      {
+        model: profile.model,
+        usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },
+        latencyMs: Date.now() - startedAt,
+      },
+      false,
+      error instanceof AppError ? error.code : 'inconnu',
+    )
+    throw toPublicFailure(error, { userId: params.userId })
+  }
+}
+
+
+/**
+ * Question posée à l'un des trois spécialistes marketing.
+ *
+ * Un seul appel pour les trois : ils ne diffèrent que par leur cadre et par les faits
+ * qu'ils reçoivent. Une fonction par métier aurait triplé le même code, et avec lui les
+ * trois endroits où oublier de comptabiliser un crédit.
+ *
+ * La réponse se termine par une ligne « RETENIR: … » que l'on détache ici. Elle n'est pas
+ * montrée au créateur : elle sert à ses collègues, à la question suivante. La demander dans
+ * la réponse plutôt qu'en un second appel évite de payer deux fois pour une phrase.
+ */
+export async function askSpecialist(params: {
+  userId: string
+  agent: 'social' | 'seo' | 'analytics'
+  question: string
+  facts: string
+  teamMemory: string | null
+  history: Array<{ question: string; answer: string }>
+  locale: string
+}): Promise<{ answer: string; takeaway: string | null; creditsSpent: number }> {
+  const accounting: Accounting = { userId: params.userId, operation: 'specialist' }
+  await beforeCalls(accounting)
+  const profile = OPERATION_PROFILES.specialist
+  const startedAt = Date.now()
+
+  const system =
+    params.agent === 'social'
+      ? SOCIAL_AGENT_SYSTEM
+      : params.agent === 'seo'
+        ? SEO_AGENT_SYSTEM
+        : ANALYTICS_AGENT_SYSTEM
+
+  const messages = [
+    ...params.history.slice(-2).flatMap((turn) => [
+      { role: 'user' as const, content: asUserData('question', turn.question) },
+      { role: 'assistant' as const, content: turn.answer.slice(0, 800) },
+    ]),
+    {
+      role: 'user' as const,
+      content: [
+        `Langue de la réponse : ${params.locale}.`,
+        asUserData('faits_du_projet', params.facts),
+        params.teamMemory === null
+          ? "Tes collègues n'ont encore rien retenu sur ce projet."
+          : asUserData('ce_que_tes_collegues_ont_retenu', params.teamMemory),
+        asUserData('question', params.question),
+      ].join('\n\n'),
+    },
+  ]
+
+  try {
+    const response = await getAnthropic().messages.create({
+      model: profile.model,
+      max_tokens: profile.maxTokens,
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+      messages,
+    })
+
+    const usage: TokenUsage = {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cachedTokens: response.usage.cache_read_input_tokens ?? 0,
+    }
+    const cost = await recordCall(
+      accounting,
+      'specialist',
+      { model: profile.model, usage, latencyMs: Date.now() - startedAt },
+      true,
+    )
+    const spent = await afterCalls(accounting, cost)
+
+    const brut = response.content
+      .filter((block): block is Extract<typeof block, { type: 'text' }> => block.type === 'text')
+      .map((block) => block.text)
+      .join('\n')
+      .trim()
+
+    if (brut === '') {
+      throw new AppError('AI_REFUSED', "Le spécialiste n'a pas pu répondre. Reformulez votre question.")
+    }
+
+    // La ligne « RETENIR: » est optionnelle : une réponse qui l'oublie reste valable, elle
+    // ne laisse simplement rien à ses collègues.
+    const lignes = brut.split('\n')
+    const index = lignes.findIndex((ligne) => /^RETENIR\s*:/i.test(ligne.trim()))
+    const takeaway =
+      index === -1 ? null : lignes[index]!.replace(/^RETENIR\s*:/i, '').trim().slice(0, 200)
+    const answer = (index === -1 ? lignes : lignes.slice(0, index)).join('\n').trim()
+
+    return { answer, takeaway: takeaway === '' ? null : takeaway, creditsSpent: spent.creditsSpent }
+  } catch (error) {
+    await recordCall(
+      accounting,
+      'specialist',
       {
         model: profile.model,
         usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 },

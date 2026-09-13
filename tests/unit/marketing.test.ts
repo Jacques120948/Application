@@ -45,11 +45,22 @@ describe('droits par abonnement', () => {
     expect(resolveEntitlements(PLANS[0]!, PLANS).granted).toEqual([])
   })
 
+  /*
+   * La fonction témoin n'est pas écrite en dur : elle est choisie dans le catalogue parmi
+   * celles encore à construire. Une version précédente citait `social_agent` ; le jour où
+   * il a été construit, le test a échoué alors que la règle qu'il défend n'avait pas bougé.
+   */
   it('n’accorde jamais une fonction seulement prévue, même si l’offre la contient', () => {
-    // Builder contient social_agent en base ; il n'est pas construit, il reste fermé.
+    const prevue = FEATURES.find(
+      (feature) => feature.status === 'prevu' && PLANS[2]!.features.includes(feature.id),
+    )
+    if (prevue === undefined) {
+      // Tout ce que Builder contient est construit : la règle n'a rien à mordre ici.
+      expect(liveFeatures().length).toBeGreaterThan(0)
+      return
+    }
     const entitlements = resolveEntitlements(PLANS[2]!, PLANS)
-    expect(PLANS[2]!.features).toContain('social_agent')
-    expect(entitlements.granted).not.toContain('social_agent')
+    expect(entitlements.granted).not.toContain(prevue.id)
   })
 
   it('ne présente comme verrouillée qu’une fonction qui existe vraiment', () => {
@@ -69,13 +80,31 @@ describe('droits par abonnement', () => {
 
   it('distingue « pas dans votre offre » de « n’existe pas encore »', () => {
     const entitlements = resolveEntitlements(PLANS[1]!, PLANS)
-    let thrown: unknown
-    try {
-      requireFeature(entitlements, 'seo_agent')
-    } catch (error) {
-      thrown = error
+    const prevue = FEATURES.find((feature) => feature.status === 'prevu')
+    const construite = liveFeatures().find((feature) => !entitlements.granted.includes(feature.id))
+
+    // Une fonction construite mais non incluse : c'est une question d'offre.
+    if (construite !== undefined) {
+      let refus: unknown
+      try {
+        requireFeature(entitlements, construite.id)
+      } catch (error) {
+        refus = error
+      }
+      expect(refus).toMatchObject({ code: 'PLAN_LIMIT' })
     }
-    expect(thrown).toMatchObject({ code: 'UNSUPPORTED_REQUEST' })
+
+    // Une fonction qui n'existe pas encore : ce n'est pas une question d'offre, et lui
+    // proposer de payer davantage serait une promesse non tenue.
+    if (prevue !== undefined) {
+      let refus: unknown
+      try {
+        requireFeature(entitlements, prevue.id)
+      } catch (error) {
+        refus = error
+      }
+      expect(refus).toMatchObject({ code: 'UNSUPPORTED_REQUEST' })
+    }
   })
 
   it('ne répartit que des fonctions du catalogue', () => {
