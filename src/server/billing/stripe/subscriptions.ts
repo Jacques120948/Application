@@ -1,3 +1,4 @@
+import { isStripeMissing, stripeMode, type StripeMode } from '@/server/billing/stripe/client'
 import type Stripe from 'stripe'
 import { z } from 'zod'
 import { env } from '@/lib/env'
@@ -49,8 +50,13 @@ type PlanRow = {
 }
 
 /** Ce qui, s'il change, exige un nouveau tarif Stripe. */
-export function priceFingerprint(plan: Pick<PlanRow, 'priceCents' | 'currency' | 'interval'>): string {
-  return `${plan.priceCents}:${plan.currency.toLowerCase()}:${plan.interval}`
+export function priceFingerprint(
+  plan: Pick<PlanRow, 'priceCents' | 'currency' | 'interval'>,
+  mode: StripeMode = stripeMode(),
+): string {
+  // Le mode fait partie de l'empreinte : un tarif créé en test n'existe pas en production,
+  // et la première demande de paiement après le passage en production le recrée d'elle-même.
+  return `${mode}:${plan.priceCents}:${plan.currency.toLowerCase()}:${plan.interval}`
 }
 
 /** Statut Evoliia d'un abonnement Stripe. `null` : l'abonnement n'existe plus. */
@@ -88,7 +94,10 @@ export async function ensureStripePrice(stripe: Stripe, planId: string): Promise
   const fingerprint = priceFingerprint(plan)
   if (plan.stripePriceId !== null && plan.stripePriceFingerprint === fingerprint) return plan.stripePriceId
 
-  let productId = plan.stripeProductId
+  // Un produit de l'autre mode n'existe pas ici : on repart d'un produit neuf, et l'ancien
+  // tarif n'est pas à désactiver — Stripe ne le connaît pas dans ce mode.
+  const sameMode = plan.stripePriceFingerprint?.startsWith(`${stripeMode()}:`) === true
+  let productId = sameMode ? plan.stripeProductId : null
   if (productId === null) {
     const product = await stripe.products.create({
       name: `Evoliia — ${plan.name}`,
@@ -107,7 +116,7 @@ export async function ensureStripePrice(stripe: Stripe, planId: string): Promise
     recurring: { interval: plan.interval === 'year' ? 'year' : 'month' },
     metadata: { planId: plan.id },
   })
-  if (plan.stripePriceId !== null) {
+  if (plan.stripePriceId !== null && sameMode) {
     await stripe.prices.update(plan.stripePriceId, { active: false }).catch(() => undefined)
   }
   await prisma.plan.update({
@@ -124,7 +133,19 @@ export async function ensureStripeCustomer(stripe: Stripe, userId: string): Prom
     select: { id: true, email: true, name: true, stripeCustomerId: true },
   })
   if (user === null) throw notFound("Ce compte n'existe pas.")
-  if (user.stripeCustomerId !== null) return user.stripeCustomerId
+  if (user.stripeCustomerId !== null) {
+    // Le client gardé en base peut venir de l'autre mode (test → production) ou avoir été
+    // supprimé dans Stripe : on le vérifie avant de l'utiliser, et on le recrée sinon.
+    const known = await stripe.customers
+      .retrieve(user.stripeCustomerId)
+      .then((customer) => !('deleted' in customer && customer.deleted === true))
+      .catch((error: unknown) => {
+        if (isStripeMissing(error)) return false
+        throw error
+      })
+    if (known) return user.stripeCustomerId
+    logger.info('stripe : client inconnu dans ce mode, recréé', { userId })
+  }
   const customer = await stripe.customers.create({
     email: user.email,
     name: user.name ?? undefined,
@@ -160,9 +181,9 @@ export async function startCheckout(
   const current = await prisma.subscription.findUnique({ where: { userId } })
 
   if (current?.stripeSubscriptionId && current.status !== 'CANCELED') {
-    const sub = await stripe.subscriptions.retrieve(current.stripeSubscriptionId)
-    const item = sub.items.data[0]
-    if (item !== undefined && sub.status !== 'canceled') {
+    const sub = await retrieveOrForget(stripe, userId, current.stripeSubscriptionId)
+    const item = sub?.items.data[0]
+    if (sub !== null && item !== undefined && sub.status !== 'canceled') {
       const updated = await stripe.subscriptions.update(sub.id, {
         items: [{ id: item.id, price: priceId }],
         proration_behavior: 'create_prorations',
@@ -193,6 +214,27 @@ export async function startCheckout(
   return { url: session.url }
 }
 
+/**
+ * Relit un abonnement chez Stripe. S'il n'y existe pas — abonnement du mode test après le
+ * passage en production, ou supprimé à la main — la ligne d'Evoliia est un orphelin : on
+ * l'efface, la personne retombe sur l'offre gratuite et peut souscrire pour de vrai.
+ * L'alternative, garder une offre ouverte que personne ne paie, coûterait à Evoliia.
+ */
+async function retrieveOrForget(
+  stripe: Stripe,
+  userId: string,
+  subscriptionId: string,
+): Promise<Stripe.Subscription | null> {
+  try {
+    return await stripe.subscriptions.retrieve(subscriptionId)
+  } catch (error) {
+    if (!isStripeMissing(error)) throw error
+    await prisma.subscription.deleteMany({ where: { userId, stripeSubscriptionId: subscriptionId } })
+    logger.warn('stripe : abonnement inconnu dans ce mode, ligne retirée', { userId, subscriptionId })
+    return null
+  }
+}
+
 /** Le portail Stripe : moyen de paiement, factures, résiliation. */
 export async function openPortal(stripe: Stripe, userId: string, locale: string): Promise<string> {
   const customerId = await ensureStripeCustomer(stripe, userId)
@@ -207,7 +249,11 @@ export async function openPortal(stripe: Stripe, userId: string, locale: string)
 export async function cancelAtPeriodEnd(stripe: Stripe, userId: string, cancel: boolean): Promise<void> {
   const current = await prisma.subscription.findUnique({ where: { userId } })
   if (!current?.stripeSubscriptionId) throw validation("Aucun abonnement Stripe n'est en cours.")
-  const updated = await stripe.subscriptions.update(current.stripeSubscriptionId, { cancel_at_period_end: cancel })
+  const sub = await retrieveOrForget(stripe, userId, current.stripeSubscriptionId)
+  if (sub === null) {
+    throw validation("Cet abonnement n'existe plus chez Stripe : l'offre a été retirée. Vous pouvez en choisir une nouvelle.")
+  }
+  const updated = await stripe.subscriptions.update(sub.id, { cancel_at_period_end: cancel })
   await applyStripeSubscription(updated)
 }
 

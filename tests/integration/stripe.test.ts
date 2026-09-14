@@ -94,7 +94,10 @@ const fake = {
     create: vi.fn(async () => ({ id: next('price') })),
     update: vi.fn(async () => ({})),
   },
-  customers: { create: vi.fn(async () => ({ id: next('cus') })) },
+  customers: {
+    create: vi.fn(async () => ({ id: next('cus') })),
+    retrieve: vi.fn(async (id: string) => ({ id, object: 'customer' })),
+  },
   checkout: {
     sessions: {
       create: vi.fn(async (params: Stripe.Checkout.SessionCreateParams, options?: Stripe.RequestOptions) => {
@@ -272,6 +275,27 @@ describe('Abonnements Evoliia', () => {
     expect(fake.prices.update).toHaveBeenCalledWith(priceId, { active: false })
     await prisma.plan.update({ where: { id: PAID_PLAN }, data: { priceCents: plan.priceCents } })
     priceId = await ensureStripePrice(fake, PAID_PLAN)
+  })
+
+  it('recrée produit et tarif au passage en production, sans toucher à ceux du mode test', async () => {
+    const before = await prisma.plan.findUniqueOrThrow({ where: { id: PAID_PLAN } })
+    expect(before.stripePriceFingerprint).toMatch(/^test:/)
+    const previous = process.env.STRIPE_SECRET_KEY
+    process.env.STRIPE_SECRET_KEY = 'sk_live' + '_faux'
+    const productsBefore = vi.mocked(fake.products.create).mock.calls.length
+    const updatesBefore = vi.mocked(fake.prices.update).mock.calls.length
+    try {
+      const livePrice = await ensureStripePrice(fake, PAID_PLAN)
+      expect(livePrice).not.toBe(priceId)
+      expect(vi.mocked(fake.products.create).mock.calls.length).toBe(productsBefore + 1)
+      expect(vi.mocked(fake.prices.update).mock.calls.length).toBe(updatesBefore)
+      const after = await prisma.plan.findUniqueOrThrow({ where: { id: PAID_PLAN } })
+      expect(after.stripePriceFingerprint).toMatch(/^live:/)
+      expect(after.stripeProductId).not.toBe(before.stripeProductId)
+    } finally {
+      process.env.STRIPE_SECRET_KEY = previous
+      priceId = await ensureStripePrice(fake, PAID_PLAN)
+    }
   })
 
   it('refuse de faire payer l’offre gratuite', async () => {

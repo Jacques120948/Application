@@ -90,6 +90,25 @@ Dans le tableau de bord Stripe :
 4. Connect : compléter le profil de plateforme et l'interface d'inscription (marque).
    Aucune option « Accounts v1 » à activer : Evoliia crée des comptes v2.
 
+## Passage du mode test au mode production
+
+Stripe sépare strictement les deux modes : un tarif, un client, un abonnement ou un compte
+connecté créé en test **n'existe pas** en production. Le code le sait :
+
+- l'empreinte d'un tarif (`Plan.stripePriceFingerprint`) commence par le mode ; à la
+  première demande de paiement en production, produit et tarif sont recréés, sans chercher
+  à désactiver ceux du mode test ;
+- un `stripeCustomerId` est vérifié chez Stripe avant usage, et recréé s'il est inconnu ;
+- un abonnement qui n'existe plus chez Stripe (abonnement d'essai du mode test) est retiré
+  de la base au premier geste — changement d'offre ou résiliation — et la personne retombe
+  sur l'offre gratuite ; l'exploitant peut aussi retirer l'offre depuis le back-office ;
+- un compte connecté du mode test doit être **déconnecté puis reconnecté** par le créateur
+  depuis Connexions : le message d'erreur de Stripe le dit en toutes lettres.
+
+Marche à suivre : activer le compte Stripe, recréer en mode production les deux webhooks,
+le portail client et l'interface d'inscription Connect, remplacer les trois secrets dans
+l'hébergeur, redéployer, puis faire un vrai paiement de petit montant et le rembourser.
+
 Sans `STRIPE_SECRET_KEY`, rien n'est proposé nulle part : la page des offres dit que le
 paiement en ligne n'est pas activé, la carte Stripe des Connexions reste « à venir », et
 toutes les routes de paiement répondent « introuvable ».

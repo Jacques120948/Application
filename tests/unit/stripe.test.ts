@@ -9,7 +9,9 @@ import { countryCodeOf } from '@/server/integrations/providers/stripe'
 describe('Stripe — correspondances', () => {
   it('change de tarif Stripe dès que le prix, la devise ou le rythme change', () => {
     const base = { priceCents: 1900, currency: 'EUR', interval: 'month' }
-    expect(priceFingerprint(base)).toBe('1900:eur:month')
+    expect(priceFingerprint(base)).toBe('test:1900:eur:month')
+    // Le mode fait partie de l'empreinte : le passage en production recrée les tarifs.
+    expect(priceFingerprint(base, 'live')).toBe('live:1900:eur:month')
     expect(priceFingerprint({ ...base, priceCents: 2900 })).not.toBe(priceFingerprint(base))
     expect(priceFingerprint({ ...base, currency: 'CHF' })).not.toBe(priceFingerprint(base))
     expect(priceFingerprint({ ...base, interval: 'year' })).not.toBe(priceFingerprint(base))
