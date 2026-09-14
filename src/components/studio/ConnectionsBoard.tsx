@@ -211,7 +211,10 @@ export function ConnectionsBoard({
                         <div className="grid gap-2">
                           <p className="m-0 text-xs text-[var(--color-ink-soft)]">
                             {row.connection.accountLabel ?? 'Votre compte'}
-                            {row.connection.hint === null ? '' : ` · clé ${row.connection.hint}`}
+                            {/* L'indice n'a de sens que pour une clé saisie ; un compte autorisé n'en a pas. */}
+                            {row.connection.hint === null || row.credential !== 'API_KEY'
+                              ? ''
+                              : ` · clé ${row.connection.hint}`}
                           </p>
                           <Button
                             variant="secondary"
