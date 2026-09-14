@@ -37,6 +37,15 @@ function key(): Buffer {
   return createHash('sha256').update(secret, 'utf8').digest()
 }
 
+/**
+ * Vérifie que le chiffrement est possible avant d'engager quoi que ce soit chez un
+ * fournisseur. Créer un compte Stripe puis échouer à en garder l'identifiant laisserait
+ * un compte orphelin ; mieux vaut refuser avant.
+ */
+export function assertEncryptionReady(): void {
+  key()
+}
+
 export function encryptSecret(plaintext: string): string {
   const nonce = randomBytes(NONCE_LENGTH)
   const cipher = createCipheriv('aes-256-gcm', key(), nonce)

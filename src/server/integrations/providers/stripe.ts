@@ -1,5 +1,6 @@
 import type Stripe from 'stripe'
 import { env } from '@/lib/env'
+import { assertEncryptionReady } from '@/lib/crypto'
 import { AppError, notFound, validation } from '@/lib/errors'
 import { prisma } from '@/server/db/client'
 import { withUserScope } from '@/server/db/scope'
@@ -89,6 +90,7 @@ export async function startStripeOnboarding(stripe: Stripe, userId: string, loca
     throw validation("Le paiement en ligne n'est pas activé sur cette installation.")
   }
   await assertConnectionSlot(userId, PROVIDER_ID)
+  assertEncryptionReady()
 
   // Une inscription commencée est reprise, jamais recommencée : un créateur qui a fermé
   // l'onglet à mi-chemin retrouve son compte, pas un deuxième.

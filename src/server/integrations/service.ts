@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { AppError, notFound, validation } from '@/lib/errors'
-import { decryptSecret, encryptSecret, secretHint } from '@/lib/crypto'
+import { assertEncryptionReady, decryptSecret, encryptSecret, secretHint } from '@/lib/crypto'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { getEffectivePlan } from '@/server/billing/plans'
@@ -181,6 +181,7 @@ export async function connectWithApiKey(
   }
 
   await assertConnectionSlot(userId, provider.id)
+  assertEncryptionReady()
 
   /*
    * La clé est vérifiée auprès du fournisseur AVANT d'être écrite. Une clé fautive
