@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
+import { AGENTS } from '@/server/agents/catalog'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
@@ -12,6 +13,7 @@ import { isEnabled } from '@/server/settings/flags'
 import { Logo } from '@/components/marketing/Logo'
 import { BrowserFrame, PhoneFrame } from '@/components/marketing/DeviceFrame'
 import { ModuleGrid, ModuleShowcase, type Showcase, type Tile } from '@/components/marketing/modules'
+import { TeamShowcase, type TeamMember } from '@/components/marketing/team'
 import {
   Check,
   CheckList,
@@ -194,6 +196,23 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
     { icon: 'lock', title: t('landing.tileSecurityTitle'), body: t('landing.tileSecurityBody'), included: everywhere },
     { icon: 'globe', title: t('landing.tileLanguagesTitle'), body: t('landing.tileLanguagesBody'), included: everywhere },
   ]
+
+  /*
+   * L'équipe marketing : prénoms et portraits viennent du catalogue des spécialistes, le
+   * même que celui de l'atelier — la page publique ne montre pas une équipe qui n'existerait
+   * pas dans le produit. Les textes, eux, sont traduits ici. Le badge « dès l'offre … » est
+   * lu dans la fonction qui ouvre chaque spécialiste, jamais écrit en dur.
+   */
+  const team: TeamMember[] = AGENTS.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    avatar: agent.avatar,
+    role: t(`landing.team_${agent.id}Role`),
+    body: t(`landing.team_${agent.id}Body`),
+    ask: t(`landing.team_${agent.id}Ask`),
+    included: includedIn((plan) => plan.features.includes(agent.feature)),
+  }))
+  const teamIncluded = includedIn((plan) => plan.features.includes('marketing_team'))
 
   const flow = [
     { title: t('landing.flow1Title'), body: t('landing.flow1Body') },
@@ -703,6 +722,50 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         <p className="mt-6 mb-0 text-sm text-[var(--color-ink-soft)]">
           {t('landing.launchIncluded')}
         </p>
+      </Section>
+
+      {/* ──────────────────── 9 bis. Votre équipe marketing ───────────────── */}
+      <Section
+        id="equipe"
+        title={t('landing.teamTitle')}
+        titleAccent={t('landing.teamTitleAccent')}
+        body={t('landing.teamBody')}
+      >
+        <TeamShowcase members={team} askLabel={t('landing.teamAskLabel')} aiLabel={t('landing.teamAiLabel')} />
+
+        {/*
+          Ce que « équipe » veut dire ici, et ce que ces spécialistes ne font pas. La
+          seconde carte est une limite annoncée avant l'inscription, pas après : personne ne
+          doit croire acheter un service humain ou une garantie de résultat.
+        */}
+        <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div className="reveal rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
+            <h3 className="m-0 text-base font-semibold text-[var(--color-brand-strong)]">
+              {t('landing.teamLinkTitle')}
+            </h3>
+            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('landing.teamLinkBody')}
+            </p>
+            {teamIncluded !== null ? (
+              <p className="mt-3 mb-0 text-xs font-medium text-[var(--color-ink-faint)]">{teamIncluded}</p>
+            ) : null}
+          </div>
+          <Panel tone="canvas">
+            <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
+              {t('landing.teamHonestTitle')}
+            </h3>
+            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('landing.teamHonestBody')}
+            </p>
+          </Panel>
+        </div>
+
+        <div className="mt-8 flex flex-wrap items-center gap-4">
+          <LinkButton href={signUp} size="large">
+            {t('landing.teamCta')}
+          </LinkButton>
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">{t('landing.teamCtaNote')}</p>
+        </div>
       </Section>
 
       {/* ──────────────────────────── 10. Tarifs ──────────────────────────── */}

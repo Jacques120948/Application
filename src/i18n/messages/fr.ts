@@ -541,6 +541,33 @@ export const fr = {
     "Une fois la semaine approuvée, elle part en un clic dans votre espace Postelya, où vous choisissez le moment de chaque publication. Rien ne part sans votre accord. Aucune statistique n’est inventée, et aucun avis client n’est écrit à votre place.",
   'landing.launchIncluded': 'Compris à partir de l’offre Launch.',
 
+  'landing.teamTitle': 'Votre équipe marketing,',
+  'landing.teamTitleAccent': 'trois spécialistes qui lisent vos vraies données.',
+  'landing.teamBody':
+    'Une fois votre application en ligne, Tom, Noah et Mila la prennent en main avec vous. Chacun a son métier et son périmètre : il ne lit que ce qui le concerne dans votre projet, et il le dit quand une donnée manque plutôt que de l’inventer.',
+  'landing.teamAiLabel': 'Spécialiste IA',
+  'landing.teamAskLabel': 'Par exemple',
+  'landing.team_socialRole': 'Réseaux sociaux',
+  'landing.team_socialBody':
+    'Il connaît votre kit de lancement, ce que vous avez approuvé et ce qui est déjà parti. Il prépare la suite plutôt que de recommencer.',
+  'landing.team_socialAsk': 'Que devrais-je publier la semaine prochaine ?',
+  'landing.team_seoRole': 'Référencement',
+  'landing.team_seoBody':
+    'Il lit les pages réellement publiées : leurs titres, leurs textes, leurs adresses. Il dit ce qui manque pour être trouvé.',
+  'landing.team_seoAsk': 'Sur quels mots pourrais-je être trouvé ?',
+  'landing.team_analyticsRole': 'Analyse',
+  'landing.team_analyticsBody':
+    'Elle lit vos chiffres réels : visites, pages consultées, inscriptions, données enregistrées. Elle ne devine rien.',
+  'landing.team_analyticsAsk': 'Que disent mes chiffres des trente derniers jours ?',
+  'landing.teamLinkTitle': 'Une équipe, pas trois guichets',
+  'landing.teamLinkBody':
+    'Avec l’équipe reliée, chacun reçoit la dernière conclusion de ses collègues : Mila constate qu’une page attire, Tom le sait à votre question suivante. Chaque question coûte des crédits, annoncés sur le bouton avant de la poser.',
+  'landing.teamHonestTitle': 'Ce qu’ils ne font pas',
+  'landing.teamHonestBody':
+    'Ce sont des assistants IA, pas des personnes. Ils ne publient rien à votre place, n’inventent aucun chiffre et ne garantissent aucun résultat : quand la donnée n’existe pas encore, ils vous le disent.',
+  'landing.teamCta': 'Rencontrer mon équipe',
+  'landing.teamCtaNote': 'Gratuit pour commencer. L’équipe s’ouvre avec les offres qui l’incluent.',
+
   // ── Vitrine des modules ───────────────────────────────────────────────────
   'landing.navModules': 'Modules',
   'landing.modulesEyebrow': 'Tout ce qu’Evoliia met entre vos mains',

@@ -514,6 +514,33 @@ export const en: Record<keyof typeof fr, string> = {
     'Once the week is approved, one click drops it into your Postelya workspace, where you choose when each post goes out. Nothing leaves without your say-so. No statistic is invented, and no customer review is written on your behalf.',
   'landing.launchIncluded': 'Included from the Launch plan.',
 
+  'landing.teamTitle': 'Your marketing team,',
+  'landing.teamTitleAccent': 'three specialists who read your real data.',
+  'landing.teamBody':
+    'Once your application is live, Tom, Noah and Mila take it on with you. Each has a trade and a scope: they read only what concerns them in your project, and they say so when a figure is missing rather than making it up.',
+  'landing.teamAiLabel': 'AI specialist',
+  'landing.teamAskLabel': 'For example',
+  'landing.team_socialRole': 'Social networks',
+  'landing.team_socialBody':
+    'He knows your launch kit, what you approved and what has already gone out. He prepares what comes next rather than starting over.',
+  'landing.team_socialAsk': 'What should I post next week?',
+  'landing.team_seoRole': 'Search ranking',
+  'landing.team_seoBody':
+    'He reads the pages actually published: their titles, their texts, their addresses. He says what is missing to be found.',
+  'landing.team_seoAsk': 'Which words could I be found on?',
+  'landing.team_analyticsRole': 'Analysis',
+  'landing.team_analyticsBody':
+    'She reads your real numbers: visits, pages viewed, sign-ups, saved data. She guesses nothing.',
+  'landing.team_analyticsAsk': 'What do my numbers from the last thirty days say?',
+  'landing.teamLinkTitle': 'One team, not three counters',
+  'landing.teamLinkBody':
+    'With the team linked, each one receives the latest conclusion of the others: Mila notices a page draws visitors, Tom knows it at your next question. Every question costs credits, shown on the button before you ask.',
+  'landing.teamHonestTitle': 'What they do not do',
+  'landing.teamHonestBody':
+    'They are AI assistants, not people. They publish nothing on your behalf, invent no number and guarantee no result: when the data does not exist yet, they tell you.',
+  'landing.teamCta': 'Meet my team',
+  'landing.teamCtaNote': 'Free to start. The team opens with the plans that include it.',
+
   // ── Vitrine des modules ───────────────────────────────────────────────────
   'landing.navModules': 'Modules',
   'landing.modulesEyebrow': 'Everything Evoliia puts in your hands',

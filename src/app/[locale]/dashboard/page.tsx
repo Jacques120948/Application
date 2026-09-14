@@ -14,7 +14,9 @@ import { getCreatorOverview } from '@/server/business/overview'
 import { OBJECTIVE_DISCLAIMER } from '@/server/business/economics'
 import type { JourneyStep } from '@/server/business/journey'
 import { Card, CardBody, LinkButton } from '@/components/ui'
+import { AGENTS } from '@/server/agents/catalog'
 import { Shell } from '@/components/studio/Shell'
+import { TeamAvatars } from '@/components/studio/TeamAvatars'
 import { ProjectCard } from '@/components/studio/ProjectCard'
 
 /**
@@ -171,14 +173,18 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                   Il reste le plus difficile : la faire connaître.
                 </p>
               </div>
-              {canLaunch && published[0] !== undefined ? (
-                <LinkButton
-                  href={`/${locale}/projets/${published[0].id}/marketing`}
-                  size="large"
-                  className="ml-auto"
-                >
-                  Préparer mon lancement
-                </LinkButton>
+              {published[0] !== undefined ? (
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {canLaunch ? (
+                    <LinkButton href={`/${locale}/projets/${published[0].id}/marketing`} size="large">
+                      Préparer mon lancement
+                    </LinkButton>
+                  ) : null}
+                  <LinkButton href={`/${locale}/projets/${published[0].id}/equipe`} variant="secondary" size="large">
+                    <TeamAvatars people={AGENTS} size="small" />
+                    <span className="ml-2">Mon équipe marketing</span>
+                  </LinkButton>
+                </div>
               ) : null}
             </CardBody>
           </Card>

@@ -7,7 +7,9 @@ import { getWallet } from '@/server/billing/credits'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { isAiAvailable } from '@/server/ai/client'
 import { getProject, listChatMessages } from '@/server/projects/service'
+import { AGENTS } from '@/server/agents/catalog'
 import { Shell } from '@/components/studio/Shell'
+import { TeamAvatars } from '@/components/studio/TeamAvatars'
 import { ProjectWorkspace } from '@/components/studio/ProjectWorkspace'
 import { isEnabled } from '@/server/settings/flags'
 import { FAQ_ESTIMATED_CREDITS } from '@/server/support/knowledge'
@@ -67,7 +69,8 @@ export default async function ProjectPage({
               href={`/${locale}/projets/${project.id}/equipe`}
               variant="secondary"
             >
-              Voir mon équipe marketing
+              <TeamAvatars people={AGENTS} size="small" />
+              <span className="ml-2">Voir mon équipe marketing</span>
             </LinkButton>
           </div>
         </div>

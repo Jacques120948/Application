@@ -19,7 +19,9 @@ import {
 } from '@/server/marketing/atelier'
 import { listConnections } from '@/server/integrations/service'
 import { isEnabled } from '@/server/settings/flags'
+import { AGENTS } from '@/server/agents/catalog'
 import { Shell } from '@/components/studio/Shell'
+import { TeamAvatars } from '@/components/studio/TeamAvatars'
 import { LaunchKitBoard } from '@/components/studio/LaunchKitBoard'
 import { Card, CardBody, LinkButton, Notice } from '@/components/ui'
 
@@ -121,6 +123,27 @@ export default async function MarketingPage({
             </CardBody>
           </Card>
         )}
+
+        {/*
+          L'équipe comme suite du kit : une fois les angles et la première semaine posés,
+          la question suivante est « et après ? ». Les trois visages y répondent mieux qu'un
+          intitulé, et la page de l'équipe dit elle-même ce que l'offre ouvre ou non.
+        */}
+        <Card className="mt-6">
+          <CardBody className="flex flex-wrap items-center gap-4">
+            <TeamAvatars people={AGENTS} />
+            <div className="min-w-48 flex-1">
+              <p className="m-0 font-medium">Votre équipe marketing</p>
+              <p className="m-0 mt-0.5 text-sm text-[var(--color-ink-soft)]">
+                {AGENTS.map((agent) => `${agent.name} (${agent.role.toLowerCase()})`).join(', ')} lisent
+                vos données réelles et répondent à vos questions, sans rien inventer.
+              </p>
+            </div>
+            <LinkButton href={`/${locale}/projets/${id}/equipe`} variant="secondary">
+              Voir mon équipe
+            </LinkButton>
+          </CardBody>
+        </Card>
       </div>
     </Shell>
   )
