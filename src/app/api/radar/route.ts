@@ -4,7 +4,13 @@ import { getRadarOverview, runRadar } from '@/server/radar/service'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 import { SUPPORTED_LOCALES } from '@/i18n/config'
 
-export const maxDuration = 90
+/**
+ * Une recherche passe par le modèle de raisonnement et produit plusieurs milliers de
+ * mots structurés : elle dépasse souvent 90 secondes. Le plafond suit celui de la
+ * recherche automatique (cron), sinon l'hébergeur coupe la fonction avant la réponse et
+ * la personne ne voit qu'un délai dépassé, sans opportunité ni explication.
+ */
+export const maxDuration = 300
 
 const input = z.object({
   locale: z.enum(SUPPORTED_LOCALES).default('fr'),

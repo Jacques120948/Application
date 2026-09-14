@@ -338,6 +338,8 @@ export const fr = {
   'radar.saveProfile': 'Enregistrer mes précisions',
   'radar.profileSaved': 'Précisions enregistrées.',
   'radar.error': 'La recherche n’a pas abouti.',
+  'radar.timeout':
+    'La recherche a pris trop de temps et a été interrompue avant de répondre. Aucune recherche ne vous a été comptée : réessayez dans un instant.',
 
   // ── Navigation et référencement ──────────────────────────────────────────
   'landing.navHow': 'Comment ça marche',

@@ -327,6 +327,8 @@ export const en: Record<keyof typeof fr, string> = {
   'radar.saveProfile': 'Save my details',
   'radar.profileSaved': 'Details saved.',
   'radar.error': 'The search did not go through.',
+  'radar.timeout':
+    'The search took too long and was cut off before it could answer. No search was counted against you: try again in a moment.',
 
   'landing.navHow': 'How it works',
   'landing.navExamples': 'Examples',

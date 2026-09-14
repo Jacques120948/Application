@@ -399,15 +399,20 @@ export function RadarBoard({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(aroundProjectId === undefined ? { locale } : { locale, projectId: aroundProjectId }),
     })
-    // Une réponse qui n'est pas du JSON (passerelle, délai dépassé) ne doit pas laisser
-    // le bouton en attente pour toujours : elle devient une erreur ordinaire.
-    const body = (await response.json().catch(() => ({}))) as {
+    // Une réponse qui n'est pas du JSON vient de l'hébergeur, pas d'Evoliia : la fonction
+    // a été coupée avant de répondre (délai dépassé). Elle ne doit pas laisser le bouton
+    // en attente pour toujours, et la personne doit savoir que ce n'est pas son quota.
+    const body = (await response.json().catch(() => null)) as {
       opportunities?: OpportunityView[]
       quota?: QuotaView
       skipped?: number
       message?: string
-    }
+    } | null
     setBusy(null)
+    if (body === null) {
+      setError(t('radar.timeout'))
+      return
+    }
     if (!response.ok || body.opportunities === undefined || body.quota === undefined) {
       setError(body.message ?? t('radar.error'))
       return
