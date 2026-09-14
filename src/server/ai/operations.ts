@@ -235,6 +235,22 @@ type Accounting = { userId: string; projectId?: string; operation: CreditedOpera
  * question de faire figurer dans les dépenses d'Evoliia de l'argent qu'elle n'a pas
  * déboursé.
  */
+/**
+ * Message d'erreur conservé pour le diagnostic.
+ *
+ * Il vient du fournisseur ou du réseau et sert à comprendre un échec depuis le
+ * back-office. Tout ce qui ressemble à une clé est masqué avant d'être écrit, et le
+ * texte est borné : un message n'est pas un journal.
+ */
+export function describeFailure(error: unknown): string {
+  const raw = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+  return raw
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-…')
+    .replace(/AIza[A-Za-z0-9_-]{8,}/g, 'AIza…')
+    .replace(/Bearer\s+\S+/gi, 'Bearer …')
+    .slice(0, 300)
+}
+
 async function recordCall(
   accounting: Accounting,
   step: string,
@@ -242,6 +258,7 @@ async function recordCall(
   success: boolean,
   errorCode?: string,
   billedToEvoliia = true,
+  errorMessage?: string,
 ): Promise<number> {
   const cost = billedToEvoliia ? costMicros(outcome.model, outcome.usage) : 0
   await prisma.aiUsage
@@ -258,6 +275,7 @@ async function recordCall(
         latencyMs: outcome.latencyMs,
         success,
         errorCode: errorCode ?? null,
+        errorMessage: errorMessage ?? null,
       },
     })
     .catch(() => undefined)
@@ -326,6 +344,8 @@ async function runSingleCall<T>(params: {
       { model: profile.model, usage: { inputTokens: 0, outputTokens: 0, cachedTokens: 0 }, latencyMs: 0 },
       false,
       error instanceof AppError ? error.code : 'network',
+      true,
+      describeFailure(error),
     )
     throw toPublicFailure(error, { operation: params.accounting.operation })
   }

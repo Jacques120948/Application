@@ -399,7 +399,9 @@ export function RadarBoard({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(aroundProjectId === undefined ? { locale } : { locale, projectId: aroundProjectId }),
     })
-    const body = (await response.json()) as {
+    // Une réponse qui n'est pas du JSON (passerelle, délai dépassé) ne doit pas laisser
+    // le bouton en attente pour toujours : elle devient une erreur ordinaire.
+    const body = (await response.json().catch(() => ({}))) as {
       opportunities?: OpportunityView[]
       quota?: QuotaView
       skipped?: number

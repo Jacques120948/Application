@@ -260,3 +260,48 @@ export async function updateFlag(input: z.infer<typeof flagInput>) {
     enabled: input.enabled,
   })
 }
+
+// ───────────────────────── Santé de l'assistant ──────────────────────────────
+
+export type AiFailure = {
+  id: string
+  operation: string
+  model: string
+  errorCode: string | null
+  errorMessage: string | null
+  email: string
+  createdAt: string
+}
+
+/**
+ * Les derniers appels IA en échec, avec le message du fournisseur.
+ *
+ * C'est le premier endroit où regarder quand « ça ne marche pas » : sans lui, il faudrait
+ * ouvrir les journaux de l'hébergeur. Les messages sont expurgés à l'écriture.
+ */
+export async function listAiFailures(take = 20): Promise<AiFailure[]> {
+  await requireAdmin()
+  const rows = await prisma.aiUsage.findMany({
+    where: { success: false },
+    orderBy: { createdAt: 'desc' },
+    take,
+    select: {
+      id: true,
+      operation: true,
+      model: true,
+      errorCode: true,
+      errorMessage: true,
+      createdAt: true,
+      user: { select: { email: true } },
+    },
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    operation: row.operation,
+    model: row.model,
+    errorCode: row.errorCode,
+    errorMessage: row.errorMessage,
+    email: row.user.email,
+    createdAt: row.createdAt.toISOString(),
+  }))
+}

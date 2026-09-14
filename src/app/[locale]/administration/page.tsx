@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
 import {
   getAdminOverview,
+  listAiFailures,
   listFlags,
   listPlans,
   listUsers,
@@ -37,13 +38,14 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
   if (user.role !== 'ADMIN') notFound()
 
   const t = getTranslator(locale)
-  const [overview, plans, users, identity, wallet, flags] = await Promise.all([
+  const [overview, plans, users, identity, wallet, flags, failures] = await Promise.all([
     getAdminOverview(),
     listPlans(),
     listUsers({ query: '', take: 50 }),
     readLegalIdentity(),
     getWallet(user.id),
     listFlags(),
+    listAiFailures(),
   ])
 
   const figures = [
@@ -73,6 +75,39 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
             </Card>
           ))}
         </div>
+
+        <h2 className="mb-1 text-lg font-semibold">Santé de l’assistant</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Les derniers appels au modèle qui ont échoué, avec la raison donnée par le
+          fournisseur. Quand une fonction « ne marche pas », c’est ici qu’on regarde d’abord.
+        </p>
+        <Card className="mb-10">
+          <CardBody>
+            {failures.length === 0 ? (
+              <p className="m-0 text-sm text-[var(--color-ink-soft)]">Aucun échec enregistré.</p>
+            ) : (
+              <ul className="m-0 grid list-none gap-3 p-0 text-sm">
+                {failures.map((failure) => (
+                  <li key={failure.id} className="grid gap-0.5 border-b border-[var(--color-line)] pb-3 last:border-0 last:pb-0">
+                    <span className="flex flex-wrap gap-x-3 gap-y-1">
+                      <span className="font-medium">{failure.operation}</span>
+                      <span className="text-[var(--color-ink-soft)]">{failure.model}</span>
+                      <span className="text-[var(--color-critical)]">{failure.errorCode ?? 'inconnu'}</span>
+                      <span className="ml-auto text-xs text-[var(--color-ink-faint)]">
+                        {new Date(failure.createdAt).toLocaleString('fr-CH')} · {failure.email}
+                      </span>
+                    </span>
+                    {failure.errorMessage !== null ? (
+                      <code className="block break-words text-xs text-[var(--color-ink-soft)]">
+                        {failure.errorMessage}
+                      </code>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
 
         <h2 className="mb-1 text-lg font-semibold">Votre identité</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
