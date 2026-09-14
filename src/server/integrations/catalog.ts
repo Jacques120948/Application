@@ -67,7 +67,23 @@ export type IntegrationProvider = {
   risk: string
   /** Comment le créateur obtient sa clé. Absent pour les fournisseurs en OAuth. */
   keyHelp?: { label: string; hint: string }
+  /**
+   * Le mode d'emploi, pas à pas, pour quelqu'un qui n'a jamais ouvert le site du
+   * fournisseur. Écrit ici plutôt que dans l'écran : c'est du contenu, il se relit et se
+   * corrige comme une fiche.
+   */
+  guide?: ProviderGuide
   reviewedOn: string
+}
+
+export type ProviderGuide = {
+  /** Où aller, en https, et comment nommer ce lien. */
+  url: string
+  urlLabel: string
+  /** Les étapes, dans l'ordre, une phrase chacune. */
+  steps: readonly string[]
+  /** Ce qu'il faut savoir avant de payer ou de donner une clé. */
+  caution?: string
 }
 
 export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
@@ -158,6 +174,19 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       "Compte de plateforme Stripe Connect, comptes connectés de type standard : le créateur reste titulaire de son compte Stripe, avec son propre tableau de bord. Les frais Stripe sont facturés au compte connecté ; Evoliia ne supporte ni frais de compte ni frais de versement.",
     risk:
       "Le vrai risque est juridique, pas technique : encaisser pour le compte d'autrui ferait d'Evoliia un intermédiaire financier. Le mode standard, où le créateur reste titulaire, l'évite.",
+    guide: {
+      url: 'https://dashboard.stripe.com/register',
+      urlLabel: 'Ouvrir Stripe',
+      steps: [
+        'Cliquez sur « Connecter Stripe » ci-dessous : Evoliia vous envoie sur une page d’inscription Stripe à ses couleurs.',
+        'Si vous avez déjà un compte Stripe, connectez-vous avec ; sinon créez-le sur place avec votre adresse e-mail.',
+        'Stripe vous demande votre activité, l’identité du responsable et l’IBAN qui recevra vos ventes. Préparez une pièce d’identité.',
+        'À la fin, Stripe vous ramène automatiquement sur Evoliia : la carte passe à « Connecté ».',
+        'Si vous fermez la fenêtre à mi-chemin, revenez ici et cliquez sur « Reprendre la connexion » : rien n’est perdu.',
+      ],
+      caution:
+        'Les paiements de vos clients arrivent sur votre compte Stripe, jamais sur celui d’Evoliia. Stripe prélève sa commission sur chaque vente ; Evoliia ne prend rien par défaut.',
+    },
     reviewedOn: '2026-09-13',
   },
   {
@@ -187,6 +216,20 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       label: 'Votre clé Anthropic',
       hint: 'Elle se crée sur console.anthropic.com, dans « API keys ». Posez-y un plafond mensuel : c’est votre compte qui paie. La clé est chiffrée et ne vous sera plus jamais réaffichée.',
     },
+    guide: {
+      url: 'https://console.anthropic.com/settings/keys',
+      urlLabel: 'Ouvrir la console Anthropic',
+      steps: [
+        'Créez un compte sur console.anthropic.com, ou connectez-vous.',
+        'Dans « Billing », ajoutez un petit crédit prépayé : c’est ce crédit que l’assistant de votre application consommera.',
+        'Dans « Limits », fixez un plafond mensuel de dépense. Il vous protège en cas d’usage imprévu.',
+        'Dans « API keys », cliquez « Create Key », nommez-la « Evoliia » et validez.',
+        'Copiez la clé affichée une seule fois : elle commence par « sk-ant- ».',
+        'Revenez ici, cliquez « Connecter » et collez-la. Evoliia la vérifie, puis la chiffre.',
+      ],
+      caution:
+        'Chaque réponse de l’assistant de votre application sera facturée sur ce compte, à leur tarif, sans passer par vos crédits Evoliia.',
+    },
     reviewedOn: '2026-09-12',
   },
   {
@@ -213,6 +256,20 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     keyHelp: {
       label: 'Votre clé OpenAI',
       hint: 'Elle se crée sur platform.openai.com, dans « API keys ». Posez-y une limite de dépense mensuelle : c’est votre compte qui paie. La clé est chiffrée et ne vous sera plus jamais réaffichée.',
+    },
+    guide: {
+      url: 'https://platform.openai.com/api-keys',
+      urlLabel: 'Ouvrir la plateforme OpenAI',
+      steps: [
+        'Créez un compte sur platform.openai.com, ou connectez-vous. C’est le site développeurs, distinct de ChatGPT.',
+        'Dans « Billing », ajoutez un moyen de paiement et un petit crédit prépayé, par exemple cinq dollars : une image coûte quelques centimes.',
+        'Dans « Limits », fixez un plafond mensuel de dépense. Il vous protège en cas d’usage imprévu.',
+        'Dans « API keys », cliquez « Create new secret key », nommez-la « Evoliia » et validez.',
+        'Copiez la clé affichée une seule fois : elle commence par « sk- ».',
+        'Revenez ici, cliquez « Connecter » et collez-la. Evoliia la vérifie, puis la chiffre.',
+      ],
+      caution:
+        'Chaque image créée dans vos applications sera facturée sur ce compte. Evoliia plafonne à vingt images par jour pour vous protéger.',
     },
     reviewedOn: '2026-09-14',
   },
@@ -241,6 +298,19 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       label: 'Votre clé Google AI',
       hint: 'Elle se crée sur aistudio.google.com, « Get API key ». Restreignez-la à l’API Generative Language. La clé est chiffrée et ne vous sera plus jamais réaffichée.',
     },
+    guide: {
+      url: 'https://aistudio.google.com/apikey',
+      urlLabel: 'Ouvrir Google AI Studio',
+      steps: [
+        'Ouvrez aistudio.google.com et connectez-vous avec un compte Google.',
+        'Cliquez « Get API key », puis « Create API key ». Google peut vous demander de choisir ou de créer un projet : acceptez la proposition par défaut.',
+        'Copiez la clé affichée : elle commence par « AIza ».',
+        'Conseillé : dans la console Google Cloud, restreignez la clé à l’API « Generative Language » et fixez une alerte de budget.',
+        'Revenez ici, cliquez « Connecter » et collez-la. Evoliia la vérifie, puis la chiffre.',
+      ],
+      caution:
+        'Google offre un palier gratuit limité ; au-delà, chaque image est facturée sur votre compte. Evoliia plafonne à vingt images par jour.',
+    },
     reviewedOn: '2026-09-14',
   },
   {
@@ -267,6 +337,19 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     keyHelp: {
       label: 'Votre code de liaison',
       hint: 'Il se génère dans Postelya, Réglages puis « Relier un service ». Il est valable un quart d’heure et ne sert qu’une fois.',
+    },
+    guide: {
+      url: 'https://postelya.com',
+      urlLabel: 'Ouvrir Postelya',
+      steps: [
+        'Connectez-vous à votre espace Postelya.',
+        'Ouvrez « Réglages », puis « Relier un service ».',
+        'Cliquez « Générer un code de liaison » : un code court s’affiche, valable un quart d’heure, utilisable une seule fois.',
+        'Revenez ici, cliquez « Connecter » et collez ce code avant qu’il expire.',
+        'Evoliia l’échange contre une autorisation durable : vous n’aurez pas à recommencer.',
+      ],
+      caution:
+        'Evoliia dépose vos publications en brouillon dans Postelya. Rien ne part sur un réseau social sans que vous l’ayez validé là-bas.',
     },
     reviewedOn: '2026-09-12',
   },

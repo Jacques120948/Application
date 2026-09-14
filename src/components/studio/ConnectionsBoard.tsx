@@ -23,6 +23,8 @@ export type ProviderCard = {
   costLabel: string
   /** Où le créateur va chercher sa clé, quand le service s'en remet à une clé. */
   keyHelp: { label: string; hint: string } | null
+  /** Le mode d'emploi pas à pas, affiché à la demande. */
+  guide: { url: string; urlLabel: string; steps: readonly string[]; caution?: string } | null
   connection: {
     id: string
     status: string
@@ -59,6 +61,8 @@ export function ConnectionsBoard({
   const [error, setError] = useState<string | null>(null)
   /** Carte sur laquelle la dernière erreur s'est produite, pour l'afficher à côté du bouton. */
   const [failedId, setFailedId] = useState<string | null>(null)
+  /** Fournisseur dont le mode d'emploi est déplié. */
+  const [guideOpen, setGuideOpen] = useState<string | null>(null)
   /** Fournisseur dont le formulaire de clé est ouvert, et ce qui y est saisi. */
   const [opened, setOpened] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -205,6 +209,52 @@ export function ConnectionsBoard({
                     <p className="mt-2 text-xs leading-relaxed text-[var(--color-ink-faint)]">
                       {row.costNotice}
                     </p>
+
+                    {/*
+                      Le mode d'emploi, replié par défaut. Il s'adresse à quelqu'un qui n'a
+                      jamais ouvert le site du fournisseur : chaque étape dit où cliquer et
+                      quoi copier, et le lien mène directement au bon endroit.
+                    */}
+                    {row.guide !== null && row.status === 'available' ? (
+                      <div className="mt-3">
+                        <button
+                          type="button"
+                          onClick={() => setGuideOpen(guideOpen === row.id ? null : row.id)}
+                          aria-expanded={guideOpen === row.id}
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-brand-strong)]"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-xs font-semibold"
+                          >
+                            ?
+                          </span>
+                          {guideOpen === row.id ? 'Masquer le mode d’emploi' : 'Comment faire ?'}
+                        </button>
+                        {guideOpen === row.id ? (
+                          <div className="mt-3 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-4">
+                            <ol className="m-0 grid list-decimal gap-2 pl-5 text-sm leading-relaxed">
+                              {row.guide.steps.map((step) => (
+                                <li key={step}>{step}</li>
+                              ))}
+                            </ol>
+                            {row.guide.caution !== undefined ? (
+                              <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                                {row.guide.caution}
+                              </p>
+                            ) : null}
+                            <a
+                              href={row.guide.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-[var(--color-brand-strong)]"
+                            >
+                              {row.guide.urlLabel} <span aria-hidden="true">↗</span>
+                            </a>
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
 
                     <div className="mt-5">
                       {row.connection?.status === 'CONNECTED' ? (

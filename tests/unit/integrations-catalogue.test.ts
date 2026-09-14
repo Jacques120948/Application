@@ -27,6 +27,14 @@ describe('catalogue des intégrations', () => {
     }
   })
 
+  it('donne un mode d’emploi pas à pas à tout service ouvert', () => {
+    for (const provider of open) {
+      expect(provider.guide, provider.id).toBeDefined()
+      expect(provider.guide?.steps.length, provider.id).toBeGreaterThanOrEqual(3)
+      expect(provider.guide?.url, provider.id).toMatch(/^https:\/\//)
+    }
+  })
+
   it('explique où trouver la clé pour tout service qui en demande une', () => {
     for (const provider of open.filter((entry) => entry.credential === 'API_KEY')) {
       expect(provider.keyHelp, provider.id).toBeDefined()
