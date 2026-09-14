@@ -13,6 +13,9 @@ import {
   useCredential,
 } from '@/server/integrations/service'
 import { INTEGRATION_PROVIDERS } from '@/server/integrations/catalog'
+import { DEFAULT_PLANS, FREE_PLAN_ID } from '@/server/billing/plans'
+
+const TEST_PLAN = 'test-connexions'
 
 /**
  * Gestionnaire d'intégrations, sur une vraie base.
@@ -46,13 +49,29 @@ beforeAll(async () => {
   // Le catalogue est figé dans le code : on y ajoute le fournisseur de test pour la durée
   // de la suite, plutôt que d'ouvrir un vrai service au public.
   ;(INTEGRATION_PROVIDERS as unknown as Array<typeof TEST_PROVIDER>).push(TEST_PROVIDER)
-  // L'offre gratuite n'autorise aucune connexion : on en accorde pour le test.
-  await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 2 } })
+  /*
+   * L'offre gratuite n'autorise aucune connexion. Plutôt que de la modifier — d'autres
+   * suites la lisent en parallèle — les deux comptes reçoivent une offre de test dédiée,
+   * inactive, qui en accorde deux.
+   */
+  const free = DEFAULT_PLANS.find((plan) => plan.id === FREE_PLAN_ID)!
+  await prisma.plan.upsert({
+    where: { id: TEST_PLAN },
+    update: { maxConnections: 2 },
+    create: { ...free, id: TEST_PLAN, name: 'Connexions (test)', features: [], maxConnections: 2, isActive: false, currency: 'EUR', interval: 'month' },
+  })
+  for (const id of [userId, otherId]) {
+    await prisma.subscription.upsert({
+      where: { userId: id },
+      update: { planId: TEST_PLAN, status: 'ACTIVE' },
+      create: { userId: id, planId: TEST_PLAN, status: 'ACTIVE' },
+    })
+  }
 })
 
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { email: { in: [email, otherEmail] } } })
-  await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 0 } })
+  await prisma.plan.delete({ where: { id: TEST_PLAN } }).catch(() => undefined)
 })
 
 describe('connexion par clé du créateur', () => {
