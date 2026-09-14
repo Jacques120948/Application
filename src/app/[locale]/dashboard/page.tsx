@@ -82,6 +82,20 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
    * mènerait à un refus après trois écrans : mieux vaut dire tout de suite où ça bloque.
    */
   const slotsLeft = plan.allowBuild ? Math.max(0, plan.maxProjects - projects.length) : 0
+  /*
+   * L'équipe marketing, spécialiste par spécialiste : ouvert ou non, et sinon avec quelle
+   * offre. Lu dans la couche de droits, jamais dans le nom d'une offre.
+   */
+  const team = AGENTS.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    role: agent.role,
+    avatar: agent.avatar,
+    open: entitlements.granted.includes(agent.feature),
+    availableWith:
+      entitlements.locked.find((entry) => entry.feature.id === agent.feature)?.availableWith ?? null,
+  }))
+  const teamProject = published[0] ?? projects[0]
 
   return (
     <Shell
@@ -363,6 +377,65 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
               Votre parcours
             </h2>
             <Stepper steps={overview.journey.steps} currentId={next?.id ?? null} />
+          </CardBody>
+        </Card>
+
+        {/* ──────────────────── Votre équipe marketing ───────────────────── */}
+        {/*
+          L'équipe est montrée à tout le monde, ouverte ou non : un spécialiste fermé
+          affiche l'offre qui l'ouvrirait, un spécialiste ouvert invite à poser une
+          question. Le projet visé est l'application en ligne s'il y en a une — c'est là
+          que l'équipe a des données à lire — sinon le premier projet, sinon rien : sans
+          projet, l'équipe n'a encore rien à regarder, et la carte le dit.
+        */}
+        <Card>
+          <CardBody>
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="m-0 text-sm font-semibold uppercase tracking-wide text-[var(--color-ink-soft)]">
+                Votre équipe marketing
+              </h2>
+              {teamProject !== undefined ? (
+                <LinkButton href={`/${locale}/projets/${teamProject.id}/equipe`} variant="secondary">
+                  Poser une question à mon équipe
+                </LinkButton>
+              ) : null}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-3">
+              {team.map((member) => (
+                <div
+                  key={member.id}
+                  className="flex gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-4"
+                >
+                  <img
+                    src={member.avatar}
+                    alt=""
+                    width={48}
+                    height={48}
+                    className={`h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-[var(--color-surface)] ${member.open ? '' : 'opacity-60 grayscale'}`}
+                  />
+                  <div className="min-w-0">
+                    <p className="m-0 font-semibold leading-tight">{member.name}</p>
+                    <p className="m-0 text-xs text-[var(--color-ink-soft)]">{member.role}</p>
+                    <p className="m-0 mt-1 text-xs">
+                      {member.open ? (
+                        <span className="text-[var(--color-positive)]">Disponible</span>
+                      ) : member.availableWith === null ? (
+                        <span className="text-[var(--color-ink-faint)]">Non inclus dans votre offre</span>
+                      ) : (
+                        <span className="text-[var(--color-ink-faint)]">Avec l’offre {member.availableWith}</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="m-0 mt-4 text-sm text-[var(--color-ink-soft)]">
+              {teamProject === undefined
+                ? 'Trois spécialistes IA qui lisent les données réelles de votre application, sans rien inventer. Ils se mettent au travail dès qu’un projet existe.'
+                : teamProject.status === 'PUBLISHED'
+                  ? `Trois spécialistes IA qui lisent les données réelles de ${teamProject.name}, sans rien inventer. Chaque question coûte des crédits, annoncés avant de la poser.`
+                  : `Trois spécialistes IA qui lisent les données réelles de ${teamProject.name}, sans rien inventer. Ils auront davantage à dire une fois l’application en ligne.`}
+            </p>
           </CardBody>
         </Card>
 
