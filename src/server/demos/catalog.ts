@@ -33,9 +33,9 @@ const SHARED: { locale: AppSpec['locale']; specVersion: 1 } = { locale: 'fr', sp
 const RAW_DEMOS: readonly DemoApp[] = [
   {
     slug: 'devisflow',
-    category: 'Outil métier · B2B',
-    summary: 'Devis, suivi des clients et relances pour les artisans.',
-    priceLabel: '19 € par mois',
+    category: 'Artisans · Outil métier',
+    summary: 'Le devis part le soir même, la relance part toute seule, et l’artisan reste sur le chantier.',
+    priceLabel: '19 € par mois et par artisan',
     shotAlt: "Page d'accueil de DevisFlow, une application de devis pour artisans",
     spec: {
       ...SHARED,
@@ -53,8 +53,10 @@ const RAW_DEMOS: readonly DemoApp[] = [
           muted: '#d8dcea',
         },
         radius: 'medium',
-        font: 'system',
+        font: 'geometric',
         mode: 'light',
+        pattern: 'grid',
+        density: 'balanced',
       },
       auth: { enabled: true, allowSignup: false },
       dataModels: [
@@ -86,6 +88,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
             {
               id: 'hero',
               type: 'hero',
+              eyebrow: 'Pour les artisans du bâtiment',
               title: 'Le devis qui part le soir même',
               subtitle:
                 "Rédigez, envoyez, relancez. DevisFlow suit vos clients pendant que vous êtes sur le chantier.",
@@ -100,15 +103,29 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 {
                   title: 'Devis en trois minutes',
                   body: 'Vos prestations habituelles sont enregistrées : un devis se compose en quelques clics.',
+                  icon: 'pen',
                 },
                 {
                   title: 'Relances automatiques',
                   body: "Un client n'a pas répondu depuis huit jours ? Il reçoit un rappel, sans que vous y pensiez.",
+                  icon: 'bell',
                 },
                 {
                   title: 'Suivi clair',
                   body: 'Envoyés, acceptés, refusés : vous savez en un coup d’œil où vous en êtes.',
+                  icon: 'chart',
                 },
+              ],
+            },
+            {
+              id: 'etapes',
+              type: 'steps',
+              title: 'Du chantier au devis signé',
+              items: [
+                { title: 'Vous choisissez vos prestations', body: 'Dans votre liste, avec vos prix. Rien à retaper.', icon: 'check' },
+                { title: 'Le devis part', body: 'Par e-mail, depuis le téléphone, avec vos mentions légales.', icon: 'mail' },
+                { title: 'DevisFlow relance', body: 'Huit jours sans réponse : un rappel poli part tout seul.', icon: 'bell' },
+                { title: 'Vous signez', body: 'Accepté, refusé, à relancer : tout est dans la même liste.', icon: 'star' },
               ],
             },
             {
@@ -118,6 +135,18 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 { label: 'Temps par devis', value: '3 minutes' },
                 { label: 'Relances à écrire', value: 'Aucune' },
                 { label: 'Sur le chantier', value: 'Depuis le téléphone' },
+              ],
+            },
+            {
+              id: 'comparatif',
+              type: 'comparison',
+              title: 'DevisFlow ou le carnet',
+              columns: ['DevisFlow', 'Carnet et tableur'],
+              rows: [
+                { label: 'Devis envoyé le jour même', values: ['✓', 'Le week-end'] },
+                { label: 'Relance sans y penser', values: ['✓', '—'] },
+                { label: 'Prestations mémorisées', values: ['✓', '—'] },
+                { label: 'Vue de tous les devis en cours', values: ['✓', 'À la main'] },
               ],
             },
             {
@@ -201,9 +230,9 @@ const RAW_DEMOS: readonly DemoApp[] = [
   },
   {
     slug: 'bookizy',
-    category: 'Réservation · Indépendants',
-    summary: 'Prise de rendez-vous pour coachs, thérapeutes et indépendants.',
-    priceLabel: '14 € par mois',
+    category: 'Indépendants · Réservation',
+    summary: 'Vos clients réservent seuls, à toute heure, et reçoivent un rappel la veille. Votre agenda se remplit pendant vos séances.',
+    priceLabel: '14 € par mois, sans commission',
     shotAlt: 'Page de réservation de Bookizy, avec agenda et créneaux',
     spec: {
       ...SHARED,
@@ -257,6 +286,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
             {
               id: 'hero',
               type: 'hero',
+              eyebrow: 'Coachs, thérapeutes, indépendants',
               title: 'Réservez votre séance en trente secondes',
               subtitle:
                 'Choisissez un créneau, recevez votre confirmation, et un rappel la veille. Rien à installer.',
@@ -401,8 +431,8 @@ const RAW_DEMOS: readonly DemoApp[] = [
   {
     slug: 'fitpilot',
     category: 'Sport · Grand public',
-    summary: 'Programmes personnalisés et suivi de progression.',
-    priceLabel: '9,90 € par mois',
+    summary: 'Un programme qui s’adapte aux semaines chargées au lieu de culpabiliser. Chaque séance enregistrée, la progression visible.',
+    priceLabel: 'Gratuit pour essayer, puis 9,90 € par mois',
     shotAlt: 'Interface sombre de FitPilot, application de suivi d’entraînement',
     spec: {
       ...SHARED,
@@ -420,8 +450,10 @@ const RAW_DEMOS: readonly DemoApp[] = [
           muted: '#334155',
         },
         radius: 'large',
-        font: 'rounded',
+        font: 'bold',
         mode: 'dark',
+        pattern: 'grid',
+        density: 'balanced',
       },
       auth: { enabled: true, allowSignup: false },
       dataModels: [
@@ -454,6 +486,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
             {
               id: 'hero',
               type: 'hero',
+              eyebrow: 'Programme adaptatif',
               title: 'Un programme qui tient compte de vos semaines chargées',
               subtitle:
                 'Trois séances prévues, deux réalisées ? Le programme s’ajuste au lieu de vous culpabiliser.',
@@ -477,15 +510,28 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 {
                   title: 'Séances guidées',
                   body: 'Chaque exercice est expliqué, avec le temps de repos et la charge conseillée.',
+                  icon: 'play',
                 },
                 {
                   title: 'Progression visible',
                   body: 'Vos charges et vos durées se comparent d’une semaine à l’autre.',
+                  icon: 'chart',
                 },
                 {
                   title: 'Objectifs réalistes',
                   body: 'Vous indiquez votre temps disponible, le programme se cale dessus.',
+                  icon: 'target',
                 },
+              ],
+            },
+            {
+              id: 'etapes',
+              type: 'steps',
+              title: 'Votre semaine, en trois gestes',
+              items: [
+                { title: 'Dites votre temps', body: 'Deux séances de trente minutes ? Le programme se cale dessus.', icon: 'clock' },
+                { title: 'Faites la séance', body: 'Exercice par exercice, repos compris, depuis le téléphone.', icon: 'bolt' },
+                { title: 'Notez le ressenti', body: 'Facile, correct, difficile : la semaine suivante s’ajuste.', icon: 'smile' },
               ],
             },
             {
@@ -568,7 +614,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
   {
     slug: 'cooksy',
     category: 'Communauté · Grand public',
-    summary: 'Chacun publie ses recettes, retrouve ses favorites et suit ses idées de repas.',
+    summary: 'Des recettes publiées par de vraies cuisines, avec les temps réels, et les vôtres en favorites.',
     priceLabel: 'Gratuit, puis 4,90 € par mois',
     shotAlt: 'Page recettes de Cooksy, avec la liste des recettes publiées',
     spec: {
@@ -732,9 +778,9 @@ const RAW_DEMOS: readonly DemoApp[] = [
   },
   {
     slug: 'immotrack',
-    category: 'Immobilier · B2B',
-    summary: 'Gestion des biens, des prospects, des visites et du suivi commercial.',
-    priceLabel: '39 € par mois',
+    category: 'Immobilier · Agences',
+    summary: 'Chaque bien, chaque prospect, chaque visite. Les relances remontent toutes seules, le tableur part à la poubelle.',
+    priceLabel: '39 € par mois et par agent',
     shotAlt: 'Tableau de bord sobre d’ImmoTrack, application de suivi immobilier',
     spec: {
       ...SHARED,
@@ -752,8 +798,10 @@ const RAW_DEMOS: readonly DemoApp[] = [
           muted: '#cbd5e1',
         },
         radius: 'small',
-        font: 'system',
+        font: 'elegant',
         mode: 'light',
+        pattern: 'lines',
+        density: 'balanced',
       },
       auth: { enabled: true, allowSignup: false },
       dataModels: [
@@ -785,6 +833,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
             {
               id: 'hero',
               type: 'hero',
+              eyebrow: 'Pour les agences et les indépendants',
               title: 'Votre portefeuille, lisible en un écran',
               subtitle:
                 'Biens, prospects, visites et relances. Sans tableur, et sans rien oublier.',
@@ -808,16 +857,39 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 {
                   title: 'Fiche par bien',
                   body: 'Prix, état d’avancement, historique des visites et notes internes.',
+                  icon: 'home',
                 },
                 {
                   title: 'Prospects rattachés',
                   body: 'Qui a visité quoi, qui rappeler, et quand.',
+                  icon: 'users',
                 },
                 {
                   title: 'Rappels de relance',
                   body: 'Une visite sans suite depuis dix jours remonte en haut de la liste.',
+                  icon: 'bell',
                 },
               ],
+            },
+            {
+              id: 'comparatif',
+              type: 'comparison',
+              title: 'Ce que le tableur ne fait pas',
+              columns: ['ImmoTrack', 'Tableur'],
+              rows: [
+                { label: 'Relance qui remonte toute seule', values: ['✓', '—'] },
+                { label: 'Historique des visites par bien', values: ['✓', 'Onglet par onglet'] },
+                { label: 'Consultable depuis une visite', values: ['✓', '—'] },
+                { label: 'Portefeuille isolé par agent', values: ['✓', '—'] },
+              ],
+            },
+            {
+              id: 'appel',
+              type: 'cta',
+              title: 'Un après-midi pour tout saisir',
+              body: 'Vos biens en cours, vos prospects, vos prochaines visites. Ensuite, ImmoTrack tient le fil.',
+              label: 'Voir le tarif',
+              pageId: 'tarif',
             },
           ],
         },
@@ -891,9 +963,9 @@ const RAW_DEMOS: readonly DemoApp[] = [
   },
   {
     slug: 'studyflow',
-    category: 'Éducation · Grand public',
-    summary: 'Cours, fiches de révision et quiz pour réviser sans se disperser.',
-    priceLabel: '12 € par mois',
+    category: 'Éducation · Familles',
+    summary: 'Une fiche, un quiz, dix minutes. Les notions ratées reviennent, les acquises s’espacent.',
+    priceLabel: '12 € par mois pour toute la famille',
     shotAlt: 'Page de StudyFlow, application de fiches de révision',
     spec: {
       ...SHARED,
@@ -910,9 +982,11 @@ const RAW_DEMOS: readonly DemoApp[] = [
           text: '#1c1533',
           muted: '#ded9f0',
         },
-        radius: 'medium',
-        font: 'serif',
+        radius: 'large',
+        font: 'playful',
         mode: 'light',
+        pattern: 'dots',
+        density: 'balanced',
       },
       auth: { enabled: true, allowSignup: false },
       dataModels: [
@@ -944,6 +1018,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
             {
               id: 'hero',
               type: 'hero',
+              eyebrow: 'Du primaire au lycée',
               title: 'Réviser dix minutes vaut mieux que relire deux heures',
               subtitle:
                 'Des fiches courtes, un quiz après chacune, et la liste de ce qui reste à revoir.',
@@ -958,15 +1033,37 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 {
                   title: 'Une fiche par notion',
                   body: 'Assez courte pour être lue avant le bus, assez complète pour servir.',
+                  icon: 'book',
                 },
                 {
                   title: 'Un quiz derrière',
                   body: 'Trois questions suffisent à savoir si la notion est acquise.',
+                  icon: 'check',
                 },
                 {
                   title: 'Ce qui reste à revoir',
                   body: 'Les notions ratées reviennent, les autres s’espacent.',
+                  icon: 'clock',
                 },
+              ],
+            },
+            {
+              id: 'etapes',
+              type: 'steps',
+              title: 'Dix minutes, chaque jour',
+              items: [
+                { title: 'Lire la fiche', body: 'Une notion, une page, trois minutes.', icon: 'book' },
+                { title: 'Faire le quiz', body: 'Trois questions, tout de suite après.', icon: 'pen' },
+                { title: 'Laisser StudyFlow décider', body: 'Ce qui est raté revient demain, ce qui est su revient dans une semaine.', icon: 'calendar' },
+              ],
+            },
+            {
+              id: 'chiffres',
+              type: 'stats',
+              items: [
+                { label: 'par fiche', value: '3 minutes' },
+                { label: 'questions par quiz', value: '3' },
+                { label: 'matières au choix', value: '4' },
               ],
             },
             {

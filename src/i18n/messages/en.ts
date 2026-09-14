@@ -443,12 +443,12 @@ export const en: Record<keyof typeof fr, string> = {
   'landing.timelineEvoliia': 'Evoliia walks the whole line with you, from the idea onward.',
   'landing.timelineOthers': 'An app builder, by contrast, starts at the “App” step.',
 
-  'landing.showcaseTitle': 'Built with Evoliia',
+  'landing.showcaseTitle': 'Built with Evoliia, live today',
   'landing.showcaseBody':
-    'A look at the kinds of project you can imagine and build with Evoliia. Each one is online: you can open it.',
+    'Six apps, six trades, six styles. Each was described in a few sentences, built by Evoliia and published as is. Open them, click around: they are real apps, not pictures.',
   'landing.showcaseMobileLabel': 'The same app on a phone',
   'landing.buildOpen': 'See the demo',
-  'landing.buildSimilar': 'Build something similar',
+  'landing.buildSimilar': 'Build mine',
   'landing.showcaseDemoNote': 'Demonstration examples built with Evoliia, not customers.',
   'landing.showcaseNote':
     'These are web apps. On a phone they add themselves to the home screen straight from the browser: icon, name, full screen, no address bar. They do not go through the App Store or Google Play, where those stores decide alone and we promise nothing on their behalf.',

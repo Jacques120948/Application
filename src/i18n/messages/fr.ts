@@ -464,12 +464,12 @@ export const fr = {
     'Un générateur d’applications, lui, commence à l’étape « Application ».',
 
   // ── Les démonstrations ───────────────────────────────────────────────────
-  'landing.showcaseTitle': 'Créé avec Evoliia',
+  'landing.showcaseTitle': 'Créé avec Evoliia, en ligne aujourd’hui',
   'landing.showcaseBody':
-    "Découvrez différents types de projets qu’il est possible d’imaginer et de construire avec Evoliia. Chacun est en ligne : vous pouvez l’ouvrir.",
+    "Six applications, six métiers, six styles. Chacune a été décrite en quelques phrases, construite par Evoliia, et publiée telle quelle. Ouvrez-les, cliquez partout : ce sont de vraies applications, pas des images.",
   'landing.showcaseMobileLabel': 'La même application sur téléphone',
   'landing.buildOpen': 'Voir la démo',
-  'landing.buildSimilar': 'Créer quelque chose de similaire',
+  'landing.buildSimilar': 'Créer la mienne',
   'landing.showcaseDemoNote': 'Exemples de démonstration créés avec Evoliia, pas des clients.',
   'landing.showcaseNote':
     "Ce sont des applications web. Sur téléphone, elles s’ajoutent à l’écran d’accueil depuis le navigateur : icône, nom, ouverture en plein écran, sans barre d’adresse. Elles ne passent pas par l’App Store ni par Google Play, où ces boutiques décident seules et où nous ne promettons rien à leur place.",
