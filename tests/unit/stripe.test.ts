@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { priceFingerprint, statusFromStripe } from '@/server/billing/stripe/subscriptions'
 import { findProvider } from '@/server/integrations/catalog'
+import { countryCodeOf } from '@/server/integrations/providers/stripe'
 
 /**
  * Ce qui, dans l'intégration Stripe, se vérifie sans base ni réseau.
@@ -33,5 +34,14 @@ describe('Stripe — correspondances', () => {
     expect(stripe?.costToEvoliia).toBe('aucun')
     expect(stripe?.connectionTarget).toBe('APP')
     expect(stripe?.credential).toBe('OAUTH')
+  })
+
+  it('déduit le pays du compte Stripe du profil, avec la Suisse par défaut', () => {
+    expect(countryCodeOf('Suisse')).toBe('ch')
+    expect(countryCodeOf(' France ')).toBe('fr')
+    expect(countryCodeOf('Belgique')).toBe('be')
+    expect(countryCodeOf('de')).toBe('de')
+    expect(countryCodeOf('Atlantide')).toBe('ch')
+    expect(countryCodeOf(null)).toBe('ch')
   })
 })

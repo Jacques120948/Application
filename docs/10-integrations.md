@@ -85,7 +85,7 @@ Google et exigent une vérification avant ouverture au public.
 
 | | |
 |---|---|
-| Autorisation | OAuth, comptes de type standard |
+| Autorisation | Stripe Connect, comptes v2 à tableau de bord complet (équivalent des anciens comptes standard) |
 | Coût pour Evoliia | **Aucun.** En mode « Stripe fixe les prix », les frais sont facturés au compte connecté ; la plateforme ne supporte ni frais de compte, ni frais de versement |
 | Coût pour le créateur | La commission Stripe habituelle, sur son propre compte |
 | Webhooks | Oui |

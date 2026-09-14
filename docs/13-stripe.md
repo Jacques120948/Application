@@ -27,14 +27,18 @@ le dit, et ne propose ni portail ni résiliation.
 ## 2. Les créateurs encaissent leurs clients (Stripe Connect)
 
 Le visiteur d'une application paie **le créateur**, sur le compte Stripe **du créateur**.
-Evoliia est la plateforme Connect ; les comptes connectés sont de type **standard** : le
+Evoliia est la plateforme Connect ; les comptes connectés sont des **comptes v2 à
+tableau de bord complet** (l'équivalent des anciens comptes standard, que Stripe ne crée
+plus pour les nouvelles intégrations) : frais et pertes à la charge du titulaire
+(`fees_collector` et `losses_collector` à « stripe »), jamais de la plateforme. Le
 créateur garde son tableau de bord Stripe, ses virements, ses obligations, ses frais.
-L'argent ne passe jamais par le compte d'Evoliia.
+L'argent ne passe jamais par le compte d'Evoliia. Le pays du compte est déduit du profil
+du créateur (Suisse à défaut) ; Stripe ne le laisse pas changer ensuite.
 
 | Étape | Ce qui se passe |
 |---|---|
-| Relier son compte (écran Connexions) | `POST /api/connexions/stripe` crée un compte standard (une seule fois, l'inscription se reprend) et renvoie un lien d'inscription Stripe. L'identifiant `acct_…` est conservé comme n'importe quel secret de créateur : chiffré, jamais renvoyé au navigateur. |
-| Retour de Stripe | `GET /api/connexions/stripe/retour` relit le compte chez Stripe : `charges_enabled` → CONNECTED, sinon la connexion reste « à terminer » avec un bouton pour reprendre. |
+| Relier son compte (écran Connexions) | `POST /api/connexions/stripe` crée un compte v2 (une seule fois, l'inscription se reprend) et renvoie un lien d'inscription Stripe. L'identifiant `acct_…` est conservé comme n'importe quel secret de créateur : chiffré, jamais renvoyé au navigateur. |
+| Retour de Stripe | `GET /api/connexions/stripe/retour` relit le compte chez Stripe : capacité `card_payments` active → CONNECTED, sinon la connexion reste « à terminer » avec un bouton pour reprendre. |
 | Le visiteur choisit une offre | Bouton sur le bloc Tarifs, réservé aux personnes ayant un compte dans l'application. `POST /api/app/<projet>/paiement` crée la session Checkout **sur le compte connecté** (`stripeAccount`), en paiement unique ou abonnement selon le rythme de l'offre. L'aperçu du studio refuse. |
 | Webhook `/api/stripe/webhook/connect` | Secret distinct (`STRIPE_CONNECT_WEBHOOK_SECRET`). Le compte émetteur de l'événement doit être celui du créateur désigné dans les métadonnées, sans quoi l'événement est ignoré : un compte connecté ne peut pas fabriquer une vente pour le projet d'un autre. La vente est écrite dans `AppPurchase`, sous Row Level Security par projet. |
 | Le créateur voit ses ventes | Onglet Monétisation (`GET /api/projects/<id>/ventes`) : encaissé, nombre, abonnés actifs, dernières ventes. Montants confirmés par Stripe, avant ses frais. |
@@ -83,7 +87,8 @@ Dans le tableau de bord Stripe :
    `customer.subscription.deleted`, `charge.refunded`.
 3. Portail client : activer et choisir ce que le client peut faire (moyen de paiement,
    factures, résiliation).
-4. Connect : compléter le profil de plateforme, type de comptes « standard ».
+4. Connect : compléter le profil de plateforme et l'interface d'inscription (marque).
+   Aucune option « Accounts v1 » à activer : Evoliia crée des comptes v2.
 
 Sans `STRIPE_SECRET_KEY`, rien n'est proposé nulle part : la page des offres dit que le
 paiement en ligne n'est pas activé, la carte Stripe des Connexions reste « à venir », et

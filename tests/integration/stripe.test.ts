@@ -82,6 +82,7 @@ const created = {
   sessions: [] as Array<{ params: Stripe.Checkout.SessionCreateParams; options?: Stripe.RequestOptions }>,
   refunds: [] as Array<{ payment_intent: string; amount?: number; refund_application_fee?: boolean }>,
   accounts: 0,
+  accountParams: null as null | { dashboard: string; defaults?: { responsibilities?: Record<string, string> } },
 }
 
 const fake = {
@@ -117,19 +118,24 @@ const fake = {
   paymentIntents: { retrieve: vi.fn(async () => ({ metadata: {} })) },
   invoices: { list: vi.fn(async () => ({ data: [] })) },
   billingPortal: { sessions: { create: vi.fn(async () => ({ url: 'https://portail.stripe.test' })) } },
-  accounts: {
-    create: vi.fn(async () => {
-      created.accounts += 1
-      return { id: 'acct_test_1' }
-    }),
-    retrieve: vi.fn(async (id: string) => ({
-      id,
-      charges_enabled: true,
-      email: 'boutique@exemple.test',
-      business_profile: { name: 'Ma boutique' },
-    })),
+  v2: {
+    core: {
+      accounts: {
+        create: vi.fn(async (params: { dashboard: string; defaults?: { responsibilities?: Record<string, string> } }) => {
+          created.accounts += 1
+          created.accountParams = params
+          return { id: 'acct_test_1' }
+        }),
+        retrieve: vi.fn(async (id: string) => ({
+          id,
+          display_name: 'Ma boutique',
+          contact_email: 'boutique@exemple.test',
+          configuration: { merchant: { capabilities: { card_payments: { status: 'active' } } } },
+        })),
+      },
+      accountLinks: { create: vi.fn(async () => ({ url: 'https://connect.stripe.test/inscription' })) },
+    },
   },
-  accountLinks: { create: vi.fn(async () => ({ url: 'https://connect.stripe.test/inscription' })) },
 } as unknown as Stripe
 
 function event(type: string, object: unknown, account?: string): Stripe.Event {
@@ -421,6 +427,12 @@ describe('Stripe Connect — le créateur encaisse ses clients', () => {
     const url = await startStripeOnboarding(fake, creator, 'fr')
     expect(url).toContain('connect.stripe.test')
     expect(created.accounts).toBe(1)
+    // Un compte avec tableau de bord complet, dont les frais et les pertes sont à la
+    // charge de son titulaire : jamais de la plateforme.
+    expect(created.accountParams).toMatchObject({
+      dashboard: 'full',
+      defaults: { responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' } },
+    })
 
     const entry = (await listConnections(creator)).find((row) => row.provider.id === 'stripe')
     expect(entry?.connection?.status).toBe('ERROR')

@@ -2,24 +2,71 @@ import type Stripe from 'stripe'
 import { env } from '@/lib/env'
 import { AppError, notFound, validation } from '@/lib/errors'
 import { prisma } from '@/server/db/client'
+import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { findProvider } from '../catalog'
 import { assertConnectionSlot, isProviderOpen, storeConnection, useCredential } from '../service'
 
 /**
- * Stripe Connect, comptes standard.
+ * Stripe Connect, comptes v2 avec tableau de bord complet (l'équivalent des anciens
+ * comptes « standard »).
  *
  * Le créateur ouvre (ou relie) son propre compte Stripe, avec son propre tableau de bord
  * Stripe, ses propres virements, ses propres obligations. Evoliia n'est que la plateforme
  * qui crée les pages de paiement en son nom : l'argent ne passe jamais par le compte
- * d'Evoliia, et les frais Stripe sont facturés au créateur.
+ * d'Evoliia, et les frais Stripe comme les pertes sont à la charge du compte du créateur
+ * (`fees_collector` et `losses_collector` à « stripe »), jamais de la plateforme.
  *
  * Ce qu'Evoliia conserve : l'identifiant du compte connecté, chiffré comme n'importe quel
  * secret de créateur. Rien d'autre — ni jeton, ni clé, ni coordonnées bancaires.
  */
 
 const PROVIDER_ID = 'stripe'
-const PENDING = 'Inscription Stripe à terminer. Cliquez sur « Connecter » pour reprendre.'
+const PENDING = 'Inscription Stripe à terminer. Cliquez sur « Reprendre la connexion » pour continuer.'
+
+/**
+ * Pays du compte Stripe, à partir de ce que le créateur a déclaré dans son profil. Stripe
+ * ne le laisse plus changer ensuite : à défaut d'une correspondance sûre, la Suisse, pays
+ * d'Evoliia, et le créateur le verra dès le premier écran de Stripe.
+ */
+const COUNTRY_CODES: Record<string, string> = {
+  suisse: 'ch',
+  switzerland: 'ch',
+  schweiz: 'ch',
+  svizzera: 'ch',
+  france: 'fr',
+  belgique: 'be',
+  belgium: 'be',
+  luxembourg: 'lu',
+  allemagne: 'de',
+  deutschland: 'de',
+  germany: 'de',
+  italie: 'it',
+  italia: 'it',
+  italy: 'it',
+  espagne: 'es',
+  españa: 'es',
+  spain: 'es',
+  autriche: 'at',
+  österreich: 'at',
+  austria: 'at',
+  'pays-bas': 'nl',
+  nederland: 'nl',
+  netherlands: 'nl',
+  portugal: 'pt',
+  canada: 'ca',
+  'royaume-uni': 'gb',
+  'united kingdom': 'gb',
+  'états-unis': 'us',
+  'etats-unis': 'us',
+  'united states': 'us',
+}
+
+export function countryCodeOf(country: string | null | undefined): string {
+  const key = (country ?? '').trim().toLowerCase()
+  if (/^[a-z]{2}$/.test(key)) return key
+  return COUNTRY_CODES[key] ?? 'ch'
+}
 
 function provider() {
   const found = findProvider(PROVIDER_ID)
@@ -49,11 +96,22 @@ export async function startStripeOnboarding(stripe: Stripe, userId: string, loca
   let accountId = existing?.secret ?? null
 
   if (accountId === null) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } })
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } })
     if (user === null) throw notFound("Ce compte n'existe pas.")
-    const account = await stripe.accounts.create({
-      type: 'standard',
-      email: user.email,
+    const profile = await withUserScope(userId, (tx) =>
+      tx.creatorProfile.findFirst({ where: { userId }, select: { country: true } }),
+    ).catch(() => null)
+
+    const account = await stripe.v2.core.accounts.create({
+      display_name: user.name ?? user.email,
+      contact_email: user.email,
+      dashboard: 'full',
+      identity: { country: countryCodeOf(profile?.country) },
+      defaults: {
+        locales: [locale === 'fr' ? 'fr' : locale === 'de' ? 'de' : locale === 'it' ? 'it' : locale === 'es' ? 'es' : 'en'],
+        responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' },
+      },
+      configuration: { merchant: { capabilities: { card_payments: { requested: true } } } },
       metadata: { userId },
     })
     accountId = account.id
@@ -68,11 +126,12 @@ export async function startStripeOnboarding(stripe: Stripe, userId: string, loca
   }
 
   const { refresh, ret } = returnUrls(locale)
-  const link = await stripe.accountLinks.create({
+  const link = await stripe.v2.core.accountLinks.create({
     account: accountId,
-    refresh_url: refresh,
-    return_url: ret,
-    type: 'account_onboarding',
+    use_case: {
+      type: 'account_onboarding',
+      account_onboarding: { configurations: ['merchant'], refresh_url: refresh, return_url: ret },
+    },
   })
   return link.url
 }
@@ -89,12 +148,19 @@ export async function completeStripeOnboarding(
   const existing = await useCredential(userId, PROVIDER_ID, { target: 'APP', includePending: true })
   if (existing === null) throw new AppError('NOT_FOUND', "Aucune inscription Stripe n'est en cours.")
 
-  const account = await stripe.accounts.retrieve(existing.secret)
-  const ready = account.charges_enabled === true
+  const account = await stripe.v2.core.accounts.retrieve(existing.secret, {
+    include: ['configuration.merchant', 'identity'],
+  })
+  const ready = account.configuration?.merchant?.capabilities?.card_payments?.status === 'active'
+  const label =
+    account.identity?.business_details?.registered_name ??
+    account.display_name ??
+    account.contact_email ??
+    'Compte Stripe'
   await storeConnection(userId, stripeProvider, {
     kind: 'OAUTH',
     secret: account.id,
-    accountLabel: ready ? (account.business_profile?.name ?? account.email ?? 'Compte Stripe') : null,
+    accountLabel: ready ? label : null,
     status: ready ? 'CONNECTED' : 'ERROR',
     lastError: ready ? null : PENDING,
   })
