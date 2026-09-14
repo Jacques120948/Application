@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { Theme } from '@/server/spec/schema'
+import { fontPairing, fontStack, type DensityId, type PatternId } from '@/lib/fonts'
 
 /**
  * Traduction du thème d'une AppSpec en variables CSS.
@@ -28,18 +29,11 @@ const RADIUS_LARGE: Record<Theme['radius'], string> = {
   large: '32px',
 }
 
-const FONT: Record<Theme['font'], string> = {
-  system:
-    "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif",
-  serif: "ui-serif, 'Iowan Old Style', Georgia, 'Times New Roman', serif",
-  rounded: "ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Nunito', system-ui, sans-serif",
-}
-
-/** Graisse des titres : une serif a besoin de moins de gras pour avoir de la présence. */
-const HEADING_WEIGHT: Record<Theme['font'], string> = {
-  system: '650',
-  serif: '600',
-  rounded: '700',
+/** Espace vertical d'une section, selon la respiration choisie. */
+const SECTION_Y: Record<DensityId, [string, string]> = {
+  airy: ['4.5rem', '7rem'],
+  balanced: ['3.5rem', '5rem'],
+  compact: ['2.5rem', '3.5rem'],
 }
 
 function channels(hex: string): [number, number, number] {
@@ -85,9 +79,44 @@ function mix(hex: string, towards: string, ratio: number): string {
   return `#${blend.map((channel) => channel.toString(16).padStart(2, '0')).join('')}`
 }
 
+/**
+ * Motif de fond d'un bandeau, dessiné en CSS.
+ *
+ * Aucune image : des dégradés répétés, dans la couleur du texte posé sur le bandeau, à
+ * faible opacité. Le motif suit donc la palette, quelle qu'elle soit.
+ */
+export function patternLayer(pattern: PatternId, ink: string): string {
+  const line = ink === '#ffffff' ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.10)'
+  switch (pattern) {
+    case 'dots':
+      return `radial-gradient(${line} 1.2px, transparent 1.4px)`
+    case 'grid':
+      return `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`
+    case 'lines':
+      return `repeating-linear-gradient(135deg, ${line} 0 1px, transparent 1px 14px)`
+    default:
+      return 'none'
+  }
+}
+
+export function patternSize(pattern: PatternId): string {
+  switch (pattern) {
+    case 'dots':
+      return '22px 22px'
+    case 'grid':
+      return '40px 40px'
+    default:
+      return 'auto'
+  }
+}
+
 export function themeStyle(theme: Theme): CSSProperties {
   const { primary, accent, background, surface, text, muted } = theme.colors
   const dark = theme.mode === 'dark'
+  const pairing = fontPairing(theme.font)
+  const density = theme.density ?? 'balanced'
+  const pattern = theme.pattern ?? 'blobs'
+  const [sectionY, sectionYLarge] = SECTION_Y[density]
 
   /*
    * Le dégradé part de la couleur principale et va vers l'accent, en passant par une
@@ -126,8 +155,16 @@ export function themeStyle(theme: Theme): CSSProperties {
     '--app-shadow-lg': `0 2px 4px ${withAlpha(text, 0.05)}, 0 24px 60px -24px ${withAlpha(primary, dark ? 0.65 : 0.38)}`,
     '--app-radius': RADIUS[theme.radius],
     '--app-radius-lg': RADIUS_LARGE[theme.radius],
-    '--app-heading-weight': HEADING_WEIGHT[theme.font],
-    fontFamily: FONT[theme.font],
+    '--app-heading-weight': pairing.headingWeight,
+    '--app-heading-tracking': pairing.headingTracking,
+    '--app-font-heading': fontStack(pairing.heading),
+    '--app-font-body': fontStack(pairing.body),
+    '--app-section-y': sectionY,
+    '--app-section-y-lg': sectionYLarge,
+    '--app-pattern': patternLayer(pattern, readableOn(primary)),
+    '--app-pattern-size': patternSize(pattern),
+    '--app-pattern-blobs': pattern === 'blobs' ? '1' : '0',
+    fontFamily: fontStack(pairing.body),
     background,
     color: text,
   } as CSSProperties

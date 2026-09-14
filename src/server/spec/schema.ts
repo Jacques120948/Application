@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { DENSITIES, FONT_IDS, PATTERNS } from '@/lib/fonts'
 
 /**
  * AppSpec — description déclarative d'une application créée sur la plateforme.
@@ -55,8 +56,13 @@ export const themeSchema = z
       })
       .strict(),
     radius: z.enum(['none', 'small', 'medium', 'large']),
-    font: z.enum(['system', 'serif', 'rounded']),
+    /** Paire de polices, voir ./fonts.ts. */
+    font: z.enum(FONT_IDS),
     mode: z.enum(['light', 'dark']),
+    /** Motif décoratif des bandeaux. Facultatif : les applications d'avant en ont un par défaut. */
+    pattern: z.enum(PATTERNS).optional(),
+    /** Respiration des sections. Facultatif, équilibrée par défaut. */
+    density: z.enum(DENSITIES).optional(),
   })
   .strict()
 

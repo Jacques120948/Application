@@ -33,60 +33,8 @@ export const TEMPLATE_LABELS: Record<TemplateKind, string> = {
   community: 'Application communautaire',
 }
 
-export const THEME_PRESETS: Record<string, Theme> = {
-  confiance: {
-    colors: {
-      primary: '#2563EB',
-      accent: '#0EA5E9',
-      background: '#FFFFFF',
-      surface: '#F4F7FB',
-      text: '#0F172A',
-      muted: '#64748B',
-    },
-    radius: 'medium',
-    font: 'system',
-    mode: 'light',
-  },
-  nature: {
-    colors: {
-      primary: '#15803D',
-      accent: '#65A30D',
-      background: '#FFFFFF',
-      surface: '#F2F8F2',
-      text: '#14261A',
-      muted: '#5F7367',
-    },
-    radius: 'large',
-    font: 'rounded',
-    mode: 'light',
-  },
-  chaleur: {
-    colors: {
-      primary: '#C2410C',
-      accent: '#EA580C',
-      background: '#FFFBF7',
-      surface: '#FDF0E6',
-      text: '#27180F',
-      muted: '#7A6255',
-    },
-    radius: 'large',
-    font: 'rounded',
-    mode: 'light',
-  },
-  elegance: {
-    colors: {
-      primary: '#4C1D95',
-      accent: '#7C3AED',
-      background: '#FFFFFF',
-      surface: '#F6F3FD',
-      text: '#1B1233',
-      muted: '#6B6382',
-    },
-    radius: 'small',
-    font: 'serif',
-    mode: 'light',
-  },
-}
+export { STYLE_PRESETS, STYLE_PRESET_IDS, THEME_PRESETS, type StylePreset } from '@/lib/style-presets'
+import { THEME_PRESETS } from '@/lib/style-presets'
 
 export const DEFAULT_THEME = THEME_PRESETS.confiance as Theme
 

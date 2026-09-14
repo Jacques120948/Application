@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { TEMPLATE_KINDS } from '@/server/spec/templates'
+import { STYLE_PRESET_IDS, TEMPLATE_KINDS } from '@/server/spec/templates'
 import {
   BLOCK_TYPES,
   blockSchema,
@@ -40,7 +40,7 @@ export const blueprintSchema = z
       .min(1)
       .max(4),
     templateKind: z.enum(TEMPLATE_KINDS),
-    themePreset: z.enum(['confiance', 'nature', 'chaleur', 'elegance']),
+    themePreset: z.enum(STYLE_PRESET_IDS),
     /** Ce que la plateforme ne sait pas faire pour cette idée. Dit franchement. */
     limitations: z.array(z.string().min(1).max(200)).max(5),
   })

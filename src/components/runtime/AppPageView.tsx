@@ -52,7 +52,7 @@ export function AppPageView({
    * C'est ce qui sépare une page qui a de l'allure d'un formulaire centré.
    */
   return (
-    <div style={themeStyle(spec.theme)} className="min-h-full">
+    <div style={themeStyle(spec.theme)} className="app-root min-h-full">
       <AppNav spec={spec} currentPageId={page.id} context={context} />
       <main className="w-full pb-20">
         {page.requiresAuth && context.endUserEmail === null ? (
@@ -136,13 +136,41 @@ function Band({
   const alternate = tinted || position % 2 === 1
   return (
     <section
-      className="py-14 sm:py-20"
+      className="app-section"
       style={alternate ? { background: 'var(--app-surface-alt)' } : undefined}
     >
       <Column wide={wide}>
         <div className="reveal">{children}</div>
       </Column>
     </section>
+  )
+}
+
+/**
+ * Décor d'un bandeau : le motif du thème, ou les deux halos lumineux.
+ *
+ * Tout est dessiné en CSS à partir des couleurs de l'application : rien à charger, et le
+ * décor suit la palette au lieu de la contredire.
+ */
+function Decor() {
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0"
+        style={{ backgroundImage: 'var(--app-pattern)', backgroundSize: 'var(--app-pattern-size)' }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-24 -top-32 h-96 w-96 rounded-full blur-3xl"
+        style={{ background: 'var(--app-accent)', opacity: 'calc(0.4 * var(--app-pattern-blobs))' }}
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -bottom-40 -right-16 h-[28rem] w-[28rem] rounded-full blur-3xl"
+        style={{ background: 'var(--app-surface)', opacity: 'calc(0.25 * var(--app-pattern-blobs))' }}
+      />
+    </>
   )
 }
 
@@ -322,16 +350,7 @@ function BlockView({
               />
             </>
           ) : null}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -left-24 -top-32 h-96 w-96 rounded-full opacity-40 blur-3xl"
-            style={{ background: 'var(--app-accent)' }}
-          />
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute -bottom-40 -right-16 h-[28rem] w-[28rem] rounded-full opacity-25 blur-3xl"
-            style={{ background: 'var(--app-surface)' }}
-          />
+          <Decor />
           <Column wide>
             <div className="relative py-24 text-center sm:py-32">
               <h1
@@ -459,7 +478,7 @@ function BlockView({
     case 'cta': {
       const href = pageHref(block.pageId) ?? block.href
       return (
-        <section className="py-14 sm:py-20">
+        <section className="app-section">
           <Column wide>
             <div
               className="reveal relative isolate overflow-hidden rounded-[var(--app-radius-lg)] px-8 py-16 text-center sm:px-12"

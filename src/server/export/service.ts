@@ -3,8 +3,11 @@ import { withUserScope } from '@/server/db/scope'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { appSpecSchema } from '@/server/spec/schema'
 import { logger } from '@/server/observability/logger'
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { createZip, type ZipEntry } from './zip'
 import { fileNameFor, renderPage, renderStylesheet } from './site'
+import { fontFiles } from '@/lib/fonts'
 
 /**
  * Export d'un projet.
@@ -125,6 +128,18 @@ export async function exportProject(userId: string, projectId: string): Promise<
     })
   }
   entries.push({ path: 'styles.css', content: renderStylesheet(spec.data) })
+
+  // Les fichiers de police de la paire choisie. Une police introuvable n'empêche pas
+  // l'export : la feuille de style prévoit un repli du système.
+  for (const font of fontFiles(spec.data.theme.font)) {
+    const source = join(process.cwd(), 'node_modules', '@fontsource-variable', font.pkg, 'files', font.file)
+    const content = await readFile(source).catch(() => null)
+    if (content === null) {
+      logger.warn('export : police absente', { pkg: font.pkg })
+      continue
+    }
+    entries.push({ path: `fonts/${font.file}`, content })
+  }
 
   // La description complète de l'application. C'est elle qui permettrait de la reconstruire
   // ailleurs, ou de la réimporter un jour.

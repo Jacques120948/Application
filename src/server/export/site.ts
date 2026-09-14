@@ -1,4 +1,5 @@
 import type { AppSpec, Block, Page } from '@/server/spec/schema'
+import { fontFiles, fontPairing, fontStack } from '@/lib/fonts'
 
 /**
  * Rendu statique d'une application, pour l'export.
@@ -180,15 +181,29 @@ const RAYON: Record<AppSpec['theme']['radius'], string> = {
 /** Feuille de style unique, reprenant le thème choisi par le créateur. */
 export function renderStylesheet(spec: AppSpec): string {
   const { primary, accent, background, surface, text, muted } = spec.theme.colors
-  const police =
-    spec.theme.font === 'serif'
-      ? "Georgia, 'Times New Roman', serif"
-      : spec.theme.font === 'rounded'
-        ? "'Trebuchet MS', 'Segoe UI', system-ui, sans-serif"
-        : "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+  const pairing = fontPairing(spec.theme.font)
+  const police = fontStack(pairing.body)
+  const policeTitres = fontStack(pairing.heading)
+  /*
+   * Les polices voyagent dans le dossier exporté, à côté des images : le site s'ouvre hors
+   * ligne avec la même typographie qu'en ligne, sans rien demander à un tiers.
+   */
+  const declarations = fontFiles(spec.theme.font)
+    .map(
+      (font) => `@font-face {
+  font-family: '${font.family}';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(fonts/${font.file}) format('woff2-variations');
+}`,
+    )
+    .join('\n')
 
   return `/* Feuille de style de ${spec.name}, exportée par Evoliia.
    Les couleurs sont celles du thème choisi dans l'atelier. Tout est modifiable ici. */
+
+${declarations}
 
 :root {
   --primaire: ${primary};
@@ -208,6 +223,7 @@ body {
   font-family: ${police};
   line-height: 1.6;
 }
+h1, h2, h3 { font-family: ${policeTitres}; font-weight: ${pairing.headingWeight}; letter-spacing: ${pairing.headingTracking}; }
 main { max-width: 900px; margin: 0 auto; padding: 0 20px 64px; }
 a { color: var(--primaire); }
 

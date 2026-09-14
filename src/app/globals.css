@@ -105,6 +105,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/*
+ * Applications créées : la police des titres est celle de la paire choisie, celle du
+ * texte courant est posée sur la racine. Les variables viennent de themeStyle().
+ */
+.app-section {
+  padding-block: var(--app-section-y, 3.5rem);
+}
+@media (min-width: 640px) {
+  .app-section {
+    padding-block: var(--app-section-y-lg, 5rem);
+  }
+}
+
+.app-root :is(h1, h2, h3, h4, .app-heading) {
+  font-family: var(--app-font-heading);
+  letter-spacing: var(--app-heading-tracking, 0);
+}
+
 /* Focus visible et cohérent partout : exigence d'accessibilité de base. */
 :focus-visible {
   outline: 2px solid var(--color-brand);

@@ -55,8 +55,17 @@ function stringList(value: unknown, max: number): string[] {
 export function toneFromSpec(spec: AppSpec | null): string[] {
   if (spec === null) return ['simple', 'direct']
   const tone: string[] = ['simple', 'direct']
-  if (spec.theme.font === 'serif') tone.push('posé')
-  if (spec.theme.font === 'rounded') tone.push('chaleureux')
+  const byFont: Record<string, string> = {
+    serif: 'posé',
+    rounded: 'chaleureux',
+    elegant: 'raffiné',
+    geometric: 'net',
+    editorial: 'posé',
+    playful: 'joueur',
+    bold: 'affirmé',
+  }
+  const fontTone = byFont[spec.theme.font]
+  if (fontTone !== undefined) tone.push(fontTone)
   if (spec.theme.mode === 'dark') tone.push('sobre')
   return tone
 }

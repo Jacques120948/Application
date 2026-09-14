@@ -8,7 +8,8 @@ import {
   pageSchema,
   planSchema,
 } from '@/server/spec/schema'
-import { TEMPLATE_KINDS } from '@/server/spec/templates'
+import { STYLE_PRESETS, TEMPLATE_KINDS } from '@/server/spec/templates'
+import { FONT_PAIRINGS } from '@/lib/fonts'
 
 /**
  * Prompts système.
@@ -60,6 +61,14 @@ Portée d'un modèle de données : "user" (chacun voit ses propres données) ou 
 (tout le monde voit tout).
 
 Modèles de départ : ${TEMPLATE_KINDS.join(', ')}.
+
+Styles visuels (champ "themePreset"), à choisir selon l'activité :
+${STYLE_PRESETS.map((preset) => `- ${preset.id.padEnd(10)}: ${preset.hint}`).join('\n')}
+
+Paires de polices (champ "theme.font") : ${FONT_PAIRINGS.map((pairing) => pairing.id).join(', ')}.
+${FONT_PAIRINGS.map((pairing) => `- ${pairing.id.padEnd(10)}: ${pairing.hint}`).join('\n')}
+Le thème comporte aussi "pattern" (blobs, dots, grid, lines, none : motif de fond des
+bandeaux) et "density" (airy, balanced, compact : espace entre les sections).
 
 Contraintes de cohérence :
 - Une page doit avoir le chemin "accueil".

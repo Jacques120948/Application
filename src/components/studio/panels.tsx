@@ -4,6 +4,8 @@ import { useState } from 'react'
 import type { AppSpec } from '@/server/spec/schema'
 import type { CheckReport } from '@/server/spec/checks'
 import type { PatchOperation } from '@/server/spec/patch'
+import { STYLE_PRESETS } from '@/lib/style-presets'
+import { DENSITIES, DENSITY_LABELS, FONT_PAIRINGS, PATTERNS, PATTERN_LABELS } from '@/lib/fonts'
 import { Badge, Button, Card, CardBody, ComingSoon, Field, Input, Notice, Select } from '@/components/ui'
 
 /**
@@ -34,8 +36,65 @@ export function DesignPanel({ spec, send }: { spec: AppSpec; send: PatchSender }
     setBusy(false)
   }
 
+  /*
+   * Un style est reconnu comme « actif » quand le thème lui correspond encore trait pour
+   * trait. Dès qu'une couleur est retouchée à la main, aucun style n'est surligné : c'est
+   * honnête, et cela n'empêche pas d'en réappliquer un.
+   */
+  const activePreset = STYLE_PRESETS.find(
+    (preset) => JSON.stringify(preset.theme) === JSON.stringify(spec.theme),
+  )?.id
+
   return (
     <div className="grid gap-5">
+      <Card>
+        <CardBody>
+          <h3 className="mt-0 text-sm font-semibold">Style</h3>
+          <p className="mt-1 text-xs text-[var(--color-ink-soft)]">
+            Un style règle d&apos;un coup les couleurs, les polices, les formes et le motif de
+            fond. Vous pouvez ensuite retoucher chaque détail plus bas.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {STYLE_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                disabled={busy}
+                title={preset.hint}
+                onClick={() =>
+                  void apply(`Style « ${preset.label} » appliqué`, [
+                    { op: 'set', path: 'theme', value: preset.theme },
+                  ])
+                }
+                className={`grid gap-2 rounded-[var(--radius-control)] border p-2.5 text-left transition ${
+                  activePreset === preset.id
+                    ? 'border-[var(--color-brand)] ring-2 ring-[var(--color-brand-soft)]'
+                    : 'border-[var(--color-line)] hover:border-[var(--color-brand)]'
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="flex h-10 items-end gap-1 overflow-hidden rounded-[8px] p-1.5"
+                  style={{ background: preset.theme.colors.background }}
+                >
+                  <span
+                    className="h-full w-1/2 rounded-[5px]"
+                    style={{
+                      background: `linear-gradient(135deg, ${preset.theme.colors.primary}, ${preset.theme.colors.accent})`,
+                    }}
+                  />
+                  <span className="grid flex-1 gap-1">
+                    <span className="h-1.5 w-full rounded-full" style={{ background: preset.theme.colors.text }} />
+                    <span className="h-1.5 w-2/3 rounded-full" style={{ background: preset.theme.colors.muted }} />
+                  </span>
+                </span>
+                <span className="text-xs font-medium text-[var(--color-ink)]">{preset.label}</span>
+              </button>
+            ))}
+          </div>
+        </CardBody>
+      </Card>
+
       <Card>
         <CardBody>
           <h3 className="mt-0 text-sm font-semibold">Identité</h3>
@@ -76,7 +135,7 @@ export function DesignPanel({ spec, send }: { spec: AppSpec; send: PatchSender }
               <label key={field.path} className="flex items-center gap-3 text-sm">
                 <input
                   type="color"
-                  defaultValue={readColor(spec, field.path)}
+                  value={readColor(spec, field.path)}
                   disabled={busy}
                   onChange={(event) =>
                     void apply(`${field.label} modifiée`, [
@@ -98,7 +157,7 @@ export function DesignPanel({ spec, send }: { spec: AppSpec; send: PatchSender }
           <div className="mt-3 grid gap-3">
             <Field label="Coins">
               <Select
-                defaultValue={spec.theme.radius}
+                value={spec.theme.radius}
                 onChange={(event) =>
                   void apply('Style des coins modifié', [
                     { op: 'set', path: 'theme.radius', value: event.target.value },
@@ -111,18 +170,68 @@ export function DesignPanel({ spec, send }: { spec: AppSpec; send: PatchSender }
                 <option value="large">Très arrondis</option>
               </Select>
             </Field>
-            <Field label="Police">
+            <Field
+              label="Polices"
+              hint={FONT_PAIRINGS.find((pairing) => pairing.id === spec.theme.font)?.hint}
+            >
               <Select
-                defaultValue={spec.theme.font}
+                value={spec.theme.font}
                 onChange={(event) =>
-                  void apply('Police modifiée', [
+                  void apply('Polices modifiées', [
                     { op: 'set', path: 'theme.font', value: event.target.value },
                   ])
                 }
               >
-                <option value="system">Moderne</option>
-                <option value="serif">Classique</option>
-                <option value="rounded">Chaleureuse</option>
+                {FONT_PAIRINGS.map((pairing) => (
+                  <option key={pairing.id} value={pairing.id}>
+                    {pairing.label}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Motif des bandeaux">
+              <Select
+                value={spec.theme.pattern ?? 'blobs'}
+                onChange={(event) =>
+                  void apply('Motif modifié', [
+                    { op: 'set', path: 'theme.pattern', value: event.target.value },
+                  ])
+                }
+              >
+                {PATTERNS.map((pattern) => (
+                  <option key={pattern} value={pattern}>
+                    {PATTERN_LABELS[pattern]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Respiration">
+              <Select
+                value={spec.theme.density ?? 'balanced'}
+                onChange={(event) =>
+                  void apply('Respiration modifiée', [
+                    { op: 'set', path: 'theme.density', value: event.target.value },
+                  ])
+                }
+              >
+                {DENSITIES.map((density) => (
+                  <option key={density} value={density}>
+                    {DENSITY_LABELS[density]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Ambiance">
+              <Select
+                value={spec.theme.mode}
+                onChange={(event) =>
+                  void apply('Ambiance modifiée', [
+                    { op: 'set', path: 'theme.mode', value: event.target.value },
+                  ])
+                }
+              >
+                <option value="light">Claire</option>
+                <option value="dark">Sombre</option>
               </Select>
             </Field>
           </div>
