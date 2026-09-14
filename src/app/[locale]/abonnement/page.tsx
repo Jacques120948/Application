@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
+import { comparePlans, planDetails } from '@/server/billing/plan-details'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { getSubscriptionView } from '@/server/billing/stripe/subscriptions'
@@ -44,7 +45,10 @@ export default async function SubscriptionPage({
     monthlyCredits: plan.monthlyCredits,
     maxProjects: plan.maxProjects,
     allowBuild: plan.allowBuild,
+    isRecommended: plan.isRecommended,
+    details: planDetails(plan, locale),
   }))
+  const comparison = comparePlans(plans, locale)
 
   return (
     <Shell
@@ -60,6 +64,7 @@ export default async function SubscriptionPage({
         <SubscriptionBoard
           locale={locale}
           plans={cards}
+          comparison={comparison}
           initial={subscription}
           paymentAvailable={isStripeAvailable()}
           returnState={etat === 'succes' ? 'succes' : etat === 'annule' ? 'annule' : null}

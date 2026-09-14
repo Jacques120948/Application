@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { getTranslator, resolveLocale, type MessageKey } from '@/i18n'
 import { Badge, Button, Card, CardBody, Notice } from '@/components/ui'
 import type { SubscriptionView } from '@/server/billing/stripe/subscriptions'
+import type { PlanComparison, PlanDetailGroup } from '@/server/billing/plan-details'
 
 export type PlanCard = {
   id: string
@@ -15,6 +16,9 @@ export type PlanCard = {
   monthlyCredits: number
   maxProjects: number
   allowBuild: boolean
+  isRecommended: boolean
+  /** Ce que l'offre contient, groupé par thème, calculé côté serveur. */
+  details: PlanDetailGroup[]
 }
 
 /**
@@ -27,6 +31,7 @@ export type PlanCard = {
 export function SubscriptionBoard({
   locale,
   plans,
+  comparison,
   initial,
   paymentAvailable,
   returnState,
@@ -34,6 +39,7 @@ export function SubscriptionBoard({
 }: {
   locale: string
   plans: PlanCard[]
+  comparison: PlanComparison
   initial: SubscriptionView
   paymentAvailable: boolean
   returnState: 'succes' | 'annule' | null
@@ -42,6 +48,7 @@ export function SubscriptionBoard({
   const t = useMemo(() => getTranslator(resolveLocale(locale)), [locale])
   const [subscription, setSubscription] = useState(initial)
   const [busy, setBusy] = useState<string | null>(null)
+  const [showDetails, setShowDetails] = useState(false)
   const [message, setMessage] = useState<{ tone: 'positive' | 'caution' | 'critical'; text: string } | null>(
     returnState === 'annule' ? { tone: 'caution', text: t('subscription.canceledCheckout') } : null,
   )
@@ -196,6 +203,10 @@ export function SubscriptionBoard({
                     <span className="shrink-0 whitespace-nowrap">
                       <Badge tone="brand">{t('subscription.yours')}</Badge>
                     </span>
+                  ) : plan.isRecommended ? (
+                    <span className="shrink-0 whitespace-nowrap">
+                      <Badge tone="neutral">{t('subscription.recommended')}</Badge>
+                    </span>
                   ) : null}
                 </div>
                 <p className="m-0 mt-2 text-2xl font-semibold">
@@ -211,10 +222,30 @@ export function SubscriptionBoard({
                   ) : null}
                 </p>
                 <p className="m-0 mt-2 text-sm text-[var(--color-ink-soft)]">{plan.description}</p>
-                <ul className="m-0 mt-3 grid list-none gap-1 p-0 text-sm text-[var(--color-ink-soft)]">
-                  <li>{t('subscription.credits', { count: plan.monthlyCredits })}</li>
-                  {plan.allowBuild ? <li>{t('subscription.projects', { count: plan.maxProjects })}</li> : null}
-                </ul>
+                {/*
+                  Le contenu exact, groupe par groupe. Une carte qui ne dirait que « 3
+                  applications » laisserait deviner le reste ; celle-ci dit tout ce que l'offre
+                  ouvre, et le tableau plus bas dit ce qu'elle n'ouvre pas.
+                */}
+                <div className="mt-4 grid gap-3">
+                  {plan.details.map((group) => (
+                    <div key={group.title}>
+                      <p className="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--color-ink-faint)]">
+                        {group.title}
+                      </p>
+                      <ul className="m-0 mt-1 grid list-none gap-1 p-0 text-sm text-[var(--color-ink-soft)]">
+                        {group.items.map((item) => (
+                          <li key={item} className="flex gap-2">
+                            <span className="mt-0.5 shrink-0 text-[var(--color-brand)]" aria-hidden="true">
+                              ✓
+                            </span>
+                            <span className="min-w-0">{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
                 <div className="mt-auto pt-4">
                   {canChoose ? (
                     <Button
@@ -238,6 +269,94 @@ export function SubscriptionBoard({
       {paymentAvailable && subscription.managedByStripe ? (
         <p className="m-0 text-xs text-[var(--color-ink-faint)]">{t('subscription.prorata')}</p>
       ) : null}
+
+      {/*
+        Le tableau complet : chaque ligne pour chaque offre, y compris ce qu'une offre
+        n'ouvre pas. Replié par défaut — c'est la lecture attentive, après les cartes — mais
+        toujours là, pour que personne ne découvre une limite après avoir payé.
+      */}
+      <Card>
+        <CardBody>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="m-0 text-lg font-semibold">{t('subscription.detailsTitle')}</h2>
+              <p className="m-0 mt-1 text-sm text-[var(--color-ink-soft)]">{t('subscription.detailsBody')}</p>
+            </div>
+            <Button variant="secondary" onClick={() => setShowDetails((value) => !value)} aria-expanded={showDetails}>
+              {showDetails ? t('subscription.hideDetails') : t('subscription.showDetails')}
+            </Button>
+          </div>
+          {showDetails ? (
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[40rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--color-line)] text-left">
+                    <th scope="col" className="py-2 pr-4 font-medium text-[var(--color-ink-soft)]">
+                      {''}
+                    </th>
+                    {comparison.planNames.map((name, index) => (
+                      <th
+                        key={name}
+                        scope="col"
+                        className={`px-3 py-2 text-center font-semibold ${
+                          plans[index]?.id === subscription.planId ? 'text-[var(--color-brand-strong)]' : ''
+                        }`}
+                      >
+                        {name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {comparison.sections.map((section) => (
+                    <Fragment key={section.title}>
+                      <tr>
+                        <th
+                          scope="rowgroup"
+                          colSpan={comparison.planNames.length + 1}
+                          className="pt-5 pb-1 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-ink-faint)]"
+                        >
+                          {section.title}
+                        </th>
+                      </tr>
+                      {section.rows.map((row) => (
+                        <tr key={row.label} className="border-t border-[var(--color-line)]">
+                          <th scope="row" className="py-2 pr-4 text-left font-normal">
+                            <span>{row.label}</span>
+                            {row.hint !== null ? (
+                              <span className="mt-0.5 block text-xs text-[var(--color-ink-faint)]">{row.hint}</span>
+                            ) : null}
+                          </th>
+                          {row.values.map((value, index) => (
+                            <td
+                              key={comparison.planNames[index]}
+                              className={`px-3 py-2 text-center ${
+                                plans[index]?.id === subscription.planId ? 'bg-[var(--color-brand-soft)]' : ''
+                              }`}
+                            >
+                              {value === true ? (
+                                <span className="font-semibold text-[var(--color-brand)]" aria-label={t('subscription.included')}>
+                                  ✓
+                                </span>
+                              ) : value === false ? (
+                                <span className="text-[var(--color-ink-faint)]" aria-label={t('subscription.notIncluded')}>
+                                  —
+                                </span>
+                              ) : (
+                                <span className="font-medium">{value}</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </CardBody>
+      </Card>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
 import { AGENTS } from '@/server/agents/catalog'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
+import { storageLabel } from '@/server/billing/plan-details'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { customersNeededFor, formatAmount } from '@/server/business/economics'
@@ -75,17 +76,6 @@ export async function generateMetadata({
 
 /** Objectif de référence des exemples chiffrés : mille euros de chiffre d'affaires mensuel. */
 const REFERENCE_GOAL_CENTS = 100_000
-
-/**
- * Espace d'images d'une offre, en toutes lettres.
- *
- * Arrondi volontairement : « 250 Mo » se retient, « 250.0 Mo » fait comptable et n'apprend
- * rien de plus à qui compare deux offres.
- */
-function storageLabel(bytes: number): string {
-  const megabytes = Math.round(bytes / (1024 * 1024))
-  return megabytes >= 1024 ? `${Math.round(megabytes / 1024)} Go` : `${megabytes} Mo`
-}
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
   const locale = resolveLocale((await params).locale)
