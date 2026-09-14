@@ -23,7 +23,12 @@ type Media = {
   createdAt: string
 }
 
-type Library = { items: Media[]; usedBytes: number; quotaBytes: number }
+type Library = {
+  items: Media[]
+  usedBytes: number
+  quotaBytes: number
+  generation: { provider: string | null; providerLabel: string | null; dailyLimit: number; dailyLeft: number }
+}
 
 function size(bytes: number): string {
   if (bytes < 1024) return `${bytes} o`
@@ -94,6 +99,11 @@ export function MediaPanel({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const input = useRef<HTMLInputElement>(null)
+  /** Génération : la description saisie, et l'emplacement qui recevra l'image. */
+  const [prompt, setPrompt] = useState('')
+  const [targetPath, setTargetPath] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const promptField = useRef<HTMLTextAreaElement>(null)
 
   const load = useCallback(async () => {
     const response = await fetch(`/api/projects/${projectId}/medias`)
@@ -129,6 +139,41 @@ export function MediaPanel({
     setBusy(false)
     if (input.current !== null) input.current.value = ''
     await load()
+  }
+
+  /**
+   * Une image générée avec la clé du créateur. Elle rejoint la bibliothèque comme une
+   * photo téléversée et, si un emplacement était visé, s'y pose tout de suite.
+   */
+  async function generate() {
+    if (prompt.trim().length < 5) return
+    setGenerating(true)
+    setError(null)
+    const response = await fetch(`/api/projects/${projectId}/medias/generer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    })
+    const body = (await response.json().catch(() => ({}))) as { message?: string; media?: Media }
+    setGenerating(false)
+    if (!response.ok || body.media === undefined) {
+      setError(body.message ?? "L'image n'a pas pu être créée.")
+      return
+    }
+    const media = body.media
+    await load()
+    if (targetPath !== null) {
+      await send('Image créée et posée', [{ op: 'set', path: targetPath, value: media.id }])
+      setTargetPath(null)
+    }
+    setPrompt('')
+  }
+
+  function askFor(slot: Slot) {
+    setTargetPath(slot.path)
+    setPrompt(slot.label === slot.section ? slot.label : `${slot.label} — ${slot.section}`)
+    promptField.current?.focus()
+    promptField.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   async function remove(mediaId: string) {
@@ -196,6 +241,65 @@ export function MediaPanel({
         </div>
       )}
 
+      {library !== null && quota > 0 ? (
+        <Card>
+          <CardBody className="grid gap-3">
+            <div>
+              <h3 className="m-0 text-sm font-semibold">Créer une image avec l&apos;IA</h3>
+              {library.generation.provider === null ? (
+                <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
+                  Connectez votre clé OpenAI ou Google Gemini depuis{' '}
+                  <a href="/fr/connexions" className="text-[var(--color-brand-strong)]">
+                    Connexions
+                  </a>
+                  . Les images sont alors générées et facturées sur votre compte, jamais sur
+                  vos crédits Evoliia.
+                </p>
+              ) : (
+                <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
+                  Générée avec votre compte {library.generation.providerLabel}, facturée là-bas
+                  quelques centimes l&apos;image. Il vous reste {library.generation.dailyLeft} image(s)
+                  sur {library.generation.dailyLimit} pour aujourd&apos;hui.
+                </p>
+              )}
+            </div>
+            {library.generation.provider !== null ? (
+              <>
+                <textarea
+                  ref={promptField}
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  rows={3}
+                  maxLength={600}
+                  placeholder="Un atelier de menuiserie baigné de lumière, établi en bois, copeaux au sol"
+                  className="w-full rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    disabled={generating || prompt.trim().length < 5 || library.generation.dailyLeft === 0}
+                    onClick={() => void generate()}
+                  >
+                    {generating ? 'Création en cours…' : 'Créer l’image'}
+                  </Button>
+                  {targetPath !== null ? (
+                    <span className="text-xs text-[var(--color-ink-soft)]">
+                      Elle sera posée sur l&apos;emplacement choisi.{' '}
+                      <button type="button" className="underline" onClick={() => setTargetPath(null)}>
+                        Annuler
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+                <p className="m-0 text-xs text-[var(--color-ink-faint)]">
+                  Le style de votre application (couleurs, ambiance) est ajouté à votre description.
+                  Pas de marque ni de personne réelle : le fournisseur refuserait.
+                </p>
+              </>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
       {library !== null && library.items.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {library.items.map((media) => (
@@ -247,6 +351,16 @@ export function MediaPanel({
                   <span className="text-xs text-[var(--color-ink-faint)]">{slot.pageTitle}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {library?.generation.provider !== null && library !== undefined ? (
+                    <button
+                      type="button"
+                      disabled={busy || generating}
+                      onClick={() => askFor(slot)}
+                      className="rounded-[var(--radius-control)] border border-dashed border-[var(--color-brand)] px-3 py-2 text-xs font-medium text-[var(--color-brand-strong)]"
+                    >
+                      Créer avec l’IA
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={busy}

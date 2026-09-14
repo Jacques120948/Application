@@ -95,6 +95,20 @@ Google et exigent une vérification avant ouverture au public.
 **Séparation stricte.** Le Stripe d'Evoliia facture les abonnements Evoliia. Le Stripe du
 créateur encaisse les clients du créateur. Les deux ne se rencontrent jamais.
 
+### Clés OpenAI et Google Gemini du créateur (images)
+
+| | |
+|---|---|
+| Autorisation | Clé fournie par le créateur, vérifiée par un appel gratuit (liste des modèles) |
+| Coût pour Evoliia | **Aucun** |
+| Coût pour le créateur | Quelques centimes par image, sur son propre compte |
+| Usage | Générer des images pour ses applications, depuis l'onglet Images. Plafond de 20 images par jour |
+| Webhooks | Sans objet |
+| Validation fournisseur | Aucune |
+| Risque | Même règle que la clé Anthropic : chiffrée, jamais renvoyée, jamais journalisée |
+
+Voir docs/14-styles-et-sections.md pour le détail.
+
 ### Clé Anthropic du créateur
 
 | | |

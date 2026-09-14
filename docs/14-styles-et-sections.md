@@ -93,8 +93,27 @@ modèle ne peut pas produire une section non prévue.
 Un contrôle « images » avertit quand une galerie est vide ou qu'aucune section illustrée
 n'a d'image. Un héros sans photo n'avertit pas : son dégradé est un fond à part entière.
 
-## Ce qui reste hors périmètre
+## Images générées par l'IA, avec la clé du créateur
 
-Pas de génération d'images par l'IA : elle aurait un coût par image à la charge
-d'Evoliia ou des crédits, et c'est une décision commerciale à prendre avant d'écrire une
-ligne. Les images viennent du créateur.
+Evoliia ne possède aucune clé d'images. Le créateur connecte son compte **OpenAI** ou
+**Google Gemini** depuis l'écran Connexions (clé vérifiée par un appel gratuit, chiffrée,
+jamais renvoyée au navigateur). L'onglet Images propose alors « Créer une image avec
+l'IA » : une description, un bouton, et chaque emplacement d'image a son propre
+« Créer avec l'IA » qui préremplit la description et pose l'image dès qu'elle arrive.
+
+| | |
+|---|---|
+| Coût pour Evoliia | **Aucun.** L'image est facturée sur le compte du créateur. |
+| Plafond | 20 images par créateur et par 24 heures (`IMAGE_DAILY_LIMIT`), pour qu'une boucle ou un abus ne vide pas son compte. |
+| Description envoyée | Celle du créateur, plus le style de l'application (ambiance, teintes). Sans texte, sans logo, sans personne réelle. Aucune donnée personnelle, aucun prompt système. |
+| Rangement | Par `addMedia`, comme un téléversement : ré-encodée, sans métadonnées, comptée dans le quota de stockage de l'offre. `origin = ai`, description conservée. |
+| Refus du fournisseur | Traduits : clé refusée (la connexion passe en erreur), quota atteint, description refusée, service indisponible. |
+| Modèles | `gpt-image-1` (OpenAI), `gemini-2.5-flash-image` (Google). Des constantes dans `providers/openai.ts` et `providers/gemini.ts` : les changer est une décision. |
+
+Sans clé connectée, le bouton explique où en obtenir une. Il n'existe pas de clé Evoliia
+de secours : ce serait une dépense par image à la charge de la plateforme, décision
+volontairement laissée pour plus tard, avec de vrais chiffres d'usage.
+
+Une offre n'autorise qu'un certain nombre de connexions (`maxConnections`) : sur Launch,
+une seule, ce qui oblige à choisir entre Stripe, Anthropic et une clé d'images. C'est un
+réglage d'offre, dans le back-office.

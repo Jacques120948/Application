@@ -3,6 +3,7 @@ import { AppError, notFound, validation } from '@/lib/errors'
 import { withUserScope, withRuntimeScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { getEffectivePlan } from '@/server/billing/plans'
+import { generationStatus, type GenerationStatus } from './generate'
 import {
   MAX_UPLOAD_BYTES,
   MAX_WIDTH,
@@ -34,10 +35,12 @@ export type MediaLibrary = {
   items: MediaView[]
   usedBytes: number
   quotaBytes: number
+  /** Génération d'images avec la clé du créateur : quel fournisseur, combien aujourd'hui. */
+  generation: GenerationStatus
 }
 
 export async function listMedias(userId: string, projectId: string): Promise<MediaLibrary> {
-  const [rows, plan, used] = await Promise.all([
+  const [rows, plan, used, generation] = await Promise.all([
     withUserScope(userId, (tx) =>
       tx.mediaAsset.findMany({
         where: { userId, projectId },
@@ -56,9 +59,11 @@ export async function listMedias(userId: string, projectId: string): Promise<Med
     ),
     getEffectivePlan(userId),
     usedBytes(userId),
+    generationStatus(userId),
   ])
 
   return {
+    generation,
     items: rows.map((row) => ({
       id: row.id,
       filename: row.filename,
@@ -91,7 +96,13 @@ export async function usedBytes(userId: string): Promise<number> {
 export async function addMedia(
   userId: string,
   projectId: string,
-  file: { name: string; bytes: Uint8Array },
+  file: {
+    name: string
+    bytes: Uint8Array
+    /** `ai` quand l'image vient d'un fournisseur, avec la description qui l'a produite. */
+    origin?: 'upload' | 'ai'
+    prompt?: string
+  },
 ): Promise<MediaView> {
   if (file.bytes.length === 0) throw validation('Ce fichier est vide.')
   if (file.bytes.length > MAX_UPLOAD_BYTES) {
@@ -175,6 +186,8 @@ export async function addMedia(
         bytes: image.length + thumb.length,
         data: new Uint8Array(image),
         thumb: new Uint8Array(thumb),
+        origin: file.origin ?? 'upload',
+        prompt: file.prompt?.slice(0, 1000) ?? null,
       },
       select: { id: true, filename: true, width: true, height: true, bytes: true, createdAt: true },
     }),

@@ -190,6 +190,60 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     reviewedOn: '2026-09-12',
   },
   {
+    id: 'openai',
+    name: 'OpenAI',
+    category: 'ia',
+    summary: 'Votre propre clé OpenAI, pour créer des images.',
+    usage:
+      'Depuis l’onglet Images de votre application, décrivez une image : elle est générée avec votre clé et se pose dans vos sections.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: [],
+    costToEvoliia: 'aucun',
+    costToCreator: 'selon-usage',
+    costNotice:
+      'Chaque image générée est facturée sur votre compte OpenAI, quelques centimes l’image selon leur tarif. Evoliia ne prend rien et ne dépense rien.',
+    freeQuota: 'Aucun. Le compte fonctionne par crédits prépayés, avec un plafond mensuel réglable.',
+    webhooks: false,
+    providerReview:
+      'Aucune validation à obtenir : la clé se crée en deux minutes. Elle est vérifiée auprès d’OpenAI avant d’être enregistrée.',
+    risk:
+      'Une clé confiée est une clé à protéger : chiffrée au repos, jamais renvoyée au navigateur, jamais journalisée. Le nombre d’images par jour est plafonné pour qu’une boucle ne vide pas votre compte.',
+    keyHelp: {
+      label: 'Votre clé OpenAI',
+      hint: 'Elle se crée sur platform.openai.com, dans « API keys ». Posez-y une limite de dépense mensuelle : c’est votre compte qui paie. La clé est chiffrée et ne vous sera plus jamais réaffichée.',
+    },
+    reviewedOn: '2026-09-14',
+  },
+  {
+    id: 'google-gemini',
+    name: 'Google Gemini',
+    category: 'ia',
+    summary: 'Votre propre clé Google AI, pour créer des images.',
+    usage:
+      'Depuis l’onglet Images de votre application, décrivez une image : elle est générée avec votre clé et se pose dans vos sections.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: [],
+    costToEvoliia: 'aucun',
+    costToCreator: 'selon-usage',
+    costNotice:
+      'Chaque image générée est facturée sur votre compte Google AI, quelques centimes l’image selon leur tarif. Evoliia ne prend rien et ne dépense rien.',
+    freeQuota: 'Un palier gratuit limité existe chez Google ; au-delà, facturation à l’image.',
+    webhooks: false,
+    providerReview:
+      'Aucune validation à obtenir : la clé se crée dans Google AI Studio. Elle est vérifiée auprès de Google avant d’être enregistrée.',
+    risk:
+      'Une clé confiée est une clé à protéger : chiffrée au repos, jamais renvoyée au navigateur, jamais journalisée. Le nombre d’images par jour est plafonné pour qu’une boucle ne vide pas votre compte.',
+    keyHelp: {
+      label: 'Votre clé Google AI',
+      hint: 'Elle se crée sur aistudio.google.com, « Get API key ». Restreignez-la à l’API Generative Language. La clé est chiffrée et ne vous sera plus jamais réaffichée.',
+    },
+    reviewedOn: '2026-09-14',
+  },
+  {
     id: 'postelya',
     name: 'Postelya',
     category: 'social',

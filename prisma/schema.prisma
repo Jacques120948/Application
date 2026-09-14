@@ -726,6 +726,10 @@ model MediaAsset {
   data      Bytes
   /// Vignette pour les écrans de l'atelier, pour ne pas charger l'originale dans une liste.
   thumb     Bytes
+  /// upload | ai
+  origin    String   @default("upload")
+  /// Description donnée par le créateur quand l'image a été générée.
+  prompt    String?
   createdAt DateTime @default(now())
 
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -733,6 +737,7 @@ model MediaAsset {
 
   @@index([projectId, createdAt])
   @@index([userId])
+  @@index([userId, origin, createdAt])
 }
 
 /// Note d'un spécialiste marketing sur un projet.

@@ -1,5 +1,7 @@
 import { verifyAnthropicKey } from './providers/anthropic'
 import { verifyPostelyaCode } from './providers/postelya'
+import { verifyOpenAiKey } from './providers/openai'
+import { verifyGeminiKey } from './providers/gemini'
 
 /**
  * Vérification d'un secret avant enregistrement.
@@ -33,6 +35,8 @@ export type KeyVerifier = (apiKey: string) => Promise<KeyVerdict>
 const VERIFIERS: Record<string, KeyVerifier> = {
   anthropic: verifyAnthropicKey,
   postelya: verifyPostelyaCode,
+  openai: verifyOpenAiKey,
+  'google-gemini': verifyGeminiKey,
 }
 
 export function findVerifier(providerId: string): KeyVerifier | undefined {
