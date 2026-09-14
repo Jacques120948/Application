@@ -54,6 +54,46 @@ function blockText(block: Block): string[] {
       return [block.title, block.body ?? '']
     case 'assistant':
       return [block.title, block.intro ?? '', block.role, block.placeholder]
+    case 'imageText':
+      return [block.title, block.body, block.ctaLabel ?? '']
+    case 'gallery':
+      return [block.title ?? '', ...block.items.map((item) => item.caption ?? '')]
+    case 'testimonials':
+      return [block.title ?? '', ...block.items.flatMap((item) => [item.quote, item.author, item.role ?? ''])]
+    case 'steps':
+      return [block.title ?? '', ...block.items.flatMap((item) => [item.title, item.body])]
+    case 'team':
+      return [block.title ?? '', ...block.members.flatMap((item) => [item.name, item.role, item.bio ?? ''])]
+    case 'logos':
+      return [block.title ?? '', ...block.items.map((item) => item.name)]
+    case 'contact':
+      return [block.title ?? '', block.body ?? '', block.address ?? '', block.hours ?? '']
+    case 'video':
+      return [block.title ?? '', block.caption ?? '']
+    case 'comparison':
+      return [block.title ?? '', ...block.columns, ...block.rows.flatMap((row) => [row.label, ...row.values])]
+    case 'banner':
+      return [block.text, block.label ?? '']
+  }
+}
+
+/** Emplacements d'image d'une section : combien existent, combien sont remplis. */
+export function imageSlots(block: Block): { total: number; filled: number } {
+  const count = (items: ReadonlyArray<{ imageId?: string }>) => ({
+    total: items.length,
+    filled: items.filter((item) => item.imageId !== undefined).length,
+  })
+  switch (block.type) {
+    case 'hero':
+    case 'imageText':
+      return { total: 1, filled: block.imageId === undefined ? 0 : 1 }
+    case 'gallery':
+    case 'logos':
+      return count(block.items)
+    case 'team':
+      return count(block.members)
+    default:
+      return { total: 0, filled: 0 }
   }
 }
 
@@ -144,6 +184,25 @@ export function runChecks(spec: AppSpec): CheckReport {
     ...(ratio >= 4.5
       ? {}
       : { hint: 'Le contraste est insuffisant : assombrissez le texte ou éclaircissez le fond.' }),
+  })
+
+  // Images. Un bandeau sans photo garde son dégradé et reste beau ; une galerie vide ou
+  // une section image et texte sans image, non.
+  const illustrated = spec.pages.flatMap((page) => page.blocks.filter((block) => block.type !== 'hero').map(imageSlots))
+  const totalSlots = illustrated.reduce((sum, slot) => sum + slot.total, 0)
+  const filledSlots = illustrated.reduce((sum, slot) => sum + slot.filled, 0)
+  const galleriesEmpty = spec.pages.some((page) =>
+    page.blocks.some((block) => block.type === 'gallery' && imageSlots(block).filled === 0),
+  )
+  const imagesOk = totalSlots === 0 || (filledSlots > 0 && !galleriesEmpty)
+  add({
+    id: 'images',
+    label: 'Vos sections illustrées ont leurs images',
+    status: imagesOk ? 'ok' : 'warn',
+    autoFixable: false,
+    ...(imagesOk
+      ? {}
+      : { hint: 'Ajoutez vos photos depuis l’onglet Images : une galerie vide ou une section sans image font moins vrai.' }),
   })
 
   // Données

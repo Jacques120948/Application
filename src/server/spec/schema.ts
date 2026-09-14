@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { DENSITIES, FONT_IDS, PATTERNS } from '@/lib/fonts'
+import { ICON_NAMES } from '@/lib/icons'
 
 /**
  * AppSpec — description déclarative d'une application créée sur la plateforme.
@@ -113,22 +114,176 @@ export const dataModelSchema = z
 
 const blockBase = { id: slug }
 
+const imageId = z.string().uuid()
+const videoUrl = z
+  .string()
+  .max(300)
+  .regex(
+    /^https:\/\/(www\.)?(youtube\.com\/watch\?v=[\w-]{6,}|youtu\.be\/[\w-]{6,}|youtube\.com\/embed\/[\w-]{6,}|vimeo\.com\/\d{6,})/i,
+    'Seules les vidéos YouTube et Vimeo sont acceptées.',
+  )
+
 export const heroBlockSchema = z
   .object({
     ...blockBase,
     type: z.literal('hero'),
+    /** Petite mention au-dessus du titre : « Nouveau », « Depuis 2012 », un lieu. */
+    eyebrow: shortText.optional(),
     title: shortText,
     subtitle: mediumText,
     ctaLabel: shortText.optional(),
     ctaPageId: slug.optional(),
     /**
-     * Image de fond, choisie par le créateur dans sa bibliothèque.
-     *
-     * Jamais renseignée par l'assistant : il ne connaît aucun identifiant réel, et un
-     * identifiant inventé ne renverrait rien. C'est l'atelier qui la pose, et le service
-     * qui sert l'image vérifie qu'elle appartient bien au projet.
+     * Image, choisie par le créateur dans sa bibliothèque. Jamais renseignée par
+     * l'assistant : il ne connaît aucun identifiant réel, et un identifiant inventé ne
+     * renverrait rien. L'assemblage retire ce qu'il ne connaît pas.
      */
-    imageId: z.string().uuid().optional(),
+    imageId: imageId.optional(),
+    /** centered : photo en fond. split : texte à gauche, image encadrée à droite. */
+    layout: z.enum(['centered', 'split']).optional(),
+  })
+  .strict()
+
+/** Image et texte côte à côte : la section la plus courante d'un site qui a de l'allure. */
+export const imageTextBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('imageText'),
+    title: shortText,
+    body: longText,
+    imageId: imageId.optional(),
+    imagePosition: z.enum(['left', 'right']),
+    ctaLabel: shortText.optional(),
+    ctaPageId: slug.optional(),
+  })
+  .strict()
+
+export const galleryBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('gallery'),
+    title: shortText.optional(),
+    items: z
+      .array(z.object({ imageId: imageId.optional(), caption: shortText.optional() }).strict())
+      .min(2)
+      .max(12),
+  })
+  .strict()
+
+/** Témoignages. Jamais inventés : l'assistant n'en ajoute que si le créateur les fournit. */
+export const testimonialsBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('testimonials'),
+    title: shortText.optional(),
+    items: z
+      .array(
+        z
+          .object({
+            quote: mediumText,
+            author: shortText,
+            role: shortText.optional(),
+            imageId: imageId.optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(6),
+  })
+  .strict()
+
+export const stepsBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('steps'),
+    title: shortText.optional(),
+    items: z
+      .array(z.object({ title: shortText, body: mediumText, icon: z.enum(ICON_NAMES).optional() }).strict())
+      .min(2)
+      .max(8),
+  })
+  .strict()
+
+export const teamBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('team'),
+    title: shortText.optional(),
+    members: z
+      .array(
+        z
+          .object({
+            name: shortText,
+            role: shortText,
+            bio: mediumText.optional(),
+            imageId: imageId.optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(8),
+  })
+  .strict()
+
+/** Partenaires, clients, labels : des noms, éventuellement des logos téléversés. */
+export const logosBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('logos'),
+    title: shortText.optional(),
+    items: z
+      .array(z.object({ name: shortText, imageId: imageId.optional() }).strict())
+      .min(2)
+      .max(12),
+  })
+  .strict()
+
+export const contactBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('contact'),
+    title: shortText.optional(),
+    body: mediumText.optional(),
+    email: z.string().email().max(120).optional(),
+    phone: z.string().min(6).max(30).optional(),
+    address: mediumText.optional(),
+    hours: mediumText.optional(),
+  })
+  .strict()
+
+export const videoBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('video'),
+    title: shortText.optional(),
+    url: videoUrl,
+    caption: mediumText.optional(),
+  })
+  .strict()
+
+/** Tableau comparatif : des colonnes, des lignes, une valeur par case. */
+export const comparisonBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('comparison'),
+    title: shortText.optional(),
+    columns: z.array(shortText).min(2).max(4),
+    rows: z
+      .array(z.object({ label: shortText, values: z.array(z.string().max(60)).min(2).max(4) }).strict())
+      .min(1)
+      .max(12),
+  })
+  .strict()
+
+/** Bandeau d'annonce, fin, en haut ou en bas d'une page. */
+export const bannerBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('banner'),
+    text: mediumText,
+    label: shortText.optional(),
+    pageId: slug.optional(),
+    href: externalLink.optional(),
   })
   .strict()
 
@@ -146,10 +301,17 @@ export const featuresBlockSchema = z
     ...blockBase,
     type: z.literal('features'),
     title: shortText.optional(),
+    intro: mediumText.optional(),
     items: z
-      .array(z.object({ title: shortText, body: mediumText }).strict())
+      .array(
+        z
+          .object({ title: shortText, body: mediumText, icon: z.enum(ICON_NAMES).optional() })
+          .strict(),
+      )
       .min(1)
       .max(9),
+    /** cards : grille de cartes. list : une colonne, icône à gauche. */
+    layout: z.enum(['cards', 'list']).optional(),
   })
   .strict()
 
@@ -252,12 +414,46 @@ export const assistantBlockSchema = z
   })
   .strict()
 
+export const BLOCK_SCHEMAS = {
+  hero: heroBlockSchema,
+  richText: richTextBlockSchema,
+  imageText: imageTextBlockSchema,
+  features: featuresBlockSchema,
+  steps: stepsBlockSchema,
+  gallery: galleryBlockSchema,
+  testimonials: testimonialsBlockSchema,
+  team: teamBlockSchema,
+  logos: logosBlockSchema,
+  faq: faqBlockSchema,
+  stats: statsBlockSchema,
+  comparison: comparisonBlockSchema,
+  video: videoBlockSchema,
+  contact: contactBlockSchema,
+  banner: bannerBlockSchema,
+  cta: ctaBlockSchema,
+  pricing: pricingBlockSchema,
+  recordForm: recordFormBlockSchema,
+  recordList: recordListBlockSchema,
+  auth: authBlockSchema,
+  assistant: assistantBlockSchema,
+} as const
+
 export const blockSchema = z.discriminatedUnion('type', [
   heroBlockSchema,
   richTextBlockSchema,
+  imageTextBlockSchema,
   featuresBlockSchema,
+  stepsBlockSchema,
+  galleryBlockSchema,
+  testimonialsBlockSchema,
+  teamBlockSchema,
+  logosBlockSchema,
   faqBlockSchema,
   statsBlockSchema,
+  comparisonBlockSchema,
+  videoBlockSchema,
+  contactBlockSchema,
+  bannerBlockSchema,
   ctaBlockSchema,
   pricingBlockSchema,
   recordFormBlockSchema,
@@ -269,9 +465,19 @@ export const blockSchema = z.discriminatedUnion('type', [
 export const BLOCK_TYPES = [
   'hero',
   'richText',
+  'imageText',
   'features',
+  'steps',
+  'gallery',
+  'testimonials',
+  'team',
+  'logos',
   'faq',
   'stats',
+  'comparison',
+  'video',
+  'contact',
+  'banner',
   'cta',
   'pricing',
   'recordForm',

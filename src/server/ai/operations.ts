@@ -41,7 +41,7 @@ import {
   blueprintSchema,
   editResponseSchema,
   ideasSchema,
-  pageContentSchema,
+  pageContentSchemaFor,
   specSheetSchema,
   validationSchema,
   type Blueprint,
@@ -394,7 +394,7 @@ export async function generateSpec(
         callStructured({
           ...GENERATION_STEPS.page,
           system: GENERATE_PAGE_SYSTEM,
-          schema: pageContentSchema,
+          schema: pageContentSchemaFor(page.blockTypes),
           userContent: [
             `Langue des textes à produire : ${locale}.`,
             asUserData('contexte', sharedContext),

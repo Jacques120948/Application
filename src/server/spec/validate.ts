@@ -134,12 +134,51 @@ function checkBlock(
       }
       break
     }
+    case 'imageText':
+      pageRef(block.ctaPageId, 'ctaPageId')
+      if (block.ctaLabel !== undefined && block.ctaPageId === undefined) {
+        issues.push({ path: `${at}.ctaPageId`, message: 'Ce bouton ne mène nulle part.' })
+      }
+      break
+    case 'banner':
+      pageRef(block.pageId, 'pageId')
+      if (block.label !== undefined && block.pageId === undefined && block.href === undefined) {
+        issues.push({ path: `${at}.pageId`, message: 'Ce bouton ne mène nulle part.' })
+      }
+      break
+    case 'comparison':
+      for (const [rowIndex, row] of block.rows.entries()) {
+        if (row.values.length !== block.columns.length) {
+          issues.push({
+            path: `${at}.rows[${rowIndex}].values`,
+            message: 'Chaque ligne du tableau doit avoir une valeur par colonne.',
+          })
+        }
+      }
+      break
+    case 'contact':
+      if (
+        block.email === undefined &&
+        block.phone === undefined &&
+        block.address === undefined &&
+        block.hours === undefined
+      ) {
+        issues.push({ path: `${at}.email`, message: 'Une section contact doit donner au moins un moyen de contact.' })
+      }
+      break
     case 'richText':
     case 'features':
+    case 'steps':
+    case 'gallery':
+    case 'testimonials':
+    case 'team':
+    case 'logos':
     case 'faq':
     case 'stats':
+    case 'video':
     case 'pricing':
     case 'auth':
+    case 'assistant':
       break
   }
   return issues

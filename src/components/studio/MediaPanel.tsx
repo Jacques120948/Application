@@ -31,18 +31,51 @@ function size(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
 }
 
-/** Bandeaux d'accueil de la spécification : les seuls endroits où une image se pose. */
-function heroBlocks(spec: AppSpec) {
-  const found: Array<{ path: string; pageTitle: string; title: string; imageId?: string }> = []
+type Slot = { path: string; pageTitle: string; section: string; label: string; imageId?: string }
+
+/**
+ * Tous les emplacements d'image de l'application : un bandeau, une section image et
+ * texte, chaque case d'une galerie, chaque membre d'une équipe, chaque logo, chaque
+ * témoignage. L'image est posée là où elle sert, jamais déposée dans un dossier à charge
+ * pour le créateur de comprendre ce qu'elle va devenir.
+ */
+function imageSlots(spec: AppSpec): Slot[] {
+  const found: Slot[] = []
   spec.pages.forEach((page, pageIndex) => {
     page.blocks.forEach((block, blockIndex) => {
-      if (block.type !== 'hero') return
-      found.push({
-        path: `pages[${pageIndex}].blocks[${blockIndex}].imageId`,
-        pageTitle: page.title,
-        title: block.title,
-        ...(block.imageId === undefined ? {} : { imageId: block.imageId }),
-      })
+      const base = `pages[${pageIndex}].blocks[${blockIndex}]`
+      const push = (path: string, section: string, label: string, imageId: string | undefined) =>
+        found.push({ path, pageTitle: page.title, section, label, ...(imageId === undefined ? {} : { imageId }) })
+      switch (block.type) {
+        case 'hero':
+          push(`${base}.imageId`, "Bandeau d'accueil", block.title, block.imageId)
+          break
+        case 'imageText':
+          push(`${base}.imageId`, 'Image et texte', block.title, block.imageId)
+          break
+        case 'gallery':
+          block.items.forEach((item, index) =>
+            push(`${base}.items[${index}].imageId`, block.title ?? 'Galerie', item.caption ?? `Image ${index + 1}`, item.imageId),
+          )
+          break
+        case 'team':
+          block.members.forEach((member, index) =>
+            push(`${base}.members[${index}].imageId`, block.title ?? 'Équipe', member.name, member.imageId),
+          )
+          break
+        case 'logos':
+          block.items.forEach((item, index) =>
+            push(`${base}.items[${index}].imageId`, block.title ?? 'Partenaires', item.name, item.imageId),
+          )
+          break
+        case 'testimonials':
+          block.items.forEach((item, index) =>
+            push(`${base}.items[${index}].imageId`, block.title ?? 'Témoignages', item.author, item.imageId),
+          )
+          break
+        default:
+          break
+      }
     })
   })
   return found
@@ -115,7 +148,7 @@ export function MediaPanel({
     await load()
   }
 
-  const heroes = heroBlocks(spec)
+  const slots = imageSlots(spec)
   const used = library?.usedBytes ?? 0
   const quota = library?.quotaBytes ?? 0
   const share = quota === 0 ? 0 : Math.min(100, Math.round((used / quota) * 100))
@@ -194,37 +227,37 @@ export function MediaPanel({
         </div>
       ) : null}
 
-      {heroes.length === 0 ? null : (
+      {slots.length === 0 ? null : (
         <Card>
           <CardBody className="grid gap-4">
             <div>
-              <h3 className="m-0 text-sm font-semibold">Fond des bandeaux d’accueil</h3>
+              <h3 className="m-0 text-sm font-semibold">Où vont vos images</h3>
               <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
-                Une photo est posée derrière le titre, sous un voile aux couleurs de votre
-                application pour que le texte reste lisible quelle que soit l’image.
+                Chaque emplacement ci-dessous attend une image. Sans image, un motif aux couleurs
+                de votre application garde la place ; avec, c&apos;est votre photo qui fait la
+                page. Sur un bandeau, elle passe sous un voile pour que le titre reste lisible.
               </p>
             </div>
 
-            {heroes.map((hero) => (
-              <div key={hero.path} className="grid gap-2">
+            {slots.map((slot) => (
+              <div key={slot.path} className="grid gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">{hero.title}</span>
-                  <Badge tone="neutral">{hero.pageTitle}</Badge>
+                  <span className="text-sm font-medium">{slot.label}</span>
+                  <Badge tone="neutral">{slot.section}</Badge>
+                  <span className="text-xs text-[var(--color-ink-faint)]">{slot.pageTitle}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() =>
-                      void send('Fond du bandeau retiré', [{ op: 'delete', path: hero.path }])
-                    }
+                    onClick={() => void send('Image retirée', [{ op: 'delete', path: slot.path }])}
                     className={`rounded-[var(--radius-control)] border px-3 py-2 text-xs ${
-                      hero.imageId === undefined
+                      slot.imageId === undefined
                         ? 'border-[var(--color-brand)] font-medium'
                         : 'border-[var(--color-line)]'
                     }`}
                   >
-                    Dégradé seul
+                    Sans image
                   </button>
                   {(library?.items ?? []).map((media) => (
                     <button
@@ -233,12 +266,12 @@ export function MediaPanel({
                       disabled={busy}
                       title={media.filename}
                       onClick={() =>
-                        void send('Fond du bandeau modifié', [
-                          { op: 'set', path: hero.path, value: media.id },
+                        void send(`Image posée : ${slot.label}`, [
+                          { op: 'set', path: slot.path, value: media.id },
                         ])
                       }
                       className={`overflow-hidden rounded-[var(--radius-control)] border-2 ${
-                        hero.imageId === media.id
+                        slot.imageId === media.id
                           ? 'border-[var(--color-brand)]'
                           : 'border-transparent'
                       }`}

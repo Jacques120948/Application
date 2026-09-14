@@ -1,8 +1,10 @@
 import { z } from 'zod'
 import { STYLE_PRESET_IDS, TEMPLATE_KINDS } from '@/server/spec/templates'
 import {
+  BLOCK_SCHEMAS,
   BLOCK_TYPES,
   blockSchema,
+  type BlockType,
   dataModelSchema,
   monetizationSchema,
   navigationSchema,
@@ -404,6 +406,26 @@ export type AppPlan = z.infer<typeof appPlanSchema>
 export const pageContentSchema = z.object({ blocks: z.array(blockSchema).min(1).max(10) }).strict()
 
 export type PageContent = z.infer<typeof pageContentSchema>
+
+/**
+ * Le contrat d'UNE page, restreint aux types de section que le plan a prévus pour elle.
+ *
+ * Vingt et un types de section font une grammaire trop large pour l'API de sortie
+ * structurée ; une page n'en utilise que quelques-uns, et le plan les a déjà nommés.
+ * Restreindre l'union au nécessaire garde chaque appel sous la limite, et empêche au
+ * passage le modèle de produire une section qui n'était pas demandée.
+ */
+export function pageContentSchemaFor(types: readonly BlockType[]) {
+  const wanted = [...new Set(types)]
+  const schemas = wanted.map((type) => BLOCK_SCHEMAS[type])
+  const first = schemas[0]
+  if (first === undefined) return pageContentSchema
+  const union =
+    schemas.length === 1
+      ? first
+      : z.discriminatedUnion('type', [first, ...schemas.slice(1)] as [typeof first, ...(typeof schemas)])
+  return z.object({ blocks: z.array(union).min(1).max(10) }).strict()
+}
 
 // ═══════════════════════════ Lia — support client ═══════════════════════════
 

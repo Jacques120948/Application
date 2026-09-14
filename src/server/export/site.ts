@@ -1,5 +1,6 @@
 import type { AppSpec, Block, Page } from '@/server/spec/schema'
 import { fontFiles, fontPairing, fontStack } from '@/lib/fonts'
+import { iconSvg } from '@/lib/icons'
 
 /**
  * Rendu statique d'une application, pour l'export.
@@ -50,6 +51,37 @@ function placeholder(titre: string, explication: string): string {
   ].join('')
 }
 
+/** Une image du dossier exporté, ou un cadre vide qui garde la place. */
+function image(images: Map<string, string>, imageId: string | undefined, alt: string, classe = ''): string {
+  const chemin = imageId === undefined ? undefined : images.get(imageId)
+  if (chemin === undefined) return `<div class="image-vide ${classe}" aria-hidden="true"></div>`
+  return `<img class="${classe}" src="${chemin}" alt="${esc(alt)}" loading="lazy">`
+}
+
+function initiales(nom: string): string {
+  return nom
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('')
+}
+
+function avatar(images: Map<string, string>, imageId: string | undefined, nom: string): string {
+  const chemin = imageId === undefined ? undefined : images.get(imageId)
+  if (chemin === undefined) return `<span class="avatar avatar-initiales" aria-hidden="true">${esc(initiales(nom))}</span>`
+  return `<img class="avatar" src="${chemin}" alt="${esc(nom)}" loading="lazy">`
+}
+
+/** Adresse d'intégration d'une vidéo, sans cookie de suivi. */
+function videoEmbed(url: string): string | null {
+  const youtube = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([\w-]{6,})/i)
+  if (youtube?.[1]) return `https://www.youtube-nocookie.com/embed/${youtube[1]}`
+  const vimeo = url.match(/vimeo\.com\/(\d{6,})/i)
+  if (vimeo?.[1]) return `https://player.vimeo.com/video/${vimeo[1]}?dnt=1`
+  return null
+}
+
 function renderBlock(block: Block, images: Map<string, string>): string {
   switch (block.type) {
     case 'hero': {
@@ -59,6 +91,7 @@ function renderBlock(block: Block, images: Map<string, string>): string {
           : ''
       return [
         `<section class="hero${fond === '' ? '' : ' hero-image'}"${fond}>`,
+        block.eyebrow === undefined ? '' : `<p class="surtitre">${esc(block.eyebrow)}</p>`,
         `<h1>${esc(block.title)}</h1>`,
         `<p class="hero-sous-titre">${esc(block.subtitle)}</p>`,
         block.ctaLabel === undefined
@@ -83,13 +116,148 @@ function renderBlock(block: Block, images: Map<string, string>): string {
       return [
         '<section class="bloc">',
         block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
-        '<ul class="grille">',
+        block.intro === undefined ? '' : `<p class="intro">${esc(block.intro)}</p>`,
+        `<ul class="grille${block.layout === 'list' ? ' grille-liste' : ''}">`,
         ...block.items.map(
-          (item) =>
-            `<li><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p></li>`,
+          (item, index) =>
+            `<li><span class="pastille">${item.icon === undefined ? index + 1 : iconSvg(item.icon, 20)}</span><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p></li>`,
         ),
         '</ul>',
         '</section>',
+      ].join('')
+    case 'imageText':
+      return [
+        `<section class="bloc image-texte${block.imagePosition === 'right' ? ' image-droite' : ''}">`,
+        image(images, block.imageId, block.title, 'image-texte-visuel'),
+        '<div>',
+        `<h2>${esc(block.title)}</h2>`,
+        `<div class="texte">${block.body
+          .split('\n')
+          .filter((ligne) => ligne.trim() !== '')
+          .map((ligne) => `<p>${esc(ligne)}</p>`)
+          .join('')}</div>`,
+        block.ctaLabel === undefined || block.ctaPageId === undefined
+          ? ''
+          : `<p><a class="bouton" href="${block.ctaPageId}.html">${esc(block.ctaLabel)}</a></p>`,
+        '</div>',
+        '</section>',
+      ].join('')
+    case 'gallery':
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        '<ul class="galerie">',
+        ...block.items.map(
+          (item) =>
+            `<li>${image(images, item.imageId, item.caption ?? '')}${item.caption === undefined ? '' : `<p class="legende">${esc(item.caption)}</p>`}</li>`,
+        ),
+        '</ul>',
+        '</section>',
+      ].join('')
+    case 'testimonials':
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        '<ul class="grille temoignages">',
+        ...block.items.map(
+          (item) =>
+            `<li><blockquote>${esc(item.quote)}</blockquote><p class="auteur">${avatar(images, item.imageId, item.author)}<span><strong>${esc(item.author)}</strong>${item.role === undefined ? '' : `<br><small>${esc(item.role)}</small>`}</span></p></li>`,
+        ),
+        '</ul>',
+        '</section>',
+      ].join('')
+    case 'steps':
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        '<ol class="etapes">',
+        ...block.items.map(
+          (item, index) =>
+            `<li><span class="pastille">${item.icon === undefined ? index + 1 : iconSvg(item.icon, 20)}</span><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p></li>`,
+        ),
+        '</ol>',
+        '</section>',
+      ].join('')
+    case 'team':
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        '<ul class="grille equipe">',
+        ...block.members.map(
+          (member) =>
+            `<li>${avatar(images, member.imageId, member.name)}<h3>${esc(member.name)}</h3><p class="role">${esc(member.role)}</p>${member.bio === undefined ? '' : `<p>${esc(member.bio)}</p>`}</li>`,
+        ),
+        '</ul>',
+        '</section>',
+      ].join('')
+    case 'logos':
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<p class="surtitre-centre">${esc(block.title)}</p>`,
+        '<ul class="logos">',
+        ...block.items.map((item) => {
+          const chemin = item.imageId === undefined ? undefined : images.get(item.imageId)
+          return `<li>${chemin === undefined ? `<span class="etiquette">${esc(item.name)}</span>` : `<img src="${chemin}" alt="${esc(item.name)}" loading="lazy">`}</li>`
+        }),
+        '</ul>',
+        '</section>',
+      ].join('')
+    case 'contact': {
+      const lignes: string[] = []
+      if (block.email !== undefined) lignes.push(`<li>${iconSvg('mail', 18)}<a href="mailto:${esc(block.email)}">${esc(block.email)}</a></li>`)
+      if (block.phone !== undefined) lignes.push(`<li>${iconSvg('phone', 18)}<a href="tel:${esc(block.phone.replace(/[^\d+]/g, ''))}">${esc(block.phone)}</a></li>`)
+      if (block.address !== undefined) lignes.push(`<li>${iconSvg('pin', 18)}<span>${esc(block.address)}</span></li>`)
+      if (block.hours !== undefined) lignes.push(`<li>${iconSvg('clock', 18)}<span>${esc(block.hours)}</span></li>`)
+      return [
+        '<section class="bloc contact">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        block.body === undefined ? '' : `<p>${esc(block.body)}</p>`,
+        `<ul class="coordonnees">${lignes.join('')}</ul>`,
+        '</section>',
+      ].join('')
+    }
+    case 'video': {
+      const src = videoEmbed(block.url)
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        src === null
+          ? ''
+          : `<div class="video"><iframe src="${src}" title="${esc(block.title ?? 'Vidéo')}" loading="lazy" allow="encrypted-media; picture-in-picture; fullscreen" referrerpolicy="strict-origin-when-cross-origin"></iframe></div>`,
+        block.caption === undefined ? '' : `<p class="legende">${esc(block.caption)}</p>`,
+        '</section>',
+      ].join('')
+    }
+    case 'comparison':
+      return [
+        '<section class="bloc">',
+        block.title === undefined ? '' : `<h2>${esc(block.title)}</h2>`,
+        '<div class="tableau"><table>',
+        `<thead><tr><th></th>${block.columns.map((column) => `<th>${esc(column)}</th>`).join('')}</tr></thead>`,
+        `<tbody>${block.rows
+          .map(
+            (row) =>
+              `<tr><th scope="row">${esc(row.label)}</th>${row.values
+                .map((value) => {
+                  const v = value.trim()
+                  if (v === '✓' || v.toLowerCase() === 'oui') return `<td class="oui">${iconSvg('check', 18)}</td>`
+                  if (v === '' || v === '—' || v === '-' || v.toLowerCase() === 'non') return '<td class="non">—</td>'
+                  return `<td>${esc(value)}</td>`
+                })
+                .join('')}</tr>`,
+          )
+          .join('')}</tbody>`,
+        '</table></div>',
+        '</section>',
+      ].join('')
+    case 'banner':
+      return [
+        '<div class="bandeau">',
+        `<span>${esc(block.text)}</span>`,
+        block.label === undefined || (block.pageId === undefined && block.href === undefined)
+          ? ''
+          : `<a href="${block.pageId === undefined ? esc(block.href ?? '#') : `${block.pageId}.html`}">${esc(block.label)}</a>`,
+        '</div>',
       ].join('')
     case 'faq':
       return [
@@ -266,6 +434,61 @@ a { color: var(--primaire); }
   padding: 12px 24px; border-radius: var(--rayon); text-decoration: none; font-weight: 600;
 }
 .note { color: var(--discret); font-size: .9rem; }
+.intro { color: var(--discret); margin: -4px 0 16px; }
+.surtitre { display: inline-block; margin: 0 0 12px; padding: 4px 12px; border: 1px solid currentColor; border-radius: 999px; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; opacity: .85; }
+.surtitre-centre { text-align: center; color: var(--discret); font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 16px; }
+.pastille { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 999px; background: var(--primaire); color: #fff; font-weight: 600; font-size: .9rem; margin-bottom: 10px; }
+.grille-liste { grid-template-columns: 1fr !important; }
+.grille-liste li { display: grid; grid-template-columns: 36px 1fr; column-gap: 14px; }
+.grille-liste li h3 { grid-column: 2; margin: 0; }
+.grille-liste li p { grid-column: 2; }
+.grille-liste .pastille { grid-row: 1 / span 2; }
+
+.image-vide { aspect-ratio: 4 / 3; border-radius: var(--rayon); background: color-mix(in srgb, var(--primaire) 12%, var(--surface)); }
+img.image-texte-visuel { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--rayon); }
+.image-texte { display: grid; gap: 24px; align-items: center; }
+@media (min-width: 700px) { .image-texte { grid-template-columns: 1fr 1fr; } .image-droite > :first-child { order: 2; } }
+
+.galerie { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 700px) { .galerie { grid-template-columns: repeat(3, 1fr); } }
+.galerie img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: var(--rayon); }
+.legende { color: var(--discret); font-size: .9rem; margin: 6px 0 0; }
+
+.temoignages blockquote { margin: 0; font-size: 1.05rem; line-height: 1.6; }
+.temoignages blockquote::before { content: '“'; display: block; font-size: 2.4rem; line-height: 1; color: var(--primaire); }
+.auteur { display: flex; align-items: center; gap: 10px; margin: 16px 0 0; }
+.avatar { width: 44px; height: 44px; border-radius: 999px; object-fit: cover; flex: none; }
+.avatar-initiales { display: inline-flex; align-items: center; justify-content: center; background: var(--primaire); color: #fff; font-weight: 600; font-size: .85rem; }
+.equipe { text-align: center; }
+.equipe .avatar { width: 72px; height: 72px; margin: 0 auto 8px; font-size: 1.2rem; }
+.equipe .role { color: var(--primaire); font-weight: 600; font-size: .9rem; margin: 4px 0 8px; }
+
+.etapes { list-style: none; margin: 0; padding: 0; display: grid; gap: 18px; }
+@media (min-width: 700px) { .etapes { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
+.etapes h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.etapes p { margin: 0; }
+
+.logos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; justify-content: center; }
+.logos img { height: 36px; width: auto; opacity: .8; }
+.etiquette { display: inline-block; padding: 8px 16px; border: 1px solid var(--discret); border-radius: 999px; font-weight: 600; font-size: .9rem; }
+
+.coordonnees { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.coordonnees li { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: var(--rayon); padding: 12px 16px; }
+.coordonnees svg { color: var(--primaire); flex: none; }
+
+.video { aspect-ratio: 16 / 9; border-radius: var(--rayon); overflow: hidden; background: #000; }
+.video iframe { width: 100%; height: 100%; border: 0; }
+
+.tableau { overflow-x: auto; background: var(--surface); border-radius: var(--rayon); }
+.tableau table { width: 100%; min-width: 480px; border-collapse: collapse; }
+.tableau th, .tableau td { padding: 12px 14px; text-align: center; border-top: 1px solid color-mix(in srgb, var(--texte) 10%, transparent); }
+.tableau thead th { border-top: 0; }
+.tableau th[scope=row] { text-align: left; font-weight: 500; }
+.tableau .oui { color: var(--primaire); }
+.tableau .non { color: var(--discret); }
+
+.bandeau { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: center; background: var(--primaire); color: #fff; padding: 10px 20px; font-size: .9rem; margin: 0 0 24px; border-radius: var(--rayon); }
+.bandeau a { color: var(--primaire); background: #fff; text-decoration: none; padding: 3px 10px; border-radius: 999px; font-weight: 600; font-size: .8rem; }
 
 /* Bloc qui avait besoin d'un serveur. Signalé, jamais simulé. */
 .bloc-serveur {

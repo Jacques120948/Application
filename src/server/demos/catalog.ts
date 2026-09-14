@@ -221,8 +221,10 @@ const RAW_DEMOS: readonly DemoApp[] = [
           muted: '#c7e6e0',
         },
         radius: 'large',
-        font: 'rounded',
+        font: 'geometric',
         mode: 'light',
+        pattern: 'grid',
+        density: 'balanced',
       },
       auth: { enabled: true, allowSignup: false },
       dataModels: [
@@ -269,19 +271,45 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 {
                   title: 'Agenda toujours à jour',
                   body: 'Un créneau réservé disparaît immédiatement. Plus de double réservation.',
+                  icon: 'calendar',
                 },
                 {
                   title: 'Rappels la veille',
                   body: 'Vos clients reçoivent un message de rappel. Les oublis deviennent rares.',
+                  icon: 'bell',
                 },
                 {
                   title: 'Fiches clients',
                   body: 'Historique des séances, notes, coordonnées : tout est au même endroit.',
+                  icon: 'user',
                 },
                 {
                   title: 'Depuis le téléphone',
                   body: 'Vos clients réservent depuis leur mobile, vous consultez depuis le vôtre.',
+                  icon: 'phone',
                 },
+              ],
+            },
+            {
+              id: 'etapes',
+              type: 'steps',
+              title: 'Comment ça marche',
+              items: [
+                { title: 'Vous indiquez vos disponibilités', body: 'Une fois, puis vous ajustez quand vous voulez.' },
+                { title: 'Vos clients choisissent', body: 'Depuis votre lien, sur téléphone ou ordinateur.' },
+                { title: 'Tout le monde est prévenu', body: 'Confirmation immédiate, rappel la veille.' },
+              ],
+            },
+            {
+              id: 'comparatif',
+              type: 'comparison',
+              title: 'Ce que change Bookizy',
+              columns: ['Avec Bookizy', 'Par messages'],
+              rows: [
+                { label: 'Réservation à toute heure', values: ['✓', '—'] },
+                { label: 'Rappel automatique la veille', values: ['✓', '—'] },
+                { label: 'Double réservation impossible', values: ['✓', '—'] },
+                { label: 'Temps passé à répondre', values: ['Aucun', 'Chaque jour'] },
               ],
             },
             {
@@ -559,8 +587,10 @@ const RAW_DEMOS: readonly DemoApp[] = [
           muted: '#f0dfcd',
         },
         radius: 'large',
-        font: 'rounded',
+        font: 'editorial',
         mode: 'light',
+        pattern: 'dots',
+        density: 'airy',
       },
       auth: { enabled: true, allowSignup: false },
       dataModels: [
@@ -593,6 +623,7 @@ const RAW_DEMOS: readonly DemoApp[] = [
             {
               id: 'hero',
               type: 'hero',
+              eyebrow: 'Recettes de vraies cuisines',
               title: 'Qu’est-ce qu’on mange ce soir ?',
               subtitle:
                 'Des recettes publiées par des gens ordinaires, testées dans de vraies cuisines.',
@@ -607,15 +638,28 @@ const RAW_DEMOS: readonly DemoApp[] = [
                 {
                   title: 'Publier vos recettes',
                   body: 'Titre, temps de préparation, étapes. Cinq minutes suffisent.',
+                  icon: 'pen',
                 },
                 {
                   title: 'Garder vos favorites',
                   body: 'Un clic, et la recette vous attend dans votre espace.',
+                  icon: 'heart',
                 },
                 {
                   title: 'Chercher par envie',
                   body: 'Entrée, plat, dessert, boisson, et par temps de préparation.',
+                  icon: 'search',
                 },
+              ],
+            },
+            {
+              id: 'etapes',
+              type: 'steps',
+              title: 'De la cuisine à la page',
+              items: [
+                { title: 'Cuisinez', body: 'Une recette que vous avez vraiment faite, pas une idée.', icon: 'cup' },
+                { title: 'Écrivez-la', body: 'Les étapes dans l’ordre, le temps qu’il faut vraiment.', icon: 'pen' },
+                { title: 'Partagez', body: 'Elle rejoint les recettes de tout le monde, et vos favorites.', icon: 'users' },
               ],
             },
           ],

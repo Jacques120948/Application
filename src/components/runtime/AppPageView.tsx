@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import type { AppSpec, Block, Page } from '@/server/spec/schema'
 import { themeStyle } from './theme'
 import { RecordForm } from './RecordForm'
@@ -8,6 +8,21 @@ import { RecordList } from './RecordList'
 import { AuthPanel } from './AuthPanel'
 import { AssistantPanel } from './AssistantPanel'
 import { InstallPrompt } from './InstallPrompt'
+import { Icon } from './Icon'
+import { Band, CARD, cardStyle, Column, columnsFor, Decor, Heading } from './layout'
+import {
+  BannerBlock,
+  ComparisonBlock,
+  ContactBlock,
+  GalleryBlock,
+  ImageTextBlock,
+  LogosBlock,
+  Picture,
+  StepsBlock,
+  TeamBlock,
+  TestimonialsBlock,
+  VideoBlock,
+} from './blocks'
 
 /**
  * Rendu d'une page d'application générée.
@@ -107,108 +122,6 @@ export function AppPageView({
   )
 }
 
-/** Colonne de lecture. Tout ce qui n'est pas pleine largeur passe par elle. */
-function Column({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
-  return (
-    <div className={`mx-auto w-full px-5 ${wide ? 'max-w-5xl' : 'max-w-3xl'}`}>{children}</div>
-  )
-}
-
-/**
- * Section de contenu.
- *
- * Un fond alterné une section sur deux donne au défilement un rythme que des blocs
- * identiques empilés n'ont jamais. `reveal` est l'animation d'apparition définie dans la
- * feuille de style globale : elle ne coûte aucun JavaScript et se désactive d'elle-même
- * pour qui a demandé moins d'animations.
- */
-function Band({
-  children,
-  position,
-  wide = false,
-  tinted = false,
-}: {
-  children: ReactNode
-  position: number
-  wide?: boolean
-  tinted?: boolean
-}) {
-  const alternate = tinted || position % 2 === 1
-  return (
-    <section
-      className="app-section"
-      style={alternate ? { background: 'var(--app-surface-alt)' } : undefined}
-    >
-      <Column wide={wide}>
-        <div className="reveal">{children}</div>
-      </Column>
-    </section>
-  )
-}
-
-/**
- * Décor d'un bandeau : le motif du thème, ou les deux halos lumineux.
- *
- * Tout est dessiné en CSS à partir des couleurs de l'application : rien à charger, et le
- * décor suit la palette au lieu de la contredire.
- */
-function Decor() {
-  return (
-    <>
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0"
-        style={{ backgroundImage: 'var(--app-pattern)', backgroundSize: 'var(--app-pattern-size)' }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -left-24 -top-32 h-96 w-96 rounded-full blur-3xl"
-        style={{ background: 'var(--app-accent)', opacity: 'calc(0.4 * var(--app-pattern-blobs))' }}
-      />
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -bottom-40 -right-16 h-[28rem] w-[28rem] rounded-full blur-3xl"
-        style={{ background: 'var(--app-surface)', opacity: 'calc(0.25 * var(--app-pattern-blobs))' }}
-      />
-    </>
-  )
-}
-
-function Heading({ children }: { children: ReactNode }) {
-  return (
-    <h2
-      className="m-0 mb-6 text-balance text-2xl sm:text-3xl"
-      style={{ fontWeight: 'var(--app-heading-weight)' }}
-    >
-      {children}
-    </h2>
-  )
-}
-
-/**
- * Grille dont le nombre de colonnes suit le nombre d'éléments.
- *
- * Une seule offre au milieu d'une grille de trois laisse un vide que rien ne justifie, et
- * c'est le genre de détail qui fait qu'une page « sent » le gabarit. Deux éléments se
- * mettent sur deux colonnes, un seul occupe la largeur qu'il mérite.
- */
-function columnsFor(count: number): string {
-  if (count <= 1) return 'sm:max-w-md'
-  if (count === 2) return 'sm:grid-cols-2'
-  if (count === 4) return 'sm:grid-cols-2'
-  return 'sm:grid-cols-2 lg:grid-cols-3'
-}
-
-/** Surface d'une carte : bordure discrète, fond, et une ombre teintée de la marque. */
-const CARD =
-  'rounded-[var(--app-radius)] border p-6 transition-transform duration-200 hover:-translate-y-0.5'
-
-const cardStyle = {
-  borderColor: 'var(--app-border)',
-  background: 'var(--app-surface)',
-  boxShadow: 'var(--app-shadow)',
-} as const
-
 function AppNav({
   spec,
   currentPageId,
@@ -295,15 +208,6 @@ function BlockView({
     case 'hero': {
       const href = pageHref(block.ctaPageId)
       /*
-       * Le héros prend toute la fenêtre, sur le dégradé de la marque. C'est le seul
-       * endroit de la page où l'on peut se permettre du très grand texte, et c'est ce qui
-       * fait qu'une capture d'écran se reconnaît d'un coup d'œil.
-       *
-       * Les deux halos sont purement décoratifs et construits à partir des couleurs du
-       * thème : aucune image à charger, aucun poids supplémentaire, et le résultat suit la
-       * palette au lieu de la contredire.
-       */
-      /*
        * L'adresse porte le projet autant que l'image : c'est ce qui empêche une
        * spécification de pointer vers le fichier d'un autre projet. Elle est la même en
        * aperçu et en ligne, le service se chargeant de la vérification.
@@ -312,6 +216,73 @@ function BlockView({
         block.imageId === undefined
           ? null
           : `/api/app/${context.projectId}/medias/${block.imageId}`
+      const eyebrow =
+        block.eyebrow === undefined ? null : (
+          <p
+            className="m-0 mb-5 inline-block rounded-full border px-3.5 py-1 text-xs font-semibold uppercase tracking-wider"
+            style={{ borderColor: 'currentColor', opacity: 0.85 }}
+          >
+            {block.eyebrow}
+          </p>
+        )
+      const button =
+        block.ctaLabel !== undefined && href !== undefined ? (
+          <a
+            href={href}
+            className="mt-10 inline-block rounded-full px-8 py-4 text-base font-semibold no-underline transition-transform duration-200 hover:-translate-y-0.5"
+            style={{
+              background: 'var(--app-surface)',
+              color: 'var(--app-text)',
+              boxShadow: 'var(--app-shadow-lg)',
+            }}
+          >
+            {block.ctaLabel}
+          </a>
+        ) : null
+
+      /*
+       * Deux mises en page. « split » : le texte à gauche, l'image encadrée à droite, la
+       * composition la plus courante des sites qui ont de l'allure. « centered » : le
+       * héros prend toute la fenêtre, sur le dégradé de la marque, avec la photo en fond
+       * s'il y en a une — c'est ce qui fait qu'une capture se reconnaît d'un coup d'œil.
+       */
+      if (block.layout === 'split') {
+        return (
+          <section
+            className="relative isolate overflow-hidden"
+            style={{ background: 'var(--app-gradient)', color: 'var(--app-on-gradient)' }}
+          >
+            <Decor />
+            <Column wide>
+              <div className="relative grid items-center gap-10 py-16 sm:py-24 md:grid-cols-[1.1fr_1fr] md:gap-14">
+                <div>
+                  {eyebrow}
+                  <h1
+                    className="m-0 text-balance text-4xl leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl"
+                    style={{ fontWeight: 'var(--app-heading-weight)' }}
+                  >
+                    {block.title}
+                  </h1>
+                  <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed opacity-85 sm:text-xl">
+                    {block.subtitle}
+                  </p>
+                  {button}
+                </div>
+                <div className="relative">
+                  <Picture
+                    context={context}
+                    imageId={block.imageId}
+                    alt=""
+                    ratio="aspect-[5/4]"
+                    className="rotate-1 transition-transform duration-500 hover:rotate-0"
+                    onGradient
+                  />
+                </div>
+              </div>
+            </Column>
+          </section>
+        )
+      }
 
       return (
         <section
@@ -353,6 +324,7 @@ function BlockView({
           <Decor />
           <Column wide>
             <div className="relative py-24 text-center sm:py-32">
+              {eyebrow}
               <h1
                 className="m-0 text-balance text-4xl leading-[1.08] tracking-tight sm:text-6xl"
                 style={{ fontWeight: 'var(--app-heading-weight)' }}
@@ -362,19 +334,7 @@ function BlockView({
               <p className="mx-auto mt-6 max-w-2xl text-pretty text-lg leading-relaxed opacity-85 sm:text-xl">
                 {block.subtitle}
               </p>
-              {block.ctaLabel !== undefined && href !== undefined ? (
-                <a
-                  href={href}
-                  className="mt-10 inline-block rounded-full px-8 py-4 text-base font-semibold no-underline transition-transform duration-200 hover:-translate-y-0.5"
-                  style={{
-                    background: 'var(--app-surface)',
-                    color: 'var(--app-text)',
-                    boxShadow: 'var(--app-shadow-lg)',
-                  }}
-                >
-                  {block.ctaLabel}
-                </a>
-              ) : null}
+              {button}
             </div>
           </Column>
         </section>
@@ -402,26 +362,72 @@ function BlockView({
       return (
         <Band position={position} wide>
           {block.title !== undefined ? <Heading>{block.title}</Heading> : null}
-          <div className={`grid gap-5 ${columnsFor(block.items.length)}`}>
-            {block.items.map((item, index) => (
-              <div key={item.title} className={CARD} style={cardStyle}>
-                {/* Une pastille numérotée aux couleurs de la marque : le repère visuel le
-                    plus économique pour qu'une grille ne soit pas un mur de texte. */}
-                <span
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold"
-                  style={{ background: 'var(--app-gradient)', color: 'var(--app-on-gradient)' }}
-                >
-                  {index + 1}
-                </span>
-                <h3 className="mt-4 text-lg" style={{ fontWeight: 'var(--app-heading-weight)' }}>
-                  {item.title}
-                </h3>
-                <p className="m-0 mt-2 leading-relaxed opacity-75">{item.body}</p>
-              </div>
-            ))}
-          </div>
+          {block.intro !== undefined ? (
+            <p className="-mt-3 mb-8 max-w-2xl text-lg leading-relaxed opacity-75">{block.intro}</p>
+          ) : null}
+          {block.layout === 'list' ? (
+            <ul className="m-0 grid max-w-3xl list-none gap-5 p-0">
+              {block.items.map((item, index) => (
+                <li key={item.title} className="flex gap-4">
+                  <span
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                    style={{ background: 'var(--app-primary-soft)', color: 'var(--app-primary)' }}
+                  >
+                    {item.icon !== undefined ? <Icon name={item.icon} size={22} /> : <span className="text-sm font-semibold">{index + 1}</span>}
+                  </span>
+                  <div>
+                    <h3 className="m-0 text-lg" style={{ fontWeight: 'var(--app-heading-weight)' }}>
+                      {item.title}
+                    </h3>
+                    <p className="m-0 mt-1 leading-relaxed opacity-75">{item.body}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className={`grid gap-5 ${columnsFor(block.items.length)}`}>
+              {block.items.map((item, index) => (
+                <div key={item.title} className={CARD} style={cardStyle}>
+                  {/* Une icône du jeu de l'application, ou une pastille numérotée : le
+                      repère visuel le plus économique pour qu'une grille ne soit pas un
+                      mur de texte. */}
+                  <span
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold"
+                    style={{ background: 'var(--app-gradient)', color: 'var(--app-on-gradient)', boxShadow: 'var(--app-shadow)' }}
+                  >
+                    {item.icon !== undefined ? <Icon name={item.icon} size={22} /> : index + 1}
+                  </span>
+                  <h3 className="mt-4 text-lg" style={{ fontWeight: 'var(--app-heading-weight)' }}>
+                    {item.title}
+                  </h3>
+                  <p className="m-0 mt-2 leading-relaxed opacity-75">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </Band>
       )
+
+    case 'imageText':
+      return <ImageTextBlock block={block} spec={spec} context={context} position={position} />
+    case 'gallery':
+      return <GalleryBlock block={block} context={context} position={position} />
+    case 'testimonials':
+      return <TestimonialsBlock block={block} context={context} position={position} />
+    case 'steps':
+      return <StepsBlock block={block} position={position} />
+    case 'team':
+      return <TeamBlock block={block} context={context} position={position} />
+    case 'logos':
+      return <LogosBlock block={block} context={context} position={position} />
+    case 'contact':
+      return <ContactBlock block={block} position={position} />
+    case 'video':
+      return <VideoBlock block={block} position={position} />
+    case 'comparison':
+      return <ComparisonBlock block={block} position={position} />
+    case 'banner':
+      return <BannerBlock block={block} spec={spec} context={context} />
 
     case 'faq':
       return (

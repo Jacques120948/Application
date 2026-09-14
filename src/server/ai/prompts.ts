@@ -10,6 +10,7 @@ import {
 } from '@/server/spec/schema'
 import { STYLE_PRESETS, TEMPLATE_KINDS } from '@/server/spec/templates'
 import { FONT_PAIRINGS } from '@/lib/fonts'
+import { ICON_NAMES } from '@/lib/icons'
 
 /**
  * Prompts système.
@@ -42,11 +43,30 @@ const VOCABULARY = `
 Vocabulaire disponible pour décrire une application :
 
 Sections de page (champ "type") : ${BLOCK_TYPES.join(', ')}.
-- hero        : bandeau d'accueil avec titre, sous-titre et bouton
+- hero        : bandeau d'accueil avec titre, sous-titre et bouton. "eyebrow" : courte
+                mention au-dessus du titre (lieu, année, nouveauté). "layout" : "centered"
+                (plein écran) ou "split" (texte à gauche, image à droite).
 - richText    : bloc de texte
-- features    : liste d'atouts (titre + description)
+- imageText   : image et texte côte à côte ("imagePosition" left ou right). À utiliser
+                pour présenter une activité, un lieu, une personne, un produit.
+- features    : liste d'atouts (titre + description + "icon" facultatif parmi :
+                ${ICON_NAMES.join(', ')}). "layout" : "cards" ou "list".
+- steps       : étapes numérotées (comment ça marche, comment réserver, le déroulé)
+- gallery     : galerie de photos, 2 à 12 cases, chaque case avec une légende courte
+- testimonials: témoignages de clients. INTERDIT d'en inventer : uniquement si le créateur
+                a fourni de vrais témoignages, mot pour mot.
+- team        : les personnes derrière l'application. INTERDIT d'inventer des noms :
+                uniquement avec les personnes que le créateur a nommées.
+- logos       : partenaires, clients, labels. INTERDIT d'en inventer.
 - faq         : questions fréquentes
-- stats       : chiffres clés
+- stats       : chiffres clés, seulement des chiffres que le créateur a donnés ou qui
+                décrivent l'application elle-même (jamais des résultats promis)
+- comparison  : tableau comparatif ("columns" 2 à 4, "rows" avec une valeur par colonne ;
+                "✓" pour oui, "—" pour non)
+- video       : vidéo YouTube ou Vimeo, uniquement une adresse https fournie par le créateur
+- contact     : coordonnées (e-mail, téléphone, adresse, horaires), uniquement celles que
+                le créateur a fournies
+- banner      : fin bandeau d'annonce, en haut d'une page
 - cta         : appel à l'action
 - pricing     : affichage des formules tarifaires
 - recordForm  : formulaire qui enregistre réellement des données
@@ -55,6 +75,14 @@ Sections de page (champ "type") : ${BLOCK_TYPES.join(', ')}.
 - assistant   : assistant conversationnel répondant aux visiteurs, dans le rôle décrit
                 par le champ "role". Attention : chaque réponse consomme les crédits du
                 créateur. Ne l'ajoute que si l'utilisateur le demande explicitement.
+
+Images : tu ne renseignes JAMAIS un champ "imageId". Le créateur pose ses propres photos
+ensuite, depuis son atelier. Prévois les emplacements (imageText, gallery, hero en
+"split") sans les remplir.
+
+Composition d'une page d'accueil qui a de l'allure, dans cet ordre : hero, puis une
+section imageText ou features avec icônes, puis steps ou stats, puis faq ou cta. Varie
+les types de section : deux sections identiques à la suite font gabarit.
 
 Types de champ de données : ${FIELD_TYPES.join(', ')}.
 Portée d'un modèle de données : "user" (chacun voit ses propres données) ou "shared"

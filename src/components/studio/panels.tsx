@@ -326,7 +326,8 @@ export function FeaturesPanel({ spec, send }: { spec: AppSpec; send: PatchSender
       ))}
       <Notice tone="neutral">
         Pour ajouter une page ou une section, demandez-le à l&apos;assistant : « Ajoute une page
-        à propos ».
+        à propos », « Ajoute une galerie photos », « Ajoute les étapes pour réserver », « Ajoute
+        une section contact avec mon adresse ».
       </Notice>
     </div>
   )
@@ -336,9 +337,19 @@ function blockLabel(type: string): string {
   const labels: Record<string, string> = {
     hero: "Bandeau d'accueil",
     richText: 'Texte',
+    imageText: 'Image et texte',
     features: 'Liste d’atouts',
+    steps: 'Étapes',
+    gallery: 'Galerie',
+    testimonials: 'Témoignages',
+    team: 'Équipe',
+    logos: 'Partenaires',
     faq: 'Questions fréquentes',
     stats: 'Chiffres clés',
+    comparison: 'Tableau comparatif',
+    video: 'Vidéo',
+    contact: 'Contact',
+    banner: 'Bandeau d’annonce',
     cta: 'Appel à l’action',
     pricing: 'Tarifs',
     recordForm: 'Formulaire',

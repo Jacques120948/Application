@@ -34,6 +34,12 @@ export type AssembleInput = {
   pages: PlanPage[]
   /** Sections produites pour chaque page, indexées par identifiant de page. */
   blocksByPage: ReadonlyMap<string, Block[]>
+  /**
+   * Images réellement présentes dans la bibliothèque du projet. Tout identifiant d'image
+   * absent de cet ensemble est retiré : le modèle n'en connaît aucun, il ne peut que les
+   * inventer. Vide par défaut, ce qui est le cas à la première génération.
+   */
+  knownImageIds?: ReadonlySet<string>
 }
 
 export function slugifyId(value: string, fallback: string): string {
@@ -107,6 +113,7 @@ export function assembleSpec(input: AssembleInput): AppSpec {
         idMap,
         modelsById,
         takenBlockIds,
+        knownImageIds: input.knownImageIds ?? new Set(),
       })
       if (repaired !== null) blocks.push(repaired)
     }
@@ -177,6 +184,14 @@ type RepairContext = {
   idMap: ReadonlyMap<string, string>
   modelsById: ReadonlyMap<string, { fields: readonly { id: string }[] }>
   takenBlockIds: Set<string>
+  knownImageIds: ReadonlySet<string>
+}
+
+/** Retire un identifiant d'image que le projet ne possède pas. */
+function keepImage<T extends { imageId?: string }>(item: T, known: ReadonlySet<string>): T {
+  if (item.imageId === undefined || known.has(item.imageId)) return item
+  const { imageId: _dropped, ...rest } = item
+  return rest as T
 }
 
 /** Répare une section, ou renvoie `null` si elle est irrécupérable. */
@@ -190,15 +205,56 @@ function repairBlock(block: Block, context: RepairContext): Block | null {
     const mapped = context.idMap.get(pageId) ?? pageId
     return context.pageIds.has(mapped) ? mapped : undefined
   }
+  const known = context.knownImageIds
 
   switch (block.type) {
     case 'hero': {
       const target = resolvePage(block.ctaPageId)
-      const { ctaPageId: _ignoredPage, ctaLabel: _ignoredLabel, ...rest } = block
+      const { ctaPageId: _ignoredPage, ctaLabel: _ignoredLabel, ...rest } = keepImage(block, known)
       return target === undefined
         ? { ...rest, id }
         : { ...rest, id, ctaLabel: block.ctaLabel ?? 'Commencer', ctaPageId: target }
     }
+    case 'imageText': {
+      const target = resolvePage(block.ctaPageId)
+      const { ctaPageId: _ignoredPage, ctaLabel: _ignoredLabel, ...rest } = keepImage(block, known)
+      return target === undefined
+        ? { ...rest, id }
+        : { ...rest, id, ctaLabel: block.ctaLabel ?? 'En savoir plus', ctaPageId: target }
+    }
+    case 'banner': {
+      const target = resolvePage(block.pageId)
+      const { pageId: _ignored, label, ...rest } = block
+      if (target === undefined && block.href === undefined) return { ...rest, id }
+      return target === undefined ? { ...rest, id, label } : { ...rest, id, label: label ?? 'Voir', pageId: target }
+    }
+    case 'gallery':
+      return { ...block, id, items: block.items.map((item) => keepImage(item, known)) }
+    case 'testimonials':
+      return { ...block, id, items: block.items.map((item) => keepImage(item, known)) }
+    case 'team':
+      return { ...block, id, members: block.members.map((item) => keepImage(item, known)) }
+    case 'logos':
+      return { ...block, id, items: block.items.map((item) => keepImage(item, known)) }
+    case 'comparison': {
+      // Une ligne trop courte est complétée, une ligne trop longue est coupée.
+      const width = block.columns.length
+      const rows = block.rows.map((row) => ({
+        label: row.label,
+        values: [...row.values.slice(0, width), ...Array.from({ length: Math.max(0, width - row.values.length) }, () => '—')],
+      }))
+      return { ...block, id, rows }
+    }
+    case 'contact':
+      if (
+        block.email === undefined &&
+        block.phone === undefined &&
+        block.address === undefined &&
+        block.hours === undefined
+      ) {
+        return null
+      }
+      return { ...block, id }
     case 'cta': {
       const target = resolvePage(block.pageId)
       if (target === undefined && block.href === undefined) return null
@@ -224,8 +280,10 @@ function repairBlock(block: Block, context: RepairContext): Block | null {
     }
     case 'richText':
     case 'features':
+    case 'steps':
     case 'faq':
     case 'stats':
+    case 'video':
     case 'pricing':
     case 'auth':
     case 'assistant':
