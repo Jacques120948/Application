@@ -3,10 +3,11 @@ import { resolveLocale } from '@/i18n'
 import { AppError } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
-import { getProject } from '@/server/projects/service'
+import { getProject, listProjects } from '@/server/projects/service'
 import { getDesk, SPECIALIST_ESTIMATED_CREDITS } from '@/server/agents/service'
 import { Shell } from '@/components/studio/Shell'
 import { TeamBoard } from '@/components/studio/TeamBoard'
+import { ProjectSwitcher } from '@/components/studio/ProjectSwitcher'
 
 /**
  * Votre équipe marketing.
@@ -33,7 +34,11 @@ export default async function TeamPage({
     throw error
   }
 
-  const [wallet, desk] = await Promise.all([getWallet(user.id), getDesk(user.id, id)])
+  const [wallet, desk, projects] = await Promise.all([
+    getWallet(user.id),
+    getDesk(user.id, id),
+    listProjects(user.id),
+  ])
 
   return (
     <Shell
@@ -45,10 +50,27 @@ export default async function TeamPage({
     >
       <div className="mx-auto w-full max-w-4xl">
         <h1 className="mb-1 text-2xl font-semibold">Votre équipe marketing</h1>
-        <p className="mb-8 text-[var(--color-ink-soft)]">
-          Trois métiers, un seul projet : {desk.projectName}. Chacun lit vos données réelles
-          et le dit quand elles manquent.
+        <p className="mb-6 text-[var(--color-ink-soft)]">
+          Trois métiers, un seul projet à la fois : {desk.projectName}. Chacun lit vos données
+          réelles et le dit quand elles manquent.
         </p>
+
+        {/*
+          Le projet se choisit ici, pas dans la question : un spécialiste ne lit qu'un
+          projet, et l'adresse de la page dit lequel. Avec un seul projet, la liste n'a
+          rien à offrir et n'apparaît pas.
+        */}
+        {projects.length > 1 ? (
+          <div className="mb-8 max-w-md">
+            <ProjectSwitcher
+              projects={projects.map((project) => ({ id: project.id, name: project.name, status: project.status }))}
+              currentId={id}
+              hrefTemplate={`/${locale}/projets/{id}/equipe`}
+              label="Projet dont parle l’équipe"
+              hint="Les questions et les réponses restent attachées au projet choisi."
+            />
+          </div>
+        ) : null}
 
         <TeamBoard
           projectId={id}
