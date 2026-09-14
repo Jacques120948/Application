@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Card, CardBody, Notice, Textarea } from '@/components/ui'
+import { Button, Card, CardBody, LinkButton, Notice, Textarea } from '@/components/ui'
 
 /**
  * Le bureau des trois spécialistes.
@@ -75,7 +75,43 @@ function Avatar({
   )
 }
 
+/**
+ * Où va-t-on après la réponse ? Chaque spécialiste conseille des gestes qui se font à un
+ * endroit précis d'Evoliia, et une réponse qui dit « approuve ta semaine » sans dire où
+ * laisse la personne chercher. Le lien nomme l'écran tel qu'il s'appelle dans l'atelier.
+ */
+function nextStepFor(
+  agentId: string,
+  locale: string,
+  projectId: string,
+): { label: string; href: string; hint: string } | null {
+  const projet = `/${locale}/projets/${projectId}`
+  if (agentId === 'social') {
+    return {
+      label: 'Ouvrir « Préparer mon lancement »',
+      href: `${projet}/marketing`,
+      hint: 'Le kit de lancement : relire, approuver la semaine, puis l’envoyer vers Postelya.',
+    }
+  }
+  if (agentId === 'seo') {
+    return {
+      label: 'Ouvrir « Mon projet »',
+      href: projet,
+      hint: 'Modifier un titre, un texte ou une page, onglet « Modifier avec l’IA ».',
+    }
+  }
+  if (agentId === 'analytics') {
+    return {
+      label: 'Ouvrir « Mon projet »',
+      href: projet,
+      hint: 'Les visites et les pages consultées, sur la page du projet.',
+    }
+  }
+  return null
+}
+
 export function TeamBoard({
+  locale,
   projectId,
   agents,
   initialNotes,
@@ -83,6 +119,7 @@ export function TeamBoard({
   estimatedCredits,
   teamEnabled,
 }: {
+  locale: string
   projectId: string
   agents: AgentState[]
   initialNotes: NoteState[]
@@ -281,6 +318,17 @@ export function TeamBoard({
                     </p>
                   </div>
                 </div>
+                {(() => {
+                  const step = nextStepFor(note.agent, locale, projectId)
+                  return step === null ? null : (
+                    <div className="flex flex-wrap items-center gap-3 pl-11">
+                      <LinkButton href={step.href} variant="secondary">
+                        {step.label}
+                      </LinkButton>
+                      <span className="text-xs text-[var(--color-ink-faint)]">{step.hint}</span>
+                    </div>
+                  )
+                })()}
               </CardBody>
             </Card>
           ))}

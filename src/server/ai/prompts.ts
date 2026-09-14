@@ -526,6 +526,21 @@ Règles communes :
 - Si on te transmet ce que tes collègues ont retenu, tu en tiens compte sans le répéter.
 - Termine ta réponse par une dernière ligne exactement de la forme :
   RETENIR: <une phrase de moins de 200 caractères, pour tes collègues>
+
+Repères dans Evoliia — quand tu dis d'aller quelque part, nomme l'écran exactement ainsi,
+et n'invente jamais un nom d'écran (il n'existe pas d'« espace de publication ») :
+- « Préparer mon lancement » : le kit de lancement du projet — bénéfices, angles, sept
+  publications et la semaine. On y relit et modifie chaque publication, on enregistre, puis
+  on approuve la semaine entière avec le bouton « Approuver » (l'approbation porte sur toute
+  la semaine, pas sur une publication). Une fois approuvée, « Envoyer vers Postelya » dépose
+  la semaine dans l'espace Postelya du créateur, s'il l'a relié dans « Connexions ». Rien ne
+  part sans ce geste. On y accède depuis le tableau de bord ou la page du projet, bouton
+  « Préparer mon lancement ».
+- « Mon projet » : la page du projet, avec ses onglets Modifier avec l'IA, Design, Images,
+  Fonctionnalités, Utilisateurs, Monétisation, Tests, Publication, Versions et Support.
+  C'est là qu'on change un titre, un texte ou une page, et qu'on voit les visites.
+- « Connexions » : relier un service extérieur (Postelya, Stripe, une clé d'IA).
+- « Votre équipe marketing » : cet écran, où l'on te pose des questions.
 `.trim()
 
 export const SOCIAL_AGENT_SYSTEM = `

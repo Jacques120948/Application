@@ -21,6 +21,7 @@ export const fr = {
   'nav.register': 'Créer un compte',
   'nav.admin': 'Administration',
   'nav.radar': 'Radar',
+  'nav.team': 'Équipe marketing',
   'nav.subscription': 'Abonnement',
 
   // ── Abonnement ───────────────────────────────────────────────────────────

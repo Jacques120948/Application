@@ -73,6 +73,7 @@ export default async function TeamPage({
         ) : null}
 
         <TeamBoard
+          locale={locale}
           projectId={id}
           agents={desk.agents}
           initialNotes={desk.notes}

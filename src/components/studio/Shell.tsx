@@ -44,6 +44,9 @@ export function Shell({
             <a href={`/${locale}/radar`} className="text-[var(--color-ink-soft)] no-underline">
               {t('nav.radar')}
             </a>
+            <a href={`/${locale}/equipe`} className="text-[var(--color-ink-soft)] no-underline">
+              {t('nav.team')}
+            </a>
             <a href={`/${locale}/connexions`} className="text-[var(--color-ink-soft)] no-underline">
               Connexions
             </a>

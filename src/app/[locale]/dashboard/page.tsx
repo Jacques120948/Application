@@ -17,6 +17,7 @@ import { Card, CardBody, LinkButton } from '@/components/ui'
 import { AGENTS } from '@/server/agents/catalog'
 import { Shell } from '@/components/studio/Shell'
 import { TeamAvatars } from '@/components/studio/TeamAvatars'
+import { TeamRoster } from '@/components/studio/TeamRoster'
 import { ProjectCard } from '@/components/studio/ProjectCard'
 
 /**
@@ -400,35 +401,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                 </LinkButton>
               ) : null}
             </div>
-            <div className="grid gap-4 sm:grid-cols-3">
-              {team.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex gap-3 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] p-4"
-                >
-                  <img
-                    src={member.avatar}
-                    alt=""
-                    width={48}
-                    height={48}
-                    className={`h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-[var(--color-surface)] ${member.open ? '' : 'opacity-60 grayscale'}`}
-                  />
-                  <div className="min-w-0">
-                    <p className="m-0 font-semibold leading-tight">{member.name}</p>
-                    <p className="m-0 text-xs text-[var(--color-ink-soft)]">{member.role}</p>
-                    <p className="m-0 mt-1 text-xs">
-                      {member.open ? (
-                        <span className="text-[var(--color-positive)]">Disponible</span>
-                      ) : member.availableWith === null ? (
-                        <span className="text-[var(--color-ink-faint)]">Non inclus dans votre offre</span>
-                      ) : (
-                        <span className="text-[var(--color-ink-faint)]">Avec l’offre {member.availableWith}</span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <TeamRoster members={team} />
             <p className="m-0 mt-4 text-sm text-[var(--color-ink-soft)]">
               {teamProject === undefined
                 ? 'Trois spécialistes IA qui lisent les données réelles de votre application, sans rien inventer. Ils se mettent au travail dès qu’un projet existe.'
