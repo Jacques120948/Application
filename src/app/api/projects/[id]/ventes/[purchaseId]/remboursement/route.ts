@@ -1,5 +1,5 @@
 import { requireUser } from '@/server/auth/session'
-import { getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
+import { describeStripeError, getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
 import { refundInput, refundPurchase } from '@/server/runtime/payments'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
@@ -13,6 +13,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const input = refundInput.parse(await readJson(request))
     return ok({ purchase: await refundPurchase(getStripe(), user.id, id, purchaseId, input) })
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }

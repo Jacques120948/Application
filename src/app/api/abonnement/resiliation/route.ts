@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { requireUser } from '@/server/auth/session'
-import { getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
+import { describeStripeError, getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
 import { cancelAtPeriodEnd, getSubscriptionView } from '@/server/billing/stripe/subscriptions'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
@@ -16,6 +16,6 @@ export async function POST(request: Request) {
     await cancelAtPeriodEnd(getStripe(), user.id, body.cancel)
     return ok({ subscription: await getSubscriptionView(user.id) })
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }

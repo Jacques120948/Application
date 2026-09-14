@@ -1,7 +1,7 @@
 import { resolveRuntimeSpec } from '@/server/runtime/context'
 import { getEndUser } from '@/server/runtime/end-users'
 import { appCheckoutInput, startAppCheckout } from '@/server/runtime/payments'
-import { getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
+import { describeStripeError, getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { assertSameOrigin, clientIp, fail, ok, readJson } from '@/server/http/respond'
 
@@ -17,6 +17,6 @@ export async function POST(request: Request, context: { params: Promise<{ projec
     const endUser = await getEndUser(runtime.projectId)
     return ok(await startAppCheckout(getStripe(), runtime, endUser, input.planId))
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }

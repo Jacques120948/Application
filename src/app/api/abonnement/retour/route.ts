@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { requireUser } from '@/server/auth/session'
-import { getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
+import { describeStripeError, getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
 import { getSubscriptionView, syncCheckoutSession } from '@/server/billing/stripe/subscriptions'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
@@ -19,6 +19,6 @@ export async function POST(request: Request) {
     const applied = await syncCheckoutSession(getStripe(), user.id, body.sessionId)
     return ok({ applied, subscription: await getSubscriptionView(user.id) })
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }

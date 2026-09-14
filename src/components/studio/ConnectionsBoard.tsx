@@ -57,6 +57,8 @@ export function ConnectionsBoard({
   const [rows, setRows] = useState(cards)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Carte sur laquelle la dernière erreur s'est produite, pour l'afficher à côté du bouton. */
+  const [failedId, setFailedId] = useState<string | null>(null)
   /** Fournisseur dont le formulaire de clé est ouvert, et ce qui y est saisi. */
   const [opened, setOpened] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
@@ -107,6 +109,7 @@ export function ConnectionsBoard({
   async function authorize(providerId: string) {
     setBusy(providerId)
     setError(null)
+    setFailedId(providerId)
     const response = await fetch(`/api/connexions/${providerId}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -115,7 +118,12 @@ export function ConnectionsBoard({
     const body = (await response.json().catch(() => ({}))) as { message?: string; url?: string }
     if (!response.ok || body.url === undefined) {
       setBusy(null)
-      setError(body.message ?? "L'autorisation n'a pas pu commencer.")
+      setError(
+        body.message ??
+          (response.status === 404
+            ? "Le paiement en ligne n'est pas activé sur cette installation."
+            : "L'autorisation n'a pas pu commencer."),
+      )
       return
     }
     window.location.assign(body.url)
@@ -217,6 +225,10 @@ export function ConnectionsBoard({
                         <div className="grid gap-2">
                           {row.connection?.status === 'ERROR' && row.connection.lastError !== null ? (
                             <p className="m-0 text-xs text-[var(--color-caution)]">{row.connection.lastError}</p>
+                          ) : null}
+                          {/* L'erreur est répétée ici, sous les yeux : le bandeau du haut est hors écran. */}
+                          {error !== null && failedId === row.id ? (
+                            <p className="m-0 text-xs text-[var(--color-critical)]">{error}</p>
                           ) : null}
                           <Button disabled={busy === row.id} onClick={() => void authorize(row.id)}>
                             {busy === row.id

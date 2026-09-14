@@ -28,4 +28,16 @@ export function getStripe(): Stripe {
   return cached
 }
 
+/**
+ * Traduit un refus de Stripe en erreur lisible par la personne. Le message de Stripe
+ * est rédigé pour être montré (« complétez votre profil de plateforme ») ; il ne contient
+ * ni clé ni donnée de carte. Tout autre incident reste une erreur interne, masquée.
+ */
+export function describeStripeError(error: unknown): unknown {
+  if (error instanceof Stripe.errors.StripeError) {
+    return new AppError('UNSUPPORTED_REQUEST', `Stripe a répondu : ${error.message}`)
+  }
+  return error
+}
+
 export type { Stripe }

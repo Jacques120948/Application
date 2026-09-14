@@ -1,5 +1,5 @@
 import { requireUser } from '@/server/auth/session'
-import { getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
+import { describeStripeError, getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
 import { checkoutInput, getSubscriptionView, startCheckout } from '@/server/billing/stripe/subscriptions'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
@@ -14,7 +14,7 @@ export async function GET() {
     const user = await requireUser()
     return ok({ subscription: await getSubscriptionView(user.id), paymentAvailable: isStripeAvailable() })
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }
 
@@ -28,6 +28,6 @@ export async function POST(request: Request) {
     if ('url' in result) return ok({ url: result.url })
     return ok({ changed: true, subscription: await getSubscriptionView(user.id) })
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }

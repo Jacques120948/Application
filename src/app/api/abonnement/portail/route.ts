@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { requireUser } from '@/server/auth/session'
-import { getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
+import { describeStripeError, getStripe, isStripeAvailable } from '@/server/billing/stripe/client'
 import { openPortal } from '@/server/billing/stripe/subscriptions'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 import { SUPPORTED_LOCALES } from '@/i18n/config'
@@ -16,6 +16,6 @@ export async function POST(request: Request) {
     const body = input.parse(await readJson(request))
     return ok({ url: await openPortal(getStripe(), user.id, body.locale) })
   } catch (error) {
-    return fail(error)
+    return fail(describeStripeError(error))
   }
 }
