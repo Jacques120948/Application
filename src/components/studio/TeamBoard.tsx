@@ -118,9 +118,15 @@ export function TeamBoard({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ agent: agent.id, question: question.trim(), history }),
     })
-    const body = (await response.json()) as { message?: string; note?: NoteState }
+    // Une réponse qui n'est pas du JSON vient de l'hébergeur (fonction coupée avant de
+    // répondre) : on le dit tel quel plutôt que de laisser le bouton en attente.
+    const body = (await response.json().catch(() => null)) as { message?: string; note?: NoteState } | null
     setBusy(false)
 
+    if (body === null) {
+      setError('La réponse a pris trop de temps et a été interrompue. Réessayez dans un instant.')
+      return
+    }
     if (!response.ok || body.note === undefined) {
       setError(body.message ?? "La question n'a pas abouti.")
       return
