@@ -93,6 +93,41 @@ modèle ne peut pas produire une section non prévue.
 Un contrôle « images » avertit quand une galerie est vide ou qu'aucune section illustrée
 n'a d'image. Un héros sans photo n'avertit pas : son dégradé est un fond à part entière.
 
+## Données : consulter et corriger
+
+Une liste (`recordList`) ne montre qu'un titre et un sous-titre. C'est ce qu'il faut pour
+parcourir, et bien trop peu pour consulter : les autres champs saisis par le visiteur
+n'étaient visibles nulle part. Une ligne s'ouvre donc, et montre alors **tous** les champs
+du modèle, chacun sous son intitulé.
+
+Ouverte, une fiche qu'on a soi-même saisie se **corrige sur place**, dans le même
+formulaire que celui de la saisie. Avant cela, une application ne savait que créer et
+détruire : changer une virgule imposait de supprimer puis de ressaisir, et tout ce qui a un
+état — une réservation qu'on déplace, une tâche qu'on coche — était hors de portée.
+
+Le drapeau `allowEdit` du bloc décide de l'affichage du bouton. Il vaut `true` par défaut,
+y compris pour les applications publiées **avant** cette fonction, dont la spécification
+figée ne le contient pas : sans cette valeur par défaut, leur relecture échouerait et elles
+cesseraient d'être servies.
+
+### Qui a le droit
+
+Le droit n'est jamais décidé par le navigateur. À chaque requête, le serveur revérifie que
+celui qui modifie est bien celui qui a saisi — la même règle que pour la suppression, et
+désormais le même code pour les deux.
+
+| Situation | Réponse |
+| --- | --- |
+| Sa propre fiche | Corrigée, après revalidation complète contre le modèle publié |
+| La fiche d'un autre, modèle privé | « Introuvable » : dire « interdit » révélerait son existence |
+| La fiche d'un autre, modèle partagé | Refus motivé : tout le monde la voit déjà |
+| Une fiche déposée sans compte | Personne ne peut la corriger, faute de pouvoir identifier son auteur |
+
+Une correction repasse par la validation de la création : un champ inconnu glissé dans la
+requête est écarté, une valeur hors bornes est refusée. Et la suppression compte désormais
+dans le même quota d'écriture que la création, sans quoi une boucle pourrait vider une
+application sans frein.
+
 ## Images générées par l'IA, avec la clé du créateur
 
 Evoliia ne possède aucune clé d'images. Le créateur connecte son compte **OpenAI** ou

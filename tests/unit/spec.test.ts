@@ -80,6 +80,42 @@ describe('validation du schéma', () => {
   })
 })
 
+describe('liste de données', () => {
+  /*
+   * Le drapeau de correction est arrivé après la mise en ligne : les applications déjà
+   * publiées portent une spécification figée qui ne le contient pas. Sans valeur par
+   * défaut, leur relecture échouerait et elles cesseraient d'être servies.
+   */
+  it('reste relisible quand la spécification est antérieure à la correction de fiches', () => {
+    const bloc = {
+      id: 'liste',
+      type: 'recordList' as const,
+      modelId: 'fiches',
+      titleField: 'titre',
+      emptyText: 'Rien pour le moment.',
+      allowDelete: true,
+    }
+    const relu = blockSchema.parse(bloc)
+    expect(relu.type).toBe('recordList')
+    if (relu.type !== 'recordList') return
+    expect(relu.allowEdit).toBe(true)
+  })
+
+  it('respecte le choix explicite du créateur', () => {
+    const relu = blockSchema.parse({
+      id: 'liste',
+      type: 'recordList',
+      modelId: 'fiches',
+      titleField: 'titre',
+      emptyText: 'Rien pour le moment.',
+      allowDelete: false,
+      allowEdit: false,
+    })
+    if (relu.type !== 'recordList') throw new Error('bloc inattendu')
+    expect(relu.allowEdit).toBe(false)
+  })
+})
+
 describe('assistant intégré à une application', () => {
   const block = {
     id: 'aide',

@@ -578,6 +578,7 @@ function BlockView({
             {...(block.subtitleField !== undefined ? { subtitleField: block.subtitleField } : {})}
             emptyText={block.emptyText}
             allowDelete={block.allowDelete}
+            allowEdit={block.allowEdit}
             refreshToken={refreshToken}
           />
         </Band>

@@ -158,6 +158,65 @@ export async function listRecords(params: {
   })
 }
 
+/**
+ * Retrouve un enregistrement et vérifie qu'on a le droit d'y toucher.
+ *
+ * La règle est la même pour corriger et pour supprimer, et c'est voulu : celui qui a saisi
+ * une donnée en dispose, personne d'autre. Sur un modèle privé, l'élément d'autrui est
+ * déclaré introuvable plutôt que refusé — répondre « interdit » révélerait son existence.
+ * Sur un modèle partagé, où tout le monde le voit déjà, on peut dire la vraie raison.
+ */
+async function ownedRecord(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  params: { projectId: string; modelId: string; recordId: string; endUserId: string | null },
+  model: DataModel,
+  geste: 'modifier' | 'supprimer',
+) {
+  const record = await tx.appRecord.findFirst({
+    where: { id: params.recordId, projectId: params.projectId, modelId: params.modelId },
+  })
+  if (!record) throw notFound('Cet élément est introuvable.')
+  const ownsIt = record.ownerEndUserId !== null && record.ownerEndUserId === params.endUserId
+  if (model.scope === 'user' && !ownsIt) throw notFound('Cet élément est introuvable.')
+  if (model.scope === 'shared' && !ownsIt) {
+    const verbe = geste === 'modifier' ? 'modifier' : 'supprimer'
+    throw validation(`Seule la personne qui a créé cet élément peut le ${verbe}.`)
+  }
+  return record
+}
+
+/**
+ * Corriger un enregistrement.
+ *
+ * Sans cette fonction, une application ne savait que créer et détruire : changer une
+ * virgule imposait de supprimer puis de ressaisir, et tout ce qui a un état — une
+ * réservation qu'on déplace, une tâche qu'on coche — était hors de portée.
+ *
+ * La saisie est revalidée en entier contre le modèle publié, exactement comme à la
+ * création : le navigateur ne décide jamais de la forme des données, et un champ inconnu
+ * glissé dans la requête est écarté.
+ */
+export async function updateRecord(params: {
+  projectId: string
+  spec: AppSpec
+  modelId: string
+  recordId: string
+  endUserId: string | null
+  input: Record<string, unknown>
+}): Promise<StoredRecord> {
+  const model = findModel(params.spec, params.modelId)
+  const data = validateRecordData(model, params.input)
+
+  return withRuntimeScope(params.projectId, async (tx) => {
+    const record = await ownedRecord(tx, params, model, 'modifier')
+    const updated = await tx.appRecord.update({
+      where: { id: record.id },
+      data: { data: data as unknown as Prisma.InputJsonValue },
+    })
+    return { id: updated.id, data, createdAt: updated.createdAt, isMine: true }
+  })
+}
+
 export async function deleteRecord(params: {
   projectId: string
   spec: AppSpec
@@ -167,16 +226,7 @@ export async function deleteRecord(params: {
 }): Promise<void> {
   const model = findModel(params.spec, params.modelId)
   await withRuntimeScope(params.projectId, async (tx) => {
-    const record = await tx.appRecord.findFirst({
-      where: { id: params.recordId, projectId: params.projectId, modelId: params.modelId },
-    })
-    if (!record) throw notFound('Cet élément est introuvable.')
-    // Une donnée partagée n'est supprimable que par celui qui l'a créée.
-    const ownsIt = record.ownerEndUserId !== null && record.ownerEndUserId === params.endUserId
-    if (model.scope === 'user' && !ownsIt) throw notFound('Cet élément est introuvable.')
-    if (model.scope === 'shared' && !ownsIt) {
-      throw validation('Seule la personne qui a créé cet élément peut le supprimer.')
-    }
+    const record = await ownedRecord(tx, params, model, 'supprimer')
     await tx.appRecord.delete({ where: { id: record.id } })
   })
 }

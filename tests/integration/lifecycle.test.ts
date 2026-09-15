@@ -16,7 +16,7 @@ import {
   runProjectChecks,
 } from '@/server/projects/service'
 import { getPublishedApp } from '@/server/runtime/published'
-import { createRecord, listRecords } from '@/server/runtime/records'
+import { createRecord, listRecords, updateRecord } from '@/server/runtime/records'
 import { withRuntimeScope } from '@/server/db/scope'
 import { AppError } from '@/lib/errors'
 import type { DataField } from '@/server/spec/schema'
@@ -141,7 +141,11 @@ describe('cycle de vie d’un projet', () => {
 
   it('publie et sert la version publiée', async () => {
     const published = await publishProject(userId, projectId)
-    const slug = published.url.split('/a/')[1]!
+    const { slug } = await prisma.project.findUniqueOrThrow({
+      where: { id: projectId },
+      select: { slug: true },
+    })
+    expect(published.url).toContain(slug)
     const app = await getPublishedApp(slug)
     expect(app.projectId).toBe(projectId)
     expect(app.spec.pages.length).toBeGreaterThan(0)
@@ -165,6 +169,15 @@ describe('cycle de vie d’un projet', () => {
     await expect(publishProject(userId, projectId)).resolves.toBeTruthy()
   })
 })
+
+/** Un visiteur identifié de l'application de test. */
+async function creerVisiteur() {
+  return withRuntimeScope(projectId, (tx) =>
+    tx.appEndUser.create({
+      data: { projectId, email: `${randomUUID()}@exemple.test`, passwordHash: 'scrypt$x' },
+    }),
+  )
+}
 
 describe('données d’une application publiée', () => {
   it('valide les saisies contre le modèle déclaré', async () => {
@@ -229,6 +242,114 @@ describe('données d’une application publiée', () => {
       endUserId: null,
     })
     expect(anonymous).toEqual([])
+  })
+
+  /*
+   * Corriger une fiche. La règle est la même que pour la supprimer : celui qui a saisi une
+   * donnée en dispose, personne d'autre. Ce sont ces refus qu'on vérifie ici, plus que le
+   * cas qui marche.
+   */
+  it('laisse corriger sa propre fiche, et revalide la saisie', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.scope === 'user')
+    if (model === undefined) return
+    const champTexte = model.fields.find((field) => field.type === 'text')
+    if (champTexte === undefined) return
+
+    const endUser = await creerVisiteur()
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      endUserId: endUser.id,
+      input: sampleInput(model),
+    })
+
+    const corrige = await updateRecord({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      recordId: record.id,
+      endUserId: endUser.id,
+      input: { ...sampleInput(model), [champTexte.id]: 'Valeur corrigée' },
+    })
+    expect(corrige.data[champTexte.id]).toBe('Valeur corrigée')
+
+    // La correction repasse par la même validation que la création.
+    await expect(
+      updateRecord({
+        projectId,
+        spec: project.spec,
+        modelId: model.id,
+        recordId: record.id,
+        endUserId: endUser.id,
+        input: {},
+      }),
+    ).rejects.toThrow(AppError)
+
+    // Et un champ inconnu glissé dans la requête n'atteint jamais la base.
+    const propre = await updateRecord({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      recordId: record.id,
+      endUserId: endUser.id,
+      input: { ...sampleInput(model), champInconnu: 'valeur pirate' },
+    })
+    expect(Object.keys(propre.data)).not.toContain('champInconnu')
+  })
+
+  it('refuse de laisser corriger la fiche d’un autre visiteur', async () => {
+    const project = await getProject(userId, projectId)
+    const prive = project.spec.dataModels.find((candidate) => candidate.scope === 'user')
+    const partage = project.spec.dataModels.find((candidate) => candidate.scope === 'shared')
+
+    if (prive !== undefined) {
+      const auteur = await creerVisiteur()
+      const autre = await creerVisiteur()
+      const record = await createRecord({
+        projectId,
+        spec: project.spec,
+        modelId: prive.id,
+        endUserId: auteur.id,
+        input: sampleInput(prive),
+      })
+      // Sur un modèle privé, l'élément d'autrui est déclaré introuvable : répondre
+      // « interdit » révélerait son existence.
+      await expect(
+        updateRecord({
+          projectId,
+          spec: project.spec,
+          modelId: prive.id,
+          recordId: record.id,
+          endUserId: autre.id,
+          input: sampleInput(prive),
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    }
+
+    if (partage !== undefined) {
+      const auteur = await creerVisiteur()
+      const autre = await creerVisiteur()
+      const record = await createRecord({
+        projectId,
+        spec: project.spec,
+        modelId: partage.id,
+        endUserId: auteur.id,
+        input: sampleInput(partage),
+      })
+      // Sur un modèle partagé, tout le monde voit déjà l'élément : on peut dire la raison.
+      await expect(
+        updateRecord({
+          projectId,
+          spec: project.spec,
+          modelId: partage.id,
+          recordId: record.id,
+          endUserId: autre.id,
+          input: sampleInput(partage),
+        }),
+      ).rejects.toMatchObject({ code: 'VALIDATION' })
+    }
   })
 })
 

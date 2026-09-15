@@ -382,6 +382,13 @@ export const recordListBlockSchema = z
     subtitleField: slug.optional(),
     emptyText: mediumText,
     allowDelete: z.boolean(),
+    /**
+     * Corriger ce qu'on a saisi. Par défaut oui : une application où l'on peut créer et
+     * détruire mais jamais rectifier oblige à supprimer pour changer une virgule.
+     * La valeur par défaut vaut aussi pour les applications publiées avant cette
+     * fonction, dont la spécification figée ne porte pas ce champ.
+     */
+    allowEdit: z.boolean().default(true),
   })
   .strict()
 
