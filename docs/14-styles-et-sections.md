@@ -110,6 +110,32 @@ y compris pour les applications publiées **avant** cette fonction, dont la spé
 figée ne le contient pas : sans cette valeur par défaut, leur relecture échouerait et elles
 cesseraient d'être servies.
 
+### Chercher, filtrer, trier
+
+Une liste de deux cents fiches sans outil est inutilisable. Trois réglages du bloc y
+répondent, et l'écran ne les montre qu'à partir de six fiches : chercher parmi trois
+éléments est une question qu'on ne se pose pas.
+
+| Réglage | Effet |
+| --- | --- |
+| `searchable` | Une recherche sur tous les champs lisibles du modèle. Vrai par défaut. |
+| `filterField` | Un filtre sur un champ `select`. Sur du texte libre, aucune valeur ne se répéterait assez pour faire un filtre utile, et l'intégrité de la spécification le refuse. |
+| `sort` | L'ordre d'ouverture : `recent`, `ancien`, `az`, `za`. Le visiteur peut en changer. |
+
+**Tout se passe dans la base, jamais dans le navigateur.** Chercher parmi les vingt fiches
+déjà chargées ne serait pas chercher, ce serait en donner l'illusion. La liste se charge
+par pages de vingt, avec un bouton « Voir plus » et un nombre de résultats.
+
+**L'ordre alphabétique porte sur le champ affiché en titre**, pas sur un champ choisi par
+le code : trier sur une valeur invisible donnerait un ordre que personne ne peut lire.
+
+La requête est écrite à la main, parce que l'ordre et la recherche portent sur des clés
+d'un document JSON que l'interface de Prisma ne sait pas ordonner. Trois précautions la
+tiennent : aucun nom de champ n'y entre sans avoir été retrouvé dans le modèle publié, il y
+entre comme paramètre et jamais par concaténation, et les jokers de SQL sont neutralisés
+dans le texte cherché — sans quoi chercher « 100 % » ramènerait tout. Elle s'exécute dans
+la portée du projet, donc sous la même protection de la base que le reste.
+
 ### Qui a le droit
 
 Le droit n'est jamais décidé par le navigateur. À chaque requête, le serveur revérifie que

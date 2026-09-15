@@ -579,6 +579,9 @@ function BlockView({
             emptyText={block.emptyText}
             allowDelete={block.allowDelete}
             allowEdit={block.allowEdit}
+            searchable={block.searchable}
+            {...(block.filterField !== undefined ? { filterField: block.filterField } : {})}
+            sort={block.sort}
             refreshToken={refreshToken}
           />
         </Band>

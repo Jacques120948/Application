@@ -137,7 +137,8 @@ describe('isolation des données des applications générées', () => {
       modelId: model!.id,
       endUserId: null,
     })
-    expect(seenByAlice.length).toBeGreaterThan(0)
+    expect(seenByAlice.items.length).toBeGreaterThan(0)
+    expect(seenByAlice.total).toBeGreaterThan(0)
 
     // Depuis la portée du projet de Bob, rien de ce qui appartient à Alice n'est visible.
     const fromBobScope = await withRuntimeScope(bob.projectId, (tx) =>

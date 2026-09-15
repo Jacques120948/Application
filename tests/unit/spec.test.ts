@@ -99,6 +99,49 @@ describe('liste de données', () => {
     expect(relu.type).toBe('recordList')
     if (relu.type !== 'recordList') return
     expect(relu.allowEdit).toBe(true)
+    expect(relu.searchable).toBe(true)
+    expect(relu.sort).toBe('recent')
+  })
+
+  it('refuse un filtre posé sur un champ où les valeurs ne se répètent pas', () => {
+    const spec = buildTemplate('booking', options)
+    const model = spec.dataModels[0]
+    const texte = model?.fields.find((field) => field.type === 'text')
+    if (model === undefined || texte === undefined) return
+
+    const page = spec.pages.find((candidate) =>
+      candidate.blocks.some((block) => block.type === 'recordList'),
+    )
+    if (page === undefined) return
+    const fautif = {
+      ...spec,
+      pages: spec.pages.map((candidate) =>
+        candidate.id !== page.id
+          ? candidate
+          : {
+              ...candidate,
+              blocks: candidate.blocks.map((block) =>
+                block.type === 'recordList' ? { ...block, filterField: texte.id } : block,
+              ),
+            },
+      ),
+    }
+    const soucis = checkIntegrity(fautif)
+    expect(soucis.some((souci) => souci.path.endsWith('.filterField'))).toBe(true)
+
+    // Un champ à choix, lui, passe.
+    const choix = model.fields.find((field) => field.type === 'select')
+    if (choix === undefined) return
+    const bon = {
+      ...fautif,
+      pages: fautif.pages.map((candidate) => ({
+        ...candidate,
+        blocks: candidate.blocks.map((block) =>
+          block.type === 'recordList' ? { ...block, filterField: choix.id } : block,
+        ),
+      })),
+    }
+    expect(checkIntegrity(bon).some((souci) => souci.path.endsWith('.filterField'))).toBe(false)
   })
 
   it('respecte le choix explicite du créateur', () => {

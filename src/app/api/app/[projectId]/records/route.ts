@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { resolveRuntimeSpec } from '@/server/runtime/context'
-import { createRecord, listRecords } from '@/server/runtime/records'
+import { createRecord, listRecords, RECORD_SORTS, type RecordSort } from '@/server/runtime/records'
 import { getEndUser } from '@/server/runtime/end-users'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { assertSameOrigin, clientIp, fail, ok, readJson } from '@/server/http/respond'
@@ -17,19 +17,46 @@ const createInput = z.object({
   data: z.record(z.string(), z.unknown()),
 })
 
+/** Un entier positif lu dans l'adresse, ou rien : une valeur illisible n'est pas une erreur. */
+function entier(valeur: string | null): number | undefined {
+  if (valeur === null) return undefined
+  const nombre = Number(valeur)
+  return Number.isInteger(nombre) && nombre >= 0 ? nombre : undefined
+}
+
 export async function GET(request: Request, context: { params: Promise<{ projectId: string }> }) {
   try {
     const { projectId } = await context.params
     const runtime = await resolveRuntimeSpec(projectId)
-    const modelId = new URL(request.url).searchParams.get('modelId') ?? ''
+    const params = new URL(request.url).searchParams
+    const modelId = params.get('modelId') ?? ''
     const endUser = await getEndUser(runtime.projectId)
-    const items = await listRecords({
+
+    // Les critères arrivent de l'adresse : ils sont lus sans confiance. Le service revérifie
+    // que chaque nom de champ existe bien dans le modèle publié.
+    const sortDemande = params.get('sort')
+    const page = await listRecords({
       projectId: runtime.projectId,
       spec: runtime.spec,
       modelId,
       endUserId: endUser?.id ?? null,
+      query: {
+        ...(params.get('recherche') !== null ? { search: params.get('recherche') as string } : {}),
+        ...(params.get('champ') !== null ? { filterField: params.get('champ') as string } : {}),
+        ...(params.get('valeur') !== null ? { filterValue: params.get('valeur') as string } : {}),
+        ...(sortDemande !== null && (RECORD_SORTS as readonly string[]).includes(sortDemande)
+          ? { sort: sortDemande as RecordSort }
+          : {}),
+        ...(params.get('champTri') !== null ? { sortField: params.get('champTri') as string } : {}),
+        ...(entier(params.get('limite')) !== undefined
+          ? { limit: entier(params.get('limite')) as number }
+          : {}),
+        ...(entier(params.get('depuis')) !== undefined
+          ? { offset: entier(params.get('depuis')) as number }
+          : {}),
+      },
     })
-    return ok({ items })
+    return ok(page)
   } catch (error) {
     return fail(error)
   }

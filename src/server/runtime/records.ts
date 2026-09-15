@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { notFound, validation } from '@/lib/errors'
 import { withOwnerRuntimeScope, withRuntimeScope } from '@/server/db/scope'
 import type { AppSpec, DataField, DataModel } from '@/server/spec/schema'
@@ -127,34 +127,186 @@ export async function createRecord(params: {
   })
 }
 
+/** Les ordres d'affichage proposés. Quatre suffisent, et chacun se dit en trois mots. */
+export const RECORD_SORTS = ['recent', 'ancien', 'az', 'za'] as const
+export type RecordSort = (typeof RECORD_SORTS)[number]
+
+export type RecordQuery = {
+  /** Texte cherché dans les champs lisibles du modèle. */
+  search?: string
+  /** Champ à choix sur lequel restreindre, et la valeur retenue. */
+  filterField?: string
+  filterValue?: string
+  sort?: RecordSort
+  /**
+   * Champ sur lequel porte l'ordre alphabétique. C'est celui que la liste affiche en
+   * titre : trier sur un champ invisible donnerait un ordre que personne ne peut lire.
+   */
+  sortField?: string
+  limit?: number
+  offset?: number
+}
+
+/** Une page de résultats, avec le total : sans lui, « voir plus » ne saurait pas s'arrêter. */
+export type RecordPage = { items: StoredRecord[]; total: number }
+
+const PAGE_SIZE = 20
+const MAX_PAGE = 100
+const MAX_SEARCH = 120
+
+/** Champs où chercher du texte. Un nombre ou une date ne se cherchent pas au clavier. */
+function searchableFields(model: DataModel): DataField[] {
+  return model.fields.filter(
+    (field) =>
+      field.type === 'text' ||
+      field.type === 'longText' ||
+      field.type === 'email' ||
+      field.type === 'url' ||
+      field.type === 'select',
+  )
+}
+
+/**
+ * Motif `ILIKE` pour une recherche libre.
+ *
+ * Les jokers de SQL sont neutralisés : sans cela, chercher « 100 % » ramènerait tout, et
+ * chercher un souligné ramènerait n'importe quel caractère. Le visiteur cherche du texte,
+ * pas un motif.
+ */
+function likePattern(search: string): string {
+  return `%${search.replace(/[\\%_]/g, (caractere) => `\\${caractere}`)}%`
+}
+
+/**
+ * La condition de lecture, écrite une seule fois.
+ *
+ * Elle sert au décompte et à la page : deux expressions de la même règle finiraient par
+ * diverger, et c'est toujours celle qu'on relit le moins qui compterait des lignes que
+ * l'autre n'affiche pas.
+ *
+ * Aucun nom de champ n'y entre sans avoir été retrouvé dans le modèle publié, et il y passe
+ * ensuite comme paramètre, jamais par concaténation.
+ */
+function condition(params: {
+  projectId: string
+  modelId: string
+  ownerEndUserId: string | null
+  filterField?: DataField
+  filterValue?: string
+  search: string
+  searchFields: DataField[]
+}): Prisma.Sql {
+  const morceaux: Prisma.Sql[] = [
+    Prisma.sql`"projectId" = ${params.projectId}::uuid AND "modelId" = ${params.modelId}`,
+  ]
+  if (params.ownerEndUserId !== null) {
+    morceaux.push(Prisma.sql`"ownerEndUserId" = ${params.ownerEndUserId}::uuid`)
+  }
+  if (params.filterField !== undefined && params.filterValue !== undefined) {
+    morceaux.push(Prisma.sql`"data"->>${params.filterField.id} = ${params.filterValue}`)
+  }
+  if (params.search !== '' && params.searchFields.length > 0) {
+    const motif = likePattern(params.search)
+    const ou = params.searchFields.map(
+      (field) => Prisma.sql`"data"->>${field.id} ILIKE ${motif} ESCAPE '\\'`,
+    )
+    morceaux.push(Prisma.sql`(${Prisma.join(ou, ' OR ')})`)
+  }
+  return Prisma.join(morceaux, ' AND ')
+}
+
+/**
+ * L'ordre demandé, traduit en SQL.
+ *
+ * L'ordre alphabétique porte sur le champ demandé — celui que la liste affiche en titre —
+ * et non sur un champ choisi ici : trier sur une valeur invisible donnerait un ordre que
+ * personne ne peut lire. Le champ est retrouvé dans le modèle publié avant d'entrer dans la
+ * requête, et il y entre comme paramètre. Seul le sens est écrit en clair, et il sort d'une
+ * liste de deux valeurs.
+ */
+function ordre(model: DataModel, sort: RecordSort, sortField?: string): Prisma.Sql {
+  if (sort === 'recent') return Prisma.sql`"createdAt" DESC`
+  if (sort === 'ancien') return Prisma.sql`"createdAt" ASC`
+  const champ =
+    model.fields.find((field) => field.id === sortField) ??
+    model.fields.find((field) => field.type === 'text')
+  // Sans champ sur lequel trier, l'ordre alphabétique n'a pas d'objet : on retombe sur la
+  // date plutôt que sur rien.
+  if (champ === undefined) return Prisma.sql`"createdAt" DESC`
+  const sens = Prisma.raw(sort === 'az' ? 'ASC' : 'DESC')
+  return Prisma.sql`"data"->>${champ.id} ${sens} NULLS LAST, "createdAt" DESC`
+}
+
+type LigneBrute = {
+  id: string
+  data: RecordData
+  createdAt: Date
+  ownerEndUserId: string | null
+}
+
+/**
+ * Liste les enregistrements, avec recherche, filtre, tri et pagination.
+ *
+ * Tout se fait dans la base, jamais dans le navigateur : chercher parmi les cinquante
+ * fiches déjà chargées ne serait pas chercher, ce serait en donner l'illusion.
+ *
+ * La requête est écrite à la main parce que l'ordre et la recherche portent sur des clés
+ * d'un document JSON, que l'interface de Prisma ne sait pas ordonner. Elle reste exécutée
+ * dans la portée du projet, donc sous la même protection de la base que le reste.
+ */
 export async function listRecords(params: {
   projectId: string
   spec: AppSpec
   modelId: string
   endUserId: string | null
-  limit?: number
-}): Promise<StoredRecord[]> {
+  query?: RecordQuery
+}): Promise<RecordPage> {
   const model = findModel(params.spec, params.modelId)
-  const limit = Math.min(params.limit ?? 50, 100)
+  const query = params.query ?? {}
+  const limit = Math.min(Math.max(query.limit ?? PAGE_SIZE, 1), MAX_PAGE)
+  const offset = Math.max(query.offset ?? 0, 0)
 
-  if (model.scope === 'user' && params.endUserId === null) return []
+  if (model.scope === 'user' && params.endUserId === null) return { items: [], total: 0 }
+
+  // On ne filtre que sur un champ à choix : sur du texte libre, aucune valeur ne se
+  // répéterait assez pour faire un filtre utile.
+  const filterField =
+    query.filterField === undefined || query.filterValue === undefined || query.filterValue === ''
+      ? undefined
+      : model.fields.find((field) => field.id === query.filterField && field.type === 'select')
+
+  const ou = condition({
+    projectId: params.projectId,
+    modelId: params.modelId,
+    ownerEndUserId: model.scope === 'user' ? params.endUserId : null,
+    ...(filterField !== undefined ? { filterField, filterValue: query.filterValue } : {}),
+    search: (query.search ?? '').trim().slice(0, MAX_SEARCH),
+    searchFields: searchableFields(model),
+  })
 
   return withRuntimeScope(params.projectId, async (tx) => {
-    const rows = await tx.appRecord.findMany({
-      where: {
-        projectId: params.projectId,
-        modelId: params.modelId,
-        ...(model.scope === 'user' ? { ownerEndUserId: params.endUserId } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    })
-    return rows.map((row) => ({
-      id: row.id,
-      data: row.data as RecordData,
-      createdAt: row.createdAt,
-      isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.endUserId,
-    }))
+    const [compte] = await tx.$queryRaw<Array<{ total: bigint }>>(
+      Prisma.sql`SELECT count(*) AS total FROM "AppRecord" WHERE ${ou}`,
+    )
+    const total = Number(compte?.total ?? 0)
+    if (total === 0) return { items: [], total }
+
+    const rows = await tx.$queryRaw<LigneBrute[]>(
+      Prisma.sql`SELECT id, "data", "createdAt", "ownerEndUserId"
+                 FROM "AppRecord"
+                 WHERE ${ou}
+                 ORDER BY ${ordre(model, query.sort ?? 'recent', query.sortField)}
+                 LIMIT ${limit} OFFSET ${offset}`,
+    )
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        data: row.data,
+        createdAt: row.createdAt,
+        isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.endUserId,
+      })),
+      total,
+    }
   })
 }
 

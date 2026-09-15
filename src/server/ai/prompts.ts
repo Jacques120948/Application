@@ -73,7 +73,9 @@ Sections de page (champ "type") : ${BLOCK_TYPES.join(', ')}.
 - recordList  : liste des données enregistrées. "allowDelete" et "allowEdit" disent si le
                 visiteur peut supprimer et corriger ce qu'il a lui-même saisi. Mets
                 "allowEdit" à true sauf si une correction n'aurait pas de sens (un vote,
-                une candidature déposée).
+                une candidature déposée). "searchable" ajoute une recherche, "filterField"
+                un filtre sur un champ de type select (statut, catégorie), et "sort" l'ordre
+                d'ouverture : recent, ancien, az, za.
 - auth        : connexion et inscription des utilisateurs de l'application
 - assistant   : assistant conversationnel répondant aux visiteurs, dans le rôle décrit
                 par le champ "role". Attention : chaque réponse consomme les crédits du

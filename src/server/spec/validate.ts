@@ -90,7 +90,7 @@ function checkBlock(
   block: Block,
   at: string,
   pageIds: ReadonlySet<string>,
-  models: ReadonlyMap<string, { fields: readonly { id: string }[] }>,
+  models: ReadonlyMap<string, { fields: readonly { id: string; type: string }[] }>,
 ): IntegrityIssue[] {
   const issues: IntegrityIssue[] = []
   const pageRef = (id: string | undefined, field: string) => {
@@ -131,6 +131,17 @@ function checkBlock(
       }
       if (block.subtitleField !== undefined && !fieldIds.has(block.subtitleField)) {
         issues.push({ path: `${at}.subtitleField`, message: 'Cette liste affiche un champ qui n\'existe pas.' })
+      }
+      if (block.filterField !== undefined) {
+        const champ = model.fields.find((field) => field.id === block.filterField)
+        if (champ === undefined) {
+          issues.push({ path: `${at}.filterField`, message: 'Cette liste filtre sur un champ qui n\'existe pas.' })
+        } else if (champ.type !== 'select') {
+          issues.push({
+            path: `${at}.filterField`,
+            message: 'On ne peut filtrer que sur un champ à choix, où les valeurs se répètent.',
+          })
+        }
       }
       break
     }

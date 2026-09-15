@@ -389,6 +389,20 @@ export const recordListBlockSchema = z
      * fonction, dont la spécification figée ne porte pas ce champ.
      */
     allowEdit: z.boolean().default(true),
+    /**
+     * Une barre de recherche au-dessus de la liste. Par défaut oui, mais l'écran ne
+     * l'affiche qu'à partir de quelques fiches : chercher parmi trois éléments est une
+     * question qu'on ne se pose pas.
+     */
+    searchable: z.boolean().default(true),
+    /**
+     * Champ à choix sur lequel proposer un filtre — un statut, une catégorie. Il doit
+     * exister dans le modèle et être de type `select` : sur du texte libre, aucune valeur
+     * ne se répéterait assez pour faire un filtre utile.
+     */
+    filterField: slug.optional(),
+    /** Ordre d'ouverture de la liste. Le visiteur peut en changer. */
+    sort: z.enum(['recent', 'ancien', 'az', 'za']).default('recent'),
   })
   .strict()
 

@@ -232,7 +232,7 @@ describe('données d’une application publiée', () => {
       modelId: model.id,
       endUserId: endUser.id,
     })
-    expect(mine.length).toBe(1)
+    expect(mine.items.length).toBe(1)
 
     // Un visiteur non connecté ne voit rien d'un modèle privé.
     const anonymous = await listRecords({
@@ -241,7 +241,130 @@ describe('données d’une application publiée', () => {
       modelId: model.id,
       endUserId: null,
     })
-    expect(anonymous).toEqual([])
+    expect(anonymous.items).toEqual([])
+    expect(anonymous.total).toBe(0)
+  })
+
+  /*
+   * Chercher, filtrer, trier, paginer. Tout se passe dans la base : une recherche qui ne
+   * regarderait que la page déjà chargée donnerait l'illusion de chercher.
+   */
+  it('cherche, filtre, trie et pagine dans l’ensemble des fiches', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.scope === 'shared')
+    if (model === undefined) return
+    const champTexte = model.fields.find((field) => field.type === 'text')
+    if (champTexte === undefined) return
+    const champChoix = model.fields.find((field) => field.type === 'select')
+
+    // On repart d'un modèle vide pour que les totaux soient ceux qu'on a écrits.
+    await withRuntimeScope(projectId, (tx) =>
+      tx.appRecord.deleteMany({ where: { projectId, modelId: model.id } }),
+    )
+
+    const noms = ['Alpha', 'Bravo', 'Charlie', 'delta', 'Écho', 'Remise 50% été']
+    for (const nom of noms) {
+      await createRecord({
+        projectId,
+        spec: project.spec,
+        modelId: model.id,
+        endUserId: null,
+        input: { ...sampleInput(model), [champTexte.id]: nom },
+      })
+    }
+
+    const tout = await listRecords({ projectId, spec: project.spec, modelId: model.id, endUserId: null })
+    expect(tout.total).toBe(noms.length)
+
+    // La recherche ignore la casse et les accents ne sont pas requis pour le reste du mot.
+    const cherche = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      endUserId: null,
+      query: { search: 'DELT' },
+    })
+    expect(cherche.total).toBe(1)
+    expect(cherche.items[0]?.data[champTexte.id]).toBe('delta')
+
+    // Un pour-cent est cherché comme un caractère, pas comme un joker : sans quoi cette
+    // recherche ramènerait les six fiches.
+    const joker = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      endUserId: null,
+      query: { search: '%' },
+    })
+    expect(joker.total).toBe(1)
+
+    // Ordre alphabétique, sur l'ensemble et non sur la page.
+    const az = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      endUserId: null,
+      query: { sort: 'az', limit: 3 },
+    })
+    expect(az.total).toBe(noms.length)
+    expect(az.items.map((item) => item.data[champTexte.id])).toEqual(['Alpha', 'Bravo', 'Charlie'])
+
+    // L'ordre porte sur le champ demandé, celui que la liste affiche en titre. Trier sur un
+    // champ invisible donnerait un ordre que personne ne peut lire.
+    if (champChoix !== undefined) {
+      const parChoix = await listRecords({
+        projectId,
+        spec: project.spec,
+        modelId: model.id,
+        endUserId: null,
+        query: { sort: 'az', sortField: champChoix.id },
+      })
+      const valeurs = parChoix.items.map((item) => String(item.data[champChoix.id] ?? ''))
+      expect([...valeurs].sort()).toEqual(valeurs)
+    }
+
+    // La page suivante continue le même ordre.
+    const suite = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      endUserId: null,
+      query: { sort: 'az', limit: 3, offset: 3 },
+    })
+    expect(suite.items.length).toBe(3)
+    expect(suite.items.map((item) => item.data[champTexte.id])).not.toContain('Alpha')
+
+    // Un filtre ne s'applique que sur un champ à choix. Sur un champ texte, il est ignoré.
+    const filtreTexte = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId: model.id,
+      endUserId: null,
+      query: { filterField: champTexte.id, filterValue: 'Alpha' },
+    })
+    expect(filtreTexte.total).toBe(noms.length)
+
+    if (champChoix !== undefined) {
+      const valeur = champChoix.options?.[0]
+      const filtre = await listRecords({
+        projectId,
+        spec: project.spec,
+        modelId: model.id,
+        endUserId: null,
+        query: { filterField: champChoix.id, filterValue: valeur },
+      })
+      // Toutes les fiches ont été créées avec la même valeur de choix.
+      expect(filtre.total).toBe(noms.length)
+
+      const absent = await listRecords({
+        projectId,
+        spec: project.spec,
+        modelId: model.id,
+        endUserId: null,
+        query: { filterField: champChoix.id, filterValue: 'valeur-qui-n-existe-pas' },
+      })
+      expect(absent.total).toBe(0)
+    }
   })
 
   /*
