@@ -9,13 +9,15 @@ import type { AppSpec } from '@/server/spec/schema'
  * viennent : ils demandent un compte payant, des fonctions natives réelles et, du côté de
  * Google, douze testeurs pendant quatorze jours.
  *
- * Chaque application publiée a son propre manifeste et sa propre portée, sous `/a/<slug>/`.
- * Deux applications du même créateur ne se marchent donc jamais dessus, et installer l'une
- * n'installe pas l'autre.
+ * Chaque application publiée a son propre manifeste et sa propre portée. Sur le domaine
+ * partagé, cette portée est `/a/<nom-court>/` : deux applications du même créateur ne se
+ * marchent jamais dessus, et installer l'une n'installe pas l'autre. Sur l'adresse propre
+ * d'une application, la portée est la racine, puisque le sous-domaine l'isole déjà.
  */
 
-export function appScope(slug: string): string {
-  return `/a/${slug}/`
+/** La portée, tirée du préfixe des liens internes. Voir src/lib/apps-domain.ts. */
+export function appScope(basePath: string): string {
+  return `${basePath}/`
 }
 
 /**
@@ -107,8 +109,8 @@ export type WebManifest = {
   icons: Array<{ src: string; sizes: string; type: string; purpose: string }>
 }
 
-export function buildManifest(spec: AppSpec, slug: string): WebManifest {
-  const scope = appScope(slug)
+export function buildManifest(spec: AppSpec, basePath: string): WebManifest {
+  const scope = appScope(basePath)
   return {
     name: spec.name,
     // Le nom court est celui qui s'affiche sous l'icône : au-delà d'une douzaine de

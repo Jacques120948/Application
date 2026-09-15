@@ -140,7 +140,7 @@ describe('cycle de vie d’un projet', () => {
   })
 
   it('publie et sert la version publiée', async () => {
-    const published = await publishProject(userId, projectId, 'http://localhost:3000')
+    const published = await publishProject(userId, projectId)
     const slug = published.url.split('/a/')[1]!
     const app = await getPublishedApp(slug)
     expect(app.projectId).toBe(projectId)
@@ -155,14 +155,14 @@ describe('cycle de vie d’un projet', () => {
         { op: 'set', path: 'theme.colors.background', value: '#FFFFFF' },
       ],
     })
-    await expect(publishProject(userId, projectId, 'http://localhost:3000')).rejects.toThrow(AppError)
+    await expect(publishProject(userId, projectId)).rejects.toThrow(AppError)
 
     // Réparation, puis la publication repasse.
     await applyManualPatch(userId, projectId, {
       summary: 'Contraste rétabli',
       operations: [{ op: 'set', path: 'theme.colors.text', value: '#0F172A' }],
     })
-    await expect(publishProject(userId, projectId, 'http://localhost:3000')).resolves.toBeTruthy()
+    await expect(publishProject(userId, projectId)).resolves.toBeTruthy()
   })
 })
 

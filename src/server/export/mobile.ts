@@ -6,6 +6,7 @@ import { appSpecSchema, type AppSpec } from '@/server/spec/schema'
 import { iconSvg } from '@/server/runtime/pwa'
 import { logger } from '@/server/observability/logger'
 import { createZip, type ZipEntry } from './zip'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * Dossier de publication mobile.
@@ -129,8 +130,7 @@ export async function buildMobileKit(
     entries.push({ path: `icones/icone-adaptative-${size}.png`, content: Buffer.from(masque) })
   }
 
-  const appUrl = process.env.APP_URL ?? ''
-  const adresse = appUrl === '' ? `/a/${project.slug}` : `${appUrl}/a/${project.slug}`
+  const adresse = publicAppUrl(project.slug)
 
   entries.push({
     path: 'fiche-boutique.md',

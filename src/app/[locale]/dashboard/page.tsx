@@ -9,11 +9,11 @@ import { listProjects } from '@/server/projects/service'
 import { getCreatorStats, getCreditHistory } from '@/server/business/stats'
 import { listIdeas } from '@/server/business/ideas'
 import { countNewOpportunities } from '@/server/radar/service'
-import { env } from '@/lib/env'
 import { getCreatorOverview } from '@/server/business/overview'
 import { OBJECTIVE_DISCLAIMER } from '@/server/business/economics'
 import type { JourneyStep } from '@/server/business/journey'
 import { Card, CardBody, LinkButton } from '@/components/ui'
+import { publicAppUrl } from '@/lib/apps-domain'
 import { AGENTS } from '@/server/agents/catalog'
 import { Shell } from '@/components/studio/Shell'
 import { TeamAvatars } from '@/components/studio/TeamAvatars'
@@ -60,7 +60,6 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
     countNewOpportunities(user.id).catch(() => null),
   ])
   const pendingIdeas = ideas.filter((idea) => idea.status === 'PROPOSED').slice(0, 3)
-  const appUrl = env.appUrl.replace(/\/$/, '')
 
   /*
    * Rien du tout : on laisse choisir son chemin plutôt que d'imposer l'objectif.
@@ -447,8 +446,7 @@ export default async function DashboardPage({ params }: { params: Promise<{ loca
                     themeColor: project.themeColor,
                     themeAccent: project.themeAccent,
                     readyScore: project.readyScore,
-                    publicUrl:
-                      project.status === 'PUBLISHED' ? `${appUrl}/a/${project.slug}` : null,
+                    publicUrl: project.status === 'PUBLISHED' ? publicAppUrl(project.slug) : null,
                   }}
                 />
               ))}

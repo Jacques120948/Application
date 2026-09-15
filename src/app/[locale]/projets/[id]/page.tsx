@@ -1,5 +1,4 @@
 import { notFound, redirect } from 'next/navigation'
-import { env } from '@/lib/env'
 import { resolveLocale } from '@/i18n'
 import { AppError } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
@@ -7,6 +6,7 @@ import { getWallet } from '@/server/billing/credits'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { isAiAvailable } from '@/server/ai/client'
 import { getProject, listChatMessages } from '@/server/projects/service'
+import { publicAppUrl } from '@/lib/apps-domain'
 import { AGENTS } from '@/server/agents/catalog'
 import { Shell } from '@/components/studio/Shell'
 import { TeamAvatars } from '@/components/studio/TeamAvatars'
@@ -119,11 +119,7 @@ export default async function ProjectPage({
           role: message.role,
           content: message.content,
         }))}
-        publishedUrl={
-          project.publishedAt === null
-            ? null
-            : `${env.appUrl.replace(/\/$/, '')}/a/${project.slug}`
-        }
+        publishedUrl={project.publishedAt === null ? null : publicAppUrl(project.slug)}
         aiAvailable={isAiAvailable()}
         alreadyTested={project.hasBeenTested}
         initialTab={onglet === 'support' ? 'support' : 'assistant'}

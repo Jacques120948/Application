@@ -103,6 +103,16 @@ export const env = {
   get appUrl(): string {
     return read('APP_URL') ?? 'http://localhost:3000'
   },
+  /**
+   * Domaine des applications publiées, par exemple `evoliia.app`. Chaque application y
+   * reçoit un sous-domaine tiré de son nom court. Sans cette variable, les applications
+   * restent servies sous `/a/<nom-court>` et rien ne change : la fonction est éteinte,
+   * pas à moitié branchée. Voir src/lib/apps-domain.ts.
+   */
+  get appsDomain(): string | undefined {
+    const value = read('APPS_DOMAIN')
+    return value === undefined ? undefined : value.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
+  },
   get isProduction(): boolean {
     return process.env.NODE_ENV === 'production'
   },

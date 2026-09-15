@@ -13,6 +13,7 @@ import { launchKitSchema, type LaunchKit, type MonthlyPlan } from '@/lib/marketi
 import { toBrandContext } from './context'
 import { isEngineAvailable, requestLaunchKit } from './engine'
 import { readMonth } from './atelier'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * Kit de lancement d'un projet.
@@ -133,13 +134,12 @@ export async function createLaunchKit(userId: string, projectId: string): Promis
   await ensureCredits(userId, 'launchKit')
 
   const spec = appSpecSchema.safeParse(project.draftSpec)
-  const appUrl = process.env.APP_URL ?? ''
   const brand = toBrandContext({
     project: { name: project.name, idea: project.idea, locale: project.locale },
     spec: spec.success ? spec.data : null,
     idea: project.sourceIdea,
     publicUrl:
-      project.publishedAt === null || appUrl === '' ? null : `${appUrl}/a/${project.slug}`,
+      project.publishedAt === null ? null : publicAppUrl(project.slug),
   })
 
   const startedAt = Date.now()

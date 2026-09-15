@@ -5,6 +5,7 @@ import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
 import { AGENTS } from '@/server/agents/catalog'
 import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
+import { publicAppUrl } from '@/lib/apps-domain'
 import { storageLabel } from '@/server/billing/plan-details'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
@@ -363,7 +364,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                 <BrowserFrame
                   src={`/demos/${hero.slug}-desktop.webp`}
                   alt={hero.shotAlt}
-                  caption={`evoliia.com/a/${hero.slug}`}
+                  caption={publicAppUrl(hero.slug).replace(/^https?:\/\//, '')}
                   priority
                 />
               ) : null}
@@ -584,7 +585,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                   <BrowserFrame
                     src="/demos/cooksy-recettes-desktop.webp"
                     alt={cooksy.shotAlt}
-                    caption={`evoliia.com/a/${cooksy.slug}`}
+                    caption={publicAppUrl(cooksy.slug).replace(/^https?:\/\//, '')}
                   />
                   <PhoneFrame
                     src="/demos/cooksy-recettes-mobile.webp"
@@ -593,7 +594,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
                   />
                 </div>
                 <a
-                  href={`/a/${cooksy.slug}`}
+                  href={publicAppUrl(cooksy.slug)}
                   className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-brand-strong)] no-underline"
                 >
                   {t('landing.oneLineOpen')}

@@ -9,6 +9,7 @@ import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { logger } from '@/server/observability/logger'
 import type { RuntimeSpecContext } from './context'
 import type { EndUser } from './end-users'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * Paiements dans les applications créées.
@@ -99,7 +100,7 @@ export async function startAppCheckout(
   const currency = runtime.spec.monetization.currency.toLowerCase()
   const mode: 'payment' | 'subscription' = plan.interval === 'once' ? 'payment' : 'subscription'
   const feePercent = env.stripeApplicationFeePercent
-  const base = `${env.appUrl.replace(/\/$/, '')}/a/${runtime.slug}`
+  const base = publicAppUrl(runtime.slug)
   const metadata = {
     projectId: runtime.projectId,
     ownerId: runtime.ownerId,

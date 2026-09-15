@@ -9,6 +9,7 @@ import { withRuntimeScope, withUserScope } from '@/server/db/scope'
 import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { AppError } from '@/lib/errors'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * Isolation multi-tenant (exigence 18).
@@ -148,8 +149,15 @@ describe('isolation des données des applications générées', () => {
 
 describe('publication', () => {
   it('ne sert au public que la version figée', async () => {
-    const published = await publishProject(alice.userId, alice.projectId, 'http://localhost:3000')
-    expect(published.url).toContain('/a/')
+    const published = await publishProject(alice.userId, alice.projectId)
+    // L'adresse rendue est l'adresse publique de cette application, quelle que soit la
+    // forme qu'elle prend sur cette installation : chemin partagé ou sous-domaine propre.
+    const project0 = await prisma.project.findUniqueOrThrow({
+      where: { id: alice.projectId },
+      select: { slug: true },
+    })
+    expect(published.url).toBe(publicAppUrl(project0.slug))
+    expect(published.url).toContain(project0.slug)
 
     const project = await prisma.project.findUniqueOrThrow({
       where: { id: alice.projectId },

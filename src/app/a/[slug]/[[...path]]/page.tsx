@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
+import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
+import { appBasePath, appHost, publicAppUrl } from '@/lib/apps-domain'
 import { AppError } from '@/lib/errors'
 import { getPublishedApp, recordVisit } from '@/server/runtime/published'
 import { getEndUser } from '@/server/runtime/end-users'
@@ -19,10 +21,16 @@ export async function generateMetadata({
   const { slug } = await params
   try {
     const app = await getPublishedApp(slug)
-    const scope = `/a/${app.slug}/`
+    const scope = `${appBasePath((await headers()).get('host'), app.slug)}/`
     return {
       title: app.spec.name,
       description: app.spec.tagline,
+      /*
+        Les deux adresses servent la même application : l'ancienne, déjà partagée, et
+        l'adresse propre. Le lien canonique désigne la seconde pour qu'un moteur de
+        recherche n'y voie pas deux pages concurrentes.
+      */
+      alternates: appHost(app.slug) === null ? undefined : { canonical: publicAppUrl(app.slug) },
       // Rend l'application installable : icône sur l'écran d'accueil, ouverture sans barre
       // d'adresse, couleur de la marque jusque dans la barre d'état du téléphone.
       manifest: `${scope}manifest.webmanifest`,
@@ -75,6 +83,7 @@ export default async function PublishedAppPage({
 }) {
   const { slug, path } = await params
   const { paiement } = await searchParams
+  const host = (await headers()).get('host')
 
   let app
   try {
@@ -99,7 +108,7 @@ export default async function PublishedAppPage({
       page={page}
       context={{
         projectId: app.projectId,
-        basePath: `/a/${app.slug}`,
+        basePath: appBasePath(host, app.slug),
         endUserEmail: endUser?.email ?? null,
         preview: false,
         payments: {

@@ -1,12 +1,14 @@
+import { appBasePath } from '@/lib/apps-domain'
 import { appScope } from '@/server/runtime/pwa'
 import { getPublishedApp } from '@/server/runtime/published'
 
 /**
  * Agent de service d'une application publiée.
  *
- * Sa portée est `/a/<slug>/` : il ne voit que les pages de cette application, jamais celles
- * d'une autre ni celles d'Evoliia. C'est ce qui rend le procédé utilisable sur un domaine
- * partagé par tous les créateurs.
+ * Sa portée est `/a/<slug>/` sur le domaine partagé : il ne voit que les pages de cette
+ * application, jamais celles d'une autre ni celles d'Evoliia. C'est ce qui rend le procédé
+ * utilisable par tous les créateurs sur une même adresse. Sur l'adresse propre d'une
+ * application, la portée est la racine, que le sous-domaine isole déjà.
  *
  * Ce qu'il fait, et surtout ce qu'il ne fait pas :
  *
@@ -21,12 +23,12 @@ import { getPublishedApp } from '@/server/runtime/published'
  * Le script est généré ici plutôt que posé en fichier statique parce qu'il porte la portée
  * et le nom de cache de l'application, donc son slug.
  */
-export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params
   const app = await getPublishedApp(slug).catch(() => null)
   if (app === null) return new Response('// application introuvable', { status: 404 })
 
-  const scope = appScope(app.slug)
+  const scope = appScope(appBasePath(request.headers.get('host'), app.slug))
   // Le nom du cache change à chaque publication : l'ancien est alors supprimé à
   // l'activation, ce qui évite qu'une version corrigée reste masquée par la précédente.
   const cacheName = `evoliia-${app.slug}-${app.versionId}`

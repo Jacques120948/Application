@@ -20,6 +20,7 @@ import {
 } from '@/lib/marketing'
 import { toBrandContext } from './context'
 import { isEngineAvailable, requestMonth, requestVariations, type EngineUsage } from './engine'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * L'atelier du kit : retravailler une publication, prolonger la semaine en mois.
@@ -105,13 +106,12 @@ async function readKitAndProject(userId: string, kitId: string) {
   }
 
   const spec = appSpecSchema.safeParse(project.draftSpec)
-  const appUrl = process.env.APP_URL ?? ''
   const brand = toBrandContext({
     project: { name: project.name, idea: project.idea, locale: project.locale },
     spec: spec.success ? spec.data : null,
     idea: project.sourceIdea,
     publicUrl:
-      project.publishedAt === null || appUrl === '' ? null : `${appUrl}/a/${project.slug}`,
+      project.publishedAt === null ? null : publicAppUrl(project.slug),
   })
 
   return { kit, content: parsed.data, brand, projectId: kit.projectId }

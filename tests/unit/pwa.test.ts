@@ -15,16 +15,28 @@ const spec = appSpecSchema.parse(DEMO_APPS[0]!.spec)
 
 describe('portée', () => {
   it('enferme chaque application sous son propre chemin', () => {
-    expect(appScope('devisflow')).toBe('/a/devisflow/')
-    const manifest = buildManifest(spec, 'devisflow')
+    expect(appScope('/a/devisflow')).toBe('/a/devisflow/')
+    const manifest = buildManifest(spec, '/a/devisflow')
     expect(manifest.scope).toBe('/a/devisflow/')
     expect(manifest.start_url).toBe('/a/devisflow/')
     // Installer une application ne doit jamais en installer une autre, ni Evoliia.
     for (const icon of manifest.icons) expect(icon.src.startsWith('/a/devisflow/')).toBe(true)
   })
 
+  /*
+   * Sur son adresse propre, l'application occupe la racine du sous-domaine : c'est lui qui
+   * l'isole, et une portée `/a/<nom-court>/` y désignerait des pages qui n'existent pas.
+   */
+  it('occupe la racine quand l’application a son propre sous-domaine', () => {
+    expect(appScope('')).toBe('/')
+    const manifest = buildManifest(spec, '')
+    expect(manifest.scope).toBe('/')
+    expect(manifest.start_url).toBe('/')
+    for (const icon of manifest.icons) expect(icon.src.startsWith('/icone/')).toBe(true)
+  })
+
   it('reprend les couleurs et la langue de l’application', () => {
-    const manifest = buildManifest(spec, 'devisflow')
+    const manifest = buildManifest(spec, '/a/devisflow')
     expect(manifest.theme_color).toBe(spec.theme.colors.primary)
     expect(manifest.background_color).toBe(spec.theme.colors.background)
     expect(manifest.lang).toBe(spec.locale)
@@ -33,11 +45,11 @@ describe('portée', () => {
 
   it('raccourcit le nom affiché sous l’icône', () => {
     const long = { ...spec, name: 'Une application au nom interminable' }
-    expect(buildManifest(long, 'x').short_name.length).toBeLessThanOrEqual(12)
+    expect(buildManifest(long, '/a/x').short_name.length).toBeLessThanOrEqual(12)
   })
 
   it('fournit une icône adaptative en plus des icônes ordinaires', () => {
-    const purposes = buildManifest(spec, 'x').icons.map((icon) => icon.purpose)
+    const purposes = buildManifest(spec, '/a/x').icons.map((icon) => icon.purpose)
     expect(purposes).toContain('maskable')
     expect(purposes).toContain('any')
   })

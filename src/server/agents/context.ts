@@ -3,6 +3,7 @@ import { appSpecSchema } from '@/server/spec/schema'
 import { launchKitSchema } from '@/lib/marketing'
 import { ANGLE_FAMILY_LABEL, DAY_LABEL, FORMAT_LABEL } from '@/lib/marketing'
 import type { AgentId } from './catalog'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * Ce que chaque spécialiste a le droit de lire.
@@ -41,14 +42,13 @@ export async function readProjectHeader(
     }),
   )
   if (project === null) return null
-  const appUrl = process.env.APP_URL ?? ''
   return {
     id: project.id,
     name: project.name,
     slug: project.slug,
     published: project.publishedAt !== null,
     publicUrl:
-      project.publishedAt === null || appUrl === '' ? null : `${appUrl}/a/${project.slug}`,
+      project.publishedAt === null ? null : publicAppUrl(project.slug),
   }
 }
 
@@ -111,8 +111,7 @@ async function seoFacts(userId: string, projectId: string): Promise<string> {
   const spec = appSpecSchema.safeParse(project.draftSpec)
   if (!spec.success) return "La description de l'application n'est pas relisible."
 
-  const appUrl = process.env.APP_URL ?? ''
-  const base = appUrl === '' ? `/a/${project.slug}` : `${appUrl}/a/${project.slug}`
+  const base = publicAppUrl(project.slug)
 
   const pages = spec.data.pages.map((page) => {
     // Les blocs sont une union discriminée : chacun n'a pas les mêmes champs, et lire un

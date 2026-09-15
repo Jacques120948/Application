@@ -1,13 +1,14 @@
+import { appBasePath } from '@/lib/apps-domain'
 import { getPublishedApp } from '@/server/runtime/published'
 import { buildManifest } from '@/server/runtime/pwa'
 
 /** Manifeste d'installation d'une application publiée. */
-export async function GET(_request: Request, context: { params: Promise<{ slug: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ slug: string }> }) {
   const { slug } = await context.params
   const app = await getPublishedApp(slug).catch(() => null)
   if (app === null) return new Response('Application introuvable', { status: 404 })
 
-  return Response.json(buildManifest(app.spec, app.slug), {
+  return Response.json(buildManifest(app.spec, appBasePath(request.headers.get('host'), app.slug)), {
     headers: {
       'content-type': 'application/manifest+json; charset=utf-8',
       // Le manifeste change quand le créateur republie : un cache court suffit à éviter

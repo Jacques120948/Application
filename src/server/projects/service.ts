@@ -16,6 +16,7 @@ import type { AppSpec } from '@/server/spec/schema'
 import { SUPPORTED_LOCALES, type Locale } from '@/i18n/config'
 import { heuristicBlueprint, blueprintFromIdea, blueprintFromSpecSheet } from './blueprints'
 import { getIdea } from '@/server/business/ideas'
+import { publicAppUrl } from '@/lib/apps-domain'
 
 /**
  * Cas d'usage « projet ».
@@ -517,11 +518,7 @@ export async function runProjectChecks(
 export type PublishResult = { url: string; versionNumber: number; report: CheckReport }
 
 /** Étape 7 : publier. Publier sert la version figée, jamais le brouillon. */
-export async function publishProject(
-  userId: string,
-  projectId: string,
-  appUrl: string,
-): Promise<PublishResult> {
+export async function publishProject(userId: string, projectId: string): Promise<PublishResult> {
   return withUserScope(userId, async (tx) => {
     const project = await requireOwnedProject(tx, projectId, userId)
     const spec = parseAppSpec(project.draftSpec)
@@ -546,7 +543,7 @@ export async function publishProject(
     })
 
     return {
-      url: `${appUrl.replace(/\/$/, '')}/a/${project.slug}`,
+      url: publicAppUrl(project.slug),
       versionNumber: version.number,
       report,
     }
