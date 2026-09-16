@@ -88,6 +88,9 @@ model User {
   chatMessages         ChatMessage[]
   reports              CreatorReport[]
   unmetRequests        UnmetRequest[]
+  sites                Site[]
+  audits               Audit[]
+  actionItems          ActionItem[]
 
   @@index([createdAt])
 }
@@ -811,8 +814,8 @@ model AppRecord {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  owner   AppEndUser? @relation(fields: [ownerEndUserId], references: [id], onDelete: Cascade)
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  owner   AppEndUser?  @relation(fields: [ownerEndUserId], references: [id], onDelete: Cascade)
   photos  MediaAsset[]
 
   @@index([projectId, modelId, createdAt])
@@ -1183,4 +1186,170 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+}
+
+// ─────────────────────────── Visibilité : sites et audits ───────────────────
+
+/// Un site suivi par un utilisateur. C'est l'objet central du nouveau produit :
+/// tout — audits, constats, plan d'action — pend à lui.
+model Site {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  /// Origine canonique : protocole + hôte, sans chemin ni barre finale.
+  origin String
+  /// Le nom d'hôte seul, pour l'unicité et l'affichage.
+  host   String
+  /// Comment l'utilisateur appelle ce site. Le nom d'hôte par défaut.
+  label  String
+  /// Ce que l'entreprise fait, en une phrase, dit par l'utilisateur. Sert de contexte
+  /// à l'IA pour les corrections : sans lui, elle rédige des généralités.
+  about  String @default("")
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audits Audit[]
+  items  ActionItem[]
+
+  /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
+  /// diverger deux historiques qui devraient n'en faire qu'un.
+  @@unique([userId, host])
+  @@index([userId, updatedAt])
+}
+
+/// Une passe d'analyse. Conservée telle quelle : c'est elle qui permet de dire
+/// « +6 depuis le dernier audit » sans recalculer le passé.
+model Audit {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// pending | running | done | failed
+  status  String @default("pending")
+  /// manual | scheduled
+  trigger String @default("manual")
+
+  /// Bornes réellement appliquées, figées dans l'audit : un réglage changé
+  /// plus tard ne doit pas réécrire ce qui a été mesuré.
+  maxPages Int @default(50)
+  maxDepth Int @default(3)
+
+  pagesCrawled Int @default(0)
+  /// Pages écartées : hors domaine, refusées par robots, non HTML, en erreur.
+  pagesSkipped Int @default(0)
+
+  /// Sur 100, calculés par Evoliia selon des pondérations administrables.
+  /// Nuls tant que l'audit n'est pas terminé.
+  seoScore Int?
+  geoScore Int?
+
+  /// Code d'échec, jamais le message brut du serveur distant.
+  errorCode  String?
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  site     Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages    AuditPage[]
+  findings AuditFinding[]
+
+  @@index([siteId, startedAt])
+  @@index([userId, startedAt])
+}
+
+/// Une page visitée, et les signaux qu'on en a extraits.
+///
+/// Les signaux sont rangés en JSON plutôt qu'en colonnes : leur liste grandira à
+/// chaque contrôle ajouté, et une migration par contrôle serait absurde. Ce qui est
+/// en colonne est ce sur quoi on trie ou on filtre.
+model AuditPage {
+  id      String @id @default(uuid()) @db.Uuid
+  auditId String @db.Uuid
+
+  url        String
+  /// Chemin seul, pour l'affichage et le tri.
+  path       String
+  depth      Int    @default(0)
+  statusCode Int    @default(0)
+  bytes      Int    @default(0)
+  /// Durée de la requête, en millisecondes.
+  fetchMs    Int    @default(0)
+
+  /// Titre et description relevés, pour les afficher sans relire le JSON.
+  title       String @default("")
+  description String @default("")
+  wordCount   Int    @default(0)
+
+  /// Tout le reste de ce qui a été extrait de la page.
+  signals Json
+
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, url])
+  @@index([auditId, depth])
+}
+
+/// Le résultat d'un contrôle sur l'ensemble de l'audit.
+///
+/// Agrégé par contrôle, et non par page et par contrôle. Cinquante pages et
+/// quarante-cinq contrôles feraient deux mille deux cent cinquante lignes à relire
+/// à chaque affichage pour dire la même chose — et « quatorze fiches produits sans
+/// description » est exactement la phrase qu'il faut montrer.
+model AuditFinding {
+  id      String @id @default(uuid()) @db.Uuid
+  auditId String @db.Uuid
+
+  /// Identifiant stable du contrôle : c'est lui qui relie un constat d'un audit
+  /// à l'autre, et à l'état choisi dans le plan d'action.
+  checkId  String
+  /// seo | geo
+  engine   String
+  /// critical | important | improvement | passed
+  severity String
+
+  /// Pages concernées, et pages examinées par ce contrôle. Le rapport des deux dit
+  /// l'ampleur ; le nombre brut dit l'effort.
+  affected Int @default(0)
+  examined Int @default(0)
+
+  /// Poids du contrôle dans le score, figé au moment de l'audit.
+  weight Int @default(0)
+  /// Points perdus sur ce contrôle. Ce qui fait le score, et ce qui fait la priorité.
+  lost   Int @default(0)
+
+  /// Quelques exemples : adresses concernées et valeur relevée. Jamais toutes les
+  /// pages — une liste de cinquante adresses n'aide personne à commencer.
+  sample Json
+
+  audit Audit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, checkId])
+  @@index([auditId, engine, lost])
+}
+
+/// L'état d'un constat dans le plan d'action, attaché au site et non à l'audit.
+///
+/// C'est délibéré : « corrigée » ou « ignorée » doit survivre à l'audit suivant,
+/// sans quoi la liste repartirait de zéro chaque mois et ne serait plus un plan.
+model ActionItem {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  checkId String
+  /// todo | doing | done | ignored
+  state   String @default("todo")
+  /// Ce que la personne a noté pour elle-même.
+  note    String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, checkId])
+  @@index([userId, state])
 }

@@ -40,6 +40,11 @@ const PROTECTED_TABLES = [
   'SupportTicket',
   'SupportInsight',
   'Notification',
+  'Site',
+  'Audit',
+  'AuditPage',
+  'AuditFinding',
+  'ActionItem',
 ] as const
 
 /*
