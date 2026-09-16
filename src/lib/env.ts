@@ -123,6 +123,19 @@ export const env = {
     const value = read('APPS_DOMAIN')
     return value === undefined ? undefined : value.replace(/^https?:\/\//, '').replace(/\/.*$/, '')
   },
+  /**
+   * Adresse publique de Postelya.
+   *
+   * Elle est réglable plutôt qu'écrite dans une page : Postelya vit aujourd'hui sur une
+   * adresse Vercel et vivra demain sur son propre domaine. Le jour où il changera, personne
+   * ne doit avoir à retrouver le lien au milieu d'un composant, ni à déployer Evoliia pour
+   * corriger une adresse.
+   *
+   * La valeur par défaut est celle d'aujourd'hui : sans réglage, le bouton fonctionne.
+   */
+  get postelyaUrl(): string {
+    return read('POSTELYA_URL') ?? 'https://postelya.vercel.app'
+  },
   get isProduction(): boolean {
     return process.env.NODE_ENV === 'production'
   },

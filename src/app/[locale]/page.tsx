@@ -277,7 +277,7 @@ export default async function LandingPage({
       {/* ───────────────────────── 6. Postelya ────────────────────────────── */}
       <Section title={t('vis.postelyaTitle')} body={t('vis.postelyaBody')}>
         <div className="flex flex-wrap items-center gap-4">
-          <LinkButton href="https://postelya.com" variant="secondary">
+          <LinkButton href={env.postelyaUrl} variant="secondary">
             {t('vis.postelyaCta')}
           </LinkButton>
           <span className="text-sm text-[var(--color-ink-faint)]">{t('vis.postelyaSoon')}</span>
