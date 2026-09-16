@@ -712,6 +712,102 @@ export const BLOCK_TYPES = [
 
 export type BlockType = (typeof BLOCK_TYPES)[number]
 
+// ─────────────────────────── Visibilité (SEO / GEO) ──────────────────────────
+
+/**
+ * Ce qu'il faut pour être trouvé, et ce qu'il faut pour être cité.
+ *
+ * Deux publics, deux besoins, un seul endroit pour les décrire.
+ *
+ * **Un moteur de recherche classe une page.** Il lui faut un titre propre à cette page et
+ * une description qui donne envie de l'ouvrir. Jusqu'ici, toutes les pages d'une même
+ * application partageaient le nom et l'accroche de l'application : douze pages qui se
+ * présentaient de la même façon, donc onze qui ne servaient à rien.
+ *
+ * **Un moteur génératif ne classe pas, il cite.** Pour être cité, il faut être
+ * identifiable — qui, où, quoi — et recoupable ailleurs. C'est ce que décrit `visibility` :
+ * l'entité derrière le site, en données plutôt qu'en prose.
+ *
+ * Tout est facultatif, et le restera. Une application publiée avant ce jour doit continuer
+ * de se valider telle quelle, et une application qui n'a rien à déclarer ne doit pas être
+ * poussée à inventer.
+ */
+
+/**
+ * Le genre d'entité derrière le site, nommé comme schema.org le nomme.
+ *
+ * La liste est courte et fermée volontairement : schema.org compte des centaines de types
+ * dont l'immense majorité ne dira jamais rien d'utile sur un artisan ou un commerce. Un
+ * type très précis mal choisi vaut moins qu'un type large bien choisi.
+ */
+export const ENTITY_TYPES = [
+  'LocalBusiness',
+  'ProfessionalService',
+  'Store',
+  'Restaurant',
+  'Organization',
+  'Person',
+] as const
+
+export type EntityType = (typeof ENTITY_TYPES)[number]
+
+/** Une adresse postale, découpée : c'est ainsi qu'une machine la lit. */
+export const postalAddressSchema = z
+  .object({
+    street: shortText.optional(),
+    /** La ville. Seule partie exigée : sans elle, l'adresse ne situe rien. */
+    locality: shortText,
+    /** Canton, région, département. */
+    region: shortText.optional(),
+    postalCode: z.string().min(2).max(16).optional(),
+    /** Code pays sur deux lettres (ISO 3166-1), en majuscules : CH, FR, BE. */
+    country: z.string().regex(/^[A-Z]{2}$/, 'Code pays attendu sur deux lettres majuscules.'),
+  })
+  .strict()
+
+/**
+ * Le titre et la description d'une page, tels qu'un moteur les affichera.
+ *
+ * Les longueurs sont bornées court, et c'est une contrainte assumée : au-delà, le moteur
+ * coupe au milieu d'un mot et la promesse se perd. Mieux vaut refuser une phrase trop
+ * longue au moment de l'écrire que la voir tronquée au moment de la lire.
+ */
+export const pageSeoSchema = z
+  .object({
+    title: z.string().min(1).max(70).optional(),
+    description: z.string().min(1).max(165).optional(),
+    /** Page tenue hors des index sans être privée pour autant : mentions, remerciements. */
+    noindex: z.boolean().optional(),
+  })
+  .strict()
+
+export const visibilitySchema = z
+  .object({
+    entityType: z.enum(ENTITY_TYPES).optional(),
+    /** Raison sociale, quand elle diffère du nom d'enseigne. */
+    legalName: shortText.optional(),
+    address: postalAddressSchema.optional(),
+    phone: z.string().min(6).max(30).optional(),
+    email: z.string().email().max(120).optional(),
+    /** Les endroits desservis : « Bulle », « la Gruyère », « canton de Fribourg ». */
+    areaServed: z.array(shortText).max(8).optional(),
+    /**
+     * Les autres adresses officielles de la même entité : fiche Google, page Facebook,
+     * profil LinkedIn. C'est ce qui permet à une machine de recouper, donc de croire.
+     */
+    sameAs: z.array(externalLink).max(8).optional(),
+    /**
+     * Des faits courts et vérifiables, écrits pour être repris tels quels.
+     *
+     * Ils ne sont pas décoratifs : un moteur génératif cite des phrases, pas des pages. Ils
+     * ne partent en revanche pas dans les données structurées — une affirmation qu'un robot
+     * ne peut pas recouper avec le contenu visible dessert plus qu'elle ne sert. Leur place
+     * est le fichier destiné aux machines, et nulle part ailleurs.
+     */
+    facts: z.array(mediumText).max(12).optional(),
+  })
+  .strict()
+
 // ───────────────────────────────── Pages ─────────────────────────────────────
 
 export const pageSchema = z
@@ -721,6 +817,8 @@ export const pageSchema = z
     /** Chemin relatif dans l'application publiée. `accueil` est la page d'entrée. */
     path: slug,
     requiresAuth: z.boolean(),
+    /** Comment cette page se présente aux moteurs. Absent : elle hérite de l'application. */
+    seo: pageSeoSchema.optional(),
     blocks: z.array(blockSchema).min(1).max(20),
   })
   .strict()
@@ -780,6 +878,8 @@ export const appSpecSchema = z
     pages: z.array(pageSchema).min(1).max(12),
     navigation: navigationSchema,
     monetization: monetizationSchema,
+    /** Qui est derrière ce site, pour les moteurs. Absent : rien n'est affirmé. */
+    visibility: visibilitySchema.optional(),
   })
   .strict()
 
@@ -790,3 +890,6 @@ export type DataModel = z.infer<typeof dataModelSchema>
 export type DataField = z.infer<typeof dataFieldSchema>
 export type Theme = z.infer<typeof themeSchema>
 export type Monetization = z.infer<typeof monetizationSchema>
+export type Visibility = z.infer<typeof visibilitySchema>
+export type PageSeo = z.infer<typeof pageSeoSchema>
+export type PostalAddress = z.infer<typeof postalAddressSchema>

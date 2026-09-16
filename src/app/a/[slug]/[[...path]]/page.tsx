@@ -8,6 +8,7 @@ import { getEndUser } from '@/server/runtime/end-users'
 import { paymentContext } from '@/server/runtime/payments'
 import { computePageMetrics } from '@/server/runtime/metrics'
 import { HOME_PATH } from '@/server/spec/validate'
+import { isIndexable, jsonLd, pageDescription, pageTitle, structuredData } from '@/server/seo/visibility'
 import { AppPageView } from '@/components/runtime/AppPageView'
 import { LiaWidget } from '@/components/runtime/LiaWidget'
 import { readPublicSupportSettings } from '@/server/support/settings'
@@ -25,14 +26,20 @@ export async function generateMetadata({
     const scope = `${appBasePath((await headers()).get('host'), app.slug)}/`
     const page = app.spec.pages.find((candidate) => candidate.path === (path?.[0] ?? HOME_PATH))
     return {
-      title: app.spec.name,
-      description: app.spec.tagline,
+      /*
+        Le titre et la description viennent de la page, pas de l'application. Douze pages
+        qui se présentent de la même façon, ce sont onze pages qui ne seront trouvées sur
+        rien : un moteur ne garde qu'un représentant par contenu identique.
+      */
+      title: page === undefined ? app.spec.name : pageTitle(app.spec, page),
+      description: page === undefined ? app.spec.tagline : pageDescription(app.spec, page),
       /*
         Une page réservée aux personnes connectées ne montre à un robot qu'un formulaire de
         connexion : la laisser indexer classerait l'application sur ce formulaire plutôt
-        que sur ce qu'elle fait.
+        que sur ce qu'elle fait. Une page publique marquée « hors index » est écartée pour
+        une autre raison — son créateur sait qu'elle n'a rien à répondre à une recherche.
       */
-      robots: page?.requiresAuth === true ? { index: false, follow: true } : undefined,
+      robots: page !== undefined && !isIndexable(page) ? { index: false, follow: true } : undefined,
       /*
         Les deux adresses servent la même application : l'ancienne, déjà partagée, et
         l'adresse propre. Le lien canonique désigne la seconde pour qu'un moteur de
@@ -119,6 +126,15 @@ export default async function PublishedAppPage({
 
   return (
     <>
+    {/*
+      Ce que les moteurs lisent sans l'afficher : qui est derrière ce site, et les questions
+      déjà écrites sur cette page. Sérialisé et échappé par `jsonLd`, jamais interpolé tel
+      quel — une spécification ne doit pas pouvoir refermer la balise qui la porte.
+    */}
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: jsonLd(structuredData(app.spec, app.slug, page)) }}
+    />
     <AppPageView
       spec={app.spec}
       page={page}

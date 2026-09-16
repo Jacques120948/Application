@@ -1,6 +1,7 @@
 import { publicAppUrl } from '@/lib/apps-domain'
 import { SUPPORTED_LOCALES, type Locale } from '@/i18n/config'
 import { HOME_PATH } from '@/server/spec/validate'
+import { isIndexable } from './visibility'
 import type { AppSpec } from '@/server/spec/schema'
 
 /**
@@ -95,7 +96,7 @@ export function evoliiaSitemap(base: string, now = new Date()): SitemapEntry[] {
 export function appSitemap(spec: AppSpec, slug: string, updatedAt: Date): SitemapEntry[] {
   const base = publicAppUrl(slug)
   return spec.pages
-    .filter((page) => !page.requiresAuth)
+    .filter(isIndexable)
     .map((page) => ({
       url: joinUrl(base, page.path),
       lastModified: updatedAt,
@@ -107,15 +108,19 @@ export function appSitemap(spec: AppSpec, slug: string, updatedAt: Date): Sitema
 /** Le fichier `robots.txt` d'une application : ses pages privées restent hors index. */
 export function appRobots(spec: AppSpec, slug: string): string {
   const base = publicAppUrl(slug)
-  const interdits = spec.pages.filter((page) => page.requiresAuth).map((page) => `/${page.path}`)
+  const interdits = spec.pages.filter((page) => !isIndexable(page)).map((page) => `/${page.path}`)
   return [
     'User-agent: *',
     'Allow: /',
-    // Une page réservée ne montrerait qu'un formulaire de connexion : la faire indexer
-    // reviendrait à faire indexer ce formulaire sous le titre de la page.
+    // Deux raisons d'écarter une page, et une seule conséquence. Réservée, elle ne
+    // montrerait qu'un formulaire de connexion, et se ferait indexer sous ce titre. Mise
+    // hors index par son créateur, elle est publique mais n'a rien à répondre à personne.
     ...interdits.map((path) => `Disallow: ${path}`),
     '',
     `Sitemap: ${joinUrl(base, 'sitemap.xml')}`,
+    // Le plan de site dit où aller ; celui-ci dit de quoi il s'agit. Les moteurs qui
+    // l'ignorent ne perdent rien, ceux qui le lisent n'ont plus à deviner.
+    `Llms: ${joinUrl(base, 'llms.txt')}`,
     '',
   ].join('\n')
 }
