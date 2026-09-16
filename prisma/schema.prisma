@@ -762,6 +762,7 @@ model AppRecord {
 
   project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   owner   AppEndUser? @relation(fields: [ownerEndUserId], references: [id], onDelete: Cascade)
+  photos  MediaAsset[]
 
   @@index([projectId, modelId, createdAt])
   @@index([projectId, modelId, ownerEndUserId])
@@ -839,18 +840,24 @@ model MediaAsset {
   data      Bytes
   /// Vignette pour les écrans de l'atelier, pour ne pas charger l'originale dans une liste.
   thumb     Bytes
-  /// upload | ai
+  /// upload | ai | visitor
   origin    String   @default("upload")
   /// Description donnée par le créateur quand l'image a été générée.
   prompt    String?
+  /// Fiche à laquelle cette photo est attachée, pour une image envoyée par un visiteur.
+  /// La suppression en cascade est voulue : une fiche effacée ne doit pas laisser ses
+  /// photos occuper indéfiniment le quota de stockage du créateur.
+  recordId  String?  @db.Uuid
   createdAt DateTime @default(now())
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  record  AppRecord? @relation(fields: [recordId], references: [id], onDelete: Cascade)
 
   @@index([projectId, createdAt])
   @@index([userId])
   @@index([userId, origin, createdAt])
+  @@index([projectId, origin, recordId])
 }
 
 /// Note d'un spécialiste marketing sur un projet.

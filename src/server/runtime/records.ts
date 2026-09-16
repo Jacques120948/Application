@@ -3,7 +3,9 @@ import { notFound, validation } from '@/lib/errors'
 import { recordLabel } from '@/lib/record-label'
 import { evaluateFormula, parseFormula, type FormulaNode } from '@/lib/formula'
 import { csvRow } from '@/lib/csv'
+import { env } from '@/lib/env'
 import { requireOwnedProject, withOwnerRuntimeScope, withRuntimeScope } from '@/server/db/scope'
+import { attachPhotos, VISITOR } from '@/server/media/service'
 import type { AppSpec, DataField, DataModel } from '@/server/spec/schema'
 
 /**
@@ -122,6 +124,15 @@ function validateField(field: DataField, raw: unknown): RecordValue {
       }
       return raw
     }
+    case 'photo': {
+      // Ce que le navigateur envoie est l'identifiant d'une image déjà reçue et déjà
+      // traitée, jamais un fichier ni une adresse. Son appartenance au projet est vérifiée
+      // dans la transaction d'écriture, comme pour un renvoi.
+      if (typeof raw !== 'string' || !UUID.test(raw)) {
+        throw validation(`Le champ « ${field.label} » attend une photo envoyée depuis ce formulaire.`)
+      }
+      return raw
+    }
   }
 }
 
@@ -149,6 +160,59 @@ async function assertReferences(
       throw validation(`Le champ « ${field.label} » désigne un élément qui n'existe pas.`)
     }
   }
+}
+
+/** Les identifiants d'images portés par une saisie, sans doublon. */
+function photoIds(model: DataModel, data: RecordData): string[] {
+  const ids = new Set<string>()
+  for (const field of model.fields) {
+    if (field.type !== 'photo') continue
+    const valeur = data[field.id]
+    if (typeof valeur === 'string' && valeur !== '') ids.add(valeur)
+  }
+  return [...ids]
+}
+
+/**
+ * Attache à la fiche les photos qu'elle désigne, après avoir vérifié qu'elle y a droit.
+ *
+ * Deux vérifications, et elles portent chacune un cas réel. **L'image doit appartenir au
+ * projet** : sans cela, la spécification d'une application pourrait afficher la photo
+ * reçue par une autre. **Elle doit être libre, ou déjà la sienne** : sans cela, il
+ * suffirait de recopier l'identifiant de la photo d'autrui dans son propre formulaire
+ * pour la lui prendre — et pour l'effacer en supprimant sa fiche.
+ *
+ * Le rattachement a lieu dans la transaction qui écrit la fiche. Une fiche enregistrée
+ * dont les photos ne seraient pas rattachées les verrait reprises comme orphelines, et
+ * l'application afficherait des images manquantes une heure plus tard.
+ */
+async function lierPhotos(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  projectId: string,
+  model: DataModel,
+  data: RecordData,
+  recordId: string,
+): Promise<void> {
+  // Sans champ photo, il n'y a rien à rattacher ni à libérer : la grande majorité des
+  // modèles est dans ce cas, et deux requêtes de plus à chaque écriture se paieraient là où
+  // rien ne le justifie.
+  if (!model.fields.some((field) => field.type === 'photo')) return
+
+  const ids = photoIds(model, data)
+  if (ids.length > 0) {
+    const disponibles = await tx.mediaAsset.count({
+      where: {
+        projectId,
+        origin: VISITOR,
+        id: { in: ids },
+        OR: [{ recordId: null }, { recordId }],
+      },
+    })
+    if (disponibles !== ids.length) {
+      throw validation("Une photo n'a pas pu être retrouvée. Renvoyez-la avant d'enregistrer.")
+    }
+  }
+  await attachPhotos(tx, { projectId, recordId, mediaIds: ids })
 }
 
 /** Valide une saisie complète contre un modèle. Les champs inconnus sont écartés. */
@@ -196,6 +260,7 @@ export async function createRecord(params: {
         data: data as unknown as Prisma.InputJsonValue,
       },
     })
+    await lierPhotos(tx, params.projectId, model, data, created.id)
     return {
       // Les calculs partent avec la fiche : le formulaire affiche le total sans attendre
       // un second aller-retour.
@@ -680,6 +745,7 @@ export async function updateRecord(params: {
       where: { id: record.id },
       data: { data: data as unknown as Prisma.InputJsonValue },
     })
+    await lierPhotos(tx, params.projectId, model, data, record.id)
     return { id: updated.id, data: garnirCalculs(model, data), createdAt: updated.createdAt, isMine: true }
   })
 }
@@ -787,6 +853,7 @@ export async function updateOwnerRecord(params: {
       where: { id: record.id },
       data: { data: data as unknown as Prisma.InputJsonValue },
     })
+    await lierPhotos(tx, params.projectId, model, data, record.id)
     return { id: updated.id, data, createdAt: updated.createdAt, isMine: false }
   })
 }
@@ -843,8 +910,17 @@ export async function exportOwnerRecords(params: {
         item.createdAt.toISOString(),
         ...model.fields.map((field) => {
           const valeur = item.data[field.id]
-          if (field.type !== 'reference') return valeur
-          return typeof valeur === 'string' && valeur !== '' ? (noms[valeur] ?? '') : ''
+          if (field.type === 'reference') {
+            return typeof valeur === 'string' && valeur !== '' ? (noms[valeur] ?? '') : ''
+          }
+          // Une photo sort sous son adresse et non sous son identifiant : un export est
+          // fait pour être ouvert, et un identifiant seul ne mène nulle part.
+          if (field.type === 'photo') {
+            return typeof valeur === 'string' && valeur !== ''
+              ? `${env.appUrl}/api/app/${params.projectId}/medias/${valeur}`
+              : ''
+          }
+          return valeur
         }),
       ]),
     )
@@ -906,6 +982,9 @@ export async function getOwnerDataOverview(
 function summarise(model: DataModel, data: RecordData): string {
   const parts: string[] = []
   for (const field of model.fields) {
+    // Une photo est stockée comme identifiant : l'écrire dans un résumé remplirait la ligne
+    // d'une suite de caractères que personne ne reconnaît.
+    if (field.type === 'photo') continue
     const value = data[field.id]
     if (value === null || value === undefined || value === '') continue
     parts.push(`${field.label} : ${String(value).slice(0, 60)}`)

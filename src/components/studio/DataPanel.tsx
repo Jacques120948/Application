@@ -1,7 +1,16 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react'
 import { labelFieldOf } from '@/lib/record-label'
+import { PHOTO_ACCEPT, photoUrl, uploadPhoto } from '@/lib/photo-upload'
 import type { DataModel } from '@/server/spec/schema'
 import { Badge, Button, Card, CardBody, Field, Input, Notice, Select, Textarea } from '@/components/ui'
 
@@ -306,7 +315,15 @@ function ModelData({
                                     {field.label}
                                   </dt>
                                   <dd className="m-0 mt-0.5 whitespace-pre-line text-sm">
-                                    {montre(model, field.id, item.data, renvois)}
+                                    {field.type === 'photo' ? (
+                                      <Vignette
+                                        projectId={projectId}
+                                        label={field.label}
+                                        value={item.data[field.id]}
+                                      />
+                                    ) : (
+                                      montre(model, field.id, item.data, renvois)
+                                    )}
                                   </dd>
                                 </div>
                               ))}
@@ -411,6 +428,7 @@ function EditForm({
             initial={item.data[field.id]}
             choix={choix[field.id]}
             models={models}
+            projectId={projectId}
           />
         ))}
       {error !== null ? <Notice tone="critical">{error}</Notice> : null}
@@ -431,14 +449,24 @@ function Champ({
   initial,
   choix,
   models,
+  projectId,
 }: {
   field: DataModel['fields'][number]
   initial: unknown
   choix?: Choix
   models: readonly DataModel[]
+  projectId: string
 }) {
   const valeur = initial === null || initial === undefined ? undefined : String(initial)
   const label = field.label + (field.required ? ' *' : '')
+
+  if (field.type === 'photo') {
+    return (
+      <Field label={label}>
+        <PhotoField field={field} initial={valeur} projectId={projectId} />
+      </Field>
+    )
+  }
 
   if (field.type === 'reference') {
     const cible = models.find((candidate) => candidate.id === field.referenceModelId)
@@ -546,6 +574,12 @@ function montre(
     if (typeof valeur !== 'string' || valeur === '') return '—'
     return renvois[valeur] ?? 'Élément supprimé'
   }
+  if (champ?.type === 'photo') {
+    // Une photo s'affiche, elle ne s'écrit pas. Là où seul du texte a sa place — le résumé
+    // d'une ligne repliée, le titre d'une fiche — on la nomme plutôt que d'y déposer
+    // l'identifiant, qui ne dirait rien à personne.
+    return typeof valeur === 'string' && valeur !== '' ? 'Photo' : '—'
+  }
   if (champ?.type === 'computed') {
     // « rien » n'est pas zéro : une donnée manquante ne doit pas s'afficher « 0 € ».
     if (typeof valeur !== 'number') return '—'
@@ -622,5 +656,106 @@ function ChoixOuLibre({
       ) : null}
       <input type="hidden" name={field.id} value={choix === AUTRE ? libre.trim() : choix} />
     </>
+  )
+}
+
+/**
+ * Une photo reçue d'un visiteur, dans la liste du créateur.
+ *
+ * Vignette seulement : l'écran des données affiche vingt fiches, et charger vingt
+ * originales pour montrer vingt timbres-poste ferait payer le créateur en attente. Le clic
+ * ouvre l'originale dans un onglet — c'est ce qu'on veut quand on inspecte une photo de
+ * chantier, et cela n'enlève pas sa place à qui parcourait la liste.
+ */
+function Vignette({
+  projectId,
+  label,
+  value,
+}: {
+  projectId: string
+  label: string
+  value: unknown
+}) {
+  if (typeof value !== 'string' || value === '') return <>—</>
+  return (
+    <a href={photoUrl(projectId, value, 'full')} target="_blank" rel="noopener noreferrer">
+      {/* eslint-disable-next-line @next/next/no-img-element -- image servie par la base, sans dimensions connues d'avance */}
+      <img
+        src={photoUrl(projectId, value, 'thumb')}
+        alt={label}
+        loading="lazy"
+        className="max-h-32 rounded-[var(--radius)] border border-[var(--color-line)]"
+      />
+    </a>
+  )
+}
+
+/**
+ * Le remplacement d'une photo, côté créateur.
+ *
+ * Il passe par la même adresse que le formulaire d'un visiteur, et par le même traitement :
+ * identification par les octets, ré-encodage, quota. Un second chemin d'envoi réservé au
+ * créateur finirait par accepter ce que l'autre refuse.
+ *
+ * Retirer la photo ne l'efface pas tout de suite : la fiche cesse de la désigner, et le
+ * ménage des images qu'aucune fiche ne réclame s'en charge ensuite. C'est ce qui permet de
+ * se raviser tant qu'on n'a pas enregistré.
+ */
+function PhotoField({
+  field,
+  initial,
+  projectId,
+}: {
+  field: DataModel['fields'][number]
+  initial?: string
+  projectId: string
+}) {
+  const [photoId, setPhotoId] = useState(initial ?? '')
+  const [envoi, setEnvoi] = useState(false)
+  const [erreur, setErreur] = useState<string | null>(null)
+
+  async function choisir(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // Remis à zéro tout de suite : sans cela, rechoisir le même fichier après une erreur ne
+    // déclencherait aucun événement.
+    event.target.value = ''
+    if (file === undefined) return
+
+    setEnvoi(true)
+    setErreur(null)
+    try {
+      setPhotoId((await uploadPhoto(projectId, file)).id)
+    } catch (error) {
+      setErreur(error instanceof Error ? error.message : "Cette photo n'a pas pu être envoyée.")
+    } finally {
+      setEnvoi(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      {photoId !== '' ? (
+        <div>
+          <Vignette projectId={projectId} label={field.label} value={photoId} />
+          <button
+            type="button"
+            onClick={() => setPhotoId('')}
+            className="mt-1 block text-xs text-[var(--color-ink-soft)] underline"
+          >
+            Retirer la photo
+          </button>
+        </div>
+      ) : null}
+      <Input
+        type="file"
+        accept={PHOTO_ACCEPT}
+        onChange={(event) => void choisir(event)}
+        disabled={envoi}
+        required={field.required && photoId === ''}
+      />
+      {envoi ? <p className="m-0 text-xs text-[var(--color-ink-faint)]">Envoi de la photo…</p> : null}
+      {erreur !== null ? <Notice tone="critical">{erreur}</Notice> : null}
+      <input type="hidden" name={field.id} value={photoId} />
+    </div>
   )
 }

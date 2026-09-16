@@ -3,6 +3,13 @@ import { validation } from '@/lib/errors'
 import { appSpecSchema, type AppSpec, type Block } from './schema'
 
 /**
+ * Une photo est stockée comme identifiant. Lui confier le titre d'une fiche afficherait à
+ * la place du nom une suite de caractères que personne ne reconnaît — et le créateur ne
+ * s'en apercevrait qu'une fois son application en ligne.
+ */
+const PHOTO_MUETTE = 'Une photo ne peut pas servir de titre : elle ne porte pas de texte.'
+
+/**
  * Validation en deux temps.
  *
  * 1. Zod vérifie la *forme* : types, longueurs, énumérations, absence de propriété inconnue.
@@ -194,9 +201,11 @@ function checkBlock(
       } else if (champDate.type !== 'date') {
         issues.push({ path: `${at}.dateField`, message: 'Un calendrier se range sur une date.' })
       }
-      const fieldIds = new Set(model.fields.map((field) => field.id))
-      if (block.titleField !== undefined && !fieldIds.has(block.titleField)) {
+      const champTitre = model.fields.find((field) => field.id === block.titleField)
+      if (block.titleField !== undefined && champTitre === undefined) {
         issues.push({ path: `${at}.titleField`, message: 'Ce calendrier affiche un champ qui n\'existe pas.' })
+      } else if (champTitre?.type === 'photo') {
+        issues.push({ path: `${at}.titleField`, message: PHOTO_MUETTE })
       }
       if (block.colorField !== undefined) {
         const champ = model.fields.find((field) => field.id === block.colorField)
@@ -246,12 +255,17 @@ function checkBlock(
         issues.push({ path: `${at}.modelId`, message: 'Cette liste utilise des données qui n\'existent pas.' })
         break
       }
-      const fieldIds = new Set(model.fields.map((field) => field.id))
-      if (!fieldIds.has(block.titleField)) {
+      const titre = model.fields.find((field) => field.id === block.titleField)
+      if (titre === undefined) {
         issues.push({ path: `${at}.titleField`, message: 'Cette liste affiche un champ qui n\'existe pas.' })
+      } else if (titre.type === 'photo') {
+        issues.push({ path: `${at}.titleField`, message: PHOTO_MUETTE })
       }
-      if (block.subtitleField !== undefined && !fieldIds.has(block.subtitleField)) {
+      const sousTitre = model.fields.find((field) => field.id === block.subtitleField)
+      if (block.subtitleField !== undefined && sousTitre === undefined) {
         issues.push({ path: `${at}.subtitleField`, message: 'Cette liste affiche un champ qui n\'existe pas.' })
+      } else if (sousTitre?.type === 'photo') {
+        issues.push({ path: `${at}.subtitleField`, message: PHOTO_MUETTE })
       }
       if (block.sumField !== undefined) {
         const champ = model.fields.find((field) => field.id === block.sumField)

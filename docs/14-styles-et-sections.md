@@ -356,3 +356,76 @@ cherche d'abord en ouvrant un planning.
 **La portée du modèle s'applique.** Sur un modèle privé, chacun ne voit que son propre
 agenda et un visiteur anonyme ne voit rien : un calendrier partagé par mégarde dirait à
 chacun quand les autres sont occupés.
+
+
+### Les photos envoyées par les visiteurs
+
+Une fiche d'artisan sans photo de chantier, une déclaration de sinistre sans cliché du
+dégât, une annonce sans image : c'est ce qui séparait le plus nettement une application
+créée ici d'un outil de travail. Les images existaient déjà, mais seulement pour le
+créateur, et seulement pour décorer ses pages.
+
+Un champ de type `photo` ouvre un sélecteur de fichier dans le formulaire. La liste montre
+ensuite sa vignette, et le clic ouvre l'originale.
+
+**Rien de nouveau n'est stocké.** Une photo de visiteur est une image comme les autres,
+dans la même table, passée par le même traitement : identifiée par ses octets et non par ce
+que le navigateur annonce, ré-encodée en WebP, donc débarrassée au passage de la position
+GPS du chantier photographié. Un fichier reçu d'un inconnu mérite au moins autant de
+méfiance qu'un fichier reçu du propriétaire.
+
+**Elle part avant que le formulaire ne soit validé**, et c'est délibéré : il faut bien la
+montrer à celui qui vient de la choisir, et un formulaire qui enverrait tout d'un bloc
+ferait attendre dix secondes sans rien afficher, puis échouerait parfois en perdant la
+saisie avec la photo. Ce qui circule ensuite dans la fiche n'est qu'un identifiant.
+
+**Elle appartient à une fiche**, et la suppression est portée par la base : une clé
+étrangère en cascade. Une fiche effacée emporte donc ses photos, sans qu'aucun chemin de
+code puisse l'oublier. Ce qu'une fiche cesse de désigner — un formulaire abandonné, une
+photo remplacée — redevient orphelin, et le ménage reprend au bout d'une heure ce
+qu'aucune fiche ne réclame. Ce ménage a lieu là où naît la pression : juste avant
+d'accepter une nouvelle photo, et quand le créateur regarde son quota. Aucune tâche
+périodique n'est nécessaire, et une application que plus personne n'utilise ne coûte aucun
+calcul.
+
+**On ne prend pas la photo d'autrui.** Une image déjà rattachée à une autre fiche ne peut
+pas être réclamée : sans cette règle, recopier son identifiant dans son propre formulaire
+suffirait à la lui prendre, et à l'effacer en supprimant sa fiche.
+
+#### Ce que cela coûte, et à qui
+
+Le poids entre dans le **quota de stockage de l'offre du créateur**, celui qui existait déjà
+pour ses images. C'est la différence qui compte : un visiteur ne peut pas créer une dépense
+nouvelle pour Evoliia, il peut au pire occuper une place déjà payée — et l'occupation
+s'arrête toute seule quand le quota est atteint.
+
+Trois protections encadrent le rythme. Le poids annoncé est refusé avant d'être lu au-delà
+de huit mégaoctets. L'envoi est bridé bien plus sévèrement qu'une saisie ordinaire — une
+fiche pèse un kilooctet, une photo huit mégaoctets, et le même plafond pour les deux
+laisserait remplir en deux minutes un espace acheté pour l'année. Et l'adresse d'envoi
+n'existe que pour les applications dont la spécification déclare un champ photo : sans cela,
+ce serait un dépôt de fichiers ouvert sur toute application publiée.
+
+Ce qui remonte au visiteur quand la place manque ne dit jamais l'état du compte du créateur.
+« Il ne reste que 3 Mo sur 50 » est une information qui ne le regarde pas, et qui
+renseignerait un curieux sur l'offre souscrite par quelqu'un d'autre.
+
+#### Le cloisonnement
+
+Le rattachement d'une photo à sa fiche a lieu dans la transaction qui écrit la fiche, donc
+dans la portée d'exécution — celle du visiteur, qui n'est pas le créateur. La politique de
+la base y est étroite : on ne peut modifier que les photos d'origine `visitor`, et seulement
+celles du projet en cours. La bibliothèque du créateur — son logo, ses illustrations — reste
+hors d'atteinte de tout ce qui s'exécute pour un visiteur. L'insertion, elle, reste réservée
+au compte du créateur, puisque c'est son quota qui la supporte.
+
+Enfin, les photos reçues ne se mêlent pas à la bibliothèque du créateur : cet écran est un
+espace de travail, pas une boîte de réception. Mais leur poids y est annoncé sur une ligne à
+part, sans quoi le créateur lirait « 30 Mo utilisés » en ne voyant que cinq mégaoctets
+d'images, et conclurait que le compteur ment.
+
+**Ce qui n'est pas fait, et pourquoi.** Seules les images sont acceptées, pas les PDF ni les
+documents. La sûreté de ce qui précède tient entièrement au ré-encodage : ce qui ressort
+n'est jamais ce qui est entré. Un PDF n'a pas d'équivalent — il faudrait décider séparément
+du contenu actif qu'il peut transporter et de la façon de le servir. C'est une autre
+fonction, avec une autre analyse.

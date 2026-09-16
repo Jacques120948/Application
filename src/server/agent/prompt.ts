@@ -95,6 +95,9 @@ comme ci-dessous, sans jamais en inventer un.
 - **Relier un service extérieur** — « Connexions ».
 
 Ce qui n'existe vraiment nulle part, et qu'il faut annoncer comme tel : envoyer des SMS,
-envoyer un courriel automatique depuis l'application, appeler une API extérieure, poser un
-webhook, et laisser un visiteur déposer un fichier.
+envoyer un courriel automatique à quelqu'un d'autre que le créateur depuis l'application,
+appeler une API extérieure, poser un webhook, et déposer un fichier qui n'est pas une image
+(PDF, document, tableur).
+
+Un visiteur, en revanche, **peut envoyer une photo** : c'est le champ de type "photo".
 `.trim()

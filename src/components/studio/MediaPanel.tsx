@@ -27,6 +27,7 @@ type Library = {
   items: Media[]
   usedBytes: number
   quotaBytes: number
+  visitorBytes: number
   generation: { provider: string | null; providerLabel: string | null; dailyLimit: number; dailyLeft: number }
 }
 
@@ -196,6 +197,7 @@ export function MediaPanel({
   const slots = imageSlots(spec)
   const used = library?.usedBytes ?? 0
   const quota = library?.quotaBytes ?? 0
+  const visitor = library?.visitorBytes ?? 0
   const share = quota === 0 ? 0 : Math.min(100, Math.round((used / quota) * 100))
 
   return (
@@ -221,6 +223,18 @@ export function MediaPanel({
               style={{ width: `${share}%`, background: 'var(--gradient-brand)' }}
             />
           </div>
+          {/*
+            Les photos reçues des visiteurs ne figurent pas dans cette grille — elles
+            appartiennent aux fiches de l'application, pas à la bibliothèque. Mais elles
+            pèsent dans le quota, et sans cette ligne le créateur lirait « 30 Mo utilisés »
+            en n'en voyant que cinq, et conclurait que le compteur ment.
+          */}
+          {visitor > 0 ? (
+            <p className="m-0 mt-2 text-xs text-[var(--color-ink-faint)]">
+              Dont {size(visitor)} de photos envoyées par vos visiteurs. Elles se consultent
+              avec leur fiche, dans l’onglet Utilisateurs, et disparaissent avec elle.
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <input
               ref={input}

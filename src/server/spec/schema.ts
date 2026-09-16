@@ -92,6 +92,20 @@ export const FIELD_TYPES = [
    * fait.
    */
   'computed',
+  /**
+   * Photo envoyée par celui qui remplit le formulaire.
+   *
+   * Une fiche d'artisan sans photo de chantier, une déclaration de sinistre sans cliché du
+   * dégât, une annonce sans image : c'est ce qui manquait le plus pour qu'une application
+   * créée ici serve vraiment. Ce qui est stocké est l'identifiant de l'image, jamais un
+   * chemin ni une adresse — l'image elle-même passe par le même traitement que celles du
+   * créateur, ré-encodée et débarrassée de ses métadonnées, et elle est servie par
+   * l'adresse du projet.
+   *
+   * Le poids compte dans le quota de stockage de l'offre du créateur, comme le reste : un
+   * visiteur ne peut pas créer une dépense, seulement remplir l'espace déjà payé.
+   */
+  'photo',
 ] as const
 
 export const dataFieldSchema = z
@@ -158,6 +172,9 @@ export const dataFieldSchema = z
   })
   .refine((field) => field.type !== 'computed' || field.required === false, {
     message: "Un champ calculé ne se saisit pas : il ne peut pas être obligatoire.",
+  })
+  .refine((field) => field.type !== 'photo' || field.options === undefined, {
+    message: "Une photo ne se choisit pas dans une liste.",
   })
 
 export const dataModelSchema = z

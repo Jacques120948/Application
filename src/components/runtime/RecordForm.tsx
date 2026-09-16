@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { recordLabel } from '@/lib/record-label'
+import { PHOTO_ACCEPT, photoUrl, uploadPhoto } from '@/lib/photo-upload'
 import type { DataModel } from '@/server/spec/schema'
 
 /**
@@ -48,6 +49,16 @@ export function RecordForm({
 }: Props) {
   const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle')
   const [error, setError] = useState<string | null>(null)
+  /*
+   * Compteur de remises à zéro.
+   *
+   * `form.reset()` ne rend leur état initial qu'aux champs du navigateur. Les contrôles qui
+   * tiennent le leur — la photo déjà envoyée, la valeur libre d'une liste de choix —
+   * garderaient la saisie précédente, et la fiche suivante partirait avec la photo de la
+   * première. Changer leur clé les remonte, ce qui est la seule remise à zéro qui les
+   * concerne tous sans que chacun ait à s'en occuper.
+   */
+  const [remises, setRemises] = useState(0)
   const correction = record !== undefined
   // Un champ calculé n'apparaît pas au formulaire : il se déduit des autres, et le montrer
   // laisserait croire qu'on peut le corriger à la main.
@@ -95,6 +106,7 @@ export function RecordForm({
         return
       }
       formElement.reset()
+      setRemises((valeur) => valeur + 1)
       onCreated()
     } catch {
       setError('La connexion a échoué. Réessayez.')
@@ -113,7 +125,7 @@ export function RecordForm({
   return (
     <form onSubmit={submit} className="grid gap-4">
       {saisissables.map((field) => (
-        <label key={field.id} className="block text-sm">
+        <label key={`${field.id}-${remises}`} className="block text-sm">
           <span className="mb-1 block font-medium">
             {field.label}
             {field.required ? ' *' : ''}
@@ -178,6 +190,10 @@ function FieldControl({
   const className = 'w-full rounded-[var(--app-radius)] border px-3 py-2 text-sm'
   const style = { borderColor: 'var(--app-muted)', background: 'var(--app-surface)' }
   const value = textValue(initial)
+
+  if (field.type === 'photo') {
+    return <PhotoPicker field={field} initial={value} projectId={projectId} style={style} />
+  }
 
   if (field.type === 'reference') {
     return (
@@ -447,6 +463,99 @@ function SelectWithOther({
         />
       ) : null}
       <input type="hidden" name={field.id} value={valeur} />
+    </>
+  )
+}
+
+/**
+ * Le choix d'une photo.
+ *
+ * Elle part dès qu'elle est choisie, et non au moment d'envoyer le formulaire. Deux raisons.
+ * Celui qui l'envoie doit **la voir** avant de valider — une photo choisie à l'aveugle est
+ * une photo de travers une fois sur trois. Et un formulaire qui enverrait tout d'un bloc
+ * ferait attendre dix secondes sans rien montrer, puis échouerait parfois en perdant la
+ * saisie avec la photo.
+ *
+ * Ce qui part au serveur avec la fiche n'est donc qu'un identifiant, porté par un champ
+ * caché : le formulaire ne manipule jamais de fichier.
+ *
+ * Une photo envoyée puis abandonnée n'est pas perdue pour rien — le serveur reprend au bout
+ * d'une heure ce qu'aucune fiche ne réclame.
+ */
+function PhotoPicker({
+  field,
+  initial,
+  projectId,
+  style,
+}: {
+  field: DataModel['fields'][number]
+  initial?: string
+  projectId: string
+  style: Record<string, string>
+}) {
+  const [photoId, setPhotoId] = useState(initial ?? '')
+  const [etat, setEtat] = useState<'idle' | 'envoi'>('idle')
+  const [erreur, setErreur] = useState<string | null>(null)
+
+  async function choisir(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    // Le champ est remis à zéro tout de suite : sans cela, rechoisir le même fichier après
+    // une erreur ne déclencherait aucun événement et rien ne se passerait.
+    event.target.value = ''
+    if (file === undefined) return
+
+    setEtat('envoi')
+    setErreur(null)
+    try {
+      const photo = await uploadPhoto(projectId, file)
+      setPhotoId(photo.id)
+    } catch (error) {
+      setErreur(error instanceof Error ? error.message : "Cette photo n'a pas pu être envoyée.")
+    } finally {
+      setEtat('idle')
+    }
+  }
+
+  return (
+    <>
+      {photoId !== '' ? (
+        <span className="mb-2 block">
+          {/* eslint-disable-next-line @next/next/no-img-element -- l'image vient de la base, sans dimensions connues à l'avance */}
+          <img
+            src={photoUrl(projectId, photoId, 'thumb')}
+            alt={field.label}
+            className="max-h-40 rounded-[var(--app-radius)] border"
+            style={{ borderColor: 'var(--app-muted)' }}
+          />
+          <button
+            type="button"
+            onClick={() => setPhotoId('')}
+            className="mt-1 text-xs underline opacity-70"
+          >
+            Retirer la photo
+          </button>
+        </span>
+      ) : null}
+
+      <input
+        type="file"
+        accept={PHOTO_ACCEPT}
+        onChange={(event) => void choisir(event)}
+        disabled={etat === 'envoi'}
+        // Obligatoire seulement tant que rien n'a été envoyé : une fois la photo reçue, ce
+        // champ est vide par construction et le navigateur bloquerait un formulaire pourtant
+        // complet.
+        required={field.required && photoId === ''}
+        className="w-full rounded-[var(--app-radius)] border px-3 py-2 text-sm"
+        style={style}
+      />
+      {etat === 'envoi' ? <span className="mt-1 block text-xs opacity-70">Envoi de la photo…</span> : null}
+      {erreur !== null ? (
+        <span role="alert" className="mt-1 block text-xs" style={{ color: '#b91c1c' }}>
+          {erreur}
+        </span>
+      ) : null}
+      <input type="hidden" name={field.id} value={photoId} />
     </>
   )
 }

@@ -245,6 +245,16 @@ Points qui font échouer les modifications le plus souvent :
   fonction, ni condition. Un champ calculé n'apparaît jamais au formulaire, n'est jamais
   obligatoire, se recalcule à chaque lecture, et peut être totalisé par une liste
   ("sumField"). Le champ "unit" ajoute un suffixe à l'affichage : "€", "h", "%".
+- Pour « les gens doivent pouvoir envoyer une photo » — photo de chantier, cliché d'un
+  dégât, image d'une annonce, justificatif — ajoute un champ de type "photo" au modèle de
+  données. Celui qui remplit le formulaire choisit une image, elle s'affiche tout de suite,
+  et la liste montre ensuite sa vignette. Ne réponds jamais que ce n'est pas possible, et
+  n'utilise surtout pas un champ "url" en demandant au visiteur de coller une adresse.
+  Trois choses à savoir, et à dire au créateur si elles comptent : le poids des photos entre
+  dans l'espace de stockage de son offre ; une photo disparaît avec la fiche qui la porte ;
+  et une photo ne peut pas servir de titre de liste ("titleField"), puisqu'elle ne porte pas
+  de texte. Ce champ sert aux images envoyées par les visiteurs — les images du créateur,
+  celles qui décorent ses pages, se gèrent dans l'écran Images.
 - Un champ à choix n'accepte que ses options. Si le créateur veut pouvoir saisir une valeur
   imprévue, ne transforme pas le champ en texte libre et n'ajoute pas d'option "Autre" :
   mets "allowOther" à true sur ce champ. Le formulaire ouvre alors une zone de saisie, la

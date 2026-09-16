@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DataModel } from '@/server/spec/schema'
+import { photoUrl } from '@/lib/photo-upload'
 import { RecordForm, type EditedRecord } from './RecordForm'
 
 type Item = { id: string; data: Record<string, unknown>; createdAt: string; isMine: boolean }
@@ -383,7 +384,15 @@ export function RecordList({
                                   {field.label}
                                 </dt>
                                 <dd className="m-0 mt-0.5 whitespace-pre-line text-sm">
-                                  {montre(model, field.id, item.data, renvois)}
+                                  {field.type === 'photo' ? (
+                                    <Photo
+                                      projectId={projectId}
+                                      label={field.label}
+                                      value={item.data[field.id]}
+                                    />
+                                  ) : (
+                                    montre(model, field.id, item.data, renvois)
+                                  )}
                                 </dd>
                               </div>
                             ))}
@@ -461,6 +470,12 @@ function montre(
   const champ = model.fields.find((field) => field.id === fieldId)
   const valeur = data[fieldId]
 
+  if (champ?.type === 'photo') {
+    // Une photo s'affiche, elle ne s'écrit pas. Là où seul du texte a sa place — le résumé
+    // d'une ligne repliée, le titre d'une fiche — on la nomme plutôt que d'y déposer
+    // l'identifiant, qui ne dirait rien à personne.
+    return typeof valeur === 'string' && valeur !== '' ? 'Photo' : '—'
+  }
   if (champ?.type === 'computed') {
     // « rien » n'est pas zéro : une donnée manquante ne doit pas s'afficher « 0 € », ce
     // qui ferait décider sur un chiffre inventé.
@@ -471,6 +486,41 @@ function montre(
   if (champ?.type !== 'reference') return display(valeur)
   if (typeof valeur !== 'string' || valeur === '') return '—'
   return renvois[valeur] ?? 'Élément supprimé'
+}
+
+/**
+ * Une photo attachée à une fiche.
+ *
+ * C'est la vignette qui s'affiche, jamais l'originale : une liste de vingt fiches
+ * rapatrierait sinon plusieurs mégaoctets pour montrer vingt images de deux centimètres.
+ * Le clic ouvre l'originale, dans un onglet à part — la liste n'est pas une visionneuse, et
+ * agrandir sur place ferait perdre sa place à qui parcourait la liste.
+ *
+ * `loading="lazy"` n'est pas un détail : sur un téléphone, une liste de fiches à photos est
+ * précisément le cas où tout charger d'un coup se paie en données mobiles.
+ */
+function Photo({
+  projectId,
+  label,
+  value,
+}: {
+  projectId: string
+  label: string
+  value: unknown
+}) {
+  if (typeof value !== 'string' || value === '') return <>—</>
+  return (
+    <a href={photoUrl(projectId, value, 'full')} target="_blank" rel="noopener noreferrer">
+      {/* eslint-disable-next-line @next/next/no-img-element -- image servie par la base, sans dimensions connues d'avance */}
+      <img
+        src={photoUrl(projectId, value, 'thumb')}
+        alt={label}
+        loading="lazy"
+        className="max-h-40 rounded-[var(--app-radius)] border"
+        style={{ borderColor: 'var(--app-muted)' }}
+      />
+    </a>
+  )
 }
 
 /** Un nombre écrit à la française, sans décimales inutiles. */

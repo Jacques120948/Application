@@ -24,13 +24,16 @@ export function recordLabel(model: DataModel, data: Record<string, unknown>): st
  * Le champ qui nomme une fiche.
  *
  * Un renvoi est écarté, même désigné explicitement : sa valeur est l'identifiant d'une
- * autre fiche, et un identifiant ne nomme rien pour qui le lit.
+ * autre fiche, et un identifiant ne nomme rien pour qui le lit. Une photo l'est pour la
+ * même raison — c'est aussi un identifiant.
  */
+const MUET = new Set(['reference', 'photo'])
+
 export function labelFieldOf(model: DataModel): DataModel['fields'][number] | undefined {
   const nomme = model.fields.find((field) => field.id === model.labelField)
-  if (nomme !== undefined && nomme.type !== 'reference') return nomme
+  if (nomme !== undefined && !MUET.has(nomme.type)) return nomme
   return (
     model.fields.find((field) => field.type === 'text') ??
-    model.fields.find((field) => field.type !== 'reference')
+    model.fields.find((field) => !MUET.has(field.type))
   )
 }
