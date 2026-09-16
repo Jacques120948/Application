@@ -388,10 +388,19 @@ export function MediaPanel({
           <CardBody className="grid gap-4">
             <div>
               <h3 className="m-0 text-sm font-semibold">Où vont vos images</h3>
+              {/*
+                La phrase qui dit quoi faire vient avant celle qui dit pourquoi.
+                Sans elle, on regarde une rangée de vignettes sans deviner qu'elles se
+                cliquent — constaté en conditions réelles, sur quelqu'un qui avait la
+                réponse sous les yeux.
+              */}
               <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
-                Chaque emplacement ci-dessous attend une image. Sans image, un motif aux couleurs
-                de votre application garde la place ; avec, c&apos;est votre photo qui fait la
-                page. Sur un bandeau, elle passe sous un voile pour que le titre reste lisible.
+                <strong className="font-medium text-[var(--color-ink)]">
+                  Cliquez sur une vignette de la ligne pour la poser à cet emplacement.
+                </strong>{' '}
+                Sans image, un motif aux couleurs de votre application garde la place ; avec,
+                c&apos;est votre photo qui fait la page. Sur un bandeau, elle passe sous un voile
+                pour que le titre reste lisible.
               </p>
             </div>
 
@@ -425,21 +434,34 @@ export function MediaPanel({
                   >
                     Sans image
                   </button>
-                  {(library?.items ?? []).map((media) => (
+                  {(library?.items ?? []).map((media) => {
+                    const posee = slot.imageId === media.id
+                    return (
                     <button
                       key={media.id}
                       type="button"
                       disabled={busy}
-                      title={media.filename}
+                      title={posee ? `${media.filename} — posée ici` : `Poser ${media.filename} ici`}
+                      aria-pressed={posee}
+                      aria-label={
+                        posee
+                          ? `${media.filename}, posée sur ${slot.label}`
+                          : `Poser ${media.filename} sur ${slot.label}`
+                      }
                       onClick={() =>
                         void send(`Image posée : ${slot.label}`, [
                           { op: 'set', path: slot.path, value: media.id },
                         ])
                       }
-                      className={`overflow-hidden rounded-[var(--radius-control)] border-2 ${
-                        slot.imageId === media.id
+                      /*
+                        Ce qui n'est pas posé est atténué, et reprend ses couleurs au survol :
+                        c'est le signe le plus court qui dise « ceci se choisit ». Une bordure
+                        seule ne distinguait que l'élue, sans rien annoncer sur les autres.
+                      */
+                      className={`relative overflow-hidden rounded-[var(--radius-control)] border-2 transition-opacity ${
+                        posee
                           ? 'border-[var(--color-brand)]'
-                          : 'border-transparent'
+                          : 'border-transparent opacity-60 hover:opacity-100'
                       }`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -449,7 +471,8 @@ export function MediaPanel({
                         className="h-14 w-20 object-cover"
                       />
                     </button>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             ))}
