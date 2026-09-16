@@ -3,7 +3,11 @@ import { AppError, notFound, validation } from '@/lib/errors'
 import { withUserScope, withRuntimeScope, type TenantClient } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { getEffectivePlan } from '@/server/billing/plans'
-import { generationStatus, type GenerationStatus } from './generate'
+import {
+  generationContext,
+  readGeneration,
+  type GenerationStatus,
+} from './generate'
 import {
   MAX_UPLOAD_BYTES,
   MAX_WIDTH,
@@ -49,13 +53,18 @@ export type MediaLibrary = {
 }
 
 export async function listMedias(userId: string, projectId: string): Promise<MediaLibrary> {
-  // Les photos orphelines d'un formulaire abandonné sont reprises ici aussi : c'est
-  // l'écran où le créateur lit son quota, il ne doit pas y voir de l'espace occupé par des
-  // images que plus rien ne désigne.
-  await sweepOrphanPhotos(userId, projectId).catch(() => undefined)
+  const [plan, contexte] = await Promise.all([getEffectivePlan(userId), generationContext(userId)])
 
-  const [rows, plan, used, visitor, generation] = await Promise.all([
-    withUserScope(userId, (tx) =>
+  /*
+   * Une seule transaction pour tout ce que cet écran demande.
+   *
+   * Chaque portée de locataire ouvre une transaction : un BEGIN, un réglage de session, la
+   * requête, un COMMIT — quatre allers-retours. Les huit lectures de cet écran, prises
+   * séparément, se payaient donc en secondes sur une base distante. Mesuré en conditions
+   * réelles, c'est le seul endroit du produit où la différence se voyait à l'œil nu.
+   */
+  const { rows, poids, generation } = await withUserScope(userId, async (tx) => {
+    const [rows, poids, generation] = await Promise.all([
       tx.mediaAsset.findMany({
         // Les photos des visiteurs appartiennent aux fiches de l'application, pas à la
         // bibliothèque du créateur : elles se consultent avec leur fiche.
@@ -72,12 +81,18 @@ export async function listMedias(userId: string, projectId: string): Promise<Med
           createdAt: true,
         },
       }),
-    ),
-    getEffectivePlan(userId),
-    usedBytes(userId),
-    visitorBytes(userId),
-    generationStatus(userId),
-  ])
+      // Le total et la part des visiteurs sortent du même regroupement : deux sommes
+      // successives, c'était deux fois la même lecture de table.
+      tx.mediaAsset.groupBy({ by: ['origin'], where: { userId }, _sum: { bytes: true } }),
+      readGeneration(tx, userId, contexte),
+    ])
+    return { rows, poids, generation }
+  })
+
+  const total = poids.reduce((somme, ligne) => somme + (ligne._sum.bytes ?? 0), 0)
+  const visitor = poids
+    .filter((ligne) => ligne.origin === VISITOR)
+    .reduce((somme, ligne) => somme + (ligne._sum.bytes ?? 0), 0)
 
   return {
     generation,
@@ -90,7 +105,7 @@ export async function listMedias(userId: string, projectId: string): Promise<Med
       bytes: row.bytes,
       createdAt: row.createdAt.toISOString(),
     })),
-    usedBytes: used,
+    usedBytes: total,
     quotaBytes: plan.storageBytes,
   }
 }
@@ -116,14 +131,6 @@ export const VISITOR = 'visitor'
  */
 const ORPHAN_AGE_MS = 60 * 60 * 1000
 
-/** Part du quota occupée par les photos reçues des visiteurs, tous projets confondus. */
-async function visitorBytes(userId: string): Promise<number> {
-  const total = await withUserScope(userId, (tx) =>
-    tx.mediaAsset.aggregate({ where: { userId, origin: VISITOR }, _sum: { bytes: true } }),
-  )
-  return total._sum.bytes ?? 0
-}
-
 /**
  * Reprend les photos qu'aucune fiche ne réclame.
  *
@@ -131,9 +138,16 @@ async function visitorBytes(userId: string): Promise<number> {
  * celui qui la choisit. Un formulaire sur trois est abandonné ; sans ce ménage, le quota du
  * créateur se remplirait d'images que personne n'a jamais vues.
  *
- * Le ménage a lieu là où naît la pression : juste avant d'accepter une nouvelle photo, et
- * quand le créateur regarde son quota. Aucune tâche périodique n'est donc nécessaire, et
- * une application que plus personne n'utilise ne coûte aucun calcul.
+ * Le ménage a lieu là où naît la pression, et là seulement : juste avant d'accepter une
+ * nouvelle photo. Aucune tâche périodique n'est nécessaire, et une application que plus
+ * personne n'utilise ne coûte aucun calcul.
+ *
+ * Il a aussi eu lieu, un temps, quand le créateur ouvrait son écran d'images — pour que son
+ * quota y soit toujours juste. C'était une écriture sur un chemin de lecture, payée par
+ * chaque visite de chaque créateur, et l'écran s'en est trouvé sensiblement ralenti. Le prix
+ * de ce retrait est qu'un quota peut rester surévalué jusqu'à une heure sur une application
+ * dont les visiteurs ont cessé d'envoyer des photos. Un écran lent se voit tous les jours ;
+ * ce décalage-là, presque jamais.
  */
 export async function sweepOrphanPhotos(userId: string, projectId: string): Promise<number> {
   const limite = new Date(Date.now() - ORPHAN_AGE_MS)

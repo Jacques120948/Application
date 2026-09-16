@@ -1,9 +1,9 @@
 import { AppError, validation } from '@/lib/errors'
 import { env } from '@/lib/env'
 import { prisma } from '@/server/db/client'
-import { withUserScope } from '@/server/db/scope'
+import { withUserScope, type TenantClient } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
-import { hasConnection, markConnectionError, useCredential } from '@/server/integrations/service'
+import { markConnectionError, useCredential } from '@/server/integrations/service'
 import { generateOpenAiImage, type ImageResult } from '@/server/integrations/providers/openai'
 import { generateGeminiImage, GEMINI_IMAGE_MODEL } from '@/server/integrations/providers/gemini'
 import { getEffectivePlan } from '@/server/billing/plans'
@@ -83,38 +83,65 @@ export type GenerationStatus = {
   creditsPerImage: number
 }
 
-async function generatedToday(userId: string): Promise<number> {
+/**
+ * Ce qu'il faut lire pour savoir ce qui est possible, en une seule fois.
+ *
+ * Toutes ces lectures partagent la transaction de l'appelant, et c'est le point de tout ce
+ * bloc. Chaque portée de locataire ouvre une transaction — un BEGIN, un réglage de session,
+ * la requête, un COMMIT : quatre allers-retours. Les compter séparément revenait, sur une
+ * base distante, à payer une seconde pour afficher un écran. Mesuré en conditions réelles.
+ */
+type Comptes = {
+  /** Images créées ces vingt-quatre heures, toutes voies confondues. */
+  today: number
+  /** Images payées par Evoliia depuis le début de la période d'abonnement. */
+  month: number
+  /** Le premier fournisseur connecté par le créateur, dans l'ordre du catalogue. */
+  provider: ImageProvider | null
+}
+
+async function lireComptes(
+  tx: TenantClient,
+  userId: string,
+  /** Début de la période mensuelle, ou `null` quand le quota d'Evoliia ne s'applique pas. */
+  periodStart: Date | null,
+): Promise<Comptes> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  return withUserScope(userId, (tx) =>
+  const [today, month, connexions] = await Promise.all([
     tx.mediaAsset.count({
       where: { userId, origin: { in: AI_ORIGINS }, createdAt: { gte: since } },
     }),
-  )
-}
-
-/** Images payées par Evoliia depuis le début de la période d'abonnement en cours. */
-async function generatedThisMonth(userId: string): Promise<{ used: number; resetsAt: Date }> {
-  const period = await currentPeriod(userId)
-  const used = await withUserScope(userId, (tx) =>
-    tx.mediaAsset.count({
-      where: { userId, origin: EVOLIIA_ORIGIN, createdAt: { gte: period.start } },
+    periodStart === null
+      ? Promise.resolve(0)
+      : tx.mediaAsset.count({
+          where: { userId, origin: EVOLIIA_ORIGIN, createdAt: { gte: periodStart } },
+        }),
+    // Une requête pour les deux fournisseurs : deux comptages successifs, c'était deux
+    // transactions pour une question qui tient en une.
+    tx.integrationConnection.findMany({
+      where: {
+        userId,
+        providerId: { in: [...IMAGE_PROVIDERS] },
+        status: 'CONNECTED',
+        disconnectedAt: null,
+        target: 'EVOLIIA',
+      },
+      select: { providerId: true },
     }),
-  )
-  return { used, resetsAt: period.end }
+  ])
+
+  const connectes = new Set(connexions.map((ligne) => ligne.providerId))
+  return {
+    today,
+    month,
+    provider: IMAGE_PROVIDERS.find((candidat) => connectes.has(candidat)) ?? null,
+  }
 }
 
 /** Ce qu'une image coûte au créateur, au tarif en vigueur. */
 export async function creditsPerImage(): Promise<number> {
   const table = await loadPricing()
   return creditsFor(table.imageMicros, MINIMUM_COST.image, table)
-}
-
-/** Le premier fournisseur connecté, dans l'ordre du catalogue. */
-async function connectedProvider(userId: string): Promise<ImageProvider | null> {
-  for (const provider of IMAGE_PROVIDERS) {
-    if (await hasConnection(userId, provider, { target: 'EVOLIIA' })) return provider
-  }
-  return null
 }
 
 /** Evoliia peut-elle créer des images elle-même ? Sans clé, la fonction est simplement éteinte. */
@@ -129,14 +156,41 @@ export function isEvoliiaImageAvailable(): boolean {
  * ne consomme aucun crédit, et celui qui a pris la peine de la connecter veut s'en servir.
  * La voie d'Evoliia est le filet pour tous les autres.
  */
-export async function generationStatus(userId: string): Promise<GenerationStatus> {
-  const [provider, today] = await Promise.all([connectedProvider(userId), generatedToday(userId)])
-  const dailyLeft = Math.max(0, IMAGE_DAILY_LIMIT - today)
+/**
+ * Ce que l'écran doit savoir avant d'ouvrir la transaction.
+ *
+ * L'offre décide si le quota d'Evoliia s'applique, donc si la période mensuelle est même
+ * utile à calculer. La lire d'abord évite d'aller chercher un portefeuille pour un créateur
+ * dont l'offre n'accorde aucune image.
+ */
+export type GenerationContext = {
+  plan: { imagesPerMonth: number }
+  periodStart: Date | null
+  creditsPerImage: number
+}
 
-  if (provider !== null) {
+export async function generationContext(userId: string): Promise<GenerationContext> {
+  const plan = await getEffectivePlan(userId)
+  const quotaPossible = isEvoliiaImageAvailable() && plan.imagesPerMonth > 0
+  if (!quotaPossible) return { plan, periodStart: null, creditsPerImage: 0 }
+
+  const [period, credits] = await Promise.all([currentPeriod(userId), creditsPerImage()])
+  return { plan, periodStart: period.start, creditsPerImage: credits }
+}
+
+/** Assemble l'état à partir de ce qui a déjà été lu. Aucune requête ici. */
+export function describeGeneration(
+  comptes: Comptes,
+  contexte: GenerationContext,
+): GenerationStatus {
+  const dailyLeft = Math.max(0, IMAGE_DAILY_LIMIT - comptes.today)
+
+  // La clé du créateur passe d'abord : elle ne coûte rien à Evoliia, et celui qui a pris la
+  // peine de la connecter veut s'en servir.
+  if (comptes.provider !== null) {
     return {
-      provider,
-      providerLabel: PROVIDER_LABEL[provider],
+      provider: comptes.provider,
+      providerLabel: PROVIDER_LABEL[comptes.provider],
       source: 'creator',
       dailyLimit: IMAGE_DAILY_LIMIT,
       dailyLeft,
@@ -146,31 +200,53 @@ export async function generationStatus(userId: string): Promise<GenerationStatus
     }
   }
 
-  const plan = await getEffectivePlan(userId)
-  if (!isEvoliiaImageAvailable() || plan.imagesPerMonth <= 0) {
+  if (contexte.periodStart === null) {
     return {
       provider: null,
       providerLabel: null,
       source: null,
       dailyLimit: IMAGE_DAILY_LIMIT,
       dailyLeft,
-      monthlyLimit: plan.imagesPerMonth,
+      monthlyLimit: contexte.plan.imagesPerMonth,
       monthlyLeft: 0,
       creditsPerImage: 0,
     }
   }
 
-  const [month, credits] = await Promise.all([generatedThisMonth(userId), creditsPerImage()])
   return {
     provider: 'google-gemini',
     providerLabel: PROVIDER_LABEL['google-gemini'],
     source: 'evoliia',
     dailyLimit: IMAGE_DAILY_LIMIT,
     dailyLeft,
-    monthlyLimit: plan.imagesPerMonth,
-    monthlyLeft: Math.max(0, plan.imagesPerMonth - month.used),
-    creditsPerImage: credits,
+    monthlyLimit: contexte.plan.imagesPerMonth,
+    monthlyLeft: Math.max(0, contexte.plan.imagesPerMonth - comptes.month),
+    creditsPerImage: contexte.creditsPerImage,
   }
+}
+
+/**
+ * Ce qui est possible, et à quel prix.
+ *
+ * Une seule transaction pour tous les comptages. L'écran des images appelle plutôt
+ * `generationContext` puis `readGeneration`, afin de partager sa propre transaction ; cette
+ * fonction-ci sert aux appels isolés.
+ */
+export async function generationStatus(userId: string): Promise<GenerationStatus> {
+  const contexte = await generationContext(userId)
+  const comptes = await withUserScope(userId, (tx) =>
+    lireComptes(tx, userId, contexte.periodStart),
+  )
+  return describeGeneration(comptes, contexte)
+}
+
+/** Les comptages, dans une transaction déjà ouverte. Réservé à l'écran des images. */
+export async function readGeneration(
+  tx: TenantClient,
+  userId: string,
+  contexte: GenerationContext,
+): Promise<GenerationStatus> {
+  return describeGeneration(await lireComptes(tx, userId, contexte.periodStart), contexte)
 }
 
 /**
