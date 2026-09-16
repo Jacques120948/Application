@@ -327,3 +327,32 @@ Ce raccourci d'interface n'est pas un raccourci de contrôle : avancer renvoie l
 entière au serveur, qui la revalide contre le modèle publié exactement comme une correction
 ordinaire. Et des étapes forment une suite fermée — elles ne se combinent pas avec la
 saisie libre.
+
+
+### La vue calendrier
+
+Une liste triée par date répond à « qu'est-ce qui vient ? ». Elle ne répond pas à « suis-je
+libre jeudi ? », ni à « ai-je trois rendez-vous le même matin ? ». Ce sont pourtant les deux
+questions d'une application de réservation, d'atelier ou de planning, et elles ne se posent
+qu'en voyant un mois d'un coup.
+
+Une section `calendar` pose les fiches d'un modèle sur une grille mensuelle, à partir d'un
+champ de type date. Elle peut afficher un champ au choix dans la case, et faire précéder
+chaque ligne de la valeur d'un champ à choix — un statut, une catégorie.
+
+Quatre choix de fabrication, et le dernier est une règle de sécurité.
+
+**La base découpe le mois**, pas le navigateur : charger toutes les fiches pour les répartir
+ensuite marcherait sur trente réservations et pas sur trois mille. Les dates étant stockées
+en `AAAA-MM-JJ`, comparer les préfixes suffit — aucune conversion, aucun fuseau horaire à
+arbitrer.
+
+**Un jour chargé se voit sans être lu.** Au-delà de trois fiches, la case annonce « +4 »
+plutôt que d'empiler des titres illisibles ; on les lit en ouvrant le jour.
+
+**Aujourd'hui est marqué, les jours voisins sont atténués.** Ce sont les deux repères qu'on
+cherche d'abord en ouvrant un planning.
+
+**La portée du modèle s'applique.** Sur un modèle privé, chacun ne voit que son propre
+agenda et un visiteur anonyme ne voit rien : un calendrier partagé par mégarde dirait à
+chacun quand les autres sont occupés.

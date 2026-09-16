@@ -182,6 +182,32 @@ function checkBlock(
       }
       break
     }
+    case 'calendar': {
+      const model = models.get(block.modelId)
+      if (!model) {
+        issues.push({ path: `${at}.modelId`, message: 'Ce calendrier utilise des données qui n\'existent pas.' })
+        break
+      }
+      const champDate = model.fields.find((field) => field.id === block.dateField)
+      if (champDate === undefined) {
+        issues.push({ path: `${at}.dateField`, message: 'Ce calendrier place les fiches sur un champ qui n\'existe pas.' })
+      } else if (champDate.type !== 'date') {
+        issues.push({ path: `${at}.dateField`, message: 'Un calendrier se range sur une date.' })
+      }
+      const fieldIds = new Set(model.fields.map((field) => field.id))
+      if (block.titleField !== undefined && !fieldIds.has(block.titleField)) {
+        issues.push({ path: `${at}.titleField`, message: 'Ce calendrier affiche un champ qui n\'existe pas.' })
+      }
+      if (block.colorField !== undefined) {
+        const champ = model.fields.find((field) => field.id === block.colorField)
+        if (champ === undefined) {
+          issues.push({ path: `${at}.colorField`, message: 'Ce calendrier colore selon un champ qui n\'existe pas.' })
+        } else if (champ.type !== 'select') {
+          issues.push({ path: `${at}.colorField`, message: 'Seul un champ à choix peut colorer un calendrier.' })
+        }
+      }
+      break
+    }
     case 'metrics': {
       for (const [itemIndex, item] of block.items.entries()) {
         const ici = `${at}.items[${itemIndex}]`

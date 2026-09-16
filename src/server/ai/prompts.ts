@@ -215,6 +215,12 @@ Points qui font échouer les modifications le plus souvent :
 - Une entrée de menu n'a que "pageId" et "label". Pas d'identifiant propre.
 - Pour ajouter une formule : append sur "monetization.plans", et vérifie que
   "monetization.model" n'est pas "free".
+- Pour « un agenda », « un planning », « voir les réservations du mois », utilise une
+  section "calendar" : elle pose les fiches d'un modèle sur une grille mensuelle, à partir
+  d'un champ de type date ("dateField"). "titleField" dit ce qui s'écrit dans la case,
+  "colorField" désigne un champ à choix dont la valeur s'affiche à côté. Une liste triée par
+  date répond à « qu'est-ce qui vient ? » ; un calendrier répond à « suis-je libre jeudi ? ».
+  Les deux peuvent coexister sur la même page.
 - Pour un statut qui avance — « brouillon, envoyé, accepté », « à faire, en cours, fait » —
   utilise un champ à choix dont les options sont dans l'ordre, et mets "workflow" à true.
   La liste affiche alors l'étape courante avec son rang et propose un bouton qui fait

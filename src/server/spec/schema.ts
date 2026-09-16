@@ -512,6 +512,44 @@ export const assistantBlockSchema = z
   .strict()
 
 /**
+ * Vue calendrier : les fiches posées sur un mois.
+ *
+ * Une liste triée par date répond à « qu'est-ce qui vient ? ». Elle ne répond pas à « suis-je
+ * libre jeudi ? », ni à « ai-je trois rendez-vous le même matin ? ». Ce sont pourtant les
+ * deux questions d'une application de réservation, d'atelier ou de planning — et elles ne se
+ * posent qu'en regardant un mois d'un coup.
+ *
+ * Trois partis pris.
+ *
+ * **Le mois est découpé par la base, pas par le navigateur.** Charger toutes les fiches pour
+ * les répartir ensuite marcherait sur trente réservations et pas sur trois mille.
+ *
+ * **Un jour chargé se voit sans être lu.** Au-delà de quelques fiches, la case n'affiche
+ * plus chaque titre mais leur nombre : un calendrier illisible ne vaut pas mieux qu'une
+ * liste.
+ *
+ * **La portée des données est celle du modèle.** Sur un modèle privé, chacun ne voit que
+ * son propre agenda — un calendrier partagé par mégarde dirait à chacun quand les autres
+ * sont occupés.
+ */
+export const calendarBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('calendar'),
+    title: shortText,
+    intro: mediumText.optional(),
+    modelId: slug,
+    /** Le champ date qui place la fiche dans le mois. */
+    dateField: slug,
+    /** Ce qui s'écrit dans la case. À défaut, le nom de la fiche. */
+    titleField: slug.optional(),
+    /** Champ à choix dont la valeur colore la pastille : un statut, une catégorie. */
+    colorField: slug.optional(),
+    emptyText: shortText,
+  })
+  .strict()
+
+/**
  * Tableau de bord chiffré : ce que les données disent, en trois ou quatre nombres.
  *
  * Une liste montre les fiches ; elle ne dit pas « combien » ni « combien ce mois-ci ».
@@ -592,6 +630,7 @@ export const BLOCK_SCHEMAS = {
   auth: authBlockSchema,
   assistant: assistantBlockSchema,
   metrics: metricsBlockSchema,
+  calendar: calendarBlockSchema,
 } as const
 
 export const blockSchema = z.discriminatedUnion('type', [
@@ -617,6 +656,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   authBlockSchema,
   assistantBlockSchema,
   metricsBlockSchema,
+  calendarBlockSchema,
 ])
 
 export const BLOCK_TYPES = [
@@ -642,6 +682,7 @@ export const BLOCK_TYPES = [
   'auth',
   'assistant',
   'metrics',
+  'calendar',
 ] as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]

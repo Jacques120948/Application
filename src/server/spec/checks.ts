@@ -56,6 +56,8 @@ function blockText(block: Block): string[] {
       return [block.title, block.intro ?? '', block.role, block.placeholder]
     case 'metrics':
       return [block.title, block.intro ?? '', ...block.items.map((item) => item.label)]
+    case 'calendar':
+      return [block.title, block.intro ?? '', block.emptyText]
     case 'imageText':
       return [block.title, block.body, block.ctaLabel ?? '']
     case 'gallery':

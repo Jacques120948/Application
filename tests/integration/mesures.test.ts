@@ -5,7 +5,7 @@ import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { applyManualPatch, createProject, getProject } from '@/server/projects/service'
 import { heuristicBlueprint } from '@/server/projects/blueprints'
-import { createRecord } from '@/server/runtime/records'
+import { createRecord, listMonth } from '@/server/runtime/records'
 import { computePageMetrics } from '@/server/runtime/metrics'
 import { withRuntimeScope } from '@/server/db/scope'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
@@ -284,5 +284,120 @@ describe('une mesure impossible ne vaut pas zéro', () => {
     })
     const sommes = (mesures['tableau-de-bord'] ?? []).filter((mesure) => mesure.id === 'total')
     expect(sommes[0]?.value).toBeNull()
+  })
+})
+
+/**
+ * La vue calendrier.
+ *
+ * Ce qui compte ici : la base découpe le mois — pas le navigateur —, et la portée du modèle
+ * s'applique. Un calendrier partagé par mégarde dirait à chacun quand les autres sont
+ * occupés.
+ */
+describe('un mois de fiches', () => {
+  let modelId: string
+
+  beforeAll(async () => {
+    const project = await getProject(userId, projectId)
+    modelId = project.spec.dataModels[0]!.id
+    await applyManualPatch(userId, projectId, {
+      summary: 'Un champ date',
+      operations: [
+        { op: 'set', path: 'dataModels[0].scope', value: 'shared' },
+        {
+          op: 'append',
+          path: 'dataModels[0].fields',
+          value: { id: 'jour', label: 'Jour', type: 'date', required: false },
+        },
+      ],
+    })
+
+    const spec = (await getProject(userId, projectId)).spec
+    const model = spec.dataModels[0]!
+    for (const jour of ['2026-04-03', '2026-04-03', '2026-04-17', '2026-05-02']) {
+      await createRecord({
+        projectId,
+        spec,
+        modelId,
+        endUserId: null,
+        input: { ...sampleInput(model), jour },
+      })
+    }
+  }, 30_000)
+
+  it('ne rend que le mois demandé', async () => {
+    const { spec } = await getProject(userId, projectId)
+    const avril = await listMonth({
+      projectId,
+      spec,
+      modelId,
+      dateField: 'jour',
+      month: '2026-04',
+      endUserId: null,
+    })
+    expect(avril).toHaveLength(3)
+    expect(avril.every((entry) => entry.day.startsWith('2026-04'))).toBe(true)
+
+    const mai = await listMonth({
+      projectId,
+      spec,
+      modelId,
+      dateField: 'jour',
+      month: '2026-05',
+      endUserId: null,
+    })
+    expect(mai).toHaveLength(1)
+  })
+
+  it('range les fiches par date déclarée, pas par date de saisie', async () => {
+    const { spec } = await getProject(userId, projectId)
+    const avril = await listMonth({
+      projectId,
+      spec,
+      modelId,
+      dateField: 'jour',
+      month: '2026-04',
+      endUserId: null,
+    })
+    expect(avril.map((entry) => entry.day)).toEqual(['2026-04-03', '2026-04-03', '2026-04-17'])
+  })
+
+  it('refuse un mois qui n’en est pas un, sans rien divulguer', async () => {
+    const { spec } = await getProject(userId, projectId)
+    for (const mois of ['2026', 'avril', "2026-04' OR '1'='1", '']) {
+      await expect(
+        listMonth({ projectId, spec, modelId, dateField: 'jour', month: mois, endUserId: null }),
+      ).resolves.toEqual([])
+    }
+  })
+
+  it('ne rend rien sur un champ qui n’est pas une date', async () => {
+    const { spec } = await getProject(userId, projectId)
+    await expect(
+      listMonth({ projectId, spec, modelId, dateField: 'montant', month: '2026-04', endUserId: null }),
+    ).resolves.toEqual([])
+  })
+
+  it('ne montre pas l’agenda des autres sur des données privées', async () => {
+    await applyManualPatch(userId, projectId, {
+      summary: 'Agenda privé',
+      operations: [{ op: 'set', path: 'dataModels[0].scope', value: 'user' }],
+    })
+    const { spec } = await getProject(userId, projectId)
+
+    // Sans visiteur connecté : rien du tout.
+    await expect(
+      listMonth({ projectId, spec, modelId, dateField: 'jour', month: '2026-04', endUserId: null }),
+    ).resolves.toEqual([])
+
+    // Un visiteur ne voit que ses propres fiches, pas les trois saisies plus tôt.
+    const visiteur = await withRuntimeScope(projectId, (tx) =>
+      tx.appEndUser.create({
+        data: { projectId, email: `${randomUUID()}@exemple.test`, passwordHash: 'scrypt$x' },
+      }),
+    )
+    await expect(
+      listMonth({ projectId, spec, modelId, dateField: 'jour', month: '2026-04', endUserId: visiteur.id }),
+    ).resolves.toEqual([])
   })
 })

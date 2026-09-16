@@ -6,6 +6,7 @@ import { themeStyle } from './theme'
 import { RecordForm } from './RecordForm'
 import { RecordList } from './RecordList'
 import { AuthPanel } from './AuthPanel'
+import { CalendarView } from './CalendarView'
 import { AssistantPanel } from './AssistantPanel'
 import { InstallPrompt } from './InstallPrompt'
 import { Icon } from './Icon'
@@ -609,6 +610,22 @@ function BlockView({
             projectId={context.projectId}
             currentEmail={context.endUserEmail}
             allowSignup={spec.auth.allowSignup}
+          />
+        </Band>
+      )
+
+    case 'calendar':
+      return (
+        <Band position={position}>
+          <Heading>{block.title}</Heading>
+          {block.intro !== undefined ? (
+            <p className="-mt-3 mb-6 text-lg opacity-75">{block.intro}</p>
+          ) : null}
+          <CalendarView
+            projectId={context.projectId}
+            blockId={block.id}
+            emptyText={block.emptyText}
+            refreshToken={refreshToken}
           />
         </Band>
       )

@@ -913,3 +913,107 @@ function summarise(model: DataModel, data: RecordData): string {
   }
   return parts.length === 0 ? 'Enregistrement vide' : parts.join(' — ')
 }
+
+// ───────────────────────── Un mois de fiches ─────────────────────────────────
+
+/**
+ * Les fiches d'un mois, pour la vue calendrier.
+ *
+ * Trois choses la distinguent d'une liste ordinaire.
+ *
+ * **C'est la base qui découpe le mois.** Charger toutes les fiches pour les répartir ensuite
+ * marcherait sur trente réservations et pas sur trois mille.
+ *
+ * **Le tri est celui de la date déclarée, pas de la saisie.** Un calendrier classé par date
+ * de création afficherait les journées dans le désordre.
+ *
+ * **La portée du modèle s'applique.** Sur un modèle privé, chacun ne voit que son propre
+ * agenda : un calendrier partagé par mégarde dirait à chacun quand les autres sont occupés.
+ */
+export type CalendarEntry = {
+  id: string
+  /** Le jour, au format `AAAA-MM-JJ`, tel qu'il est écrit dans la fiche. */
+  day: string
+  label: string
+  /** Valeur du champ qui colore la pastille, quand il y en a un. */
+  tone: string | null
+  isMine: boolean
+}
+
+/** Au-delà, une case de calendrier n'affiche plus les titres mais leur nombre. */
+export const MAX_JOUR = 400
+
+export async function listMonth(params: {
+  projectId: string
+  spec: AppSpec
+  modelId: string
+  dateField: string
+  titleField?: string | undefined
+  colorField?: string | undefined
+  /** Premier jour du mois demandé, au format `AAAA-MM`. */
+  month: string
+  endUserId: string | null
+}): Promise<CalendarEntry[]> {
+  const model = findModel(params.spec, params.modelId)
+  if (model.scope === 'user' && params.endUserId === null) return []
+
+  const champDate = model.fields.find(
+    (field) => field.id === params.dateField && field.type === 'date',
+  )
+  if (champDate === undefined) return []
+  if (!/^\d{4}-\d{2}$/.test(params.month)) return []
+
+  // Les dates sont stockées en `AAAA-MM-JJ` : comparer les préfixes suffit et laisse
+  // PostgreSQL travailler sur du texte, sans conversion ni fuseau horaire à arbitrer.
+  const debut = `${params.month}-01`
+  const fin = `${params.month}-32`
+
+  return withRuntimeScope(params.projectId, async (tx) => {
+    const conditions: Prisma.Sql[] = [
+      Prisma.sql`"projectId" = ${params.projectId}::uuid`,
+      Prisma.sql`"modelId" = ${model.id}`,
+      Prisma.sql`"data"->>${champDate.id} >= ${debut}`,
+      Prisma.sql`"data"->>${champDate.id} < ${fin}`,
+    ]
+    if (model.scope === 'user') {
+      conditions.push(Prisma.sql`"ownerEndUserId" = ${params.endUserId}::uuid`)
+    }
+
+    const rows = await tx.$queryRaw<Array<{ id: string; data: RecordData; ownerEndUserId: string | null }>>(
+      Prisma.sql`SELECT id, "data", "ownerEndUserId"
+                 FROM "AppRecord"
+                 WHERE ${Prisma.join(conditions, ' AND ')}
+                 ORDER BY "data"->>${champDate.id} ASC, "createdAt" ASC
+                 LIMIT ${MAX_JOUR}`,
+    )
+
+    const champTitre =
+      params.titleField === undefined
+        ? undefined
+        : model.fields.find((field) => field.id === params.titleField)
+    const champCouleur =
+      params.colorField === undefined
+        ? undefined
+        : model.fields.find((field) => field.id === params.colorField && field.type === 'select')
+
+    return rows.map((row) => {
+      const data = garnirCalculs(model, row.data)
+      const brut = champTitre === undefined ? null : data[champTitre.id]
+      return {
+        id: row.id,
+        day: String(data[champDate.id] ?? '').slice(0, 10),
+        label:
+          typeof brut === 'string' && brut !== ''
+            ? brut
+            : typeof brut === 'number'
+              ? String(brut)
+              : recordLabel(model, data),
+        tone:
+          champCouleur === undefined || typeof data[champCouleur.id] !== 'string'
+            ? null
+            : (data[champCouleur.id] as string),
+        isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.endUserId,
+      }
+    })
+  })
+}
