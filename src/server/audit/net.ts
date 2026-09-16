@@ -171,6 +171,21 @@ export function parseTargetUrl(brut: string): URL {
   if (isIP(url.hostname) !== 0) {
     throw validation('Indiquez un nom de domaine, pas une adresse IP.')
   }
+  /*
+   * Les noms qui ne désignent rien de public.
+   *
+   * Ce contrôle ne remplace pas la vérification après résolution — c'est elle qui protège
+   * réellement, et elle seule. Il évite deux choses plus modestes : qu'une saisie manifestement
+   * locale traverse la moitié du produit avant d'échouer, et qu'elle s'affiche entre-temps
+   * comme si elle était un site.
+   *
+   * Un nom sans point est décisif : aucun domaine public n'existe sans extension.
+   */
+  const nom = url.hostname.toLowerCase()
+  const locaux = ['.local', '.localhost', '.internal', '.home.arpa', '.lan']
+  if (!nom.includes('.') || locaux.some((fin) => nom.endsWith(fin))) {
+    throw validation('Indiquez l’adresse publique de votre site.')
+  }
   url.hash = ''
   return url
 }

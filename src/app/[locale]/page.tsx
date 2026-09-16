@@ -3,49 +3,48 @@ import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { env } from '@/lib/env'
 import { getCurrentUser } from '@/server/auth/session'
-import { AGENTS } from '@/server/agents/catalog'
-import { LAUNCH_KIT_FEATURE } from '@/server/billing/features'
-import { publicAppUrl } from '@/lib/apps-domain'
-import { storageLabel } from '@/server/billing/plan-details'
+import { VISIBILITY_AGENTS } from '@/server/agents/visibility'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
-import { customersNeededFor, formatAmount } from '@/server/business/economics'
-import { DEMO_APPS } from '@/server/demos/catalog'
-import { isEnabled } from '@/server/settings/flags'
+import { formatAmount } from '@/server/business/economics'
 import { Logo } from '@/components/marketing/Logo'
-import { BrowserFrame, PhoneFrame } from '@/components/marketing/DeviceFrame'
-import { ModuleGrid, ModuleShowcase, type Showcase, type Tile } from '@/components/marketing/modules'
-import { TeamShowcase, type TeamMember } from '@/components/marketing/team'
+import { CheckList, Eyebrow, FlowRail, Section } from '@/components/marketing/landing'
 import {
-  Check,
-  CheckList,
-  DemoGallery,
-  DoorCards,
-  Eyebrow,
-  FlowRail,
-  NumberedSteps,
-  Panel,
-  Section,
-  Timeline,
-} from '@/components/marketing/landing'
+  AgentCard,
+  CheckFamily,
+  HonestCard,
+  ScoreDial,
+} from '@/components/marketing/visibility'
 import { LandingHeader } from '@/components/marketing/LandingHeader'
 import { LinkButton } from '@/components/ui'
 
 /**
  * Page publique.
  *
- * Elle raconte une chose et une seule : on peut arriver ici sans idée. C'est la différence
- * d'Evoliia avec un générateur d'applications, et tout l'ordre des sections en découle —
- * l'envie, puis le profil, puis les trois portes d'entrée, et seulement ensuite ce que la
- * plateforme sait construire.
+ * Elle raconte une chose et une seule : vous avez un site, et personne ne le trouve. C'est
+ * tout le positionnement d'Evoliia, et l'ordre des sections en découle — l'adresse d'abord,
+ * puis ce qui se passe ensuite, puis les deux scores, puis qui fait le travail.
  *
- * Rien n'y est inventé. Les captures sont celles des démonstrations réellement publiées par
- * le moteur (voir server/demos/catalog.ts), la grille tarifaire est lue en base, les nombres
- * de clients sont calculés par server/business/economics.ts, et il n'y a ni témoignage, ni
- * logo client, ni compteur d'utilisateurs : nous n'en avons pas.
+ * Trois règles tiennent cette page, et ce sont les mêmes que pour la précédente.
  *
- * La mise en forme est déléguée à components/marketing/landing.tsx. Ici ne restent que le
- * contenu et son ordre.
+ * **Rien n'y est inventé.** La grille tarifaire est lue en base. Il n'y a ni témoignage, ni
+ * logo client, ni compteur d'utilisateurs : nous n'en avons pas. Les deux scores du premier
+ * écran portent la mention « exemple » dans le même bloc que le chiffre, parce qu'un nombre
+ * sur cent affiché sur une page de vente se lit comme une promesse.
+ *
+ * **Ce qui n'est pas construit est annoncé comme tel.** Les quatre spécialistes portent une
+ * étiquette « en construction », et ce n'est pas une politesse : leurs fonctions sont
+ * déclarées « prévu » dans la grille des droits, ce qui les empêche matériellement d'entrer
+ * dans une offre. Décrire une équipe au présent avant qu'elle existe est la façon la plus
+ * sûre de décevoir quelqu'un qui vient de s'inscrire.
+ *
+ * **On dit ce qu'on ne promet pas.** Une section entière y est consacrée, et c'est la seule
+ * réponse honnête à un marché qui se vend avec des certitudes que personne ne détient.
+ * Aucun score ne garantit d'apparaître dans ChatGPT : on l'écrit là où on parle du score,
+ * pas en note de bas de page.
+ *
+ * La mise en forme est déléguée à components/marketing. Ici ne restent que le contenu et son
+ * ordre.
  */
 
 export async function generateMetadata({
@@ -55,236 +54,83 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const locale = resolveLocale((await params).locale)
   const t = getTranslator(locale)
-  const title = t('landing.metaTitle')
-  const description = t('landing.metaDescription')
+  const title = t('vis.metaTitle')
+  const description = t('vis.metaDescription')
   return {
     title,
     description,
-    alternates: { canonical: `/${locale}`, languages: { fr: '/fr', en: '/en' } },
-    openGraph: {
-      title,
-      description,
-      type: 'website',
-      locale: locale === 'fr' ? 'fr_FR' : 'en_US',
-      siteName: t('common.appName'),
-      // Capture d'une démonstration réelle, recadrée au format attendu par les réseaux.
-      // Aucune maquette inventée, là non plus.
-      images: [{ url: '/partage.jpg', width: 1200, height: 630, alt: title }],
-    },
-    twitter: { card: 'summary_large_image', title, description, images: ['/partage.jpg'] },
+    alternates: { canonical: `${env.appUrl}/${locale}` },
+    openGraph: { title, description, url: `${env.appUrl}/${locale}`, type: 'website' },
   }
 }
 
-/** Objectif de référence des exemples chiffrés : mille euros de chiffre d'affaires mensuel. */
-const REFERENCE_GOAL_CENTS = 100_000
-
-export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function LandingPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}) {
   const locale = resolveLocale((await params).locale)
+  const t = getTranslator(locale)
+
+  // Qui est déjà connecté n'a rien à faire sur une page de vente.
   const user = await getCurrentUser()
   if (user !== null) redirect(`/${locale}/dashboard`)
 
-  const t = getTranslator(locale)
-  const [plans, socialOpen] = await Promise.all([
-    listPublicPlans(),
-    // La page d'accueil ne décrit pas un produit imaginé mais celui de cette installation.
-    // Tant que l'envoi vers Postelya est fermé, elle annonce que rien n'est publié ; le jour
-    // où il s'ouvre, elle le dit, sans qu'une ligne soit à réécrire.
-    isEnabled('socialPublishing'),
-  ])
-
-  /*
-   * Bêta privée. L'installation exige un code d'accès quand SIGNUP_CODE est définie ; la
-   * page le dit avant le clic, plutôt que de laisser la personne le découvrir devant le
-   * formulaire. Le jour du lancement public, retirer la variable suffit : ce paragraphe
-   * disparaît de lui-même.
-   */
-  const privateBeta = env.signupCode !== undefined
-
-  // Deux entrées distinctes : l'une conduit au parcours guidé, l'autre à la description
-  // directe. Le bouton d'en-tête, lui, laisse choisir une fois le compte créé.
+  const plans = await listPublicPlans()
   const signUp = `/${locale}/inscription`
-  const findIdea = `/${locale}/inscription?suite=objectif`
-  const haveIdea = `/${locale}/inscription?suite=idee`
 
   const navLinks = [
-    { label: t('landing.navHow'), href: '#fonctionnement' },
-    { label: t('landing.navExamples'), href: '#exemples' },
-    { label: t('landing.navFeatures'), href: '#fonctionnalites' },
-    { label: t('landing.navModules'), href: '#modules' },
-    { label: t('landing.navPricing'), href: '#tarifs' },
+    { href: '#equipe', label: t('vis.navTeam') },
+    { href: '#parcours', label: t('vis.navHow') },
+    { href: '#tarifs', label: t('vis.navPricing') },
+  ]
+
+  const parcours = [
+    { title: t('vis.path1Title'), body: t('vis.path1Body') },
+    { title: t('vis.path2Title'), body: t('vis.path2Body') },
+    { title: t('vis.path3Title'), body: t('vis.path3Body') },
+    { title: t('vis.path4Title'), body: t('vis.path4Body') },
+    { title: t('vis.path5Title'), body: t('vis.path5Body') },
   ]
 
   /*
-   * « Compris dans… » : lu dans les offres réelles, jamais écrit en dur. La première offre
-   * (par ordre d'affichage) qui ouvre un module donne son nom ; si c'est l'offre gratuite,
-   * on dit « toutes les offres ». Un module qu'aucune offre n'ouvre ne porte pas de badge.
+   * Les familles de contrôles sont écrites en clair plutôt que tirées du moteur : ce sont des
+   * noms de choses qu'un visiteur reconnaît sur son propre site, pas des identifiants.
    */
-  const includedIn = (test: (plan: (typeof plans)[number]) => boolean): string | null => {
-    const first = plans.find(test)
-    if (first === undefined) return null
-    return first.priceCents === 0 ? t('landing.modulesAllPlans') : t('landing.modulesFrom', { plan: first.name })
-  }
-  const everywhere = plans.length > 0 ? t('landing.modulesAllPlans') : null
-  const showcase: Showcase[] = [
+  const familles = [
     {
-      icon: 'radar',
-      eyebrow: t('landing.modRadarEyebrow'),
-      title: t('landing.modRadarTitle'),
-      body: t('landing.modRadarBody'),
-      bullets: [t('landing.modRadar1'), t('landing.modRadar2'), t('landing.modRadar3'), t('landing.modRadar4')],
-      included: includedIn((plan) => plan.features.includes('radar') && plan.radarRunsPerMonth > 0),
-      desktop: { src: '/modules/radar.webp', alt: t('landing.modRadarEyebrow'), caption: 'evoliia.com/radar' },
+      title: t('vis.checks1Title'),
+      items: ['Title', 'Meta description', 'H1', 'H2', 'Structure des titres', 'Canonical'],
     },
     {
-      icon: 'wand',
-      eyebrow: t('landing.modBuildEyebrow'),
-      title: t('landing.modBuildTitle'),
-      body: t('landing.modBuildBody'),
-      bullets: [t('landing.modBuild1'), t('landing.modBuild2'), t('landing.modBuild3'), t('landing.modBuild4')],
-      included: includedIn((plan) => plan.allowBuild),
-      desktop: { src: '/modules/atelier.webp', alt: t('landing.modBuildEyebrow') },
+      title: t('vis.checks2Title'),
+      items: ['Longueur', 'Réponses directes', 'FAQ', 'Listes', 'Tableaux', 'Images et ALT'],
     },
     {
-      icon: 'chat',
-      eyebrow: t('landing.modLiaEyebrow'),
-      title: t('landing.modLiaTitle'),
-      body: t('landing.modLiaBody'),
-      bullets: [t('landing.modLia1'), t('landing.modLia2'), t('landing.modLia3'), t('landing.modLia4')],
-      included: includedIn((plan) => plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0),
-      desktop: { src: '/modules/support.webp', alt: t('landing.modLiaEyebrow') },
-      phone: { src: '/modules/lia-mobile.webp', alt: t('landing.modLiaEyebrow') },
+      title: t('vis.checks3Title'),
+      items: ['Statut HTTP', 'HTTPS', 'robots.txt', 'Plan du site', 'Redirections', 'Liens internes'],
     },
     {
-      icon: 'megaphone',
-      eyebrow: t('landing.modLaunchEyebrow'),
-      title: t('landing.modLaunchTitle'),
-      body: t('landing.modLaunchBody'),
-      bullets: [t('landing.modLaunch1'), t('landing.modLaunch2'), t('landing.modLaunch3'), t('landing.modLaunch4')],
-      included: includedIn((plan) => plan.features.includes(LAUNCH_KIT_FEATURE)),
-      desktop: { src: '/modules/equipe.webp', alt: t('landing.modLaunchEyebrow') },
-    },
-  ]
-  const tiles: Tile[] = [
-    { icon: 'target', title: t('landing.tileGoalTitle'), body: t('landing.tileGoalBody'), included: everywhere },
-    { icon: 'bulb', title: t('landing.tileIdeasTitle'), body: t('landing.tileIdeasBody'), included: everywhere },
-    { icon: 'search', title: t('landing.tileAnalysisTitle'), body: t('landing.tileAnalysisBody'), included: everywhere },
-    { icon: 'radar', title: t('landing.tileRadarTitle'), body: t('landing.tileRadarBody'), included: includedIn((plan) => plan.features.includes('radar') && plan.radarRunsPerMonth > 0) },
-    { icon: 'document', title: t('landing.tileSpecTitle'), body: t('landing.tileSpecBody'), included: everywhere },
-    { icon: 'wand', title: t('landing.tileBuildTitle'), body: t('landing.tileBuildBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'blocks', title: t('landing.tileBlocksTitle'), body: t('landing.tileBlocksBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'palette', title: t('landing.tileDesignTitle'), body: t('landing.tileDesignBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'users', title: t('landing.tileUsersTitle'), body: t('landing.tileUsersBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'coins', title: t('landing.tileMoneyTitle'), body: t('landing.tileMoneyBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'shield', title: t('landing.tileTestsTitle'), body: t('landing.tileTestsBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'rocket', title: t('landing.tilePublishTitle'), body: t('landing.tilePublishBody'), included: includedIn((plan) => plan.allowBuild) },
-    { icon: 'download', title: t('landing.tileExportTitle'), body: t('landing.tileExportBody'), included: includedIn((plan) => plan.allowExport || plan.allowMobilePrep) },
-    { icon: 'plug', title: t('landing.tileConnectTitle'), body: t('landing.tileConnectBody'), included: includedIn((plan) => plan.maxConnections > 0) },
-    { icon: 'lifebuoy', title: t('landing.tileCoachTitle'), body: t('landing.tileCoachBody'), included: everywhere },
-    { icon: 'chart', title: t('landing.tileDashboardTitle'), body: t('landing.tileDashboardBody'), included: everywhere },
-    { icon: 'megaphone', title: t('landing.tileKitTitle'), body: t('landing.tileKitBody'), included: includedIn((plan) => plan.features.includes(LAUNCH_KIT_FEATURE)) },
-    { icon: 'team', title: t('landing.tileTeamTitle'), body: t('landing.tileTeamBody'), included: includedIn((plan) => plan.features.includes('marketing_team')) },
-    { icon: 'chat', title: t('landing.tileLiaTitle'), body: t('landing.tileLiaBody'), included: includedIn((plan) => plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0) },
-    { icon: 'lock', title: t('landing.tileSecurityTitle'), body: t('landing.tileSecurityBody'), included: everywhere },
-    { icon: 'globe', title: t('landing.tileLanguagesTitle'), body: t('landing.tileLanguagesBody'), included: everywhere },
-  ]
-
-  /*
-   * L'équipe marketing : prénoms et portraits viennent du catalogue des spécialistes, le
-   * même que celui de l'atelier — la page publique ne montre pas une équipe qui n'existerait
-   * pas dans le produit. Les textes, eux, sont traduits ici. Le badge « dès l'offre … » est
-   * lu dans la fonction qui ouvre chaque spécialiste, jamais écrit en dur.
-   */
-  const team: TeamMember[] = AGENTS.map((agent) => ({
-    id: agent.id,
-    name: agent.name,
-    avatar: agent.avatar,
-    role: t(`landing.team_${agent.id}Role`),
-    body: t(`landing.team_${agent.id}Body`),
-    ask: t(`landing.team_${agent.id}Ask`),
-    included: includedIn((plan) => plan.features.includes(agent.feature)),
-  }))
-  const teamIncluded = includedIn((plan) => plan.features.includes('marketing_team'))
-
-  const flow = [
-    { title: t('landing.flow1Title'), body: t('landing.flow1Body') },
-    { title: t('landing.flow2Title'), body: t('landing.flow2Body') },
-    { title: t('landing.flow3Title'), body: t('landing.flow3Body') },
-    { title: t('landing.flow4Title'), body: t('landing.flow4Body') },
-    { title: t('landing.flow5Title'), body: t('landing.flow5Body') },
-  ]
-
-  const doors = [
-    {
-      title: t('landing.door1Title'),
-      body: t('landing.door1Body'),
-      cta: t('landing.door1Cta'),
-      href: findIdea,
-    },
-    {
-      title: t('landing.door2Title'),
-      body: t('landing.door2Body'),
-      cta: t('landing.door2Cta'),
-      href: haveIdea,
-    },
-    {
-      title: t('landing.door3Title'),
-      body: t('landing.door3Body'),
-      cta: t('landing.door3Cta'),
-      href: findIdea,
+      title: t('vis.checks4Title'),
+      items: ['Organization', 'LocalBusiness', 'Product', 'Article', 'FAQPage', 'Breadcrumb'],
     },
   ]
 
-  const timeline = [
-    t('landing.timeline1'),
-    t('landing.timeline2'),
-    t('landing.timeline3'),
-    t('landing.timeline4'),
-    t('landing.timeline5'),
-    t('landing.timeline6'),
-  ]
-
-  const steps = [
-    { title: t('landing.step1Title'), body: t('landing.step1Body') },
-    { title: t('landing.step2Title'), body: t('landing.step2Body') },
-    { title: t('landing.step3Title'), body: t('landing.step3Body') },
-    { title: t('landing.step4Title'), body: t('landing.step4Body') },
-    { title: t('landing.step5Title'), body: t('landing.step5Body') },
+  const honnetete = [
+    { title: t('vis.honest1Title'), body: t('vis.honest1Body') },
+    { title: t('vis.honest2Title'), body: t('vis.honest2Body') },
+    { title: t('vis.honest3Title'), body: t('vis.honest3Body') },
+    { title: t('vis.honest4Title'), body: t('vis.honest4Body') },
   ]
 
   const faq = [
-    { q: t('landing.faq1Q'), a: t('landing.faq1A') },
-    { q: t('landing.faq2Q'), a: t('landing.faq2A') },
-    { q: t('landing.faq3Q'), a: t('landing.faq3A') },
-    { q: t('landing.faq4Q'), a: t('landing.faq4A') },
-    { q: t('landing.faq5Q'), a: t('landing.faq5A') },
-    { q: t('landing.faq6Q'), a: t('landing.faq6A') },
+    { q: t('vis.faq1Q'), a: t('vis.faq1A') },
+    { q: t('vis.faq2Q'), a: t('vis.faq2A') },
+    { q: t('vis.faq3Q'), a: t('vis.faq3A') },
+    { q: t('vis.faq4Q'), a: t('vis.faq4A') },
+    { q: t('vis.faq5Q'), a: t('vis.faq5A') },
+    { q: t('vis.faq6Q'), a: t('vis.faq6A') },
   ]
-
-  // Les nombres de clients ne sont pas écrits à la main : ils sortent du même calcul que
-  // celui du parcours, à partir du prix affiché.
-  const projects = [
-    { name: t('landing.project1Name'), priceCents: 1900, difficulty: t('landing.difficultyEasy') },
-    { name: t('landing.project2Name'), priceCents: 990, difficulty: t('landing.difficultyEasy') },
-    { name: t('landing.project3Name'), priceCents: 1490, difficulty: t('landing.difficultyMedium') },
-    { name: t('landing.project4Name'), priceCents: 1200, difficulty: t('landing.difficultyEasy') },
-  ].map((project) => ({
-    ...project,
-    customers: customersNeededFor(REFERENCE_GOAL_CENTS, project.priceCents, 'month') ?? 0,
-  }))
-
-  const demos = DEMO_APPS.map((demo) => ({
-    slug: demo.slug,
-    name: demo.spec.name,
-    category: demo.category,
-    summary: demo.summary,
-    priceLabel: demo.priceLabel,
-    shot: `/demos/${demo.slug}-desktop.webp`,
-    shotAlt: demo.shotAlt,
-  }))
-
-  const hero = DEMO_APPS.find((demo) => demo.slug === 'devisflow')
-  const heroPhone = DEMO_APPS.find((demo) => demo.slug === 'fitpilot')
-  const cooksy = DEMO_APPS.find((demo) => demo.slug === 'cooksy')
 
   return (
     <div className="min-h-screen">
@@ -292,7 +138,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         links={navLinks}
         loginLabel={t('nav.login')}
         loginHref={`/${locale}/connexion`}
-        startLabel={t('landing.navStart')}
+        startLabel={t('vis.navStart')}
         startHref={signUp}
         menuLabel={t('landing.navOpenMenu')}
         brand={
@@ -302,630 +148,249 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         }
       />
 
-      {/* ─────────────────────────── 1. Premier écran ─────────────────────── */}
+      {/* ───────────────────────── 1. Premier écran ───────────────────────── */}
       <section
         className="on-night relative overflow-hidden text-white"
         style={{ background: 'var(--gradient-night)' }}
       >
-        {/*
-          Deux halos colorés plutôt qu'un. Un seul laissait la moitié gauche du héros
-          éteinte, et c'est justement là que se trouve le titre : la lueur chaude le porte.
-        */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-56 right-[-15%] h-[640px] w-[640px] rounded-full opacity-45 blur-3xl"
-          style={{ background: 'var(--gradient-brand)' }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-[-30%] left-[-20%] h-[560px] w-[560px] rounded-full opacity-30 blur-3xl"
-          style={{ background: 'radial-gradient(circle, #f81878 0%, #fc7a3b 45%, transparent 72%)' }}
-        />
-
-        <div className="relative mx-auto grid w-full max-w-6xl gap-12 px-5 py-16 sm:py-20 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)] lg:items-center lg:gap-14 lg:py-28">
+        <div className="mx-auto grid w-full max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-28">
           <div>
-            <span className="inline-flex items-center rounded-[var(--radius-pill)] border border-white/20 bg-white/10 px-3 py-1 text-xs font-medium text-white/90">
-              {t('landing.eyebrow')}
-            </span>
-            <h1 className="mt-5 text-balance text-[2rem] font-semibold leading-[1.12] tracking-tight sm:text-[2.7rem] xl:text-[3.1rem]">
-              {t('landing.heroTitle')}
-              <br />
-              <span className="text-gradient-brand">{t('landing.heroTitleAccent')}</span>
+            <Eyebrow tone="light">{t('vis.heroEyebrow')}</Eyebrow>
+            <h1 className="mt-5 mb-0 text-4xl leading-[1.08] font-semibold tracking-tight sm:text-5xl">
+              {t('vis.heroTitle')}
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-relaxed text-white/75 sm:mt-6 sm:text-lg">
-              {t('landing.heroBody')}
+            <p className="mt-5 mb-0 max-w-xl text-lg leading-relaxed text-white/80">
+              {t('vis.heroBody')}
             </p>
-            <p className="mt-3 max-w-xl text-sm text-white/55">{t('landing.heroSub')}</p>
 
-            <div className="mt-8 flex flex-wrap items-center gap-3">
-              <LinkButton href={findIdea} size="large">
-                {t('landing.ctaFindIdea')}
-              </LinkButton>
-              <a
-                href={haveIdea}
-                className="inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-white/25 px-6 py-3 text-base font-medium text-white no-underline transition-colors hover:bg-white/10"
-              >
-                {t('landing.ctaHaveIdea')}
-                <span aria-hidden="true">→</span>
-              </a>
-            </div>
-            <p className="mt-5 text-sm text-white/55">{t('landing.heroNote')}</p>
-            {privateBeta ? (
-              <p className="mt-3 inline-flex rounded-[var(--radius-control)] border border-white/20 bg-white/5 px-3 py-2 text-sm text-white/70">
-                {t('landing.heroBeta')}
-              </p>
-            ) : null}
-          </div>
-
-          {/* Montage : deux applications de démonstration, réellement en ligne. */}
-          <div>
-            <div className="relative">
-              {hero !== undefined ? (
-                <BrowserFrame
-                  src={`/demos/${hero.slug}-desktop.webp`}
-                  alt={hero.shotAlt}
-                  caption={publicAppUrl(hero.slug).replace(/^https?:\/\//, '')}
-                  priority
-                />
-              ) : null}
-              {heroPhone !== undefined ? (
-                <PhoneFrame
-                  src={`/demos/${heroPhone.slug}-mobile.webp`}
-                  alt={heroPhone.shotAlt}
-                  cropHeight={172}
-                  className="absolute -bottom-14 -left-6 hidden w-28 sm:block lg:w-32"
-                />
-              ) : null}
-            </div>
-            <p className="mt-24 text-center text-xs text-white/45">
-              {t('landing.heroShotsCaption')}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ──────────────── 2. Une envie suffit, le parcours en bref ────────── */}
-      <Section title={t('landing.flowTitle')} body={t('landing.flowBody')}>
-        <FlowRail steps={flow} />
-      </Section>
-
-      {/* ──────────────── 3. Vous n'avez pas besoin d'une idée ───────────── */}
-      <Section title={t('landing.noIdeaTitle')} body={t('landing.noIdeaBody')} tone="surface">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-stretch">
-          <Panel tone="canvas" className="flex flex-col">
-            <Eyebrow>{t('landing.profileLabel')}</Eyebrow>
-            <dl className="mt-4 mb-0 grid gap-3 text-sm">
-              {[
-                { label: t('landing.profileJob'), value: t('landing.profileJobValue') },
-                {
-                  label: t('landing.profileExperience'),
-                  value: t('landing.profileExperienceValue'),
-                },
-                { label: t('landing.profileTime'), value: t('landing.profileTimeValue') },
-                { label: t('landing.profileBudget'), value: t('landing.profileBudgetValue') },
-                { label: t('landing.profileGoal'), value: t('landing.profileGoalValue') },
-              ].map((row) => (
-                <div
-                  key={row.label}
-                  className="flex items-baseline justify-between gap-4 border-b border-[var(--color-line)] pb-2 last:border-0"
-                >
-                  <dt className="text-[var(--color-ink-soft)]">{row.label}</dt>
-                  <dd className="m-0 text-right font-medium">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <p className="mt-5 mb-0 flex items-center gap-2 text-sm text-[var(--color-brand-strong)]">
-              <span
-                aria-hidden="true"
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ background: 'var(--gradient-cta)' }}
+            {/*
+              Le champ mène à l'inscription en emportant l'adresse saisie : celui qui a déjà
+              écrit son site ne doit pas avoir à le réécrire une fois inscrit. Méthode GET
+              vers une page publique, donc rien de sensible ne transite.
+            */}
+            <form action={signUp} method="get" className="mt-8 flex max-w-xl flex-wrap gap-3">
+              <input
+                type="url"
+                name="site"
+                required
+                placeholder={t('vis.heroPlaceholder')}
+                aria-label={t('vis.heroCta')}
+                className="min-w-0 flex-1 rounded-[var(--radius-control)] border border-white/20 bg-white/10 px-4 py-3 text-base text-white placeholder:text-white/50"
               />
-              {t('landing.noIdeaAnalysing')}
+              <button
+                type="submit"
+                className="rounded-[var(--radius-control)] px-5 py-3 text-base font-semibold text-white"
+                style={{ background: 'var(--gradient-cta)' }}
+              >
+                {t('vis.heroCta')}
+              </button>
+            </form>
+            <p className="mt-3 mb-0 text-sm text-white/60">{t('vis.heroNote')}</p>
+            <a href="#equipe" className="mt-6 inline-block text-sm text-white/80">
+              {t('vis.heroCtaSecond')} →
+            </a>
+          </div>
+
+          <div className="rounded-[var(--radius-card)] border border-white/15 bg-white/5 p-6">
+            <p className="m-0 text-xs tracking-wide text-white/60 uppercase">
+              {t('vis.heroSample')}
             </p>
-          </Panel>
-
-          <div
-            className="reveal rounded-[var(--radius-card)] p-6 text-white sm:p-7"
-            style={{ background: 'var(--gradient-night)' }}
-          >
-            <Eyebrow tone="light">{t('landing.suggestionLabel')}</Eyebrow>
-            <h3 className="mt-3 mb-0 text-xl font-semibold text-balance">
-              {t('landing.suggestionName')}
-            </h3>
-            <dl className="mt-6 mb-0 grid gap-5 sm:grid-cols-2">
-              {[
-                { label: t('landing.suggestionScore'), value: t('landing.suggestionScoreValue') },
-                {
-                  label: t('landing.suggestionDifficulty'),
-                  value: t('landing.suggestionDifficultyValue'),
-                },
-                { label: t('landing.suggestionMarket'), value: t('landing.suggestionMarketValue') },
-                { label: t('landing.suggestionModel'), value: t('landing.suggestionModelValue') },
-                { label: t('landing.suggestionTime'), value: t('landing.suggestionTimeValue') },
-                {
-                  label: t('landing.suggestionCompetition'),
-                  value: t('landing.suggestionCompetitionValue'),
-                },
-              ].map((row) => (
-                <div key={row.label} className="min-w-0">
-                  <dt className="text-xs text-white/55">{row.label}</dt>
-                  <dd className="m-0 mt-1 text-base font-semibold">{row.value}</dd>
-                </div>
-              ))}
-            </dl>
-            <LinkButton href={findIdea} className="mt-7">
-              {t('landing.suggestionCta')}
-            </LinkButton>
-            <p className="mt-5 mb-0 border-t border-white/15 pt-4 text-xs leading-relaxed text-white/50">
-              {t('landing.suggestionDisclaimer')}
-            </p>
-          </div>
-        </div>
-      </Section>
-
-      {/* ──────────────────── 4. Les trois portes d'entrée ────────────────── */}
-      <Section title={t('landing.doorsTitle')} body={t('landing.doorsBody')}>
-        <DoorCards doors={doors} />
-
-        {/* Ce que la troisième porte veut dire, en arithmétique plutôt qu'en promesse. */}
-        <div className="mt-12">
-          <h3 className="m-0 text-lg font-semibold">{t('landing.projectsTitle')}</h3>
-          <p className="mt-2 mb-0 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
-            {t('landing.projectsBody')}
-          </p>
-          <p className="mt-4 mb-0 text-sm font-medium text-[var(--color-brand-strong)]">
-            {t('landing.projectsGoal')}
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {projects.map((project) => (
-              <Panel key={project.name} className="p-5">
-                <h4 className="m-0 text-sm font-semibold">{project.name}</h4>
-                <p className="mt-3 mb-0 text-2xl font-semibold tracking-tight">
-                  {formatAmount(project.priceCents)}
-                  <span className="ml-1 text-sm font-normal text-[var(--color-ink-faint)]">
-                    {t('landing.pricingPerMonth')}
-                  </span>
-                </p>
-                <p className="mt-3 mb-0 text-sm text-[var(--color-ink-soft)]">
-                  {t('landing.projectsCustomers', { count: project.customers })}
-                </p>
-                <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">
-                  {t('landing.projectsDifficulty')} : {project.difficulty}
-                </p>
-              </Panel>
-            ))}
-          </div>
-          <p className="mt-5 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
-            {t('landing.projectsNote')}
-          </p>
-        </div>
-      </Section>
-
-      {/* ─────────── 5. Pas seulement une application, un projet ─────────── */}
-      <Section
-        title={t('landing.projectTitle')}
-        titleAccent={t('landing.projectTitleAccent')}
-        tone="surface"
-      >
-        <Timeline
-          steps={timeline}
-          covered={t('landing.timelineEvoliia')}
-          others={t('landing.timelineOthers')}
-        />
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
-          <Panel tone="canvas" edge>
-            <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {t('landing.projectLead')}
-            </p>
-          </Panel>
-          <Panel tone="canvas" edge>
-            <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {t('landing.projectLead2')}
-            </p>
-          </Panel>
-        </div>
-      </Section>
-
-      {/* ───────────────────────── 6. Créé avec Evoliia ───────────────────── */}
-      <Section id="exemples" title={t('landing.showcaseTitle')} body={t('landing.showcaseBody')}>
-        <DemoGallery
-          demos={demos}
-          openLabel={t('landing.buildOpen')}
-          createLabel={t('landing.buildSimilar')}
-          createHref={haveIdea}
-        />
-        <p className="mt-8 mb-0 text-sm font-medium text-[var(--color-ink-soft)]">
-          {t('landing.showcaseDemoNote')}
-        </p>
-        <p className="mt-3 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
-          {t('landing.showcaseNote')}
-        </p>
-      </Section>
-
-      {/* ──────────────────────── 7. Comment ça marche ────────────────────── */}
-      <Section
-        id="fonctionnement"
-        title={t('landing.howTitle')}
-        body={t('landing.howBody')}
-        tone="surface"
-      >
-        <NumberedSteps steps={steps} />
-      </Section>
-
-      {/* ───────────────────── 8. Ce qu'Evoliia sait faire ────────────────── */}
-      <Section
-        id="fonctionnalites"
-        title={t('landing.featuresTitle')}
-        body={t('landing.featuresBody')}
-      >
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-start">
-          <div className="reveal">
-            <Eyebrow>{t('landing.oneLinePromptLabel')}</Eyebrow>
-            <blockquote className="mt-3 mb-0 rounded-[var(--radius-card)] border border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-5 text-base leading-relaxed sm:text-lg">
-              « {t('landing.oneLinePrompt')} »
-            </blockquote>
-            <CheckList
-              className="mt-6 text-[var(--color-ink-soft)]"
-              items={[
-                t('landing.oneLineFeature1'),
-                t('landing.oneLineFeature2'),
-                t('landing.oneLineFeature3'),
-                t('landing.oneLineFeature4'),
-                t('landing.oneLineFeature5'),
-                t('landing.oneLineFeature6'),
-              ]}
-            />
-          </div>
-
-          <div className="reveal">
-            <Eyebrow>{t('landing.oneLineResultLabel')}</Eyebrow>
-            {cooksy !== undefined ? (
-              <>
-                <div className="mt-3 grid gap-4 sm:grid-cols-[1.5fr_0.5fr] sm:items-end">
-                  <BrowserFrame
-                    src="/demos/cooksy-recettes-desktop.webp"
-                    alt={cooksy.shotAlt}
-                    caption={publicAppUrl(cooksy.slug).replace(/^https?:\/\//, '')}
-                  />
-                  <PhoneFrame
-                    src="/demos/cooksy-recettes-mobile.webp"
-                    alt={cooksy.shotAlt}
-                    className="mx-auto w-32 sm:w-full"
-                  />
-                </div>
-                <a
-                  href={publicAppUrl(cooksy.slug)}
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--color-brand-strong)] no-underline"
-                >
-                  {t('landing.oneLineOpen')}
-                  <span aria-hidden="true">→</span>
-                </a>
-              </>
-            ) : null}
-          </div>
-        </div>
-
-        <Panel tone="canvas" className="mt-10">
-          <h3 className="m-0 text-base font-semibold">{t('landing.oneLineEditTitle')}</h3>
-          <p className="mt-1 mb-0 max-w-2xl text-sm text-[var(--color-ink-soft)]">
-            {t('landing.oneLineEditBody')}
-          </p>
-          <ul className="m-0 mt-5 grid list-none gap-3 p-0 sm:grid-cols-3">
-            {[t('landing.oneLineEdit1'), t('landing.oneLineEdit2'), t('landing.oneLineEdit3')].map(
-              (edit) => (
-                <li
-                  key={edit}
-                  className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-3 text-sm"
-                >
-                  « {edit} »
-                </li>
-              ),
-            )}
-          </ul>
-        </Panel>
-      </Section>
-
-      {/* ──────────────────── 8 bis. La vitrine des modules ───────────────── */}
-      <section id="modules" className="relative isolate scroll-mt-20 overflow-hidden text-white [background-image:var(--gradient-night)]">
-        {/* Deux halos fixes : ils donnent de la profondeur au fond sans rien animer. */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -left-32 top-24 h-96 w-96 rounded-full opacity-40 blur-3xl"
-          style={{ background: 'radial-gradient(circle, rgba(248,24,120,0.8), transparent 65%)' }}
-        />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-32 bottom-32 h-[28rem] w-[28rem] rounded-full opacity-40 blur-3xl"
-          style={{ background: 'radial-gradient(circle, rgba(151,5,244,0.9), transparent 65%)' }}
-        />
-        <div className="mx-auto w-full max-w-6xl px-5 py-16 sm:py-20 lg:py-28">
-          <Eyebrow tone="light">{t('landing.modulesEyebrow')}</Eyebrow>
-          <h2 className="mt-3 max-w-3xl text-balance text-[1.9rem] font-semibold leading-[1.1] tracking-tight sm:text-5xl">
-            {t('landing.modulesTitle')}
-            <br />
-            <span className="text-gradient-brand">{t('landing.modulesTitleAccent')}</span>
-          </h2>
-          <p className="mt-5 max-w-2xl text-base leading-relaxed text-white/75 sm:text-lg">
-            {t('landing.modulesBody')}
-          </p>
-
-          <div className="mt-14 sm:mt-20">
-            <ModuleShowcase items={showcase} />
-          </div>
-
-          <div className="mt-20 border-t border-white/10 pt-14 sm:mt-28">
-            <h3 className="m-0 text-balance text-2xl font-semibold sm:text-3xl">{t('landing.modulesGridTitle')}</h3>
-            <p className="mt-3 max-w-2xl text-base leading-relaxed text-white/70">{t('landing.modulesGridBody')}</p>
-            <div className="mt-8">
-              <ModuleGrid tiles={tiles} />
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <ScoreDial label={t('vis.heroScoreSeo')} value={74} delta={6} />
+              <ScoreDial label={t('vis.heroScoreGeo')} value={58} delta={11} />
             </div>
+            <p className="mt-4 mb-0 text-sm text-white/70">
+              <span className="font-semibold text-white">5</span> {t('vis.heroPriorities')}
+            </p>
+            {/*
+              La mention vit dans le même bloc que les chiffres, et non en bas de page : un
+              score sur cent se lit comme un engagement si rien ne dit le contraire aussitôt.
+            */}
+            <p className="mt-2 mb-0 text-xs text-white/50">{t('vis.heroSampleNote')}</p>
           </div>
         </div>
       </section>
 
-      {/* ────────────────────── 9. Préparer son lancement ─────────────────── */}
-      <Section
-        id="lancement"
-        title={t('landing.launchTitle')}
-        body={t('landing.launchBody')}
-        tone="surface"
-      >
-        <div className="grid gap-5 md:grid-cols-3">
-          {[
-            { title: t('landing.launchAnglesTitle'), body: t('landing.launchAnglesBody') },
-            { title: t('landing.launchIdeasTitle'), body: t('landing.launchIdeasBody') },
-            { title: t('landing.launchWeekTitle'), body: t('landing.launchWeekBody') },
-          ].map((card) => (
-            <Panel key={card.title} tone="canvas" edge>
-              <h3 className="m-0 text-base font-semibold">{card.title}</h3>
-              <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                {card.body}
-              </p>
-            </Panel>
+      {/* ───────────────────────── 2. Le parcours ─────────────────────────── */}
+      <Section id="parcours" title={t('vis.pathTitle')} body={t('vis.pathBody')}>
+        <FlowRail steps={parcours} />
+      </Section>
+
+      {/* ───────────────────────── 3. Les deux scores ─────────────────────── */}
+      <Section title={t('vis.scoresTitle')} body={t('vis.scoresBody')} tone="surface">
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+            <h3 className="m-0 text-lg font-semibold">{t('vis.seoTitle')}</h3>
+            <p className="mt-3 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('vis.seoBody')}
+            </p>
+          </div>
+          <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+            <h3 className="m-0 text-lg font-semibold">{t('vis.geoTitle')}</h3>
+            <p className="mt-3 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('vis.geoBody')}
+            </p>
+            {/*
+              L'avertissement est à côté de ce qu'il concerne. Le reléguer plus bas
+              reviendrait à laisser la promesse s'installer avant de la corriger.
+            */}
+            <p className="mt-4 mb-0 rounded-[var(--radius-control)] bg-[var(--color-caution-soft)] p-3 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {t('vis.geoWarning')}
+            </p>
+          </div>
+        </div>
+        <div className="mt-6 rounded-[var(--radius-card)] border border-[var(--color-line)] p-6">
+          <h3 className="m-0 text-base font-semibold">{t('vis.scoresHow')}</h3>
+          <p className="mt-2 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
+            {t('vis.scoresHowBody')}
+          </p>
+        </div>
+      </Section>
+
+      {/* ───────────────────────── 4. L'équipe ────────────────────────────── */}
+      <Section id="equipe" title={t('vis.teamTitle')} body={t('vis.teamBody')}>
+        <div className="grid gap-5 md:grid-cols-2">
+          {VISIBILITY_AGENTS.map((agent) => (
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              handlesLabel={t('vis.teamHandles')}
+              askLabel={t('vis.teamAsk')}
+              soonLabel={t('vis.teamSoon')}
+            />
           ))}
         </div>
-
-        {/*
-          Ce qui vient du parcours, et ce qu'il advient du kit : les deux côte à côte. La
-          seconde carte dit la vérité de cette installation, et non une intention. Tant que
-          l'envoi est fermé, elle annonce qu'aucune publication n'a lieu, ce qui évite la
-          déception de celui qui croirait acheter une publication automatique.
-        */}
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <div className="reveal rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-brand-strong)]">
-              {t('landing.launchSourceTitle')}
-            </h3>
-            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {t('landing.launchSourceBody')}
-            </p>
-          </div>
-          <Panel tone="canvas">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
-              {socialOpen ? t('landing.launchSendTitle') : t('landing.launchLimitTitle')}
-            </h3>
-            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {socialOpen ? t('landing.launchSendBody') : t('landing.launchLimitBody')}
-            </p>
-          </Panel>
-        </div>
-
-        <p className="mt-6 mb-0 text-sm text-[var(--color-ink-soft)]">
-          {t('landing.launchIncluded')}
+        <p className="mt-6 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
+          {t('vis.teamSoonNote')}
         </p>
       </Section>
 
-      {/* ──────────────────── 9 bis. Votre équipe marketing ───────────────── */}
-      <Section
-        id="equipe"
-        title={t('landing.teamTitle')}
-        titleAccent={t('landing.teamTitleAccent')}
-        body={t('landing.teamBody')}
-      >
-        <TeamShowcase members={team} askLabel={t('landing.teamAskLabel')} aiLabel={t('landing.teamAiLabel')} />
-
-        {/*
-          Ce que « équipe » veut dire ici, et ce que ces spécialistes ne font pas. La
-          seconde carte est une limite annoncée avant l'inscription, pas après : personne ne
-          doit croire acheter un service humain ou une garantie de résultat.
-        */}
-        <div className="mt-5 grid gap-5 md:grid-cols-2">
-          <div className="reveal rounded-[var(--radius-card)] border-2 border-[var(--color-brand)] bg-[var(--color-brand-soft)] p-6">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-brand-strong)]">
-              {t('landing.teamLinkTitle')}
-            </h3>
-            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {t('landing.teamLinkBody')}
-            </p>
-            {teamIncluded !== null ? (
-              <p className="mt-3 mb-0 text-xs font-medium text-[var(--color-ink-faint)]">{teamIncluded}</p>
-            ) : null}
-          </div>
-          <Panel tone="canvas">
-            <h3 className="m-0 text-base font-semibold text-[var(--color-ink-soft)]">
-              {t('landing.teamHonestTitle')}
-            </h3>
-            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {t('landing.teamHonestBody')}
-            </p>
-          </Panel>
+      {/* ───────────────────── 5. Ce qui est réellement mesuré ────────────── */}
+      <Section title={t('vis.checksTitle')} body={t('vis.checksBody')} tone="surface">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {familles.map((famille) => (
+            <CheckFamily key={famille.title} title={famille.title} items={famille.items} />
+          ))}
         </div>
+      </Section>
 
-        <div className="mt-8 flex flex-wrap items-center gap-4">
-          <LinkButton href={signUp} size="large">
-            {t('landing.teamCta')}
+      {/* ───────────────────────── 6. Postelya ────────────────────────────── */}
+      <Section title={t('vis.postelyaTitle')} body={t('vis.postelyaBody')}>
+        <div className="flex flex-wrap items-center gap-4">
+          <LinkButton href="https://postelya.com" variant="secondary">
+            {t('vis.postelyaCta')}
           </LinkButton>
-          <p className="m-0 text-sm text-[var(--color-ink-soft)]">{t('landing.teamCtaNote')}</p>
+          <span className="text-sm text-[var(--color-ink-faint)]">{t('vis.postelyaSoon')}</span>
         </div>
       </Section>
 
-      {/* ──────────────────────────── 10. Tarifs ──────────────────────────── */}
-      <Section id="tarifs" title={t('landing.pricingTitle')} body={t('landing.pricingBody')}>
+      {/* ───────────────────────── 7. Tarifs ──────────────────────────────── */}
+      <Section id="tarifs" title={t('vis.pricingTitle')} body={t('vis.pricingBody')} tone="surface">
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {plans.map((plan) => {
-            const features = [
-              t('landing.pricingCredits', { count: plan.monthlyCredits }),
-              plan.allowBuild
-                ? plan.maxProjects === 1
-                  ? t('landing.pricingProjectsOne')
-                  : t('landing.pricingProjects', { count: plan.maxProjects })
-                : t('landing.pricingNoBuild'),
-              ...(plan.allowBuild ? [t('landing.pricingBuild'), t('landing.pricingInstall')] : []),
-              ...(plan.storageBytes > 0
-                ? [t('landing.pricingImages', { size: storageLabel(plan.storageBytes) })]
-                : []),
-              ...(plan.features.includes(LAUNCH_KIT_FEATURE)
-                ? [t('landing.pricingLaunchKit')]
-                : []),
-              ...(plan.allowCustomDomain ? [t('landing.pricingDomain')] : []),
-              ...(plan.allowMobilePrep ? [t('landing.pricingMobile')] : []),
-              ...(plan.allowExport ? [t('landing.pricingExport')] : []),
-              ...(plan.features.includes('radar') && plan.radarRunsPerMonth > 0
-                ? [t('landing.pricingRadar', { count: plan.radarRunsPerMonth })]
-                : []),
-              ...(plan.features.includes('lia_support') && plan.liaAnswersPerMonth > 0
-                ? [t('landing.pricingLia', { count: plan.liaAnswersPerMonth })]
-                : []),
-            ]
-            return (
-              <div
-                key={plan.id}
-                className={
-                  plan.isRecommended
-                    ? 'ring-brand [--ring-fill:var(--color-surface)] relative flex flex-col rounded-[var(--radius-card)] p-6 shadow-[0_22px_48px_-26px_rgba(151,5,244,0.6)]'
-                    : 'relative flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6'
-                }
-              >
-                {plan.isRecommended ? (
-                  <span
-                    className="absolute -top-3 left-6 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold text-white"
-                    style={{ background: 'var(--gradient-cta)' }}
-                  >
-                    {t('landing.pricingRecommended')}
-                  </span>
-                ) : null}
-                <h3 className="m-0 text-base font-semibold">{plan.name}</h3>
-                <p className="mt-3 mb-0 text-3xl font-semibold tracking-tight">
-                  {plan.priceCents === 0
-                    ? t('landing.pricingFree')
-                    : formatAmount(plan.priceCents, plan.currency)}
-                </p>
-                {plan.priceCents > 0 ? (
-                  <p className="m-0 text-xs text-[var(--color-ink-faint)]">
-                    {t('landing.pricingPerMonth')}
-                  </p>
-                ) : null}
-                <p className="mt-4 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                  {plan.description}
-                </p>
-                <CheckList items={features} className="mt-5 mb-6 text-[var(--color-ink-soft)]" />
-                <LinkButton
-                  href={findIdea}
-                  variant={plan.isRecommended ? 'primary' : 'secondary'}
-                  className="mt-auto w-full"
+          {plans.map((plan) => (
+            <div
+              key={plan.id}
+              className={
+                plan.isRecommended
+                  ? 'ring-brand [--ring-fill:var(--color-surface)] relative flex flex-col rounded-[var(--radius-card)] p-6 shadow-[0_22px_48px_-26px_rgba(151,5,244,0.6)]'
+                  : 'relative flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6'
+              }
+            >
+              {plan.isRecommended ? (
+                <span
+                  className="absolute -top-3 left-6 rounded-[var(--radius-pill)] px-2.5 py-1 text-xs font-semibold text-white"
+                  style={{ background: 'var(--gradient-cta)' }}
                 >
-                  {plan.priceCents === 0
-                    ? t('landing.pricingCtaFree')
-                    : t('landing.pricingCtaPaid')}
-                </LinkButton>
-              </div>
-            )
-          })}
+                  {t('landing.pricingRecommended')}
+                </span>
+              ) : null}
+              <h3 className="m-0 text-base font-semibold">{plan.name}</h3>
+              <p className="mt-3 mb-0 text-3xl font-semibold tracking-tight">
+                {plan.priceCents === 0
+                  ? t('landing.pricingFree')
+                  : formatAmount(plan.priceCents, plan.currency)}
+              </p>
+              {plan.priceCents > 0 ? (
+                <p className="m-0 text-xs text-[var(--color-ink-faint)]">
+                  {t('landing.pricingPerMonth')}
+                </p>
+              ) : null}
+              <p className="mt-4 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                {plan.description}
+              </p>
+              {/*
+                Une seule ligne de contenu, et c'est délibéré : les capacités listées jusqu'ici
+                — projets, installation, export mobile — décrivaient le constructeur
+                d'applications. Les annoncer sur une page de visibilité vendrait autre chose
+                que ce qu'on livre. Les offres elles-mêmes ne sont pas touchées : elles
+                appartiennent à l'exploitant, et c'est à lui de les redéfinir.
+              */}
+              <CheckList
+                items={[t('landing.pricingCredits', { count: plan.monthlyCredits })]}
+                className="mt-5 mb-6 text-[var(--color-ink-soft)]"
+              />
+              <LinkButton
+                href={signUp}
+                variant={plan.isRecommended ? 'primary' : 'secondary'}
+                className="mt-auto w-full"
+              >
+                {t('vis.pricingCta')}
+              </LinkButton>
+            </div>
+          ))}
         </div>
-        <p className="mt-8 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
-          {t('landing.pricingNote')}
-        </p>
-        <p className="mt-3 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
+        <p className="mt-8 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
           {isStripeAvailable() ? t('landing.pricingStripeNote') : t('landing.pricingPaymentNote')}
         </p>
       </Section>
 
-      {/* ───────────────────────── 11. Transparence ───────────────────────── */}
-      <Section title={t('landing.honestTitle')} body={t('landing.honestBody')} tone="surface">
+      {/* ───────────────────────── 8. Transparence ────────────────────────── */}
+      <Section title={t('vis.honestTitle')} body={t('vis.honestBody')}>
         <div className="grid gap-5 md:grid-cols-2">
-          {[
-            t('landing.honest1'),
-            t('landing.honest2'),
-            t('landing.honest3'),
-            t('landing.honest4'),
-          ].map((promise) => (
-            <Panel key={promise} tone="canvas" className="flex gap-3 py-5">
-              <span className="mt-0.5 text-[var(--color-brand)]">
-                <Check className="h-5 w-5 shrink-0" />
-              </span>
-              <p className="m-0 text-sm leading-relaxed">{promise}</p>
-            </Panel>
+          {honnetete.map((point) => (
+            <HonestCard key={point.title} title={point.title}>
+              {point.body}
+            </HonestCard>
           ))}
         </div>
-        <p className="mt-6 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
-          {t('landing.honestNote')}
-        </p>
       </Section>
 
-      {/* ─────────────────────────────── 12. FAQ ──────────────────────────── */}
-      <Section title={t('landing.faqTitle')}>
-        <div className="grid max-w-3xl gap-3">
-          {faq.map((item) => (
-            <details
-              key={item.q}
-              className="group rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] px-5 py-4"
+      {/* ───────────────────────── 9. Questions ───────────────────────────── */}
+      <Section title={t('vis.faqTitle')} tone="surface">
+        <div className="grid gap-4 md:grid-cols-2">
+          {faq.map((entree) => (
+            <div
+              key={entree.q}
+              className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-medium marker:hidden">
-                {item.q}
-                <span
-                  aria-hidden="true"
-                  className="shrink-0 text-[var(--color-ink-faint)] transition-transform group-open:rotate-45"
-                >
-                  +
-                </span>
-              </summary>
-              <p className="mt-3 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                {item.a}
+              <h3 className="m-0 text-base font-semibold">{entree.q}</h3>
+              <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                {entree.a}
               </p>
-            </details>
+            </div>
           ))}
         </div>
       </Section>
 
-      {/* ───────────────────────── 13. Dernier appel ──────────────────────── */}
-      <section
-        className="on-night relative overflow-hidden text-white"
-        style={{ background: 'var(--gradient-night)' }}
-      >
+      {/* ───────────────────────── 10. Dernier appel ──────────────────────── */}
+      <section className="mx-auto w-full max-w-6xl px-5 pb-16">
         <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-40 left-1/2 h-[520px] w-[820px] -translate-x-1/2 rounded-full opacity-35 blur-3xl"
-          style={{ background: 'var(--gradient-brand)' }}
-        />
-        <div className="relative mx-auto w-full max-w-3xl px-5 py-20 text-center sm:py-24">
-          <h2 className="text-balance text-[1.75rem] font-semibold leading-[1.15] tracking-tight sm:text-4xl">
-            {t('landing.finalTitle')}
-            <br />
-            <span className="text-gradient-brand">{t('landing.finalTitleAccent')}</span>
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-white/70">{t('landing.finalBody')}</p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <LinkButton href={findIdea} size="large">
-              {t('landing.ctaFindIdea')}
-            </LinkButton>
-            <a
-              href={haveIdea}
-              className="inline-flex items-center justify-center gap-1.5 rounded-[var(--radius-control)] border border-white/25 px-6 py-3 text-base font-medium text-white no-underline transition-colors hover:bg-white/10"
-            >
-              {t('landing.ctaHaveIdea')}
-              <span aria-hidden="true">→</span>
-            </a>
-          </div>
-          <p className="mt-6 text-sm text-white/55">{t('landing.heroNote')}</p>
+          className="on-night rounded-[var(--radius-card)] px-8 py-12 text-center text-white"
+          style={{ background: 'var(--gradient-night)' }}
+        >
+          <h2 className="m-0 text-3xl font-semibold tracking-tight">{t('vis.heroTitle')}</h2>
+          <p className="mx-auto mt-4 mb-0 max-w-2xl text-white/80">{t('vis.heroBody')}</p>
+          <LinkButton href={signUp} className="mt-8">
+            {t('vis.heroCta')}
+          </LinkButton>
         </div>
       </section>
 
-      {/* ──────────────────────────────── Pied ────────────────────────────── */}
       <footer className="mx-auto w-full max-w-6xl px-5 py-12">
         <div className="flex flex-wrap items-center gap-6">
           <Logo id="mark-footer" wordmark={t('common.appName')} />
           <p className="m-0 max-w-md text-sm text-[var(--color-ink-soft)]">
-            {t('landing.footerTagline')}
+            {t('vis.metaDescription')}
           </p>
         </div>
         <div className="mt-8 flex flex-wrap items-center gap-5 border-t border-[var(--color-line)] pt-6 text-sm text-[var(--color-ink-soft)]">

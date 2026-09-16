@@ -127,6 +127,42 @@ export const FEATURES: readonly Feature[] = [
     summary: 'La lecture des résultats et les recommandations qui en découlent.',
     status: 'live',
   },
+  /*
+   * L'équipe de visibilité. Annoncée, pas encore construite — d'où « prevu », qui n'est pas
+   * un détail d'affichage : une fonction prévue n'entre jamais dans les droits accordés,
+   * donc personne ne peut l'atteindre par mégarde, et aucune offre ne la vend. Chacune
+   * passera à « live » le jour où elle marchera, et pas un jour avant.
+   */
+  {
+    id: 'visibility_audit_agent',
+    group: 'equipe',
+    label: 'Léa — Audit de visibilité',
+    summary:
+      'L’analyse de votre site page par page : ce qui cloche, classé par ordre d’importance.',
+    status: 'prevu',
+  },
+  {
+    id: 'visibility_seo_agent',
+    group: 'equipe',
+    label: 'Néo — Référencement',
+    summary: 'Les titres, les descriptions, la structure et les liens entre vos pages.',
+    status: 'prevu',
+  },
+  {
+    id: 'visibility_geo_agent',
+    group: 'equipe',
+    label: 'Gia — Moteurs IA',
+    summary:
+      'Ce qu’une intelligence artificielle comprend de vos pages, et ce qui l’en empêche.',
+    status: 'prevu',
+  },
+  {
+    id: 'visibility_content_agent',
+    group: 'equipe',
+    label: 'Milo — Contenu',
+    summary: 'L’écriture et la réécriture : descriptions, pages, questions fréquentes, articles.',
+    status: 'prevu',
+  },
 ]
 
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)

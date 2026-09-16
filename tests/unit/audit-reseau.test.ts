@@ -87,6 +87,20 @@ describe('les adresses acceptées en entrée', () => {
     }
   })
 
+  it('refuse un nom qui ne désigne rien de public', () => {
+    // La vérification après résolution les refuserait de toute façon. Les écarter ici évite
+    // qu'une saisie manifestement locale traverse le produit et s'affiche comme un site.
+    for (const adresse of [
+      'http://localhost:5432',
+      'http://localhost',
+      'http://serveur',
+      'http://nas.local',
+      'http://api.internal',
+    ]) {
+      expect(() => parseTargetUrl(adresse), adresse).toThrow(/publique/i)
+    }
+  })
+
   it('refuse une adresse portant des identifiants', () => {
     expect(() => parseTargetUrl('https://admin:secret@monsite.ch')).toThrow(/identifiants/i)
   })
