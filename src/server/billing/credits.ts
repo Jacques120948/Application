@@ -1,6 +1,8 @@
+import type { CreditMovement } from '@prisma/client'
 import { AppError } from '@/lib/errors'
 import { prisma } from '@/server/db/client'
 import { logger } from '@/server/observability/logger'
+import { creditsFor, loadPricing } from './ai-pricing'
 import { DEFAULT_PLANS, FREE_PLAN_ID, getEffectivePlan } from './plans'
 
 /**
@@ -98,17 +100,19 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
 }
 
 /**
- * 1 crédit = 5 000 micro-dollars de coût API, arrondi au supérieur.
+ * Crédits dus pour un coût observé.
  *
- * Cette unité n'est pas arbitraire : elle est choisie pour que le modèle tarifaire de
- * référence tienne debout. Construire une application coûte environ 0,105 USD, soit 21
- * crédits ; l'offre Launch en accorde 100 par mois. Changer l'unité ici recalibre tout le
- * système sans toucher à la mécanique.
+ * L'unité de conversion et la marge ne sont plus écrites ici : elles se règlent depuis
+ * l'administration (voir `ai-pricing.ts`), avec pour valeurs de départ exactement celles
+ * qui s'appliquaient auparavant. Le plancher de l'opération, lui, reste dans le code :
+ * il dit ce qu'une opération coûte au minimum à Evoliia, ce qui est une donnée technique
+ * et non un choix commercial.
  */
-const MICROS_PER_CREDIT = 5_000
-
-export function creditsForCost(operation: CreditedOperation, costMicros: number): number {
-  return Math.max(MINIMUM_COST[operation], Math.ceil(costMicros / MICROS_PER_CREDIT))
+export async function creditsForCost(
+  operation: CreditedOperation,
+  costMicros: number,
+): Promise<number> {
+  return creditsFor(costMicros, MINIMUM_COST[operation], await loadPricing())
 }
 
 function nextResetDate(from: Date): Date {
@@ -125,7 +129,13 @@ export async function grantInitialCredits(userId: string): Promise<void> {
       data: { userId, balance: monthly, monthlyGrant: monthly, resetsAt: nextResetDate(now) },
     }),
     prisma.creditLedger.create({
-      data: { userId, delta: monthly, balanceAfter: monthly, reason: 'grant:inscription' },
+      data: {
+        userId,
+        delta: monthly,
+        balanceAfter: monthly,
+        reason: 'grant:inscription',
+        type: 'SUBSCRIPTION_CREDIT',
+      },
     }),
   ])
 }
@@ -174,6 +184,7 @@ export async function getWallet(userId: string) {
           delta: balance - previousBalance,
           balanceAfter: balance,
           reason: renew ? `grant:mensuel:${plan.id}` : `grant:offre:${plan.id}`,
+          type: 'SUBSCRIPTION_CREDIT',
         },
       })
     }
@@ -182,14 +193,19 @@ export async function getWallet(userId: string) {
   return wallet
 }
 
-/** Vérifie le solde AVANT tout appel réseau facturé. */
+/**
+ * Vérifie le solde AVANT tout appel réseau facturé.
+ *
+ * Regarde le disponible et non le solde brut : une opération déjà en cours a mis ses
+ * crédits de côté, et les compter deux fois autoriserait un dépassement.
+ */
 export async function ensureCredits(userId: string, operation: CreditedOperation): Promise<void> {
-  const wallet = await getWallet(userId)
-  if (wallet.balance < MINIMUM_COST[operation]) {
+  const balance = await availableCredits(userId)
+  if (balance < MINIMUM_COST[operation]) {
     throw new AppError(
       'INSUFFICIENT_CREDITS',
       "Vous n'avez plus assez de crédits pour cette opération. Vos crédits se renouvellent chaque mois.",
-      { details: { balance: wallet.balance, required: MINIMUM_COST[operation] } },
+      { details: { balance, required: MINIMUM_COST[operation] } },
     )
   }
 }
@@ -198,11 +214,34 @@ export async function ensureCredits(userId: string, operation: CreditedOperation
  * Débite après coup, sur la base du coût réellement observé.
  * Le solde ne descend jamais sous zéro : un dépassement est journalisé, pas facturé.
  */
+/**
+ * Type d'un mouvement, déduit de son motif.
+ *
+ * Les motifs suivent une convention stable depuis l'origine (`ia:`, `grant:`), et
+ * l'historique déjà écrit a été reclassé par la migration selon la même règle. La déduire
+ * plutôt que l'exiger à chaque appel évite qu'un oubli à un seul endroit reclasse un
+ * débit d'IA en correction manuelle.
+ */
+export function movementFor(reason: string): CreditMovement {
+  if (reason.startsWith('ia:')) return 'AI_USAGE'
+  if (reason.startsWith('grant:')) return 'SUBSCRIPTION_CREDIT'
+  if (reason.startsWith('achat:')) return 'CREDIT_PURCHASE'
+  if (reason.startsWith('remboursement:')) return 'REFUND'
+  return 'ADJUSTMENT'
+}
+
+export type SpendDetails = {
+  /** L'appel au modèle qui a provoqué ce débit, quand il y en a un. */
+  aiUsageId?: string | undefined
+  type?: CreditMovement | undefined
+}
+
 export async function spendCredits(
   userId: string,
   amount: number,
   reason: string,
   projectId?: string,
+  details: SpendDetails = {},
 ): Promise<number> {
   if (amount <= 0) return (await getWallet(userId)).balance
 
@@ -220,9 +259,26 @@ export async function spendCredits(
         delta: -spent,
         balanceAfter,
         reason,
+        type: details.type ?? movementFor(reason),
         projectId: projectId ?? null,
+        aiUsageId: details.aiUsageId ?? null,
       },
     })
     return balanceAfter
   })
+}
+
+/**
+ * Le solde disponible : le solde, moins ce que les opérations en cours ont mis de côté.
+ *
+ * C'est ce nombre qu'il faut regarder avant d'autoriser une opération. Le solde brut ment
+ * dès que deux opérations tournent en même temps : chacune y lirait la totalité.
+ */
+export async function availableCredits(userId: string): Promise<number> {
+  const wallet = await getWallet(userId)
+  const held = await prisma.creditReservation.aggregate({
+    where: { userId, releasedAt: null, expiresAt: { gt: new Date() } },
+    _sum: { amount: true },
+  })
+  return Math.max(0, wallet.balance - (held._sum.amount ?? 0))
 }

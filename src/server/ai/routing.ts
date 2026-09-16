@@ -23,13 +23,6 @@ export const MODELS = {
 
 export type ModelId = (typeof MODELS)[keyof typeof MODELS]
 
-/** Tarifs en micro-dollars par jeton. Source : tarification publique de l'API Claude. */
-const PRICING: Record<ModelId, { input: number; output: number; cacheRead: number }> = {
-  'claude-opus-5': { input: 5, output: 25, cacheRead: 0.5 },
-  'claude-sonnet-5': { input: 2, output: 10, cacheRead: 0.2 },
-  'claude-haiku-4-5': { input: 1, output: 5, cacheRead: 0.1 },
-}
-
 export type OperationProfile = {
   model: ModelId
   maxTokens: number
@@ -95,14 +88,10 @@ export type TokenUsage = {
   cachedTokens: number
 }
 
-/** Coût réel d'un appel, en micro-dollars. Alimente l'écran de marge de l'administration. */
-export function costMicros(model: string, usage: TokenUsage): number {
-  const pricing = PRICING[model as ModelId]
-  if (!pricing) return 0
-  const billedInput = Math.max(0, usage.inputTokens - usage.cachedTokens)
-  return Math.round(
-    billedInput * pricing.input +
-      usage.cachedTokens * pricing.cacheRead +
-      usage.outputTokens * pricing.output,
-  )
-}
+/**
+ * Le calcul du coût a déménagé dans `@/server/billing/ai-pricing`.
+ *
+ * Les tarifs ne sont plus écrits dans le code : ils se règlent depuis l'administration,
+ * avec les valeurs d'ici en secours. Ce fichier ne garde que ce qui relève du routage —
+ * quel modèle pour quelle tâche, avec quelles bornes.
+ */

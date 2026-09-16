@@ -10,6 +10,13 @@ import { logger } from '@/server/observability/logger'
 import { FREE_PLAN_ID, PLANNED_PLAN_CAPABILITIES } from '@/server/billing/plans'
 import { countPublishedApps } from '@/server/runtime/published'
 import {
+  DEFAULT_MODEL_PRICING,
+  forgetPricingCache,
+  loadPricing,
+  PRICING_SETTINGS,
+} from '@/server/billing/ai-pricing'
+import { writeSetting } from '@/server/settings/store'
+import {
   getLegalIdentity,
   legalIdentityInput,
   saveLegalIdentity,
@@ -304,4 +311,105 @@ export async function listAiFailures(take = 20): Promise<AiFailure[]> {
     email: row.user.email,
     createdAt: row.createdAt.toISOString(),
   }))
+}
+
+// ───────────────────── Tarifs des modèles et marge ───────────────────────────
+
+/**
+ * Les trois réglages qui décident de ce qu'une opération IA coûte au créateur.
+ *
+ * Ils vivaient dans le code. Les en sortir permet de réagir à un changement de tarif
+ * d'Anthropic, ou d'ajuster la marge, sans déploiement — c'est-à-dire le jour où il faut
+ * réagir vite. Le code garde les valeurs actuelles en secours : une table vidée par erreur
+ * ne fait pas tomber la facturation à zéro.
+ */
+
+export type ModelPricingRow = {
+  model: string
+  label: string
+  /** Tarifs en centimes de dollar par million de jetons, comme Anthropic les publie. */
+  input: number
+  output: number
+  cacheRead: number
+  isActive: boolean
+  /** Vrai tant que la ligne n'existe qu'en secours, dans le code. */
+  fromCode: boolean
+}
+
+export async function listModelPricing(): Promise<{
+  models: ModelPricingRow[]
+  multiplier: number
+  microsPerCredit: number
+}> {
+  await requireAdmin()
+  const [rows, table] = await Promise.all([prisma.aiModelPricing.findMany(), loadPricing()])
+  const byModel = new Map(rows.map((row) => [row.model, row]))
+
+  const names = new Set([...Object.keys(DEFAULT_MODEL_PRICING), ...byModel.keys()])
+  const models = [...names].sort().map((model) => {
+    const stored = byModel.get(model)
+    const fallback = DEFAULT_MODEL_PRICING[model]
+    return {
+      model,
+      label: stored?.label ?? fallback?.label ?? model,
+      input: stored?.inputCentsPerMTok ?? fallback?.input ?? 0,
+      output: stored?.outputCentsPerMTok ?? fallback?.output ?? 0,
+      cacheRead: stored?.cacheReadCentsPerMTok ?? fallback?.cacheRead ?? 0,
+      isActive: stored?.isActive ?? true,
+      fromCode: stored === undefined,
+    }
+  })
+
+  return { models, multiplier: table.multiplier, microsPerCredit: table.microsPerCredit }
+}
+
+export const modelPricingInput = z.object({
+  model: z.string().min(3).max(80),
+  label: z.string().min(1).max(80),
+  input: z.number().int().min(0).max(1_000_000),
+  output: z.number().int().min(0).max(1_000_000),
+  cacheRead: z.number().int().min(0).max(1_000_000),
+  isActive: z.boolean(),
+})
+
+export async function updateModelPricing(input: z.infer<typeof modelPricingInput>) {
+  const admin = await requireAdmin()
+  await prisma.aiModelPricing.upsert({
+    where: { model: input.model },
+    update: {
+      label: input.label,
+      inputCentsPerMTok: input.input,
+      outputCentsPerMTok: input.output,
+      cacheReadCentsPerMTok: input.cacheRead,
+      isActive: input.isActive,
+    },
+    create: {
+      model: input.model,
+      label: input.label,
+      inputCentsPerMTok: input.input,
+      outputCentsPerMTok: input.output,
+      cacheReadCentsPerMTok: input.cacheRead,
+      isActive: input.isActive,
+    },
+  })
+  forgetPricingCache()
+  logger.info('tarif de modèle modifié', { adminId: admin.id, model: input.model })
+}
+
+export const creditSettingsInput = z.object({
+  /** Marge Evoliia. À 1, le créateur paie exactement ce qu'Evoliia dépense. */
+  multiplier: z.number().min(0.1).max(20),
+  /** Micro-dollars de coût API pour un crédit. */
+  microsPerCredit: z.number().int().min(1).max(1_000_000),
+})
+
+export async function updateCreditSettings(input: z.infer<typeof creditSettingsInput>) {
+  const admin = await requireAdmin()
+  await writeSetting(PRICING_SETTINGS.multiplier, String(input.multiplier))
+  await writeSetting(PRICING_SETTINGS.microsPerCredit, String(input.microsPerCredit))
+  forgetPricingCache()
+  logger.info('conversion des crédits modifiée', {
+    adminId: admin.id,
+    multiplier: input.multiplier,
+  })
 }

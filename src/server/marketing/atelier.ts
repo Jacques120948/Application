@@ -8,7 +8,7 @@ import { creditsForCost, ensureCredits, spendCredits } from '@/server/billing/cr
 import type { CreditedOperation } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { requireFeature } from '@/server/billing/features'
-import { costMicros } from '@/server/ai/routing'
+import { costMicros, loadPricing } from '@/server/billing/ai-pricing'
 import { appSpecSchema } from '@/server/spec/schema'
 import {
   launchKitSchema,
@@ -125,14 +125,18 @@ async function settle(
   usage: EngineUsage,
   startedAt: number,
 ): Promise<number> {
-  const cost = costMicros(usage.model, {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    cachedTokens: usage.cachedTokens,
-  })
-  const credits = creditsForCost(operation, cost)
+  const cost = costMicros(
+    usage.model,
+    {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedTokens: usage.cachedTokens,
+    },
+    await loadPricing(),
+  )
+  const credits = await creditsForCost(operation, cost)
 
-  await prisma.aiUsage
+  const recorded = await prisma.aiUsage
     .create({
       data: {
         userId,
@@ -147,10 +151,13 @@ async function settle(
         latencyMs: Date.now() - startedAt,
         success: true,
       },
+      select: { id: true },
     })
-    .catch(() => undefined)
+    .catch(() => null)
 
-  await spendCredits(userId, credits, `ia:${operation}`, projectId)
+  await spendCredits(userId, credits, `ia:${operation}`, projectId, {
+    aiUsageId: recorded?.id,
+  })
   return credits
 }
 

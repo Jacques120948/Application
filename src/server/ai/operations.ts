@@ -5,17 +5,20 @@ import { prisma } from '@/server/db/client'
 import { logger } from '@/server/observability/logger'
 import {
   creditsForCost,
-  ensureCredits,
+
+  MINIMUM_COST,
   spendCredits,
   type CreditedOperation,
 } from '@/server/billing/credits'
+import { costMicros, creditsFor, loadPricing } from '@/server/billing/ai-pricing'
+import { releaseReservation, reserveCredits } from '@/server/billing/reservation'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import type { AppSpec, Block } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
 import { assembleSpec } from '@/server/spec/assemble'
 import type Anthropic from '@anthropic-ai/sdk'
 import { getAnthropic, getAnthropicWithKey, isAiAvailable } from './client'
-import { costMicros, GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
+import { GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
 import {
   appAssistantSystem,
   asUserData,
@@ -225,7 +228,27 @@ function truncateAt(root: unknown, path: Array<string | number>, maximum: number
   if (typeof value === 'string') container[last] = value.slice(0, maximum).trimEnd()
 }
 
-type Accounting = { userId: string; projectId?: string; operation: CreditedOperation }
+/**
+ * État d'une opération en cours de facturation.
+ *
+ * Il est attaché à l'objet de comptabilité par `beforeCalls` et relu par `recordCall` et
+ * `afterCalls`. Le faire voyager ainsi plutôt que de le passer en paramètre évite de
+ * modifier la douzaine d'endroits qui enregistrent un appel — et l'objet de comptabilité
+ * est créé à neuf pour chaque opération, donc rien ne fuit d'une opération à l'autre.
+ */
+type RunState = {
+  reservationId: string | null
+  /** Les appels enregistrés, dans l'ordre : c'est sur eux que le débit est réparti. */
+  calls: Array<{ id: string; costMicros: number }>
+  settled: boolean
+}
+
+type Accounting = {
+  userId: string
+  projectId?: string
+  operation: CreditedOperation
+  run?: RunState
+}
 
 /**
  * Enregistre un appel et renvoie ce qu'il a coûté à Evoliia.
@@ -260,8 +283,9 @@ async function recordCall(
   billedToEvoliia = true,
   errorMessage?: string,
 ): Promise<number> {
-  const cost = billedToEvoliia ? costMicros(outcome.model, outcome.usage) : 0
-  await prisma.aiUsage
+  const table = await loadPricing()
+  const cost = billedToEvoliia ? costMicros(outcome.model, outcome.usage, table) : 0
+  const usage = await prisma.aiUsage
     .create({
       data: {
         userId: accounting.userId,
@@ -277,30 +301,114 @@ async function recordCall(
         errorCode: errorCode ?? null,
         errorMessage: errorMessage ?? null,
       },
+      select: { id: true },
     })
-    .catch(() => undefined)
+    .catch(() => null)
+  if (usage !== null && accounting.run !== undefined) {
+    accounting.run.calls.push({ id: usage.id, costMicros: cost })
+  }
   return cost
 }
 
-/** Vérifie le quota et le solde. À appeler avant le premier appel réseau. */
+/**
+ * Estimation haute du coût d'une opération, en crédits.
+ *
+ * Elle sert à réserver, pas à facturer : on suppose la sortie remplie jusqu'à sa borne et
+ * l'entrée trois fois plus grosse, ce qui n'arrive presque jamais. Réserver large et
+ * rendre beaucoup vaut mieux que réserver juste et découvrir le dépassement une fois
+ * l'argent dépensé.
+ */
+async function estimateMaxCredits(operation: CreditedOperation): Promise<number> {
+  const profile = OPERATION_PROFILES[operation]
+  const table = await loadPricing()
+  const worst = costMicros(
+    profile.model,
+    {
+      inputTokens: profile.maxTokens * 3,
+      outputTokens: profile.maxTokens,
+      cachedTokens: 0,
+    },
+    table,
+  )
+  return creditsFor(worst, MINIMUM_COST[operation], table)
+}
+
+/**
+ * Vérifie le quota, puis met les crédits de côté. À appeler avant le premier appel réseau.
+ *
+ * La réservation remplace la simple vérification de solde : entre le contrôle et le débit,
+ * une opération peut durer une minute, et deux opérations lancées ensemble y lisaient le
+ * même solde. Le dépassement était alors rattrapé en plafonnant le débit — c'est-à-dire
+ * qu'Evoliia payait la différence.
+ */
 async function beforeCalls(accounting: Accounting): Promise<void> {
   if (!isAiAvailable()) {
     throw new AppError('AI_UNAVAILABLE', "L'assistant n'est pas configuré sur cette installation.")
   }
   consume(`ai:${accounting.userId}`, RULES.aiOperation)
-  await ensureCredits(accounting.userId, accounting.operation)
+
+  const reservation = await reserveCredits({
+    userId: accounting.userId,
+    operation: accounting.operation,
+    amount: await estimateMaxCredits(accounting.operation),
+    projectId: accounting.projectId,
+  })
+  accounting.run = { reservationId: reservation.id, calls: [], settled: false }
 }
 
-/** Débite une fois, sur la base du coût cumulé réellement observé. */
+/**
+ * Débite une fois, sur la base du coût cumulé réellement observé, puis rend la réservation.
+ *
+ * Le débit est rattaché aux appels qui l'ont causé : chaque ligne d'usage reçoit sa part
+ * des crédits, et l'écriture du journal désigne le premier appel de l'opération. Sans ce
+ * lien, « pourquoi ai-je perdu 34 crédits » n'avait pas de réponse vérifiable.
+ */
 async function afterCalls(accounting: Accounting, totalCostMicros: number): Promise<RunResult<null>> {
-  const credits = creditsForCost(accounting.operation, totalCostMicros)
+  const credits = await creditsForCost(accounting.operation, totalCostMicros)
+  const calls = accounting.run?.calls ?? []
+
   const balance = await spendCredits(
     accounting.userId,
     credits,
     `ia:${accounting.operation}`,
     accounting.projectId,
+    { aiUsageId: calls[0]?.id },
   )
+  await shareCreditsOverCalls(calls, credits)
+  await settleRun(accounting)
   return { value: null, creditsSpent: credits, balance }
+}
+
+/** Répartit les crédits débités entre les appels, au prorata de leur coût réel. */
+async function shareCreditsOverCalls(
+  calls: ReadonlyArray<{ id: string; costMicros: number }>,
+  credits: number,
+): Promise<void> {
+  if (calls.length === 0 || credits <= 0) return
+  const total = calls.reduce((sum, call) => sum + call.costMicros, 0)
+  let reste = credits
+
+  for (const [index, call] of calls.entries()) {
+    // Le dernier appel absorbe l'arrondi : la somme des parts vaut exactement le débit.
+    const part =
+      index === calls.length - 1
+        ? reste
+        : total === 0
+          ? Math.floor(credits / calls.length)
+          : Math.floor((credits * call.costMicros) / total)
+    reste -= part
+    await prisma.aiUsage
+      .update({ where: { id: call.id }, data: { creditsSpent: part } })
+      .catch(() => undefined)
+  }
+}
+
+/** Rend la réservation, qu'elle ait servi ou non. Appelé une seule fois par opération. */
+async function settleRun(accounting: Accounting): Promise<void> {
+  const run = accounting.run
+  if (run === undefined || run.settled) return
+  run.settled = true
+  if (run.reservationId !== null) await releaseReservation(run.reservationId)
 }
 
 function toPublicFailure(error: unknown, context: Record<string, unknown>): AppError {
@@ -347,6 +455,7 @@ async function runSingleCall<T>(params: {
       true,
       describeFailure(error),
     )
+    await settleRun(params.accounting)
     throw toPublicFailure(error, { operation: params.accounting.operation })
   }
 }
@@ -462,6 +571,7 @@ export async function generateSpec(
   } catch (error) {
     // Les appels déjà faits ont coûté : ils sont facturés même si l'assemblage échoue.
     if (totalCost > 0) await afterCalls(accounting, totalCost).catch(() => undefined)
+    await settleRun(accounting)
     throw toPublicFailure(error, { operation: 'generate', projectId })
   }
 }
@@ -843,6 +953,7 @@ export async function answerAsAppAssistant(params: {
       error instanceof AppError ? error.code : 'inconnu',
       false,
     )
+    await settleRun(accounting)
     if (onCreatorKey) throw creatorKeyFailure(error)
     throw toPublicFailure(error, { projectId: params.projectId })
   }
@@ -953,6 +1064,7 @@ export async function askCoach(params: {
       false,
       error instanceof AppError ? error.code : 'inconnu',
     )
+    await settleRun(accounting)
     throw toPublicFailure(error, { userId: params.userId })
   }
 }
@@ -1060,6 +1172,7 @@ export async function askSpecialist(params: {
       false,
       error instanceof AppError ? error.code : 'inconnu',
     )
+    await settleRun(accounting)
     throw toPublicFailure(error, { userId: params.userId })
   }
 }
@@ -1152,6 +1265,7 @@ export async function answerAsLia(params: {
       error instanceof AppError ? error.code : 'inconnu',
       false,
     )
+    await settleRun(accounting)
     if (onCreatorKey) throw creatorKeyFailure(error)
     throw toPublicFailure(error, { projectId: params.projectId })
   }

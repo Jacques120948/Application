@@ -1,7 +1,10 @@
 # Evoliia comme atelier de création piloté par l'IA
 
-Document d'architecture. Il précède l'implémentation : rien n'est modifié tant que les
-arbitrages qu'il pose ne sont pas tranchés.
+Document d'architecture, et journal de son exécution.
+
+Les trois arbitrages de la section 4 ont été tranchés le 16 septembre 2026 : **chemin A**
+(élargir le modèle déclaratif), **bornes prudentes** pour l'agent, **marge à 1** au départ.
+La phase 1 est livrée ; les suivantes s'y appuient.
 
 Il répond à une demande en vingt-six points. Une bonne partie de ce qui y est demandé
 existe déjà dans Evoliia, parfois exactement sous la forme décrite. Le dire franchement
@@ -15,8 +18,8 @@ bute réellement.
 ### La pile
 
 Next.js 15 (App Router), React 19, TypeScript strict, Tailwind 4, Prisma 6 sur PostgreSQL
-16, Vitest. Déploiement Vercel depuis la branche unique. 454 tests, dont une partie sur une
-vraie base soumise au Row Level Security.
+16, Vitest. Déploiement Vercel depuis la branche unique. Près de cinq cents tests, dont une
+part notable sur une vraie base soumise au Row Level Security.
 
 ### Comment une application est fabriquée aujourd'hui
 
@@ -52,12 +55,12 @@ déploiements, et ce qui rend l'isolation vérifiable.
 | 6 — Vérification puis preview | **Partiel.** `runChecks()` (contraste, textes-bouchons, images manquantes), aperçu en direct, une reprise automatique si la validation refuse le patch. Manque : une boucle de correction digne de ce nom. |
 | 7 — Historique et retour arrière | **Fait.** `ProjectVersion` immuable, numérotée, avec libellé ; `listVersions`, `restoreVersion`, onglet Versions. Une génération IA ne détruit jamais un projet. |
 | 8 — Solde de crédits côté serveur | **Fait.** `CreditWallet` + `CreditLedger`. Le frontend ne calcule ni ne modifie rien. |
-| 9 — Consommation réelle | **Fait à 90 %.** Table `AiUsage` : utilisateur, projet, modèle, jetons entrée/sortie/cache, coût en micro-dollars, latence, succès, code d'erreur. **Manque : `creditsSpent` est déclaré mais jamais écrit — il vaut toujours 0.** Et les tarifs sont dans le code, pas en base. |
-| 11 — Réservation de crédits | **Absent.** Le solde est vérifié avant, débité après. Pas de réservation. |
+| 9 — Consommation réelle | **Fait.** Table `AiUsage` : utilisateur, projet, modèle, jetons entrée/sortie/cache, coût en micro-dollars, latence, succès, code d'erreur. `creditsSpent` était écrit par les opérations marketing mais pas par le chemin central ; la phase 1 l'y a ajouté, réparti au prorata entre les appels d'une même opération. Les tarifs sont désormais en base. |
+| 11 — Réservation de crédits | **Fait en phase 1.** Table `CreditReservation`, pose transactionnelle avec verrou sur le portefeuille, libération immédiate à l'échec, échéance qui empêche tout gel définitif. |
 | 12 — Protections | **Fait en grande partie.** `max_tokens` par opération, timeout 120 s, `RULES.aiOperation` (30/min), vérification du solde avant tout appel réseau, quotas mensuels par offre (Radar, Lia). Manque : limite journalière configurable. |
-| 13 — Routage des modèles | **Fait.** `src/server/ai/routing.ts` : `MODELS.reasoning / fast / economical`, un profil par opération. Les noms de modèles ne sont écrits qu'à cet endroit. **Mais ils sont dans le code, pas en base.** |
+| 13 — Routage des modèles | **Fait.** `src/server/ai/routing.ts` : `MODELS.reasoning / fast / economical` — vos `AI_MODEL_POWERFUL / STANDARD / FAST` —, un profil par opération. Les noms ne sont écrits qu'à cet endroit. Leur passage en base est prévu avec l'agent, qui sera le premier à en avoir besoin. |
 | 14 — Afficher le coût | **Partiel.** Le solde est affiché partout ; « X crédits utilisés » remonte après opération. Manque : l'estimation avant, et la répartition. |
-| 17 — Ledger | **Fait.** `CreditLedger` avec `delta`, `balanceAfter`, `reason`, `projectId`. **Manque : type structuré, lien vers `AiUsage`, lien vers un paiement Stripe.** |
+| 17 — Ledger | **Fait en phase 1.** `CreditLedger` gagne un type (`AI_USAGE`, `SUBSCRIPTION_CREDIT`, `CREDIT_PURCHASE`, `REFUND`, `ADJUSTMENT`, `BONUS`, `EXPIRED_CREDIT`), un lien vers l'appel qui a causé le débit, et un lien vers le paiement Stripe — unique, donc un paiement ne crédite qu'une fois. L'historique déjà écrit a été reclassé par la migration. |
 | 18 — Crédits inclus dans l'abonnement | **Fait.** `Plan.monthlyCredits`, réglable depuis l'administration. Manque : la distinction entre crédits offerts et crédits achetés. |
 | 21 — `project_versions` | **Existe déjà** sous le nom `ProjectVersion`. |
 | 22 — Optimisation du coût | **Partiel.** Cache du prompt système, génération en deux temps (plan au modèle fort, pages au modèle rapide — le coût divisé par deux, mesuré), modèle économique pour les réponses courtes. **Manque : la sélection de contexte. Aujourd'hui `editWithAssistant` envoie `JSON.stringify(spec)`, l'application entière, pour « change le texte du bouton ».** |
@@ -144,7 +147,7 @@ Ils peuvent être traités plus tard par une brique dédiée et bornée, pas par
 
 Chaque phase est indépendante, livrable et réversible. Aucune ne supprime quoi que ce soit.
 
-### PHASE 1 — Tarifs, marge et réservation de crédits
+### PHASE 1 — Tarifs, marge et réservation de crédits · **livrée**
 
 **Ce qui existe.** `CreditWallet`, `CreditLedger`, `AiUsage`, `creditsForCost()`,
 `MINIMUM_COST`, `MICROS_PER_CREDIT = 5 000`, `PRICING` par modèle, `MODELS` par rôle.
@@ -173,9 +176,17 @@ Nouvelles lignes `SiteSetting` pour le multiplicateur et l'unité — la table e
 libérée gèle des crédits.
 
 **Comment ne rien casser.** Les colonnes ajoutées sont facultatives, avec des valeurs par
-défaut égales au comportement actuel. La réservation est libérée dans un `finally`, et un
-travail de ménage restitue toute réservation plus vieille que le délai d'expiration. Les
-tests existants sur les crédits font foi : ils doivent passer sans modification.
+défaut égales au comportement actuel. Une réservation est libérée sur chaque chemin
+d'échec, et cesse de toute façon de compter à son échéance. La table des tarifs n'est
+amorcée qu'en création : un tarif corrigé depuis le back-office n'est jamais réécrit par
+un déploiement.
+
+**Ce qui a réellement été livré.** Tables `AiModelPricing` et `CreditReservation` ;
+`CreditLedger` typé et relié à l'appel et au paiement ; `ai-pricing.ts` avec les valeurs du
+code en secours ; `reservation.ts` ; écran d'administration « Le coût de l'intelligence
+artificielle » ; `creditsSpent` écrit et réparti. Marge laissée à 1 : rien de ce que paient
+les clients n'a changé. 468 tests passent, dont douze nouveaux sur la réservation et le
+journal.
 
 ---
 
@@ -357,13 +368,13 @@ construit pas une boucle d'agent puis on lui met des freins ; on pose les freins
 6. **Phase 6** — packs de crédits, quand vous aurez fixé les prix.
 7. **Phase 8** — le reste des optimisations, mesuré.
 
-**Trois décisions vous appartiennent avant que je commence :**
+**Trois décisions ont été prises le 16 septembre 2026, et sont reportées ici :**
 
-1. **Chemin A ou chemin B** (section 2). Je recommande A.
-2. **Les bornes de l'agent** : nombre d'étapes maximum, jetons maximum par exécution, coût
-   maximum en crédits par exécution. Ce sont elles qui décident de votre facture Anthropic.
-3. **Le multiplicateur de marge** de départ. Aujourd'hui l'unité est 1 crédit pour
-   5 000 micro-dollars, sans multiplicateur explicite. Le rendre explicite ne change rien
-   tant qu'il vaut 1 ; au-delà, c'est votre marge.
-
-Rien ne bouge tant que ces trois réponses ne sont pas là.
+1. **Chemin A** — élargir le modèle déclaratif. Les APIs et webhooks sortants arbitraires
+   restent hors périmètre ; ils relèveront d'une brique dédiée et bornée, pas de code libre.
+2. **Bornes prudentes** pour l'agent : de l'ordre de six étapes, quarante mille jetons et
+   quarante crédits par exécution. On mesure sur des cas réels avant d'élargir, avec des
+   chiffres plutôt qu'une impression.
+3. **Marge à 1.** Le multiplicateur devient explicite et réglable, sans rien changer à ce
+   que paient les clients aujourd'hui. Il s'ajustera quand le tableau de bord
+   administrateur montrera la marge réelle par opération.

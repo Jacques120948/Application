@@ -7,7 +7,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import { creditsForCost, ensureCredits, spendCredits } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { LAUNCH_KIT_FEATURE, requireFeature } from '@/server/billing/features'
-import { costMicros } from '@/server/ai/routing'
+import { costMicros, loadPricing } from '@/server/billing/ai-pricing'
 import { appSpecSchema } from '@/server/spec/schema'
 import { launchKitSchema, type LaunchKit, type MonthlyPlan } from '@/lib/marketing'
 import { toBrandContext } from './context'
@@ -164,14 +164,18 @@ export async function createLaunchKit(userId: string, projectId: string): Promis
     )
   }
 
-  const cost = costMicros(result.usage.model, {
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
-    cachedTokens: result.usage.cachedTokens,
-  })
-  const credits = creditsForCost('launchKit', cost)
+  const cost = costMicros(
+    result.usage.model,
+    {
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+      cachedTokens: result.usage.cachedTokens,
+    },
+    await loadPricing(),
+  )
+  const credits = await creditsForCost('launchKit', cost)
 
-  await prisma.aiUsage
+  const recorded = await prisma.aiUsage
     .create({
       data: {
         userId,
@@ -186,10 +190,11 @@ export async function createLaunchKit(userId: string, projectId: string): Promis
         latencyMs: Date.now() - startedAt,
         success: true,
       },
+      select: { id: true },
     })
-    .catch(() => undefined)
+    .catch(() => null)
 
-  await spendCredits(userId, credits, 'ia:launchKit', projectId)
+  await spendCredits(userId, credits, 'ia:launchKit', projectId, { aiUsageId: recorded?.id })
 
   const saved = await withUserScope(userId, (tx) =>
     tx.marketingKit.create({

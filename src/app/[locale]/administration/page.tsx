@@ -9,6 +9,7 @@ import {
   listFlags,
   listPlans,
   listUsers,
+  listModelPricing,
   readLegalIdentity,
 } from '@/server/admin/service'
 import { Shell } from '@/components/studio/Shell'
@@ -17,6 +18,7 @@ import {
   AdminPlan,
   AdminUser,
   LegalIdentityForm,
+  AiPricingEditor,
   FlagEditor,
   PlanEditor,
   UserTable,
@@ -38,7 +40,7 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
   if (user.role !== 'ADMIN') notFound()
 
   const t = getTranslator(locale)
-  const [overview, plans, users, identity, wallet, flags, failures] = await Promise.all([
+  const [overview, plans, users, identity, wallet, flags, failures, pricing] = await Promise.all([
     getAdminOverview(),
     listPlans(),
     listUsers({ query: '', take: 50 }),
@@ -46,6 +48,7 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
     getWallet(user.id),
     listFlags(),
     listAiFailures(),
+    listModelPricing(),
   ])
 
   const figures = [
@@ -124,6 +127,19 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
           le jour où elle arrive, sans redéploiement.
         </p>
         <FlagEditor flags={flags} />
+
+        <h2 className="mt-12 mb-1 text-lg font-semibold">Le coût de l’intelligence artificielle</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Deux choses distinctes. Les tarifs disent ce qu’Evoliia paie à Anthropic : ils se
+          recopient depuis leur page de tarifs le jour où elle change. La conversion dit ce
+          que le créateur paie à Evoliia : c’est une décision commerciale. Tant que rien
+          n’est réglé ici, les valeurs du code s’appliquent, et ce sont celles d’aujourd’hui.
+        </p>
+        <AiPricingEditor
+          models={pricing.models}
+          multiplier={pricing.multiplier}
+          microsPerCredit={pricing.microsPerCredit}
+        />
 
         <h2 className="mt-12 mb-1 text-lg font-semibold">Les offres</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">

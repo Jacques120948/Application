@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { DEFAULT_PLANS, PLANNED_PLAN_CAPABILITIES } from '../src/server/billing/plans'
+import { DEFAULT_MODEL_PRICING } from '../src/server/billing/ai-pricing'
 import { activerRadarEtLiaUneFois } from '../src/server/billing/activation'
 import { seedDemoApps } from './seed-demos'
 
@@ -73,8 +74,37 @@ async function main(): Promise<void> {
   if (ouverture === null) console.log('Radar et Lia : ouverture déjà faite, offres laissées telles quelles.')
   else for (const ligne of ouverture) console.log(`Radar et Lia ouverts — ${ligne}`)
 
+  await seedTarifsIa()
   await seedDemoApps(prisma)
   await promoteAdmin()
+}
+
+/**
+ * Tarifs des modèles, écrits une fois pour que l'administration ait des lignes à modifier.
+ *
+ * `create` seulement, jamais `update` : un tarif corrigé depuis le back-office ne doit pas
+ * être réécrit par le prochain déploiement. Le code ne fait qu'amorcer la table ; ensuite
+ * elle appartient à l'exploitant.
+ */
+async function seedTarifsIa(): Promise<void> {
+  let ajoutes = 0
+  for (const [model, price] of Object.entries(DEFAULT_MODEL_PRICING)) {
+    const existe = await prisma.aiModelPricing.findUnique({ where: { model } })
+    if (existe !== null) continue
+    await prisma.aiModelPricing.create({
+      data: {
+        model,
+        label: price.label,
+        inputCentsPerMTok: price.input,
+        outputCentsPerMTok: price.output,
+        cacheReadCentsPerMTok: price.cacheRead,
+      },
+    })
+    ajoutes += 1
+  }
+  console.log(
+    ajoutes > 0 ? `Tarifs IA initialisés : ${ajoutes}` : 'Tarifs IA : déjà en place, rien modifié.',
+  )
 }
 
 /**

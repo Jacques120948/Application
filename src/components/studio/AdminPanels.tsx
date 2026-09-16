@@ -587,3 +587,237 @@ function FlagCard({ flag }: { flag: AdminFlag }) {
     </Card>
   )
 }
+
+// ─────────────────── Tarifs des modèles et marge Evoliia ─────────────────────
+
+export type AdminModelPrice = {
+  model: string
+  label: string
+  input: number
+  output: number
+  cacheRead: number
+  isActive: boolean
+  fromCode: boolean
+}
+
+/** Centimes par million de jetons → dollars, pour l'affichage. */
+function usdPerMTok(cents: number): string {
+  return `${(cents / 100).toFixed(2)} $`
+}
+
+/**
+ * Tarifs et conversion.
+ *
+ * Deux choses différentes sur le même écran, et il faut les distinguer : le tarif dit ce
+ * qu'Evoliia paie à Anthropic, la conversion dit ce que le créateur paie à Evoliia. Le
+ * premier se recopie depuis la page de tarifs d'Anthropic ; le second est une décision
+ * commerciale.
+ */
+export function AiPricingEditor({
+  models,
+  multiplier,
+  microsPerCredit,
+}: {
+  models: AdminModelPrice[]
+  multiplier: number
+  microsPerCredit: number
+}) {
+  return (
+    <div className="grid gap-4">
+      <ConversionCard multiplier={multiplier} microsPerCredit={microsPerCredit} />
+      {models.map((model) => (
+        <ModelPriceCard key={model.model} price={model} />
+      ))}
+    </div>
+  )
+}
+
+function ConversionCard({
+  multiplier,
+  microsPerCredit,
+}: {
+  multiplier: number
+  microsPerCredit: number
+}) {
+  const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [valeurs, setValeurs] = useState({
+    multiplier: String(multiplier),
+    microsPerCredit: String(microsPerCredit),
+  })
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setStatus('busy')
+    setError(null)
+    const response = await fetch('/api/admin/tarifs-ia', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        multiplier: Number(valeurs.multiplier.replace(',', '.')),
+        microsPerCredit: Number(valeurs.microsPerCredit),
+      }),
+    })
+    const body = (await response.json().catch(() => null)) as { message?: string } | null
+    if (body === null || !response.ok) {
+      setError(body?.message ?? "L'enregistrement n'a pas abouti.")
+      setStatus('idle')
+      return
+    }
+    setStatus('saved')
+  }
+
+  return (
+    <Card>
+      <CardBody>
+        <form onSubmit={submit} className="grid gap-3">
+          <h3 className="m-0 text-base font-semibold">Conversion en crédits</h3>
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+            Le coût réel d’un appel est multiplié par la marge, puis converti en crédits.
+            À 1, le créateur paie exactement ce qu’Evoliia dépense.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Marge" hint="1 · 1,5 · 2 · 2,5 · 3">
+              <Input
+                value={valeurs.multiplier}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, multiplier: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Micro-dollars par crédit" hint="5 000 par défaut">
+              <Input
+                type="number"
+                min={1}
+                value={valeurs.microsPerCredit}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, microsPerCredit: event.target.value }))
+                }
+              />
+            </Field>
+          </div>
+          {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+          {status === 'saved' ? (
+            <Notice tone="positive">
+              Enregistré. La nouvelle conversion s’applique aux opérations suivantes.
+            </Notice>
+          ) : null}
+          <div>
+            <Button type="submit" disabled={status === 'busy'}>
+              {status === 'busy' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
+  )
+}
+
+function ModelPriceCard({ price }: { price: AdminModelPrice }) {
+  const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [valeurs, setValeurs] = useState({
+    label: price.label,
+    input: String(price.input),
+    output: String(price.output),
+    cacheRead: String(price.cacheRead),
+    isActive: price.isActive,
+  })
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setStatus('busy')
+    setError(null)
+    const response = await fetch('/api/admin/tarifs-ia', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: price.model,
+        label: valeurs.label,
+        input: Number(valeurs.input),
+        output: Number(valeurs.output),
+        cacheRead: Number(valeurs.cacheRead),
+        isActive: valeurs.isActive,
+      }),
+    })
+    const body = (await response.json().catch(() => null)) as { message?: string } | null
+    if (body === null || !response.ok) {
+      setError(body?.message ?? "L'enregistrement n'a pas abouti.")
+      setStatus('idle')
+      return
+    }
+    setStatus('saved')
+  }
+
+  return (
+    <Card>
+      <CardBody>
+        <form onSubmit={submit} className="grid gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h3 className="m-0 text-base font-semibold">{price.model}</h3>
+            {price.fromCode ? <Badge tone="neutral">Valeur du code</Badge> : null}
+            {valeurs.isActive ? null : <Badge tone="neutral">Ignoré</Badge>}
+          </div>
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+            En centimes de dollar par million de jetons, comme Anthropic les publie.
+            Actuellement {usdPerMTok(price.input)} en entrée, {usdPerMTok(price.output)} en
+            sortie, {usdPerMTok(price.cacheRead)} en lecture de cache.
+          </p>
+          <Field label="Nom affiché">
+            <Input
+              value={valeurs.label}
+              onChange={(event) => setValeurs((state) => ({ ...state, label: event.target.value }))}
+            />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Entrée">
+              <Input
+                type="number"
+                min={0}
+                value={valeurs.input}
+                onChange={(event) => setValeurs((state) => ({ ...state, input: event.target.value }))}
+              />
+            </Field>
+            <Field label="Sortie">
+              <Input
+                type="number"
+                min={0}
+                value={valeurs.output}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, output: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Lecture de cache">
+              <Input
+                type="number"
+                min={0}
+                value={valeurs.cacheRead}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, cacheRead: event.target.value }))
+                }
+              />
+            </Field>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={valeurs.isActive}
+              onChange={(event) =>
+                setValeurs((state) => ({ ...state, isActive: event.target.checked }))
+              }
+            />
+            Tarif appliqué
+          </label>
+          {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+          {status === 'saved' ? <Notice tone="positive">Enregistré.</Notice> : null}
+          <div>
+            <Button type="submit" disabled={status === 'busy'}>
+              {status === 'busy' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
+  )
+}

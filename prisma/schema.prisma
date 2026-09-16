@@ -43,22 +43,22 @@ enum UserRole {
 }
 
 model User {
-  id              String    @id @default(uuid()) @db.Uuid
-  email           String    @unique
-  passwordHash    String
-  name            String?
-  locale          String    @default("fr")
-  role            UserRole  @default(USER)
-  emailVerifiedAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  disabledAt      DateTime?
+  id               String    @id @default(uuid()) @db.Uuid
+  email            String    @unique
+  passwordHash     String
+  name             String?
+  locale           String    @default("fr")
+  role             UserRole  @default(USER)
+  emailVerifiedAt  DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  disabledAt       DateTime?
   /// Alertes du Radar : nouvelles opportunités correspondant au profil.
-  radarAlerts     Boolean   @default(true)
+  radarAlerts      Boolean   @default(true)
   /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
-  supportAlerts   Boolean   @default(true)
+  supportAlerts    Boolean   @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
-  stripeCustomerId String?  @unique
+  stripeCustomerId String?   @unique
 
   sessions             Session[]
   projects             Project[]
@@ -82,6 +82,7 @@ model User {
   subscription         Subscription?
   wallet               CreditWallet?
   creditEntries        CreditLedger[]
+  creditReservations   CreditReservation[]
   aiUsage              AiUsage[]
   chatMessages         ChatMessage[]
 
@@ -290,19 +291,85 @@ model CreditWallet {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-/// Journal immuable des mouvements de crédits.
+/// Pourquoi un solde a changé. Le motif libre restait lisible mais pas dénombrable :
+/// impossible de répondre à « combien de crédits vendus ce mois » sans analyser du texte.
+enum CreditMovement {
+  /// Dotation mensuelle d'une offre, ou rattrapage après un changement d'offre.
+  SUBSCRIPTION_CREDIT
+  /// Pack acheté séparément de l'abonnement.
+  CREDIT_PURCHASE
+  /// Débit d'un appel au modèle.
+  AI_USAGE
+  /// Remboursement d'un achat.
+  REFUND
+  /// Correction manuelle depuis l'administration.
+  ADJUSTMENT
+  /// Geste commercial.
+  BONUS
+  /// Crédits périmés à l'échéance mensuelle.
+  EXPIRED_CREDIT
+}
+
+/// Journal immuable des mouvements de crédits. C'est lui qui fait foi, pas le solde.
 model CreditLedger {
-  id           String   @id @default(uuid()) @db.Uuid
-  userId       String   @db.Uuid
-  delta        Int
-  balanceAfter Int
-  reason       String
-  projectId    String?  @db.Uuid
-  createdAt    DateTime @default(now())
+  id              String         @id @default(uuid()) @db.Uuid
+  userId          String         @db.Uuid
+  delta           Int
+  balanceAfter    Int
+  /// Motif lisible, conservé tel quel : il dit ce que le type ne dit pas.
+  reason          String
+  type            CreditMovement @default(ADJUSTMENT)
+  projectId       String?        @db.Uuid
+  /// L'appel au modèle qui a provoqué ce débit, quand il y en a un.
+  aiUsageId       String?        @db.Uuid
+  /// Le paiement Stripe qui a provoqué ce crédit. Unique : un paiement ne crédite qu'une fois.
+  stripePaymentId String?        @unique
+  createdAt       DateTime       @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiUsage AiUsage? @relation(fields: [aiUsageId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([type, createdAt])
+}
+
+/// Crédits mis de côté le temps d'une opération.
+///
+/// Sans elle, deux opérations lancées en même temps voient le même solde et le dépassent
+/// toutes les deux. Une réservation retire les crédits du solde disponible avant l'appel,
+/// et ne les débite vraiment qu'une fois la consommation connue ; le reste est rendu.
+model CreditReservation {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  projectId  String?   @db.Uuid
+  operation  String
+  /// Plafond mis de côté, en crédits.
+  amount     Int
+  /// Passé cette date, la réservation ne compte plus : un processus interrompu ne gèle
+  /// pas des crédits pour toujours.
+  expiresAt  DateTime
+  releasedAt DateTime?
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, createdAt])
+  @@index([userId, releasedAt])
+  @@index([expiresAt])
+}
+
+/// Tarif d'un modèle, en centimes de dollar par million de jetons.
+///
+/// C'est l'unité dans laquelle Anthropic publie ses prix : la recopier telle quelle évite
+/// une conversion à la main le jour d'un changement de tarif. Le code garde les valeurs
+/// actuelles en secours, donc une table vide ne casse rien.
+model AiModelPricing {
+  model                 String   @id
+  label                 String
+  inputCentsPerMTok     Int
+  outputCentsPerMTok    Int
+  cacheReadCentsPerMTok Int
+  isActive              Boolean  @default(true)
+  updatedAt             DateTime @updatedAt
 }
 
 /// Comptabilité fine des appels IA : jetons, coût réel, latence (exigence 37).
@@ -324,7 +391,8 @@ model AiUsage {
   errorMessage String?
   createdAt    DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditEntries CreditLedger[]
 
   @@index([userId, createdAt])
   @@index([createdAt])
@@ -593,30 +661,30 @@ model AppEndUser {
 /// Un achat fait par l'utilisateur d'une application créée, sur le compte Stripe du
 /// créateur. L'argent ne transite jamais par Evoliia : on ne garde ici que la trace.
 model AppPurchase {
-  id                   String    @id @default(uuid()) @db.Uuid
-  projectId            String    @db.Uuid
-  endUserId            String?   @db.Uuid
+  id                    String    @id @default(uuid()) @db.Uuid
+  projectId             String    @db.Uuid
+  endUserId             String?   @db.Uuid
   /// Offre de l'application (identifiant et nom dans l'AppSpec au moment de l'achat).
-  planId               String
-  planName             String
+  planId                String
+  planName              String
   /// payment | subscription
-  mode                 String
-  amountCents          Int       @default(0)
-  currency             String
+  mode                  String
+  amountCents           Int       @default(0)
+  currency              String
   /// paid | active | past_due | canceled | refunded
-  status               String    @default("paid")
-  stripeAccountId      String
-  stripeSessionId      String    @unique
-  stripeSubscriptionId String?
+  status                String    @default("paid")
+  stripeAccountId       String
+  stripeSessionId       String    @unique
+  stripeSubscriptionId  String?
   /// Paiement à rembourser (paiement unique). Pour un abonnement, la dernière facture est relue chez Stripe.
   stripePaymentIntentId String?
   /// Commission d'Evoliia prélevée sur cette vente, restituée en cas de remboursement.
-  applicationFeeCents  Int       @default(0)
-  refundedCents        Int       @default(0)
-  refundedAt           DateTime?
-  currentPeriodEnd     DateTime?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @default(now()) @updatedAt
+  applicationFeeCents   Int       @default(0)
+  refundedCents         Int       @default(0)
+  refundedAt            DateTime?
+  currentPeriodEnd      DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @default(now()) @updatedAt
 
   project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   endUser AppEndUser? @relation(fields: [endUserId], references: [id], onDelete: SetNull)
