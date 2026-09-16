@@ -795,124 +795,136 @@ export const en: Record<keyof typeof fr, string> = {
     'You no longer have enough credits for this operation. Your credits renew every month.',
   'ai.disabled': 'The assistant is not configured on this installation. See the setup guide.',
 
-  /* ── Public page: visibility. The new positioning. ───────────────────────── */
-  'vis.metaTitle': 'Evoliia | Your AI team for being found everywhere',
+  /* ── Public page: visibility. See the French catalogue for the writing rules. */
+  'vis.metaTitle': 'Evoliia | The AI team that gets your site found',
   'vis.metaDescription':
-    'Analyse your site, improve your search ranking and prepare your content for Google and AI engines. A team of agents that explains, prioritises and writes.',
+    'Analyse your site, understand what keeps it from being found on Google and quoted by AI, and fix it. For freelancers, tradespeople, shop owners and small businesses.',
   'vis.navTeam': 'The team',
   'vis.navHow': 'How it works',
   'vis.navPricing': 'Pricing',
   'vis.navStart': 'Analyse my site',
 
-  'vis.heroEyebrow': 'Search and AI engines',
+  'vis.heroEyebrow': 'Freelancers, tradespeople, shop owners, small businesses',
   'vis.heroTitle': 'Your AI team for being found everywhere.',
   'vis.heroBody':
-    'Analyse your site, improve your search ranking and prepare your content for Google and AI engines. You need to know nothing about SEO: the team tells you what to do, in what order, and writes it for you.',
+    'Your site is online, and yet almost nobody finds it. Evoliia reads it page by page, tells you in plain language what is wrong, ranks the fixes from the most useful to the least urgent — and writes them for you.',
   'vis.heroPlaceholder': 'https://mysite.com',
   'vis.heroCta': 'Analyse my site',
-  'vis.heroCtaSecond': 'Meet the team',
-  'vis.heroNote': 'No card required. Your site is read, never modified.',
-  'vis.heroScoreSeo': 'Search',
+  'vis.heroCtaSecond': 'See the team',
+  'vis.heroNote': 'No card, no password, nothing to install.',
+  'vis.heroScoreSeo': 'Google',
   'vis.heroScoreGeo': 'AI engines',
-  'vis.heroSample': 'Example result',
+  'vis.heroSample': 'What a result looks like',
   'vis.heroSampleNote': 'An example, not a forecast: your figures depend on your site.',
-  'vis.heroPriorities': 'priority actions',
+  'vis.heroPriorities': 'actions to deal with first',
 
-  'vis.pathTitle': 'Five steps, and nothing to learn.',
+  'vis.pathTitle': 'You give an address. We handle the vocabulary.',
   'vis.pathBody':
-    'You give an address. The rest unfolds without jargon, and every finding is explained in a language you actually speak.',
+    'Search marketing is a trade full of words nobody wants to learn. You will not have to remember a single one.',
   'vis.path1Title': 'Add',
-  'vis.path1Body': 'You enter your site address. That is all we ask for.',
+  'vis.path1Body':
+    'You paste your site address. No access, no password, nothing installed on it.',
   'vis.path2Title': 'Analyse',
   'vis.path2Body':
-    'Léa walks through your pages, up to fifty, and records everything an engine would see.',
+    'Léa walks through your pages, up to fifty, starting with the ones that matter most.',
   'vis.path3Title': 'Understand',
   'vis.path3Body':
-    'Two scores, and five actions ranked by importance. Every problem is explained plainly.',
+    'Two scores out of a hundred, and five ranked actions. Every problem comes with what it costs you.',
   'vis.path4Title': 'Fix',
   'vis.path4Body':
-    'You ask the relevant agent for the correction, compare it with what you have, and copy it.',
+    'You ask the relevant agent for the text, compare it with what you have, and copy it.',
   'vis.path5Title': 'Progress',
   'vis.path5Body':
-    'You run the analysis again. Your scores are tracked over time and your list empties out.',
+    'You run the analysis again. The scores are tracked over time, and your list empties out.',
 
-  'vis.scoresTitle': 'Two scores, because there are now two audiences.',
+  'vis.prioTitle': 'Where to start: the only question that really matters.',
+  'vis.prioBody':
+    'An audit that hands back two hundred remarks helps nobody — it gets closed. Evoliia ranks them, explains what each problem costs you, and stops at the five that change something.',
+  'vis.prioBadge': 'Priority 1',
+  'vis.prioHeadline': '14 product pages with no description',
+  'vis.prioWhy':
+    'Google has nothing to show under their title, so it grabs a piece of text from the page at random — often your menu. That sentence decides whether anyone clicks.',
+  'vis.prioCta': 'Fix it with Néo',
+  'vis.prioNote': 'An example. Your priorities depend on what the analysis finds on your site.',
+
+  'vis.scoresTitle': 'People search for you on Google. They are starting to ask an AI.',
   'vis.scoresBody':
-    'Ranking well in Google and being quoted by an assistant do not take the same work. Evoliia measures each separately.',
-  'vis.seoTitle': 'Search score',
+    'The two do not take the same work, and a single figure would blur them. Evoliia measures each separately.',
+  'vis.seoTitle': 'Google score',
   'vis.seoBody':
-    'What a search engine looks at: your titles, your descriptions, the structure of your pages, your internal links, your images, your structured data. Around thirty checks, all computed by code.',
+    'What a search engine looks at: your titles, your descriptions, the structure of your pages, the links between them, your images, your structured data. Around thirty checks, all done by computation.',
   'vis.geoTitle': 'AI engine score',
   'vis.geoBody':
-    'What an assistant needs to find in order to quote you: direct answers, clear facts, a clearly identified business, content that holds up out of context.',
+    'What an assistant needs to find before it will quote you: direct answers, clear facts, an identifiable business, text that stands up even when lifted out of its page.',
   'vis.geoWarning':
-    'No score guarantees an appearance in ChatGPT, Gemini or Perplexity. Nobody can promise that, and we do not. This score measures what is within your control.',
-  'vis.scoresHow': 'How the score is calculated',
+    'No score guarantees an appearance in ChatGPT, Gemini or Perplexity. Nobody can promise that, and we do not. This one measures what is within your control, and nothing else.',
+  'vis.scoresHow': 'Where these figures come from',
   'vis.scoresHowBody':
-    'By rules, with weightings, over facts recorded in your pages. No artificial intelligence invents the number: it explains what the calculation found, and it writes the corrections.',
+    'From rules and weightings applied to what was recorded in your pages. No artificial intelligence invents the score: it explains what the calculation found, and it writes the corrections. You can ask for every lost point in detail.',
 
-  'vis.teamTitle': 'Four specialists, one site.',
+  'vis.teamTitle': 'Four specialists, one site, one conversation.',
   'vis.teamBody':
-    'What makes them a team is not their first name: it is that each one looks at something different and can do something different. You talk to them in a single conversation.',
+    'What makes them a team is not their first name: each one looks at something different and can do something different. You do not have to pick who to talk to — you write, and whoever knows answers.',
   'vis.teamHandles': 'Handles',
   'vis.teamAsk': 'You can ask',
   'vis.teamSoon': 'In progress',
   'vis.teamSoonNote':
-    'The team is being built. This page describes what it will do, and each specialist will open on the day it works.',
+    'The team is being built. This page describes what it will do; each specialist will open on the day it works, not before.',
 
-  'vis.checksTitle': 'What Evoliia looks at in your pages.',
+  'vis.checksTitle': 'What gets counted, and what gets written.',
   'vis.checksBody':
-    'Everything below is measured by code: exact, immediate, and it costs you no credits. Artificial intelligence comes afterwards, to explain and to write.',
-  'vis.checks1Title': 'The form',
-  'vis.checks2Title': 'The content',
-  'vis.checks3Title': 'The technical side',
-  'vis.checks4Title': 'Structured data',
+    'Everything countable is counted by computation: exact, immediate, and it costs you no credits. Artificial intelligence steps in only afterwards, to explain and to write — where it cannot be replaced, and only there.',
+  'vis.checks1Title': 'What shows up in Google',
+  'vis.checks2Title': 'What your pages say',
+  'vis.checks3Title': 'What happens under the hood',
+  'vis.checks4Title': 'What machines read',
 
-  'vis.postelyaTitle': 'And for your social networks: Postelya.',
+  'vis.postelyaTitle': 'Your social networks: that is Postelya.',
   'vis.postelyaBody':
-    'Evoliia works on your visibility in engines. Postelya handles your social networks: it turns your ideas and content into posts, schedules them and publishes them. The two complement each other, and what Milo writes here will be able to go there.',
+    'Evoliia works on your visibility in engines. Postelya handles your social networks: it turns your content into posts, schedules them and publishes them. Two grounds, two tools — and what Milo writes here will be able to go there.',
   'vis.postelyaCta': 'Open Postelya',
-  'vis.postelyaSoon': 'The bridge between the two is being prepared.',
+  'vis.postelyaSoon': 'The hand-off between the two is being prepared.',
 
-  'vis.pricingTitle': 'Plans, and credits that actually do something.',
+  'vis.pricingTitle': 'Credits pay for the AI, not for the analysis.',
   'vis.pricingBody':
-    'Analysing your site consumes no credits: it is done by code. Credits are for corrections, texts and the team’s answers.',
+    'Reading your site and computing your scores costs nothing: it is computation. You spend credits when you ask for a text, a correction or an explanation — that is, when an artificial intelligence actually works for you.',
   'vis.pricingCta': 'Get started',
 
-  'vis.honestTitle': 'What Evoliia will not promise you.',
+  'vis.honestTitle': 'What we will not promise you.',
   'vis.honestBody':
-    'Search marketing is sold with a great many certainties. Here are ours, and they are shorter.',
+    'This trade is sold with a great many certainties. Here are ours: shorter, and possible to keep.',
   'vis.honest1Title': 'No guaranteed ranking',
   'vis.honest1Body':
-    'Nobody decides your place in Google, and nobody decides to be quoted by an assistant. We fix what is within your control; the rest is not ours to give.',
+    'Nobody decides your place in Google, and nobody decides to be quoted by an assistant. We fix what is within your control; the rest belongs to no one who would sell it to you.',
   'vis.honest2Title': 'No invented figures',
   'vis.honest2Body':
-    'Scores come from rules applied to facts recorded in your pages. You can ask to see every point lost, in detail.',
-  'vis.honest3Title': 'Your site is not modified',
+    'The scores come from rules applied to facts recorded in your pages. Every lost point can be shown to you, line by line, with the page it came from.',
+  'vis.honest3Title': 'Your site is not touched',
   'vis.honest3Body':
-    'Evoliia reads your pages and hands you corrections to copy. It writes nothing on your side, and asks for no access to your site.',
+    'Evoliia reads it the way an engine would, and hands you text to paste. It writes nothing on your side, and asks for neither access nor password.',
   'vis.honest4Title': 'No results overnight',
   'vis.honest4Body':
-    'An engine takes weeks to pick your pages up again. What we show you straight away is what changed in your site, not your traffic.',
+    'An engine takes weeks to come back to your pages. What we show you straight away is what changed on your site — not your traffic, which we do not control.',
 
   'vis.faqTitle': 'Frequently asked questions',
-  'vis.faq1Q': 'Do I need to know SEO to use it?',
+  'vis.faq1Q': 'I know nothing about SEO. Is that a problem?',
   'vis.faq1A':
-    'No, and that is the starting point. Every problem is written in plain language, with what it costs you and where to begin. If an explanation stays obscure, you ask the team.',
-  'vis.faq2Q': 'What exactly is GEO?',
+    'It is the product’s starting point. Every problem is written in plain language, with what it costs you and where to begin. If an explanation stays obscure, you ask the team again, in the same conversation.',
+  'vis.faq2Q': 'What exactly are “AI engines”?',
   'vis.faq2A':
-    'It is the work that makes your pages usable by assistants — ChatGPT, Gemini, Perplexity, Google’s AI answers. They do not rank links: they answer, and quote their sources. To be quoted you have to be understandable and checkable, which does not hinge on quite the same things as classic search.',
-  'vis.faq3Q': 'Is my site modified?',
+    'ChatGPT, Gemini, Perplexity, Google’s generated answers. They do not rank links: they answer, and quote their sources. To be quoted you have to be understandable and checkable — which does not hinge on quite the same things as classic search.',
+  'vis.faq3Q': 'Do you modify my site?',
   'vis.faq3A':
-    'Never. Evoliia reads it the way an engine would, and hands you text to copy. No access, no password, no connection to your site is required.',
+    'Never. Evoliia reads it the way an engine would, and hands you text to paste. No access, no password, no extension to install.',
   'vis.faq4Q': 'How many pages are analysed?',
   'vis.faq4A':
-    'Up to fifty per analysis, starting with the most important: your home page, then what it points to. We respect what your site allows to be crawled.',
-  'vis.faq5Q': 'Does it work with Shopify, WordPress, Wix?',
+    'Up to fifty per analysis, starting with the most important: your home page, then what it points to. We respect what your site allows to be crawled, and we go at a pace that does not disturb it.',
+  'vis.faq5Q': 'What if my site runs on Shopify, WordPress or Wix?',
   'vis.faq5A':
-    'Yes: the analysis reads web pages, whatever they were built with. Connecting directly to Shopify and WordPress, to apply corrections without copy-pasting, will come later.',
-  'vis.faq6Q': 'What does it consume in credits?',
+    'It makes no difference: the analysis reads web pages, whatever they were built with. Connecting directly to Shopify and WordPress, to apply corrections without copy-pasting, will come later.',
+  'vis.faq6Q': 'How many credits does it use?',
   'vis.faq6A':
-    'The analysis and the scores consume nothing: it is computation. Credits are used when you ask an agent for a correction, a text or an explanation — that is, when an artificial intelligence actually works.',
+    'The analysis and the scores use none: that is computation. Credits go when you ask an agent for a text, a correction or an explanation, and the cost of each action is shown before you start it.',
+
   'vis.signupSite': 'Site to analyse: {site}. Create your account to start the analysis.',
 }

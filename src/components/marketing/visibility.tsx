@@ -183,3 +183,45 @@ export function HonestCard({ title, children }: { title: string; children: React
     </div>
   )
 }
+
+/**
+ * Une priorité, montrée plutôt que décrite.
+ *
+ * C'est le cœur de ce que le produit rend, et une page qui se contente d'en parler perd son
+ * meilleur argument. Ce bloc reprend la forme exacte de ce que le créateur verra : un rang,
+ * un constat chiffré, la raison en une phrase, et le bouton qui la corrige.
+ *
+ * Le bouton n'est pas cliquable ici, et il n'a pas l'air de l'être : un appel à l'action qui
+ * ne fait rien sur une page de vente est une petite trahison, et on la remarque.
+ */
+export function PriorityExample({
+  badge,
+  headline,
+  why,
+  cta,
+}: {
+  badge: string
+  headline: string
+  why: string
+  cta: string
+}) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="rounded-[var(--radius-pill)] bg-[var(--color-critical-soft)] px-3 py-1 text-xs font-semibold text-[var(--color-critical)]">
+          {badge}
+        </span>
+        <h3 className="m-0 text-lg font-semibold">{headline}</h3>
+      </div>
+      <p className="mt-3 mb-0 max-w-2xl text-sm leading-relaxed text-[var(--color-ink-soft)]">
+        {why}
+      </p>
+      <span
+        aria-hidden="true"
+        className="mt-5 inline-block rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-4 py-2 text-sm font-medium text-[var(--color-ink-soft)]"
+      >
+        {cta}
+      </span>
+    </div>
+  )
+}

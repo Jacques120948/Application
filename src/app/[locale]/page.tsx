@@ -13,6 +13,7 @@ import {
   AgentCard,
   CheckFamily,
   HonestCard,
+  PriorityExample,
   ScoreDial,
 } from '@/components/marketing/visibility'
 import { LandingHeader } from '@/components/marketing/LandingHeader'
@@ -216,8 +217,19 @@ export default async function LandingPage({
         <FlowRail steps={parcours} />
       </Section>
 
-      {/* ───────────────────────── 3. Les deux scores ─────────────────────── */}
-      <Section title={t('vis.scoresTitle')} body={t('vis.scoresBody')} tone="surface">
+      {/* ──────────────────── 3. Par quoi commencer ───────────────────────── */}
+      <Section title={t('vis.prioTitle')} body={t('vis.prioBody')} tone="surface">
+        <PriorityExample
+          badge={t('vis.prioBadge')}
+          headline={t('vis.prioHeadline')}
+          why={t('vis.prioWhy')}
+          cta={t('vis.prioCta')}
+        />
+        <p className="mt-4 mb-0 text-sm text-[var(--color-ink-faint)]">{t('vis.prioNote')}</p>
+      </Section>
+
+      {/* ───────────────────────── 4. Les deux scores ─────────────────────── */}
+      <Section title={t('vis.scoresTitle')} body={t('vis.scoresBody')}>
         <div className="grid gap-5 md:grid-cols-2">
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
             <h3 className="m-0 text-lg font-semibold">{t('vis.seoTitle')}</h3>
