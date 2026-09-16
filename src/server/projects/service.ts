@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { z } from 'zod'
 import type { Prisma, ProjectStatus } from '@prisma/client'
 import { AppError, conflict, notFound, validation } from '@/lib/errors'
@@ -8,9 +8,10 @@ import { getEffectivePlan } from '@/server/billing/plans'
 import { isAiAvailable } from '@/server/ai/client'
 import { generateBlueprint, generateSpec, requestEdit } from '@/server/ai/operations'
 import { blueprintSchema, type Blueprint } from '@/server/ai/schemas'
-import { applyPatch, specPatchSchema, type SpecPatch } from '@/server/spec/patch'
+import { applyPatch, specPatchSchema, type PatchOperation, type SpecPatch } from '@/server/spec/patch'
 import { truncationLeak } from '@/server/agent/context'
 import { runAgent } from '@/server/agent/loop'
+import { planTargets, planVerdict } from '@/server/agent/plan'
 import { runChecks, type CheckReport } from '@/server/spec/checks'
 import { buildTemplate, THEME_PRESETS, DEFAULT_THEME } from '@/server/spec/templates'
 import { parseAppSpec } from '@/server/spec/validate'
@@ -416,11 +417,42 @@ export async function editWithAssistant(
  * spécification obtenue n'est pas valide, et chaque modification crée une version. Une
  * demande ratée ne coûte donc jamais l'application.
  */
+/** Une modification préparée, en attente de la décision du créateur. */
+export type PendingPlan = {
+  request: string
+  summary: string
+  operations: PatchOperation[]
+  reasons: string[]
+  targets: string[]
+  scale: { operations: number; pages: number; models: number; deletions: number }
+}
+
+/** Ce que le navigateur reçoit d'un plan : de quoi l'afficher, jamais les opérations. */
+export type PlanView = {
+  id: string
+  summary: string
+  reasons: string[]
+  targets: string[]
+  scale: PendingPlan['scale']
+}
+
+export type AgentOutcomeView = EditOutcome & {
+  read: string[]
+  steps: number
+  /** Présent quand la modification attend une confirmation. */
+  plan?: PlanView
+}
+
+/** Empreinte d'un brouillon : dit si le projet a changé depuis qu'un plan a été calculé. */
+function empreinteSpec(spec: AppSpec): string {
+  return createHash('sha256').update(JSON.stringify(spec)).digest('hex')
+}
+
 export async function editWithAgent(
   userId: string,
   projectId: string,
   message: string,
-): Promise<EditOutcome & { read: string[]; steps: number }> {
+): Promise<AgentOutcomeView> {
   const trimmed = message.trim()
   if (trimmed.length < 3) throw validation('Dites en quelques mots ce que vous voulez changer.')
   if (trimmed.length > 2000) throw validation('Votre message est trop long.')
@@ -466,6 +498,59 @@ export async function editWithAgent(
   const label = outcome.summary ?? 'Modification par l’agent'
   const appliedSpec = outcome.spec
 
+  /*
+   * Une modification qui engage est annoncée avant d'être appliquée. Le travail est déjà
+   * fait et déjà validé — il attend simplement dans la conversation. C'est délibéré : un
+   * plan calculé d'avance serait une intention, que rien ne garantit réalisable, alors que
+   * celui-ci est une modification prête, dont on connaît l'ampleur exacte.
+   */
+  const verdict = planVerdict(outcome.operations)
+  if (verdict.required) {
+    const plan: PendingPlan = {
+      request: trimmed,
+      summary: label,
+      operations: outcome.operations,
+      reasons: verdict.reasons,
+      targets: planTargets(current, outcome.operations),
+      scale: verdict.scale,
+    }
+    const messageId = await withUserScope(userId, async (tx) => {
+      await requireOwnedProject(tx, projectId, userId)
+      // Une proposition en remplace une autre : deux plans en attente sur le même projet
+      // se contrediraient, et le second s'appliquerait sur un brouillon que le premier
+      // aurait changé.
+      await tx.chatMessage.updateMany({
+        where: { projectId, planStatus: 'PROPOSED' },
+        data: { planStatus: 'STALE' },
+      })
+      const message = await tx.chatMessage.create({
+        data: {
+          projectId,
+          role: 'ASSISTANT',
+          content: outcome.reply,
+          operation: 'agent',
+          plan: plan as unknown as Prisma.InputJsonValue,
+          planStatus: 'PROPOSED',
+          planBase: empreinteSpec(current),
+        },
+        select: { id: true },
+      })
+      return message.id
+    })
+
+    return {
+      reply: outcome.reply,
+      applied: false,
+      summary: label,
+      spec: current,
+      creditsSpent: outcome.creditsSpent,
+      versionNumber: null,
+      read: outcome.read,
+      steps: outcome.steps,
+      plan: { id: messageId, summary: label, reasons: verdict.reasons, targets: plan.targets, scale: verdict.scale },
+    }
+  }
+
   const versionNumber = await withUserScope(userId, async (tx) => {
     await requireOwnedProject(tx, projectId, userId)
     const version = await createVersion(tx, projectId, appliedSpec, label, 'AI')
@@ -498,6 +583,123 @@ export async function editWithAgent(
     versionNumber,
     read: outcome.read,
     steps: outcome.steps,
+  }
+}
+
+/**
+ * Applique une modification annoncée, ou l'abandonne.
+ *
+ * Trois garanties, et aucune n'est superflue.
+ *
+ * **Le plan est rejoué, pas recopié.** Les opérations sont réappliquées sur le brouillon
+ * du moment et revalidées entièrement. Si le résultat n'est plus une application valide,
+ * rien n'est écrit : le plan a été calculé plus tôt, et le monde a pu bouger.
+ *
+ * **Un brouillon qui a changé rend le plan caduc.** L'empreinte enregistrée au moment de
+ * la proposition est comparée à celle du brouillon courant. Appliquer à l'aveugle un plan
+ * calculé sur une version précédente écraserait silencieusement ce qui a été fait entre
+ * les deux.
+ *
+ * **Aucun crédit n'est débité.** Le travail du modèle a été payé quand il a été fait.
+ * Cliquer « Appliquer » ne fait que poser sur le projet ce qui attendait déjà.
+ */
+export async function decidePlan(
+  userId: string,
+  projectId: string,
+  messageId: string,
+  action: 'apply' | 'cancel',
+): Promise<{ applied: boolean; reply: string; spec: AppSpec | null; versionNumber: number | null }> {
+  const { message, current } = await withUserScope(userId, async (tx) => {
+    const project = await requireOwnedProject(tx, projectId, userId)
+    const found = await tx.chatMessage.findFirst({
+      where: { id: messageId, projectId },
+      select: { id: true, plan: true, planStatus: true, planBase: true },
+    })
+    if (found === null) throw notFound("Cette proposition n'existe pas.")
+    return { message: found, current: parseAppSpec(project.draftSpec) }
+  })
+
+  if (message.planStatus !== 'PROPOSED') {
+    throw validation("Cette proposition n'est plus en attente.")
+  }
+
+  if (action === 'cancel') {
+    await withUserScope(userId, async (tx) => {
+      await requireOwnedProject(tx, projectId, userId)
+      await tx.chatMessage.updateMany({
+        where: { id: messageId, projectId, planStatus: 'PROPOSED' },
+        data: { planStatus: 'CANCELLED' },
+      })
+    })
+    return {
+      applied: false,
+      reply: "Modification abandonnée. Votre application n'a pas changé.",
+      spec: null,
+      versionNumber: null,
+    }
+  }
+
+  const plan = message.plan as unknown as PendingPlan | null
+  if (plan === null || !Array.isArray(plan.operations) || plan.operations.length === 0) {
+    throw validation('Cette proposition est illisible. Reformulez votre demande.')
+  }
+
+  if (message.planBase !== empreinteSpec(current)) {
+    await withUserScope(userId, async (tx) => {
+      await requireOwnedProject(tx, projectId, userId)
+      await tx.chatMessage.updateMany({
+        where: { id: messageId, projectId, planStatus: 'PROPOSED' },
+        data: { planStatus: 'STALE' },
+      })
+    })
+    throw conflict(
+      'Votre application a changé depuis cette proposition. Redemandez la modification pour que je la recalcule.',
+    )
+  }
+
+  let updated: AppSpec
+  try {
+    updated = applyPatch(current, specPatchSchema.parse({
+      summary: plan.summary,
+      operations: plan.operations,
+    }))
+  } catch {
+    await withUserScope(userId, async (tx) => {
+      await requireOwnedProject(tx, projectId, userId)
+      await tx.chatMessage.updateMany({
+        where: { id: messageId, projectId, planStatus: 'PROPOSED' },
+        data: { planStatus: 'STALE' },
+      })
+    })
+    throw validation(
+      "Cette modification ne s'applique plus à votre application. Redemandez-la et je la recalcule.",
+    )
+  }
+
+  const versionNumber = await withUserScope(userId, async (tx) => {
+    await requireOwnedProject(tx, projectId, userId)
+    const version = await createVersion(tx, projectId, updated, plan.summary, 'AI')
+    await tx.project.update({
+      where: { id: projectId },
+      data: {
+        draftSpec: updated as unknown as Prisma.InputJsonValue,
+        name: updated.name,
+        status: 'TESTING',
+      },
+    })
+    await tx.chatMessage.updateMany({
+      where: { id: messageId, projectId, planStatus: 'PROPOSED' },
+      data: { planStatus: 'APPLIED', versionId: version.id },
+    })
+    return version.number
+  })
+
+  logger.info('plan appliqué', { projectId, operations: plan.operations.length, versionNumber })
+  return {
+    applied: true,
+    reply: `C'est appliqué. Version ${versionNumber} : ${plan.summary}`,
+    spec: updated,
+    versionNumber,
   }
 }
 
@@ -657,14 +859,47 @@ export async function publishProject(userId: string, projectId: string): Promise
   })
 }
 
+/**
+ * La conversation d'un projet, avec la proposition en attente s'il y en a une.
+ *
+ * Une proposition doit survivre à un rechargement de page : le créateur qui ferme son
+ * onglet pour aller réfléchir doit retrouver le bouton « Appliquer » en revenant, pas une
+ * réponse sans suite dont il ne saurait plus quoi faire.
+ */
 export async function listChatMessages(userId: string, projectId: string) {
   return withUserScope(userId, async (tx) => {
     await requireOwnedProject(tx, projectId, userId)
-    return tx.chatMessage.findMany({
+    const rows = await tx.chatMessage.findMany({
       where: { projectId },
       orderBy: { createdAt: 'asc' },
       take: 200,
-      select: { id: true, role: true, content: true, createdAt: true },
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        createdAt: true,
+        plan: true,
+        planStatus: true,
+      },
+    })
+    return rows.map(({ plan, planStatus, ...message }) => {
+      // Les opérations ne sortent jamais vers le navigateur : elles ne lui servent à rien,
+      // et c'est le serveur qui les rejouera.
+      const attente = planStatus === 'PROPOSED' ? (plan as unknown as PendingPlan | null) : null
+      return {
+        ...message,
+        ...(attente === null
+          ? {}
+          : {
+              plan: {
+                id: message.id,
+                summary: attente.summary,
+                reasons: attente.reasons,
+                targets: attente.targets,
+                scale: attente.scale,
+              } satisfies PlanView,
+            }),
+      }
     })
   })
 }

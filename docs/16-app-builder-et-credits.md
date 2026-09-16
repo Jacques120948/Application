@@ -244,7 +244,7 @@ l'interrupteur existe et pourquoi il est fermé.
 
 ---
 
-### PHASE 3 — Conversation, mode plan, contexte
+### PHASE 3 — Conversation, mode plan, contexte · **livrée**
 
 **Ce qui existe.** `ChatMessage`, l'onglet « Modifier avec l'IA », l'historique.
 
@@ -278,9 +278,36 @@ appliqué, annulé). Colonnes facultatives : les messages existants restent lisi
 
 **Risques.** Un plan accepté puis appliqué sur une application qui a changé entre-temps.
 
-**Comment ne rien casser.** Le plan retient le numéro de version sur lequel il a été
-calculé ; s'il ne correspond plus au brouillon au moment d'appliquer, on le recalcule au
-lieu de l'appliquer à l'aveugle.
+**Comment ne rien casser.** Le plan retient l'empreinte du brouillon sur lequel il a été
+calculé ; si elle ne correspond plus au moment d'appliquer, la modification est refusée et
+le créateur la redemande, plutôt qu'on l'applique à l'aveugle sur un projet qui a bougé.
+
+**Ce qui a réellement été livré, et pourquoi ainsi.**
+
+Le besoin est venu d'un essai réel : un créateur demande « ajoute un champ métier avec une
+liste de choix », l'agent le rend obligatoire — ce qui est défendable — et ne le dit pas.
+Le créateur le découvre en butant dessus. La modification était bonne ; c'est le silence
+qui ne l'était pas.
+
+Le plan n'est donc **pas une intention calculée d'avance**. L'agent travaille normalement,
+et le résultat — déjà produit, déjà validé contre le schéma — est retenu au lieu d'être
+appliqué. Trois conséquences : aucun appel supplémentaire au modèle, donc aucun coût ; le
+plan ne peut pas promettre l'impossible, puisqu'il existe ; et cliquer « Appliquer » ne
+débite rien, ce que l'encadré dit explicitement.
+
+Le seuil est **décidé par le serveur**, jamais par le modèle, en lisant les opérations :
+toucher aux données, supprimer quelque chose, changer les comptes ou la monétisation,
+dépasser trois pages ou huit opérations. Un agent ne peut donc pas contourner la
+confirmation en affirmant que sa modification est petite. En dessous, tout s'applique
+directement — demander confirmation pour un changement de couleur apprendrait au créateur à
+cliquer sans lire, ce qui reviendrait à ne rien annoncer du tout.
+
+L'encadré dit, dans cet ordre : que rien n'est encore appliqué, ce que la modification
+touche — nommé comme le créateur le connaît, « vos données « Devis » », « la page
+« Accueil » » —, et pourquoi elle est soumise à décision. Trois boutons : Appliquer,
+Modifier la demande, Annuler. La proposition survit à un rechargement de page, et une
+nouvelle proposition périme la précédente : deux plans en attente sur le même projet se
+contrediraient.
 
 ---
 
@@ -402,7 +429,7 @@ construit pas une boucle d'agent puis on lui met des freins ; on pose les freins
    rien sur les petites, aucun changement visible pour le créateur.
 3. ~~**Phase 2**~~ — **livrée**, derrière un interrupteur, à côté de l'existant. Reste à
    l'ouvrir en ligne et à comparer les deux chemins sur les mêmes demandes.
-4. **Phase 3 (mode plan)** et **phase 4** — conversation, plan, correction.
+4. ~~**Phase 3 (mode plan)**~~ — **livrée**. Reste la **phase 4**, la boucle de correction.
 5. **Phase 5**, **phase 7** — historique enrichi, tableaux de bord.
 6. **Phase 6** — packs de crédits, quand vous aurez fixé les prix.
 7. **Phase 8** — le reste des optimisations, mesuré.

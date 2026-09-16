@@ -21,7 +21,19 @@ import { SupportPanel } from './SupportPanel'
  * L'aperçu est un `iframe` cloisonné qui affiche la véritable application, pas une image.
  */
 
-type Message = { id: string; role: 'USER' | 'ASSISTANT' | 'SYSTEM'; content: string }
+type Message = {
+  id: string
+  role: 'USER' | 'ASSISTANT' | 'SYSTEM'
+  content: string
+  /** Une modification préparée qui attend la décision du créateur. */
+  plan?: {
+    id: string
+    summary: string
+    reasons: string[]
+    targets: string[]
+    scale: { operations: number; pages: number; models: number; deletions: number }
+  }
+}
 
 type DataOverview = {
   endUserCount: number

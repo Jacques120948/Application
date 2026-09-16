@@ -118,6 +118,9 @@ export default async function ProjectPage({
           id: message.id,
           role: message.role,
           content: message.content,
+          // La proposition en attente survit au rechargement : sans elle, le créateur qui
+          // revient retrouverait une réponse sans bouton et ne saurait plus quoi en faire.
+          ...('plan' in message && message.plan !== undefined ? { plan: message.plan } : {}),
         }))}
         publishedUrl={project.publishedAt === null ? null : publicAppUrl(project.slug)}
         aiAvailable={isAiAvailable()}

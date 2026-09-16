@@ -9,6 +9,23 @@ type Message = {
   content: string
   /** Ce que l'agent a fait pour répondre. Absent des messages relus depuis la base. */
   trace?: Trace
+  /** Présent quand la modification attend votre décision. */
+  plan?: Plan
+}
+
+/**
+ * Une modification préparée, qui attend d'être appliquée.
+ *
+ * Elle n'est pas une intention : le travail est fait et validé, il attend simplement. D'où
+ * le vocabulaire de l'encadré — « voici ce que je propose », pas « voici ce que je ferais ».
+ * Et d'où le fait qu'appliquer ne coûte aucun crédit : c'est déjà payé.
+ */
+type Plan = {
+  id: string
+  summary: string
+  reasons: string[]
+  targets: string[]
+  scale: { operations: number; pages: number; models: number; deletions: number }
 }
 
 /**
@@ -50,6 +67,7 @@ export function ChatPanel({
   const [draft, setDraft] = useState(initialDraft)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deciding, setDeciding] = useState<string | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // On fait défiler le conteneur de la conversation, jamais la page : `scrollIntoView`
@@ -89,6 +107,7 @@ export function ChatPanel({
       read?: string[]
       steps?: number
       creditsSpent?: number
+      plan?: Plan
     } | null
 
     if (body === null || !response.ok) {
@@ -112,9 +131,38 @@ export function ChatPanel({
                 credits: body.creditsSpent ?? 0,
               },
             }),
+        ...(body.plan === undefined ? {} : { plan: body.plan }),
       },
     ])
     setBusy(false)
+    if (body.applied === true) onApplied()
+  }
+
+  /** Applique ou abandonne une modification annoncée. Aucun crédit n'est engagé ici. */
+  async function decide(plan: Plan, action: 'apply' | 'cancel') {
+    if (deciding !== null) return
+    setDeciding(plan.id)
+    setError(null)
+    const response = await fetch(`/api/projects/${projectId}/plan`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messageId: plan.id, action }),
+    })
+    const body = (await response.json().catch(() => null)) as {
+      reply?: string
+      applied?: boolean
+      message?: string
+    } | null
+    setDeciding(null)
+    if (body === null || !response.ok) {
+      setError(body?.message ?? "La décision n'a pas abouti.")
+      return
+    }
+    // L'encadré disparaît : la proposition n'est plus en attente, quelle que soit l'issue.
+    setMessages((current) => [
+      ...current.map((item) => (item.id === plan.id ? { ...item, plan: undefined } : item)),
+      { id: `decision-${current.length}`, role: 'ASSISTANT', content: body.reply ?? '' },
+    ])
     if (body.applied === true) onApplied()
   }
 
@@ -139,6 +187,17 @@ export function ChatPanel({
               >
                 {message.content}
               </div>
+              {message.plan !== undefined ? (
+                <PlanCard
+                  plan={message.plan}
+                  busy={deciding === message.plan.id}
+                  onDecide={(action) => void decide(message.plan!, action)}
+                  onEdit={() => {
+                    setDraft(draftFromPlan(message.plan!))
+                    void decide(message.plan!, 'cancel')
+                  }}
+                />
+              ) : null}
               {message.trace !== undefined ? (
                 <p className="m-0 justify-self-start text-xs text-[var(--color-ink-soft)]">
                   {describeTrace(message.trace)}
@@ -172,6 +231,90 @@ export function ChatPanel({
           {busy ? '…' : 'Envoyer'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Le texte remis dans la zone de saisie quand on choisit « Modifier la demande ».
+ *
+ * On ne remet pas la demande d'origine : elle a produit ce plan-là, la retaper à
+ * l'identique produirait le même. On propose un point de départ qui dit à l'agent ce qu'on
+ * veut changer dans sa proposition.
+ */
+function draftFromPlan(plan: Plan): string {
+  return `${plan.summary} — mais `
+}
+
+/** « 9 modifications · 2 pages · vos données ». Rien d'inventé : ce que le plan touche. */
+function describeScale(plan: Plan): string {
+  const morceaux = [
+    `${plan.scale.operations} modification${plan.scale.operations > 1 ? 's' : ''}`,
+  ]
+  if (plan.scale.pages > 0) morceaux.push(`${plan.scale.pages} page${plan.scale.pages > 1 ? 's' : ''}`)
+  if (plan.scale.models > 0) morceaux.push('vos données')
+  if (plan.scale.deletions > 0) {
+    morceaux.push(`${plan.scale.deletions} suppression${plan.scale.deletions > 1 ? 's' : ''}`)
+  }
+  return morceaux.join(' · ')
+}
+
+/**
+ * L'encadré d'une modification annoncée.
+ *
+ * Il dit trois choses, dans cet ordre : que rien n'est encore appliqué, ce que la
+ * modification touche, et pourquoi elle est soumise à décision. L'ordre compte — un
+ * créateur qui lit « rien n'est encore appliqué » en premier lit la suite tranquillement.
+ */
+function PlanCard({
+  plan,
+  busy,
+  onDecide,
+  onEdit,
+}: {
+  plan: Plan
+  busy: boolean
+  onDecide: (action: 'apply' | 'cancel') => void
+  onEdit: () => void
+}) {
+  return (
+    <div
+      className="justify-self-start max-w-[90%] rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-3.5 text-sm"
+      role="group"
+      aria-label="Modification à confirmer"
+    >
+      <p className="m-0 font-medium">Rien n’est encore appliqué.</p>
+      {plan.targets.length > 0 ? (
+        <p className="mt-1 mb-0 text-[var(--color-ink-soft)]">
+          Cette modification touche {plan.targets.join(', ')}.
+        </p>
+      ) : null}
+      {plan.reasons.length > 0 ? (
+        <>
+          <p className="mt-2 mb-0 text-[var(--color-ink-soft)]">Je vous demande votre avis parce que :</p>
+          <ul className="mt-1 mb-0 list-disc pl-5 text-[var(--color-ink-soft)]">
+            {plan.reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <p className="mt-2 mb-0 text-xs text-[var(--color-ink-soft)]">{describeScale(plan)}</p>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button disabled={busy} onClick={() => onDecide('apply')}>
+          {busy ? '…' : 'Appliquer'}
+        </Button>
+        <Button variant="secondary" disabled={busy} onClick={onEdit}>
+          Modifier la demande
+        </Button>
+        <Button variant="ghost" disabled={busy} onClick={() => onDecide('cancel')}>
+          Annuler
+        </Button>
+      </div>
+      <p className="mt-2 mb-0 text-xs text-[var(--color-ink-soft)]">
+        Appliquer ne coûte aucun crédit : le travail est déjà fait.
+      </p>
     </div>
   )
 }
