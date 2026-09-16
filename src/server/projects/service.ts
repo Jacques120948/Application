@@ -20,6 +20,7 @@ import { SUPPORTED_LOCALES, type Locale } from '@/i18n/config'
 import { heuristicBlueprint, blueprintFromIdea, blueprintFromSpecSheet } from './blueprints'
 import { getIdea } from '@/server/business/ideas'
 import { publicAppUrl } from '@/lib/apps-domain'
+import { resolveAttachments, type ChatAttachment } from '@/server/media/service'
 
 /**
  * Cas d'usage « projet ».
@@ -269,19 +270,65 @@ export type EditOutcome = {
 }
 
 /** Étape 6 du parcours : modifier l'application en langage naturel. */
+
+/**
+ * Ce qu'une image jointe ajoute à la demande.
+ *
+ * Deux textes, et la distinction n'est pas cosmétique.
+ *
+ * **Ce qui est gardé dans la conversation** ne porte que les noms de fichiers. Un créateur
+ * qui relit son historique doit reconnaître ce qu'il a joint, pas déchiffrer des
+ * identifiants.
+ *
+ * **Ce qui part à l'assistant** porte les identifiants, puisque c'est avec eux qu'il place
+ * une image, et une consigne sans ambiguïté : il ne voit pas ces images. Il reçoit un nom
+ * de fichier et des dimensions, rien de plus. Lui envoyer l'image elle-même serait un appel
+ * d'un autre genre, et d'un autre prix — ce n'est pas ce qui est fait ici, et l'assistant
+ * doit donc éviter de laisser croire qu'il l'a regardée.
+ */
+function mentionAttachments(attachments: readonly ChatAttachment[]): string {
+  if (attachments.length === 0) return ''
+  const noms = attachments.map((image) => image.filename).join(', ')
+  return `\n\n(Image${attachments.length > 1 ? 's' : ''} jointe${attachments.length > 1 ? 's' : ''} : ${noms})`
+}
+
+function briefAttachments(attachments: readonly ChatAttachment[]): string {
+  if (attachments.length === 0) return ''
+  const lignes = attachments.map(
+    (image) => `- "${image.filename}" (${image.width}x${image.height}) : imageId ${image.id}`,
+  )
+  return [
+    '',
+    '',
+    'Images jointes à cette demande, déjà enregistrées dans la bibliothèque du projet :',
+    ...lignes,
+    '',
+    'Place-les en renseignant le champ "imageId" du bloc qui convient — bandeau, image et',
+    'texte, galerie, portrait d\'équipe, logo. Tu ne les as pas regardées : tu n\'en connais',
+    'que le nom et les dimensions. Ne décris jamais leur contenu et n\'invente pas de',
+    'légende qui prétendrait le connaître ; si la demande ne dit pas où les mettre,',
+    'demande-le.',
+  ].join('\n')
+}
+
 export async function editWithAssistant(
   userId: string,
   projectId: string,
   message: string,
+  mediaIds: readonly string[] = [],
 ): Promise<EditOutcome> {
   const trimmed = message.trim()
   if (trimmed.length < 3) throw validation('Dites en quelques mots ce que vous voulez changer.')
   if (trimmed.length > 2000) throw validation('Votre message est trop long.')
 
+  const attachments = await resolveAttachments(userId, projectId, mediaIds)
+  const garde = trimmed + mentionAttachments(attachments)
+  const demande = garde + briefAttachments(attachments)
+
   const current = await withUserScope(userId, async (tx) => {
     const project = await requireOwnedProject(tx, projectId, userId)
     await tx.chatMessage.create({
-      data: { projectId, userId, role: 'USER', content: trimmed },
+      data: { projectId, userId, role: 'USER', content: garde },
     })
     return parseAppSpec(project.draftSpec)
   })
@@ -296,7 +343,7 @@ export async function editWithAssistant(
   // Une tentative, puis une seule reprise si la validation refuse le patch. La reprise
   // reçoit le motif exact du refus : mesurée en conditions réelles, elle rattrape les
   // erreurs de forme que l'assistant corrige dès qu'on les lui nomme.
-  let result = await requestEdit(userId, projectId, current, trimmed)
+  let result = await requestEdit(userId, projectId, current, demande)
   let creditsSpent = result.creditsSpent
   let response = result.value
   let patch: SpecPatch | null = null
@@ -333,7 +380,7 @@ export async function editWithAssistant(
       })
       if (attempt === 1) break
 
-      const retry = await requestEdit(userId, projectId, current, trimmed, {
+      const retry = await requestEdit(userId, projectId, current, demande, {
         operations: response.operations,
         problem: lastProblem,
       })
@@ -452,14 +499,19 @@ export async function editWithAgent(
   userId: string,
   projectId: string,
   message: string,
+  mediaIds: readonly string[] = [],
 ): Promise<AgentOutcomeView> {
   const trimmed = message.trim()
   if (trimmed.length < 3) throw validation('Dites en quelques mots ce que vous voulez changer.')
   if (trimmed.length > 2000) throw validation('Votre message est trop long.')
 
+  const attachments = await resolveAttachments(userId, projectId, mediaIds)
+  const garde = trimmed + mentionAttachments(attachments)
+  const demande = garde + briefAttachments(attachments)
+
   const { spec: current, history } = await withUserScope(userId, async (tx) => {
     const project = await requireOwnedProject(tx, projectId, userId)
-    await tx.chatMessage.create({ data: { projectId, userId, role: 'USER', content: trimmed } })
+    await tx.chatMessage.create({ data: { projectId, userId, role: 'USER', content: garde } })
     const previous = await tx.chatMessage.findMany({
       where: { projectId, role: { in: ['USER', 'ASSISTANT'] } },
       orderBy: { createdAt: 'desc' },
@@ -479,7 +531,7 @@ export async function editWithAgent(
     }
   })
 
-  const outcome = await runAgent({ userId, projectId, spec: current, request: trimmed, history })
+  const outcome = await runAgent({ userId, projectId, spec: current, request: demande, history })
 
   if (outcome.operations.length === 0) {
     await recordAssistantMessage(userId, projectId, outcome.reply, null)
@@ -507,7 +559,9 @@ export async function editWithAgent(
   const verdict = planVerdict(outcome.operations)
   if (verdict.required) {
     const plan: PendingPlan = {
-      request: trimmed,
+      // La demande gardée avec le plan est celle qui a produit ces opérations, consigne
+      // sur les images comprise : la reprendre à l'identique doit donner le même résultat.
+      request: demande,
       summary: label,
       operations: outcome.operations,
       reasons: verdict.reasons,

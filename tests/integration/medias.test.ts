@@ -5,7 +5,15 @@ import { withUserScope } from '@/server/db/scope'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { DEMO_APPS } from '@/server/demos/catalog'
-import { addMedia, listMedias, readMedia, removeMedia } from '@/server/media/service'
+import {
+  addMedia,
+  addVisitorPhoto,
+  listMedias,
+  readMedia,
+  removeMedia,
+  resolveAttachments,
+  MAX_ATTACHMENTS,
+} from '@/server/media/service'
 
 /**
  * Bibliothèque d'images, sur une vraie base.
@@ -165,5 +173,57 @@ describe('cloisonnement', () => {
     const thumb = await readMedia(projectId, id, 'thumb')
     expect(full?.mime).toBe('image/webp')
     expect(thumb!.bytes.length).toBeLessThan(full!.bytes.length)
+  })
+})
+
+/**
+ * Les images jointes à une demande faite à l'assistant.
+ *
+ * Le navigateur annonce des identifiants ; il ne décide de rien. Sans la relecture faite
+ * ici, joindre l'identifiant de l'image d'un autre projet — ou celle d'un autre créateur —
+ * suffirait à la faire apparaître dans ses propres pages. C'est la seule chose que ce
+ * mécanisme peut casser, et c'est donc la seule qu'on vérifie vraiment.
+ */
+describe('images jointes à une demande', () => {
+  it('ne retient que les images de ce créateur et de ce projet', async () => {
+    const mienne = await addMedia(userId, projectId, { name: 'atelier.png', bytes: await image() })
+    const ailleurs = await addMedia(otherId, otherProjectId, {
+      name: 'voisin.png',
+      bytes: await image(),
+    })
+
+    const retenues = await resolveAttachments(userId, projectId, [mienne.id, ailleurs.id])
+    expect(retenues.map((item) => item.id)).toEqual([mienne.id])
+
+    // Et depuis le projet du voisin, la mienne ne remonte pas davantage.
+    expect(await resolveAttachments(otherId, otherProjectId, [mienne.id])).toEqual([])
+  })
+
+  it('écarte les photos reçues des visiteurs', async () => {
+    const photo = await addVisitorPhoto({
+      ownerId: userId,
+      projectId,
+      name: 'client.png',
+      bytes: await image(),
+    })
+    // Elles appartiennent à une fiche, pas à la décoration : les placer dans un bandeau
+    // publierait la photo d'un client.
+    expect(await resolveAttachments(userId, projectId, [photo.id])).toEqual([])
+  })
+
+  it('garde l’ordre du créateur, sans doublon ni débordement', async () => {
+    const images = []
+    for (let index = 0; index < MAX_ATTACHMENTS + 2; index += 1) {
+      images.push(await addMedia(userId, projectId, { name: `p${index}.png`, bytes: await image() }))
+    }
+    const demandes = [...images.map((item) => item.id), images[0]!.id]
+    const retenues = await resolveAttachments(userId, projectId, demandes)
+
+    expect(retenues).toHaveLength(MAX_ATTACHMENTS)
+    // L'ordre compte : c'est celui dans lequel il les a jointes, et il le dit dans sa
+    // demande — « la première en haut, la seconde en bas ».
+    expect(retenues.map((item) => item.id)).toEqual(
+      images.slice(0, MAX_ATTACHMENTS).map((item) => item.id),
+    )
   })
 })

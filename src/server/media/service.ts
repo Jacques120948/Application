@@ -401,3 +401,44 @@ export async function attachPhotos(
     data: { recordId: null },
   })
 }
+
+/** Une image jointe à une demande faite à l'assistant. */
+export type ChatAttachment = {
+  id: string
+  filename: string
+  width: number
+  height: number
+}
+
+/** Au-delà, une demande cesse d'être « place cette photo » et devient un album. */
+export const MAX_ATTACHMENTS = 4
+
+/**
+ * Les images qu'une demande peut légitimement joindre.
+ *
+ * Le navigateur annonce des identifiants ; ce sont les seuls que le serveur retient, et
+ * seulement après avoir vérifié qu'ils désignent des images **de ce créateur et de ce
+ * projet**. Sans cette relecture, joindre l'identifiant de l'image d'un autre projet
+ * suffirait à la faire apparaître dans le sien.
+ *
+ * Les photos reçues des visiteurs sont écartées : elles appartiennent à une fiche, pas à la
+ * décoration des pages, et les placer dans un bandeau publierait la photo d'un client.
+ */
+export async function resolveAttachments(
+  userId: string,
+  projectId: string,
+  mediaIds: readonly string[],
+): Promise<ChatAttachment[]> {
+  if (mediaIds.length === 0) return []
+  const uniques = [...new Set(mediaIds)].slice(0, MAX_ATTACHMENTS)
+
+  const rows = await withUserScope(userId, (tx) =>
+    tx.mediaAsset.findMany({
+      where: { userId, projectId, id: { in: uniques }, origin: { not: VISITOR } },
+      select: { id: true, filename: true, width: true, height: true },
+    }),
+  )
+  // L'ordre du créateur est conservé : c'est celui dans lequel il les a jointes, et il
+  // compte quand il écrit « la première en haut, la seconde en bas ».
+  return uniques.flatMap((id) => rows.filter((row) => row.id === id))
+}

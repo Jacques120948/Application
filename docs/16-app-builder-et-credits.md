@@ -309,6 +309,33 @@ Modifier la demande, Annuler. La proposition survit à un rechargement de page, 
 nouvelle proposition périme la précédente : deux plans en attente sur le même projet se
 contrediraient.
 
+#### Joindre une image à une demande
+
+« Mets cette photo en haut de la page d'accueil » est la demande la plus naturelle du
+monde, et elle était impossible : il fallait passer par l'écran Images, retenir un nom de
+fichier, puis revenir l'écrire dans la conversation. La zone de saisie accepte maintenant
+des images, jusqu'à quatre.
+
+**Ce n'est pas une pièce jointe de messagerie, c'est une image du projet.** Elle part par le
+chemin de l'écran Images, rejoint la bibliothèque, passe par le même traitement — identifiée
+par ses octets, ré-encodée, comptée dans le quota de l'offre — et reste disponible ensuite,
+même si la demande n'aboutit pas. Un second dépôt réservé à la conversation finirait par
+accepter ce que l'autre refuse, et laisserait derrière lui des images que rien ne montre.
+
+**Le navigateur ne fait que désigner.** Ce qui circule au moment d'envoyer, ce sont des
+identifiants ; le serveur les relit et n'en retient que ceux qui appartiennent à ce créateur
+et à ce projet. Sans cette relecture, joindre l'identifiant de l'image d'un autre projet
+suffirait à la faire apparaître dans le sien. Les photos reçues des visiteurs sont écartées
+du lot : elles appartiennent à une fiche, et les placer dans un bandeau publierait la photo
+d'un client.
+
+**L'assistant ne regarde pas l'image.** Il en reçoit le nom, les dimensions et
+l'identifiant — de quoi la placer, pas de quoi la décrire. Lui envoyer l'image elle-même
+serait un appel d'un autre genre et d'un autre prix ; ce n'est pas ce qui est fait ici, la
+consigne le lui dit explicitement, et l'interface le dit au créateur plutôt que de le
+laisser croire qu'il a été compris. Joindre une image ne coûte donc rien de plus que la
+demande elle-même.
+
 ---
 
 ### PHASE 4 — Preview et correction automatique

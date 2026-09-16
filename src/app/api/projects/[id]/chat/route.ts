@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { requireUser } from '@/server/auth/session'
 import { editWithAgent, editWithAssistant, listChatMessages } from '@/server/projects/service'
 import { isEnabled } from '@/server/settings/flags'
+import { MAX_ATTACHMENTS } from '@/server/media/service'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -11,7 +12,17 @@ import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
  * navigateur n'a pas à le savoir. C'est ce qui permet de revenir en arrière sans rien
  * déployer — et de comparer les deux sur les mêmes demandes.
  */
-const input = z.object({ message: z.string().min(1).max(2000) })
+const input = z.object({
+  message: z.string().min(1).max(2000),
+  /**
+   * Images jointes à la demande.
+   *
+   * Seuls des identifiants transitent : les fichiers ont déjà été envoyés et traités par
+   * la bibliothèque du projet. Le service les relit et n'en retient que ceux qui
+   * appartiennent bien à ce créateur et à ce projet — le navigateur ne fait que désigner.
+   */
+  mediaIds: z.array(z.string().uuid()).max(MAX_ATTACHMENTS).optional(),
+})
 
 /**
  * L'agent enchaîne plusieurs appels au modèle : il lui faut davantage que les quelques
@@ -39,8 +50,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const agent = await isEnabled('appBuilder')
     return ok(
       agent
-        ? await editWithAgent(user.id, id, body.message)
-        : await editWithAssistant(user.id, id, body.message),
+        ? await editWithAgent(user.id, id, body.message, body.mediaIds ?? [])
+        : await editWithAssistant(user.id, id, body.message, body.mediaIds ?? []),
     )
   } catch (error) {
     return fail(error)

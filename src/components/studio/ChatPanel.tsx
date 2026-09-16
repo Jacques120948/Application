@@ -2,6 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { Button, Notice, Textarea } from '@/components/ui'
+import { PHOTO_ACCEPT } from '@/lib/photo-upload'
+
+/**
+ * Une image jointe à la demande en cours.
+ *
+ * Elle est déjà envoyée et déjà traitée : ce qui reste ici est ce qu'il faut pour
+ * l'afficher et la désigner. Au moment d'envoyer, seuls les identifiants partent.
+ */
+type Jointe = { id: string; filename: string }
+
+/** Au-delà, une demande cesse d'être « place cette photo » et devient un album. */
+const MAX_JOINTES = 4
 
 type Message = {
   id: string
@@ -68,7 +80,10 @@ export function ChatPanel({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deciding, setDeciding] = useState<string | null>(null)
+  const [jointes, setJointes] = useState<Jointe[]>([])
+  const [envoiImage, setEnvoiImage] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const fichier = useRef<HTMLInputElement>(null)
 
   // On fait défiler le conteneur de la conversation, jamais la page : `scrollIntoView`
   // ferait remonter toute la fenêtre et chasserait l'aperçu hors de l'écran.
@@ -81,22 +96,74 @@ export function ChatPanel({
     if (container !== null) container.scrollTop = container.scrollHeight
   }, [messages.length, busy])
 
+  /**
+   * Joindre une image.
+   *
+   * Elle part par le même chemin que l'écran Images, et pour une raison de fond : ce n'est
+   * pas une pièce jointe de messagerie, c'est une image du projet. Elle rejoint donc la
+   * bibliothèque, passe par le même traitement — identification par les octets,
+   * ré-encodage, quota de l'offre — et reste disponible ensuite, même si la demande
+   * n'aboutit pas. Un second dépôt réservé à la conversation finirait par accepter ce que
+   * l'autre refuse, et laisserait des images que rien ne montre.
+   */
+  async function joindre(files: FileList | null) {
+    if (files === null || files.length === 0 || envoiImage) return
+    setEnvoiImage(true)
+    setError(null)
+    try {
+      for (const file of Array.from(files).slice(0, MAX_JOINTES - jointes.length)) {
+        const corps = new FormData()
+        corps.append('image', file)
+        const response = await fetch(`/api/projects/${projectId}/medias`, {
+          method: 'POST',
+          body: corps,
+        })
+        const body = (await response.json().catch(() => null)) as {
+          media?: { id: string; filename: string }
+          message?: string
+        } | null
+        if (body === null || !response.ok || body.media === undefined) {
+          setError(body?.message ?? "Cette image n'a pas pu être ajoutée.")
+          break
+        }
+        const ajoutee = body.media
+        setJointes((current) =>
+          current.some((image) => image.id === ajoutee.id) ? current : [...current, ajoutee],
+        )
+      }
+    } catch {
+      setError("L'envoi de l'image a échoué. Vérifiez votre connexion.")
+    } finally {
+      setEnvoiImage(false)
+    }
+  }
+
   async function send() {
     const message = draft.trim()
     if (message.length < 3 || busy) return
 
+    const mediaIds = jointes.map((image) => image.id)
+    const noms = jointes.map((image) => image.filename).join(', ')
+
     setBusy(true)
     setError(null)
     setDraft('')
+    setJointes([])
     setMessages((current) => [
       ...current,
-      { id: `local-${current.length}`, role: 'USER', content: message },
+      {
+        id: `local-${current.length}`,
+        role: 'USER',
+        // Le même texte que celui gardé par le serveur : la conversation ne doit pas dire
+        // autre chose une fois rechargée.
+        content: noms === '' ? message : `${message}\n\n(Image${jointes.length > 1 ? 's' : ''} jointe${jointes.length > 1 ? 's' : ''} : ${noms})`,
+      },
     ])
 
     const response = await fetch(`/api/projects/${projectId}/chat`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, mediaIds }),
     })
     // Une réponse qui n'est pas du JSON vient de l'hébergeur, pas de l'assistant : elle ne
     // doit pas laisser le bouton en attente pour toujours.
@@ -227,9 +294,67 @@ export function ChatPanel({
           maxLength={2000}
           className="min-h-20"
         />
-        <Button className="mt-2 w-full" onClick={() => void send()} disabled={busy}>
-          {busy ? '…' : 'Envoyer'}
-        </Button>
+
+        {jointes.length > 0 ? (
+          <ul className="m-0 mt-2 flex list-none flex-wrap gap-2 p-0">
+            {jointes.map((image) => (
+              <li
+                key={image.id}
+                className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] py-1 pl-1 pr-2"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- image servie par la base, sans dimensions connues d'avance */}
+                <img
+                  src={`/api/app/${projectId}/medias/${image.id}?format=thumb`}
+                  alt=""
+                  className="h-8 w-8 rounded-[var(--radius-control)] object-cover"
+                />
+                <span className="max-w-32 truncate text-xs">{image.filename}</span>
+                <button
+                  type="button"
+                  onClick={() => setJointes((current) => current.filter((autre) => autre.id !== image.id))}
+                  aria-label={`Retirer ${image.filename}`}
+                  className="text-xs text-[var(--color-ink-soft)]"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <input
+          ref={fichier}
+          type="file"
+          accept={PHOTO_ACCEPT}
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            void joindre(event.target.files)
+            // Remis à zéro : sans cela, rechoisir le même fichier ne déclencherait rien.
+            event.target.value = ''
+          }}
+        />
+
+        <div className="mt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => fichier.current?.click()}
+            disabled={busy || envoiImage || jointes.length >= MAX_JOINTES}
+            className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-sm text-[var(--color-ink-soft)] disabled:opacity-50"
+          >
+            {envoiImage ? 'Envoi…' : '📎 Image'}
+          </button>
+          <Button className="flex-1" onClick={() => void send()} disabled={busy}>
+            {busy ? '…' : 'Envoyer'}
+          </Button>
+        </div>
+        {jointes.length > 0 ? (
+          <p className="m-0 mt-2 text-xs text-[var(--color-ink-faint)]">
+            L’assistant ne regarde pas vos images : il en connaît le nom et la taille, et sait
+            où les placer. Dites-lui où vous les voulez. Elles rejoignent votre bibliothèque,
+            onglet Images.
+          </p>
+        ) : null}
       </div>
     </div>
   )
