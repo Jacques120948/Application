@@ -8,6 +8,7 @@ import { prisma } from '@/server/db/client'
 import { getAnthropic, isAiAvailable } from '@/server/ai/client'
 import { describeFailure } from '@/server/ai/operations'
 import { asUserData } from '@/server/ai/prompts'
+import { documentBlocks, type AttachedDocument } from '@/server/ai/documents'
 import { MODELS } from '@/server/ai/routing'
 import { logger } from '@/server/observability/logger'
 import type { AppSpec } from '@/server/spec/schema'
@@ -122,6 +123,14 @@ export async function runAgent(params: {
   projectId: string
   spec: AppSpec
   request: string
+  /**
+   * Documents joints à la demande : un cahier des charges, une liste de produits.
+   *
+   * Ils entrent dans le premier message et y restent : la boucle renvoyant toute la
+   * conversation à chaque étape, ils sont mis en cache pour que les étapes suivantes les
+   * relisent dix fois moins cher au lieu de les refacturer plein tarif.
+   */
+  documents?: readonly AttachedDocument[]
   /** Les échanges précédents du projet, du plus ancien au plus récent. Facultatif. */
   history?: Array<{ role: 'user' | 'assistant'; content: string }>
   /**
@@ -163,6 +172,7 @@ async function boucle(params: {
   projectId: string
   spec: AppSpec
   request: string
+  documents?: readonly AttachedDocument[] | undefined
   history?: Array<{ role: 'user' | 'assistant'; content: string }> | undefined
   client?: Anthropic | undefined
   limits: AgentLimits
@@ -179,11 +189,19 @@ async function boucle(params: {
     })),
     {
       role: 'user' as const,
+      // Les documents précèdent le texte : c'est l'ordre attendu par l'API, et le bon
+      // ordre de lecture — le contexte d'abord, la question ensuite.
       content: [
-        asUserData('plan_de_lapplication', outline(params.spec)),
-        asUserData('demande', params.request),
-        "Réponds au créateur quand tu as terminé. N'utilise plus d'outil dans ce dernier message.",
-      ].join('\n\n'),
+        ...documentBlocks(params.documents ?? []),
+        {
+          type: 'text' as const,
+          text: [
+            asUserData('plan_de_lapplication', outline(params.spec)),
+            asUserData('demande', params.request),
+            "Réponds au créateur quand tu as terminé. N'utilise plus d'outil dans ce dernier message.",
+          ].join('\n\n'),
+        },
+      ],
     },
   ]
 

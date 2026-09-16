@@ -15,6 +15,19 @@ type Jointe = { id: string; filename: string }
 /** Au-delà, une demande cesse d'être « place cette photo » et devient un album. */
 const MAX_JOINTES = 4
 
+/** Au-delà, une demande cesse d'être une demande et devient un dossier. */
+const MAX_DOCUMENTS = 2
+
+const ACCEPTE_IMAGE = PHOTO_ACCEPT
+const ACCEPTE_DOCUMENT = 'application/pdf,text/plain,text/markdown,text/csv,.pdf,.txt,.md,.csv'
+
+/** Le poids d'un fichier, dit en clair. */
+function poids(octets: number): string {
+  if (octets < 1024) return `${octets} o`
+  if (octets < 1024 * 1024) return `${Math.round(octets / 1024)} Ko`
+  return `${(octets / (1024 * 1024)).toFixed(1)} Mo`
+}
+
 type Message = {
   id: string
   role: 'USER' | 'ASSISTANT' | 'SYSTEM'
@@ -81,9 +94,19 @@ export function ChatPanel({
   const [error, setError] = useState<string | null>(null)
   const [deciding, setDeciding] = useState<string | null>(null)
   const [jointes, setJointes] = useState<Jointe[]>([])
+  /*
+   * Les documents ne quittent le navigateur qu'au moment d'envoyer.
+   *
+   * C'est ce qui les distingue des images : une image est un bien du projet, elle rejoint
+   * la bibliothèque tout de suite et y reste. Un document est un contexte d'un instant —
+   * l'envoyer d'avance obligerait le serveur à le garder quelque part, à le nettoyer, et à
+   * savoir quoi faire de celui qu'on n'enverra jamais.
+   */
+  const [documents, setDocuments] = useState<File[]>([])
   const [envoiImage, setEnvoiImage] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const fichier = useRef<HTMLInputElement>(null)
+  const docRef = useRef<HTMLInputElement>(null)
 
   // On fait défiler le conteneur de la conversation, jamais la page : `scrollIntoView`
   // ferait remonter toute la fenêtre et chasserait l'aperçu hors de l'écran.
@@ -143,12 +166,13 @@ export function ChatPanel({
     if (message.length < 3 || busy) return
 
     const mediaIds = jointes.map((image) => image.id)
-    const noms = jointes.map((image) => image.filename).join(', ')
+    const piecesJointes = [...documents]
 
     setBusy(true)
     setError(null)
     setDraft('')
     setJointes([])
+    setDocuments([])
     setMessages((current) => [
       ...current,
       {
@@ -156,15 +180,25 @@ export function ChatPanel({
         role: 'USER',
         // Le même texte que celui gardé par le serveur : la conversation ne doit pas dire
         // autre chose une fois rechargée.
-        content: noms === '' ? message : `${message}\n\n(Image${jointes.length > 1 ? 's' : ''} jointe${jointes.length > 1 ? 's' : ''} : ${noms})`,
+        content: message + mention(jointes, piecesJointes),
       },
     ])
 
-    const response = await fetch(`/api/projects/${projectId}/chat`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message, mediaIds }),
-    })
+    /*
+     * Deux formes de corps, et la distinction suit celle des pièces jointes. Sans document,
+     * la demande est du JSON, comme avant. Avec, elle passe en formulaire : c'est ce qui
+     * permet d'envoyer le fichier lui-même sans le gonfler d'un tiers en base64.
+     */
+    const response = await fetch(
+      `/api/projects/${projectId}/chat`,
+      piecesJointes.length === 0
+        ? {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ message, mediaIds }),
+          }
+        : { method: 'POST', body: corpsAvecDocuments(message, mediaIds, piecesJointes) },
+    )
     // Une réponse qui n'est pas du JSON vient de l'hébergeur, pas de l'assistant : elle ne
     // doit pas laisser le bouton en attente pour toujours.
     const body = (await response.json().catch(() => null)) as {
@@ -295,6 +329,33 @@ export function ChatPanel({
           className="min-h-20"
         />
 
+        {documents.length > 0 ? (
+          <ul className="m-0 mt-2 flex list-none flex-wrap gap-2 p-0">
+            {documents.map((document) => (
+              <li
+                key={`${document.name}-${document.size}`}
+                className="flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] px-2 py-1.5"
+              >
+                <span aria-hidden="true" className="text-sm">
+                  📄
+                </span>
+                <span className="max-w-40 truncate text-xs">{document.name}</span>
+                <span className="text-xs text-[var(--color-ink-faint)]">{poids(document.size)}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setDocuments((current) => current.filter((autre) => autre !== document))
+                  }
+                  aria-label={`Retirer ${document.name}`}
+                  className="text-xs text-[var(--color-ink-soft)]"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
         {jointes.length > 0 ? (
           <ul className="m-0 mt-2 flex list-none flex-wrap gap-2 p-0">
             {jointes.map((image) => (
@@ -325,7 +386,7 @@ export function ChatPanel({
         <input
           ref={fichier}
           type="file"
-          accept={PHOTO_ACCEPT}
+          accept={ACCEPTE_IMAGE}
           multiple
           className="hidden"
           onChange={(event) => {
@@ -334,25 +395,53 @@ export function ChatPanel({
             event.target.value = ''
           }}
         />
+        <input
+          ref={docRef}
+          type="file"
+          accept={ACCEPTE_DOCUMENT}
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            const choisis = Array.from(event.target.files ?? [])
+            setDocuments((current) => [...current, ...choisis].slice(0, MAX_DOCUMENTS))
+            event.target.value = ''
+          }}
+        />
 
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => fichier.current?.click()}
             disabled={busy || envoiImage || jointes.length >= MAX_JOINTES}
             className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-sm text-[var(--color-ink-soft)] disabled:opacity-50"
           >
-            {envoiImage ? 'Envoi…' : '📎 Image'}
+            {envoiImage ? 'Envoi…' : '🖼 Image'}
+          </button>
+          <button
+            type="button"
+            onClick={() => docRef.current?.click()}
+            disabled={busy || documents.length >= MAX_DOCUMENTS}
+            className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-sm text-[var(--color-ink-soft)] disabled:opacity-50"
+          >
+            📄 Document
           </button>
           <Button className="flex-1" onClick={() => void send()} disabled={busy}>
             {busy ? '…' : 'Envoyer'}
           </Button>
         </div>
+
         {jointes.length > 0 ? (
           <p className="m-0 mt-2 text-xs text-[var(--color-ink-faint)]">
             L’assistant ne regarde pas vos images : il en connaît le nom et la taille, et sait
             où les placer. Dites-lui où vous les voulez. Elles rejoignent votre bibliothèque,
             onglet Images.
+          </p>
+        ) : null}
+        {documents.length > 0 ? (
+          <p className="m-0 mt-2 text-xs text-[var(--color-ink-faint)]">
+            L’assistant lit vos documents — PDF, texte, Markdown, CSV — pour comprendre ce que
+            vous voulez construire. Les lire consomme quelques crédits de plus qu’une demande
+            ordinaire. Ils ne sont pas conservés : ils repartent avec cette demande.
           </p>
         ) : null}
       </div>
@@ -442,4 +531,36 @@ function PlanCard({
       </p>
     </div>
   )
+}
+
+/**
+ * Ce que la conversation garde d'une demande avec pièces jointes.
+ *
+ * Écrit ici comme il l'est côté serveur : deux formulations différentes pour la même
+ * demande feraient dire à la conversation autre chose une fois la page rechargée.
+ */
+function mention(images: readonly Jointe[], documents: readonly File[]): string {
+  const morceaux: string[] = []
+  if (images.length > 0) {
+    const pluriel = images.length > 1 ? 's' : ''
+    morceaux.push(`Image${pluriel} jointe${pluriel} : ${images.map((image) => image.filename).join(', ')}`)
+  }
+  if (documents.length > 0) {
+    const pluriel = documents.length > 1 ? 's' : ''
+    morceaux.push(`Document${pluriel} joint${pluriel} : ${documents.map((doc) => doc.name).join(', ')}`)
+  }
+  return morceaux.length === 0 ? '' : `\n\n(${morceaux.join(' — ')})`
+}
+
+/** La demande et ses documents, en formulaire. Les images n'y sont que des identifiants. */
+function corpsAvecDocuments(
+  message: string,
+  mediaIds: readonly string[],
+  documents: readonly File[],
+): FormData {
+  const corps = new FormData()
+  corps.append('message', message)
+  corps.append('mediaIds', JSON.stringify(mediaIds))
+  for (const document of documents) corps.append('document', document)
+  return corps
 }

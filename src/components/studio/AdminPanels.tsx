@@ -844,6 +844,7 @@ export type AdminAgentLimits = {
   maxTokens: number
   maxCredits: number
   maxDurationMs: number
+  documentTokens: number
 }
 
 /**
@@ -861,6 +862,7 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
     maxTokens: String(limits.maxTokens),
     maxCredits: String(limits.maxCredits),
     maxDurationSeconds: String(Math.round(limits.maxDurationMs / 1000)),
+    documentTokens: String(limits.documentTokens),
   })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -875,6 +877,7 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
         maxTokens: Number(valeurs.maxTokens),
         maxCredits: Number(valeurs.maxCredits),
         maxDurationSeconds: Number(valeurs.maxDurationSeconds),
+        documentTokens: Number(valeurs.documentTokens),
       }),
     })
     const body = (await response.json().catch(() => null)) as { message?: string } | null
@@ -937,6 +940,20 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
                 value={valeurs.maxDurationSeconds}
                 onChange={(event) =>
                   setValeurs((state) => ({ ...state, maxDurationSeconds: event.target.value }))
+                }
+              />
+            </Field>
+            <Field
+              label="Jetons d’un document joint"
+              hint="Un PDF plus gros est refusé avant tout appel, donc sans rien coûter. 30 000 ≈ 15 pages."
+            >
+              <Input
+                type="number"
+                min={2000}
+                max={200000}
+                value={valeurs.documentTokens}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, documentTokens: event.target.value }))
                 }
               />
             </Field>

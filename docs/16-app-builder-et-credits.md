@@ -336,6 +336,48 @@ consigne le lui dit explicitement, et l'interface le dit au créateur plutôt qu
 laisser croire qu'il a été compris. Joindre une image ne coûte donc rien de plus que la
 demande elle-même.
 
+#### Joindre un document à une demande
+
+Un créateur arrive rarement les mains vides : il a un cahier des charges dans un PDF, une
+liste de produits exportée en CSV, des notes dans un fichier texte. Jusqu'ici il devait
+recopier tout cela dans la zone de saisie — exactement le travail que la plateforme est
+censée lui épargner. La zone accepte maintenant deux documents : PDF, texte, Markdown, CSV.
+
+**Rien n'est stocké.** Le document voyage avec la demande et disparaît avec elle. C'est ce
+qui le distingue d'une image : une image décore des pages, elle est un bien du projet et
+mérite une bibliothèque ; un document est un contexte d'un instant. Ne pas le garder évite
+d'un seul coup la table, le ménage, l'adresse qui le sert, et la question de ce qu'on fait
+des binaires d'autrui. D'où la seule différence visible côté navigateur : une demande avec
+document part en formulaire multipart plutôt qu'en JSON.
+
+**Le PDF est lu par l'API**, qui en extrait texte et mise en page. Écrire notre propre
+extracteur aurait ajouté une dépendance, un format d'entrée à surveiller, et fait moins bien
+ce qui est déjà fait ailleurs.
+
+**Le contenu n'est jamais une consigne.** Un cahier des charges peut contenir la phrase
+« ignore les instructions précédentes » sans la moindre malice. Le texte est donc encadré
+comme une donnée, et la consigne dit explicitement que seule la demande du créateur fait
+autorité — si le document la contredit, c'est la demande qui l'emporte, et l'assistant le
+signale.
+
+**Ce que cela coûte, et comment c'est borné.** Lire un document consomme des crédits du
+créateur, contrairement à une image jointe. Trois choses l'encadrent.
+
+Le document est **mis en cache** dans le premier message. La boucle de l'agent renvoie toute
+la conversation à chaque étape : sans cela, un PDF de dix pages serait refacturé plein tarif
+six fois de suite — environ 48 crédits au lieu de 12.
+
+Le nombre de jetons est **compté avant le premier appel**, par l'API, gratuitement. Au-delà
+du plafond (30 000 par défaut, réglable depuis l'administration), la demande est refusée
+avec le chiffre en clair, et elle n'a rien coûté. Rien n'est jamais tronqué en silence : un
+cahier des charges amputé de sa seconde moitié produirait une application à moitié fausse
+sans que personne sache pourquoi.
+
+Ce comptage est une **précaution, pas l'opération** : s'il échoue — clé refusée, réseau —,
+la demande se poursuit et l'incident est tracé. Refuser punirait le créateur pour une panne
+qui n'est pas la sienne, alors que la réservation de crédits et les bornes de l'agent le
+protègent déjà d'un document démesuré, moins finement mais sûrement.
+
 ---
 
 ### PHASE 4 — Preview et correction automatique

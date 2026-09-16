@@ -15,7 +15,8 @@ import {
   loadPricing,
   PRICING_SETTINGS,
 } from '@/server/billing/ai-pricing'
-import { writeSetting } from '@/server/settings/store'
+import { readSetting, writeSetting } from '@/server/settings/store'
+import { DEFAULT_MAX_DOCUMENT_TOKENS, DOCUMENT_SETTINGS } from '@/server/ai/documents'
 import { AGENT_SETTINGS, loadAgentLimits } from '@/server/agent/limits'
 import {
   getLegalIdentity,
@@ -429,7 +430,16 @@ export async function updateCreditSettings(input: z.infer<typeof creditSettingsI
  */
 export async function readAgentLimits() {
   await requireAdmin()
-  return loadAgentLimits()
+  const [limits, brut] = await Promise.all([
+    loadAgentLimits(),
+    readSetting(DOCUMENT_SETTINGS.maxTokens),
+  ])
+  const valeur = brut === null ? Number.NaN : Number(brut)
+  return {
+    ...limits,
+    documentTokens:
+      Number.isFinite(valeur) && valeur > 0 ? Math.round(valeur) : DEFAULT_MAX_DOCUMENT_TOKENS,
+  }
 }
 
 export const agentLimitsInput = z.object({
@@ -438,6 +448,15 @@ export const agentLimitsInput = z.object({
   maxCredits: z.number().int().min(5).max(400),
   /** En secondes dans l'interface : des millisecondes ne se saisissent pas à la main. */
   maxDurationSeconds: z.number().int().min(30).max(600),
+  /**
+   * Jetons qu'un document joint peut représenter.
+   *
+   * Cette borne-là ne protège pas Evoliia — la réservation s'en charge — mais le créateur :
+   * sans elle, joindre un PDF de deux cents pages épuiserait son budget d'un coup, et il ne
+   * l'apprendrait qu'après. Elle est vérifiée avant le premier appel, par un comptage
+   * gratuit, donc un refus ne coûte rien à personne.
+   */
+  documentTokens: z.number().int().min(2_000).max(200_000),
 })
 
 export async function updateAgentLimits(input: z.infer<typeof agentLimitsInput>) {
@@ -446,5 +465,6 @@ export async function updateAgentLimits(input: z.infer<typeof agentLimitsInput>)
   await writeSetting(AGENT_SETTINGS.maxTokens, String(input.maxTokens))
   await writeSetting(AGENT_SETTINGS.maxCredits, String(input.maxCredits))
   await writeSetting(AGENT_SETTINGS.maxDurationMs, String(input.maxDurationSeconds * 1000))
+  await writeSetting(DOCUMENT_SETTINGS.maxTokens, String(input.documentTokens))
   logger.info('bornes de l’agent modifiées', { adminId: admin.id, ...input })
 }

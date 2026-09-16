@@ -21,6 +21,13 @@ import { heuristicBlueprint, blueprintFromIdea, blueprintFromSpecSheet } from '.
 import { getIdea } from '@/server/business/ideas'
 import { publicAppUrl } from '@/lib/apps-domain'
 import { resolveAttachments, type ChatAttachment } from '@/server/media/service'
+import {
+  assertDocumentsFit,
+  documentBrief,
+  type AttachedDocument,
+} from '@/server/ai/documents'
+import { getAnthropic } from '@/server/ai/client'
+import { MODELS } from '@/server/ai/routing'
 
 /**
  * Cas d'usage « projet ».
@@ -286,10 +293,52 @@ export type EditOutcome = {
  * d'un autre genre, et d'un autre prix — ce n'est pas ce qui est fait ici, et l'assistant
  * doit donc éviter de laisser croire qu'il l'a regardée.
  */
-function mentionAttachments(attachments: readonly ChatAttachment[]): string {
-  if (attachments.length === 0) return ''
-  const noms = attachments.map((image) => image.filename).join(', ')
-  return `\n\n(Image${attachments.length > 1 ? 's' : ''} jointe${attachments.length > 1 ? 's' : ''} : ${noms})`
+function mentionAttachments(
+  attachments: readonly ChatAttachment[],
+  documents: readonly AttachedDocument[] = [],
+): string {
+  const morceaux: string[] = []
+  if (attachments.length > 0) {
+    const pluriel = attachments.length > 1 ? 's' : ''
+    morceaux.push(`Image${pluriel} jointe${pluriel} : ${attachments.map((image) => image.filename).join(', ')}`)
+  }
+  if (documents.length > 0) {
+    const pluriel = documents.length > 1 ? 's' : ''
+    morceaux.push(`Document${pluriel} joint${pluriel} : ${documents.map((doc) => doc.filename).join(', ')}`)
+  }
+  return morceaux.length === 0 ? '' : `\n\n(${morceaux.join(' — ')})`
+}
+
+/**
+ * Prépare ce qui accompagne une demande.
+ *
+ * Le comptage des documents a lieu ici, avant toute écriture : un document trop gros doit
+ * être refusé sans avoir rien laissé dans la conversation, et sans avoir rien dépensé. Le
+ * comptage lui-même est gratuit.
+ */
+async function prepareRequest(params: {
+  userId: string
+  projectId: string
+  message: string
+  mediaIds: readonly string[]
+  documents: readonly AttachedDocument[]
+}): Promise<{ garde: string; demande: string; documents: readonly AttachedDocument[] }> {
+  const attachments = await resolveAttachments(params.userId, params.projectId, params.mediaIds)
+  // Sans assistant configuré, il n'y a rien à compter et rien à dépenser : la demande
+  // s'arrêtera plus loin avec le message qui convient, pas sur une erreur de client absent.
+  if (params.documents.length > 0 && isAiAvailable()) {
+    await assertDocumentsFit({
+      client: getAnthropic(),
+      model: MODELS.fast,
+      documents: params.documents,
+    })
+  }
+  const garde = params.message + mentionAttachments(attachments, params.documents)
+  return {
+    garde,
+    demande: garde + briefAttachments(attachments) + documentBrief(params.documents),
+    documents: params.documents,
+  }
 }
 
 function briefAttachments(attachments: readonly ChatAttachment[]): string {
@@ -316,14 +365,19 @@ export async function editWithAssistant(
   projectId: string,
   message: string,
   mediaIds: readonly string[] = [],
+  joints: readonly AttachedDocument[] = [],
 ): Promise<EditOutcome> {
   const trimmed = message.trim()
   if (trimmed.length < 3) throw validation('Dites en quelques mots ce que vous voulez changer.')
   if (trimmed.length > 2000) throw validation('Votre message est trop long.')
 
-  const attachments = await resolveAttachments(userId, projectId, mediaIds)
-  const garde = trimmed + mentionAttachments(attachments)
-  const demande = garde + briefAttachments(attachments)
+  const { garde, demande, documents } = await prepareRequest({
+    userId,
+    projectId,
+    message: trimmed,
+    mediaIds,
+    documents: joints,
+  })
 
   const current = await withUserScope(userId, async (tx) => {
     const project = await requireOwnedProject(tx, projectId, userId)
@@ -343,7 +397,7 @@ export async function editWithAssistant(
   // Une tentative, puis une seule reprise si la validation refuse le patch. La reprise
   // reçoit le motif exact du refus : mesurée en conditions réelles, elle rattrape les
   // erreurs de forme que l'assistant corrige dès qu'on les lui nomme.
-  let result = await requestEdit(userId, projectId, current, demande)
+  let result = await requestEdit(userId, projectId, current, demande, undefined, documents)
   let creditsSpent = result.creditsSpent
   let response = result.value
   let patch: SpecPatch | null = null
@@ -380,10 +434,14 @@ export async function editWithAssistant(
       })
       if (attempt === 1) break
 
-      const retry = await requestEdit(userId, projectId, current, demande, {
-        operations: response.operations,
-        problem: lastProblem,
-      })
+      const retry = await requestEdit(
+        userId,
+        projectId,
+        current,
+        demande,
+        { operations: response.operations, problem: lastProblem },
+        documents,
+      )
       creditsSpent += retry.creditsSpent
       response = retry.value
     }
@@ -500,14 +558,19 @@ export async function editWithAgent(
   projectId: string,
   message: string,
   mediaIds: readonly string[] = [],
+  joints: readonly AttachedDocument[] = [],
 ): Promise<AgentOutcomeView> {
   const trimmed = message.trim()
   if (trimmed.length < 3) throw validation('Dites en quelques mots ce que vous voulez changer.')
   if (trimmed.length > 2000) throw validation('Votre message est trop long.')
 
-  const attachments = await resolveAttachments(userId, projectId, mediaIds)
-  const garde = trimmed + mentionAttachments(attachments)
-  const demande = garde + briefAttachments(attachments)
+  const { garde, demande, documents } = await prepareRequest({
+    userId,
+    projectId,
+    message: trimmed,
+    mediaIds,
+    documents: joints,
+  })
 
   const { spec: current, history } = await withUserScope(userId, async (tx) => {
     const project = await requireOwnedProject(tx, projectId, userId)
@@ -531,7 +594,14 @@ export async function editWithAgent(
     }
   })
 
-  const outcome = await runAgent({ userId, projectId, spec: current, request: demande, history })
+  const outcome = await runAgent({
+    userId,
+    projectId,
+    spec: current,
+    request: demande,
+    documents,
+    history,
+  })
 
   if (outcome.operations.length === 0) {
     await recordAssistantMessage(userId, projectId, outcome.reply, null)

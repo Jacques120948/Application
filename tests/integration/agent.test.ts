@@ -292,3 +292,63 @@ describe('les crédits', () => {
     ).rejects.toMatchObject({ code: 'INSUFFICIENT_CREDITS' })
   })
 })
+
+/**
+ * Un document joint à la demande.
+ *
+ * Ce qui est vérifié ici est la seule chose que les tests unitaires ne peuvent pas voir :
+ * que le document arrive réellement au modèle, au bon endroit, et qu'il y reste mis en
+ * cache. L'oubli de ce dernier point ne casserait rien de visible — ce serait une facture
+ * multipliée par le nombre d'étapes, en silence.
+ */
+describe('document joint', () => {
+  it('parvient au modèle avant la demande, et mis en cache', async () => {
+    const observed = { appels: [] as Anthropic.Messages.MessageCreateParamsNonStreaming[] }
+    const project = await getProject(userId, projectId)
+
+    await runAgent({
+      userId,
+      projectId,
+      spec: project.spec,
+      request: 'Construis la page décrite dans mon cahier des charges.',
+      documents: [
+        { kind: 'text', filename: 'cahier.txt', text: 'Révision complète : 89 CHF' },
+      ],
+      client: scriptedClient([{ text: 'C’est fait.' }], observed),
+    })
+
+    const premier = observed.appels[0]!
+    const contenu = premier.messages[premier.messages.length - 1]!.content
+    expect(Array.isArray(contenu)).toBe(true)
+    const blocs = contenu as Anthropic.Messages.ContentBlockParam[]
+
+    // Le document d'abord, la demande ensuite : le contexte avant la question.
+    const document = blocs[0]!
+    expect(document.type).toBe('text')
+    expect(document.type === 'text' ? document.text : '').toContain('Révision complète : 89 CHF')
+    expect(document.type === 'text' ? document.text : '').toContain('<document_joint')
+    expect(document.cache_control).toEqual({ type: 'ephemeral' })
+
+    const demande = blocs[1]!
+    expect(demande.type === 'text' ? demande.text : '').toContain('cahier des charges')
+  })
+
+  it('n’ajoute aucun bloc quand rien n’est joint', async () => {
+    const observed = { appels: [] as Anthropic.Messages.MessageCreateParamsNonStreaming[] }
+    const project = await getProject(userId, projectId)
+
+    await runAgent({
+      userId,
+      projectId,
+      spec: project.spec,
+      request: 'Mets le bouton en bleu.',
+      client: scriptedClient([{ text: 'C’est fait.' }], observed),
+    })
+
+    const premier = observed.appels[0]!
+    const blocs = premier.messages[premier.messages.length - 1]!
+      .content as Anthropic.Messages.ContentBlockParam[]
+    expect(blocs).toHaveLength(1)
+    expect(blocs[0]?.cache_control).toBeUndefined()
+  })
+})

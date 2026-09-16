@@ -19,6 +19,7 @@ import type { PatchOperation } from '@/server/spec/patch'
 import { assembleSpec } from '@/server/spec/assemble'
 import type Anthropic from '@anthropic-ai/sdk'
 import { getAnthropic, getAnthropicWithKey, isAiAvailable } from './client'
+import { documentBlocks, type AttachedDocument } from './documents'
 import { GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
 import {
   appAssistantSystem,
@@ -96,6 +97,8 @@ async function callStructured<T>(params: {
   effort: 'low' | 'medium' | 'high'
   system: string
   userContent: string
+  /** Documents joints à la demande. Ils précèdent le texte, comme l'attend l'API. */
+  documents?: readonly AttachedDocument[]
   schema: ZodType<T>
   /** Compte à solliciter. Par défaut celui d'Evoliia ; celui d'un créateur pour Lia. */
   client?: Anthropic
@@ -107,7 +110,15 @@ async function callStructured<T>(params: {
     max_tokens: params.maxTokens,
     // Le prompt système ne varie pas d'un appel à l'autre : il est mis en cache.
     system: [{ type: 'text', text: params.system, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: params.userContent }],
+    messages: [
+      {
+        role: 'user',
+        content: [
+          ...documentBlocks(params.documents ?? []),
+          { type: 'text' as const, text: params.userContent },
+        ],
+      },
+    ],
     output_config: {
       format: betaZodOutputFormat(params.schema),
       effort: params.effort,
@@ -429,6 +440,7 @@ async function runSingleCall<T>(params: {
   accounting: Accounting
   system: string
   userContent: string
+  documents?: readonly AttachedDocument[]
   schema: ZodType<T>
 }): Promise<RunResult<T>> {
   await beforeCalls(params.accounting)
@@ -441,6 +453,7 @@ async function runSingleCall<T>(params: {
       effort: profile.effort,
       system: params.system,
       userContent: params.userContent,
+      ...(params.documents === undefined ? {} : { documents: params.documents }),
       schema: params.schema,
     })
     const cost = await recordCall(params.accounting, params.accounting.operation, outcome, true)
@@ -644,6 +657,7 @@ export async function requestEdit(
   spec: AppSpec,
   request: string,
   previous?: FailedAttempt,
+  documents: readonly AttachedDocument[] = [],
 ): Promise<RunResult<EditOperations>> {
   /*
    * À la première tentative, le modèle reçoit la structure complète mais les textes longs
@@ -655,6 +669,7 @@ export async function requestEdit(
   const result = await runSingleCall({
     accounting: { userId, projectId, operation: 'edit' },
     system: EDIT_SYSTEM,
+    documents,
     schema: editResponseSchema,
     userContent: [
       asUserData('application_actuelle', contexte.text),
