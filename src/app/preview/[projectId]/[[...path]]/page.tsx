@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { AppError } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
@@ -8,6 +9,18 @@ import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
 import { LiaWidget } from '@/components/runtime/LiaWidget'
 import { readPublicSupportSettings } from '@/server/support/settings'
+
+/**
+ * Un brouillon n'est pas une publication.
+ *
+ * L'aperçu est déjà refusé à toute personne qui n'en est pas propriétaire, mais un moteur
+ * de recherche n'a même pas à conserver l'adresse : la publier reviendrait à annoncer
+ * l'existence d'un projet que son créateur n'a pas encore montré.
+ */
+export const metadata: Metadata = {
+  title: 'Aperçu',
+  robots: { index: false, follow: false, nocache: true },
+}
 
 /**
  * Aperçu du brouillon, réservé au propriétaire.

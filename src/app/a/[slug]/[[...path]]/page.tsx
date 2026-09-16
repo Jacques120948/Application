@@ -16,15 +16,22 @@ import { readPublicSupportSettings } from '@/server/support/settings'
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ slug: string }>
+  params: Promise<{ slug: string; path?: string[] }>
 }): Promise<Metadata> {
-  const { slug } = await params
+  const { slug, path } = await params
   try {
     const app = await getPublishedApp(slug)
     const scope = `${appBasePath((await headers()).get('host'), app.slug)}/`
+    const page = app.spec.pages.find((candidate) => candidate.path === (path?.[0] ?? HOME_PATH))
     return {
       title: app.spec.name,
       description: app.spec.tagline,
+      /*
+        Une page réservée aux personnes connectées ne montre à un robot qu'un formulaire de
+        connexion : la laisser indexer classerait l'application sur ce formulaire plutôt
+        que sur ce qu'elle fait.
+      */
+      robots: page?.requiresAuth === true ? { index: false, follow: true } : undefined,
       /*
         Les deux adresses servent la même application : l'ancienne, déjà partagée, et
         l'adresse propre. Le lien canonique désigne la seconde pour qu'un moteur de

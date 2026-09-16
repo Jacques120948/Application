@@ -69,3 +69,26 @@ métadonnées pour qu'un moteur de recherche n'y voie pas deux pages concurrente
    redéployer : les variables ne sont lues qu'au démarrage.
 4. Ouvrir une application publiée depuis le tableau de bord. Son adresse doit être le
    sous-domaine, et l'ancienne adresse doit continuer de répondre.
+
+## Ce que les moteurs de recherche lisent
+
+Une adresse propre ne sert à rien si rien n'indique quoi explorer. Deux sites cohabitent
+sur le même code, et ils n'ont pas les mêmes règles.
+
+**Evoliia** (`/robots.txt`, `/sitemap.xml`) annonce ses pages publiques dans les cinq
+langues, chacune renvoyant vers ses traductions — sans quoi cinq adresses proches se
+feraient concurrence au lieu de se compléter. L'atelier, le tableau de bord et surtout
+l'aperçu restent hors index : un aperçu indexé, c'est le brouillon d'un créateur qui sort
+dans un moteur avant même qu'il ait publié. Les pages d'aperçu portent en plus une balise
+`noindex`, parce qu'un `robots.txt` se contourne et qu'une balise, non.
+
+**Chaque application publiée** a son propre plan de site et son propre `robots.txt`, servis
+sous son adresse. Sur le sous-domaine, le routage de bordure amène `/robots.txt` et
+`/sitemap.xml` vers ceux de l'application : elle répond avec ses règles, jamais celles
+d'Evoliia. Le plan ne liste que les pages publiques, et les pages réservées aux personnes
+connectées sont refusées en plus par une balise `noindex` — un robot n'y verrait qu'un
+formulaire de connexion, et classerait l'application sur ce formulaire.
+
+Le plan d'Evoliia ne contient **aucune** application : les créations des clients ne sont
+pas des pages d'Evoliia, et les y lister reviendrait à publier la liste des créations de
+tout le monde sans le leur demander.
