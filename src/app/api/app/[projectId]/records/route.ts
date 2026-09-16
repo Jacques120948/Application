@@ -48,6 +48,8 @@ export async function GET(request: Request, context: { params: Promise<{ project
           ? { sort: sortDemande as RecordSort }
           : {}),
         ...(params.get('champTri') !== null ? { sortField: params.get('champTri') as string } : {}),
+        ...(params.get('champTotal') !== null ? { sumField: params.get('champTotal') as string } : {}),
+        ...(params.get('typeTotal') === 'moyenne' ? { sumKind: 'moyenne' as const } : {}),
         ...(entier(params.get('limite')) !== undefined
           ? { limit: entier(params.get('limite')) as number }
           : {}),

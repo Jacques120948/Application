@@ -246,6 +246,145 @@ describe('données d’une application publiée', () => {
   })
 
   /*
+   * Relier deux modèles, et totaliser.
+   *
+   * La spécification est construite ici plutôt que publiée : les fonctions de données la
+   * reçoivent en argument, et c'est elle qui fait autorité sur la forme des données.
+   */
+  it('relie une fiche à une autre et refuse un renvoi qui pointe dans le vide', async () => {
+    const project = await getProject(userId, projectId)
+    const clients = {
+      id: 'client',
+      label: 'Client',
+      labelPlural: 'Clients',
+      scope: 'shared' as const,
+      labelField: 'nom',
+      fields: [
+        { id: 'nom', label: 'Nom', type: 'text' as const, required: true },
+        { id: 'ville', label: 'Ville', type: 'text' as const, required: false },
+      ],
+    }
+    const devis = {
+      id: 'devis',
+      label: 'Devis',
+      labelPlural: 'Devis',
+      scope: 'shared' as const,
+      fields: [
+        { id: 'objet', label: 'Objet', type: 'text' as const, required: true },
+        { id: 'montant', label: 'Montant', type: 'number' as const, required: true },
+        {
+          id: 'client',
+          label: 'Client',
+          type: 'reference' as const,
+          required: true,
+          referenceModelId: 'client',
+        },
+      ],
+    }
+    const spec = { ...project.spec, dataModels: [...project.spec.dataModels, clients, devis] }
+
+    const client = await createRecord({
+      projectId,
+      spec,
+      modelId: 'client',
+      endUserId: null,
+      input: { nom: 'Boulangerie Durand', ville: 'Fribourg' },
+    })
+
+    // Un renvoi qui ne désigne rien est refusé à l'écriture, pas découvert à la lecture.
+    await expect(
+      createRecord({
+        projectId,
+        spec,
+        modelId: 'devis',
+        endUserId: null,
+        input: { objet: 'Fantôme', montant: 10, client: randomUUID() },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+
+    // Un renvoi vers une fiche du mauvais modèle est refusé de la même façon.
+    const autre = project.spec.dataModels[0]
+    if (autre !== undefined) {
+      const ailleurs = await createRecord({
+        projectId,
+        spec,
+        modelId: autre.id,
+        endUserId: null,
+        input: sampleInput(autre),
+      }).catch(() => null)
+      if (ailleurs !== null) {
+        await expect(
+          createRecord({
+            projectId,
+            spec,
+            modelId: 'devis',
+            endUserId: null,
+            input: { objet: 'Mauvais modèle', montant: 10, client: ailleurs.id },
+          }),
+        ).rejects.toMatchObject({ code: 'VALIDATION' })
+      }
+    }
+
+    for (const [objet, montant] of [
+      ['Vitrine', 1200],
+      ['Devanture', 800.5],
+      ['Enseigne', 400],
+    ] as const) {
+      await createRecord({
+        projectId,
+        spec,
+        modelId: 'devis',
+        endUserId: null,
+        input: { objet, montant, client: client.id },
+      })
+    }
+
+    // La liste rend le nom de la fiche visée, jamais son identifiant.
+    const page = await listRecords({ projectId, spec, modelId: 'devis', endUserId: null })
+    expect(page.total).toBe(3)
+    expect(page.references[client.id]).toBe('Boulangerie Durand')
+
+    // Le total porte sur l'ensemble, et il suit le filtre plutôt que la page affichée.
+    const somme = await listRecords({
+      projectId,
+      spec,
+      modelId: 'devis',
+      endUserId: null,
+      query: { sumField: 'montant', limit: 1 },
+    })
+    expect(somme.items.length).toBe(1)
+    expect(somme.aggregate).toMatchObject({ field: 'montant', kind: 'somme', value: 2400.5 })
+
+    const moyenne = await listRecords({
+      projectId,
+      spec,
+      modelId: 'devis',
+      endUserId: null,
+      query: { sumField: 'montant', sumKind: 'moyenne' },
+    })
+    expect(moyenne.aggregate?.value).toBe(800.17)
+
+    const restreint = await listRecords({
+      projectId,
+      spec,
+      modelId: 'devis',
+      endUserId: null,
+      query: { search: 'Enseigne', sumField: 'montant' },
+    })
+    expect(restreint.aggregate?.value).toBe(400)
+
+    // On ne totalise pas ce qui n'est pas un nombre : le réglage est ignoré, sans erreur.
+    const texte = await listRecords({
+      projectId,
+      spec,
+      modelId: 'devis',
+      endUserId: null,
+      query: { sumField: 'objet' },
+    })
+    expect(texte.aggregate).toBeNull()
+  })
+
+  /*
    * Chercher, filtrer, trier, paginer. Tout se passe dans la base : une recherche qui ne
    * regarderait que la page déjà chargée donnerait l'illusion de chercher.
    */

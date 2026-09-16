@@ -136,6 +136,37 @@ entre comme paramètre et jamais par concaténation, et les jokers de SQL sont n
 dans le texte cherché — sans quoi chercher « 100 % » ramènerait tout. Elle s'exécute dans
 la portée du projet, donc sous la même protection de la base que le reste.
 
+### Relier deux modèles
+
+Un champ de type `reference` désigne une fiche d'un autre modèle : une réservation qui
+nomme un client, un devis qui nomme le sien. Le champ déclare `referenceModelId`, et la
+valeur enregistrée est l'identifiant de la fiche visée.
+
+À la saisie, le champ devient une liste de choix alimentée par le serveur, qui n'y met que
+ce que le visiteur a le droit de voir — ses propres fiches sur un modèle privé, toutes sur
+un modèle partagé. À la lecture, la liste affiche le **nom** de la fiche visée, jamais son
+identifiant ; une fiche supprimée entre-temps le dit.
+
+Le nom d'une fiche est son `labelField`, à défaut son premier champ texte. Cette règle vit
+dans un seul module, partagé par le serveur et le navigateur : deux versions finiraient par
+nommer la même fiche autrement d'un écran à l'autre.
+
+**Un renvoi qui pointe dans le vide est refusé à l'écriture**, pas découvert à la lecture :
+le serveur vérifie, dans la même transaction, que la fiche visée existe, dans le modèle
+annoncé et dans le même projet. Et la vérification d'intégrité refuse avant publication un
+renvoi vers un modèle qui n'existe pas. Un renvoi d'un modèle vers lui-même reste
+légitime : une tâche peut avoir une tâche mère.
+
+### Totaliser
+
+Une liste peut annoncer le total d'un champ numérique : `sumField` le nomme, `sumKind` vaut
+`somme` ou `moyenne`. Le total porte sur **l'ensemble filtré**, jamais sur la page
+affichée : un total qui changerait en cliquant « Voir plus » ne serait pas un total.
+
+Les valeurs qui ne sont pas des nombres sont ignorées plutôt que de faire échouer la
+lecture — un champ peut avoir changé de type après que des fiches ont été saisies. La
+vérification d'intégrité refuse par ailleurs de totaliser un champ qui n'est pas un nombre.
+
 ### Qui a le droit
 
 Le droit n'est jamais décidé par le navigateur. À chaque requête, le serveur revérifie que

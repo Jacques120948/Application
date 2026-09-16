@@ -553,6 +553,7 @@ function BlockView({
             <RecordForm
               projectId={context.projectId}
               model={model}
+              models={spec.dataModels}
               submitLabel={block.submitLabel}
               successMessage={block.successMessage}
               onCreated={onDataChanged}
@@ -574,6 +575,7 @@ function BlockView({
           <RecordList
             projectId={context.projectId}
             model={model}
+            models={spec.dataModels}
             titleField={block.titleField}
             {...(block.subtitleField !== undefined ? { subtitleField: block.subtitleField } : {})}
             emptyText={block.emptyText}
@@ -582,6 +584,8 @@ function BlockView({
             searchable={block.searchable}
             {...(block.filterField !== undefined ? { filterField: block.filterField } : {})}
             sort={block.sort}
+            {...(block.sumField !== undefined ? { sumField: block.sumField } : {})}
+            sumKind={block.sumKind}
             refreshToken={refreshToken}
           />
         </Band>

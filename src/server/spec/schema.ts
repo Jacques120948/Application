@@ -78,6 +78,12 @@ export const FIELD_TYPES = [
   'email',
   'url',
   'select',
+  /**
+   * Renvoi vers une fiche d'un autre modèle : une réservation qui désigne un client, une
+   * ligne de devis qui désigne un produit. La valeur stockée est l'identifiant de la fiche
+   * visée ; ce qui s'affiche est son nom, relu à la lecture.
+   */
+  'reference',
 ] as const
 
 export const dataFieldSchema = z
@@ -88,6 +94,8 @@ export const dataFieldSchema = z
     required: z.boolean(),
     /** Renseigné uniquement pour le type `select`. */
     options: z.array(shortText).max(30).optional(),
+    /** Renseigné uniquement pour le type `reference` : le modèle vers lequel on renvoie. */
+    referenceModelId: slug.optional(),
     help: shortText.optional(),
   })
   .strict()
@@ -95,6 +103,9 @@ export const dataFieldSchema = z
     (field) => field.type !== 'select' || (field.options !== undefined && field.options.length > 0),
     { message: 'Un champ à choix multiples doit proposer au moins une option.' },
   )
+  .refine((field) => field.type !== 'reference' || field.referenceModelId !== undefined, {
+    message: 'Un renvoi doit dire vers quelles données il pointe.',
+  })
 
 export const dataModelSchema = z
   .object({
@@ -107,6 +118,12 @@ export const dataModelSchema = z
      */
     scope: z.enum(['user', 'shared']),
     fields: z.array(dataFieldSchema).min(1).max(20),
+    /**
+     * Champ qui nomme une fiche, pour la désigner ailleurs — dans un renvoi, notamment.
+     * À défaut, le premier champ texte du modèle. L'écrire évite de dépendre de l'ordre
+     * des champs, qui n'a pas été pensé pour ça.
+     */
+    labelField: slug.optional(),
   })
   .strict()
 
@@ -403,6 +420,12 @@ export const recordListBlockSchema = z
     filterField: slug.optional(),
     /** Ordre d'ouverture de la liste. Le visiteur peut en changer. */
     sort: z.enum(['recent', 'ancien', 'az', 'za']).default('recent'),
+    /**
+     * Champ numérique dont la liste annonce le total. Il porte sur ce qui est affiché :
+     * filtrer la liste change le total, ce qui est le seul comportement qui ne ment pas.
+     */
+    sumField: slug.optional(),
+    sumKind: z.enum(['somme', 'moyenne']).default('somme'),
   })
   .strict()
 

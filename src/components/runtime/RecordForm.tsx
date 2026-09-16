@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { recordLabel } from '@/lib/record-label'
 import type { DataModel } from '@/server/spec/schema'
 
 /**
@@ -20,6 +21,8 @@ export type EditedRecord = { id: string; data: Record<string, unknown> }
 type Props = {
   projectId: string
   model: DataModel
+  /** Tous les modèles de l'application : un renvoi doit pouvoir nommer sa cible. */
+  models: readonly DataModel[]
   submitLabel: string
   successMessage: string
   onCreated: () => void
@@ -34,6 +37,7 @@ type Props = {
 export function RecordForm({
   projectId,
   model,
+  models,
   submitLabel,
   successMessage,
   onCreated,
@@ -111,7 +115,12 @@ export function RecordForm({
             {field.label}
             {field.required ? ' *' : ''}
           </span>
-          <FieldControl field={field} initial={record?.data[field.id]} />
+          <FieldControl
+            field={field}
+            initial={record?.data[field.id]}
+            projectId={projectId}
+            models={models}
+          />
           {field.help !== undefined ? (
             <span className="mt-1 block text-xs opacity-70">{field.help}</span>
           ) : null}
@@ -155,13 +164,30 @@ function textValue(initial: unknown): string | undefined {
 function FieldControl({
   field,
   initial,
+  projectId,
+  models,
 }: {
   field: DataModel['fields'][number]
   initial?: unknown
+  projectId: string
+  models: readonly DataModel[]
 }) {
   const className = 'w-full rounded-[var(--app-radius)] border px-3 py-2 text-sm'
   const style = { borderColor: 'var(--app-muted)', background: 'var(--app-surface)' }
   const value = textValue(initial)
+
+  if (field.type === 'reference') {
+    return (
+      <ReferencePicker
+        field={field}
+        initial={value}
+        projectId={projectId}
+        model={models.find((candidate) => candidate.id === field.referenceModelId)}
+        className={className}
+        style={style}
+      />
+    )
+  }
 
   switch (field.type) {
     case 'longText':
@@ -258,4 +284,79 @@ function FieldControl({
         />
       )
   }
+}
+
+/**
+ * Choix d'une fiche d'un autre modèle.
+ *
+ * Les candidats sont lus au serveur, qui n'en renvoie que ce que le visiteur a le droit de
+ * voir : sur un modèle privé, ses propres fiches ; sur un modèle partagé, toutes. Le nom
+ * affiché suit la même règle que la liste, parce que la règle vit dans un seul endroit.
+ */
+function ReferencePicker({
+  field,
+  initial,
+  projectId,
+  model,
+  className,
+  style,
+}: {
+  field: DataModel['fields'][number]
+  initial?: string
+  projectId: string
+  model?: DataModel
+  className: string
+  style: Record<string, string>
+}) {
+  const [choix, setChoix] = useState<Array<{ id: string; label: string }> | null>(null)
+
+  useEffect(() => {
+    if (model === undefined) return
+    let annule = false
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/app/${projectId}/records?modelId=${encodeURIComponent(model.id)}&limite=100`,
+          { cache: 'no-store' },
+        )
+        const body = (await response.json().catch(() => null)) as {
+          items?: Array<{ id: string; data: Record<string, unknown> }>
+        } | null
+        if (annule) return
+        setChoix((body?.items ?? []).map((item) => ({ id: item.id, label: recordLabel(model, item.data) })))
+      } catch {
+        if (!annule) setChoix([])
+      }
+    })()
+    return () => {
+      annule = true
+    }
+  }, [projectId, model])
+
+  if (model === undefined) return <p className="text-sm opacity-70">Ce renvoi n’est pas configuré.</p>
+  if (choix === null) return <p className="text-sm opacity-70">Chargement…</p>
+  if (choix.length === 0) {
+    return (
+      <p className="text-sm opacity-70">
+        Aucun élément à choisir pour le moment. Créez d’abord {model.labelPlural.toLowerCase()}.
+      </p>
+    )
+  }
+
+  return (
+    <select
+      name={field.id}
+      required={field.required}
+      defaultValue={initial ?? ''}
+      className={className}
+      style={style}
+    >
+      <option value="">Choisir…</option>
+      {choix.map((option) => (
+        <option key={option.id} value={option.id}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  )
 }

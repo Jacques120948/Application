@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { notFound, validation } from '@/lib/errors'
+import { recordLabel } from '@/lib/record-label'
 import { withOwnerRuntimeScope, withRuntimeScope } from '@/server/db/scope'
 import type { AppSpec, DataField, DataModel } from '@/server/spec/schema'
 
@@ -71,6 +72,40 @@ function validateField(field: DataField, raw: unknown): RecordValue {
       }
       return raw
     }
+    case 'reference': {
+      // Seule la forme est vérifiée ici : savoir si la fiche visée existe demande la base,
+      // et cela se fait dans la même transaction que l'écriture.
+      if (typeof raw !== 'string' || !UUID.test(raw)) {
+        throw validation(`Le champ « ${field.label} » doit désigner un élément existant.`)
+      }
+      return raw
+    }
+  }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Vérifie que chaque renvoi désigne une fiche qui existe, dans le modèle annoncé et dans le
+ * même projet. Sans cette vérification, le navigateur pourrait désigner n'importe quoi, et
+ * la liste afficherait un renvoi mort.
+ */
+async function assertReferences(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  projectId: string,
+  model: DataModel,
+  data: RecordData,
+): Promise<void> {
+  for (const field of model.fields) {
+    if (field.type !== 'reference' || field.referenceModelId === undefined) continue
+    const valeur = data[field.id]
+    if (valeur === null || valeur === undefined) continue
+    const existe = await tx.appRecord.count({
+      where: { id: String(valeur), projectId, modelId: field.referenceModelId },
+    })
+    if (existe === 0) {
+      throw validation(`Le champ « ${field.label} » désigne un élément qui n'existe pas.`)
+    }
   }
 }
 
@@ -110,6 +145,7 @@ export async function createRecord(params: {
     if (count >= MAX_RECORDS_PER_MODEL) {
       throw validation("Cette application a atteint sa limite d'enregistrements.")
     }
+    await assertReferences(tx, params.projectId, model, data)
     const created = await tx.appRecord.create({
       data: {
         projectId: params.projectId,
@@ -143,12 +179,24 @@ export type RecordQuery = {
    * titre : trier sur un champ invisible donnerait un ordre que personne ne peut lire.
    */
   sortField?: string
+  /** Champ numérique dont on veut le total, et la façon de le calculer. */
+  sumField?: string
+  sumKind?: 'somme' | 'moyenne'
   limit?: number
   offset?: number
 }
 
+/** Un total calculé sur l'ensemble filtré, jamais sur la seule page affichée. */
+export type RecordAggregate = { field: string; label: string; kind: 'somme' | 'moyenne'; value: number }
+
 /** Une page de résultats, avec le total : sans lui, « voir plus » ne saurait pas s'arrêter. */
-export type RecordPage = { items: StoredRecord[]; total: number }
+export type RecordPage = {
+  items: StoredRecord[]
+  total: number
+  /** Nom des fiches désignées par les renvois de cette page, par identifiant. */
+  references: Record<string, string>
+  aggregate: RecordAggregate | null
+}
 
 const PAGE_SIZE = 20
 const MAX_PAGE = 100
@@ -164,6 +212,7 @@ function searchableFields(model: DataModel): DataField[] {
       field.type === 'url' ||
       field.type === 'select',
   )
+  // Un renvoi n'est pas cherchable : sa valeur est un identifiant, que personne ne tape.
 }
 
 /**
@@ -266,7 +315,9 @@ export async function listRecords(params: {
   const limit = Math.min(Math.max(query.limit ?? PAGE_SIZE, 1), MAX_PAGE)
   const offset = Math.max(query.offset ?? 0, 0)
 
-  if (model.scope === 'user' && params.endUserId === null) return { items: [], total: 0 }
+  if (model.scope === 'user' && params.endUserId === null) {
+    return { items: [], total: 0, references: {}, aggregate: null }
+  }
 
   // On ne filtre que sur un champ à choix : sur du texte libre, aucune valeur ne se
   // répéterait assez pour faire un filtre utile.
@@ -289,7 +340,7 @@ export async function listRecords(params: {
       Prisma.sql`SELECT count(*) AS total FROM "AppRecord" WHERE ${ou}`,
     )
     const total = Number(compte?.total ?? 0)
-    if (total === 0) return { items: [], total }
+    if (total === 0) return { items: [], total, references: {}, aggregate: null }
 
     const rows = await tx.$queryRaw<LigneBrute[]>(
       Prisma.sql`SELECT id, "data", "createdAt", "ownerEndUserId"
@@ -298,16 +349,86 @@ export async function listRecords(params: {
                  ORDER BY ${ordre(model, query.sort ?? 'recent', query.sortField)}
                  LIMIT ${limit} OFFSET ${offset}`,
     )
+    const items = rows.map((row) => ({
+      id: row.id,
+      data: row.data,
+      createdAt: row.createdAt,
+      isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.endUserId,
+    }))
     return {
-      items: rows.map((row) => ({
-        id: row.id,
-        data: row.data,
-        createdAt: row.createdAt,
-        isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.endUserId,
-      })),
+      items,
       total,
+      references: await resoudreRenvois(tx, params.projectId, params.spec, model, items),
+      aggregate: await calculer(tx, ou, model, query.sumField, query.sumKind ?? 'somme'),
     }
   })
+}
+
+/**
+ * Remplace les identifiants des renvois par le nom des fiches visées.
+ *
+ * Une requête par modèle référencé, jamais une par ligne : une liste de vingt fiches qui
+ * renverraient chacune vers un client ferait vingt allers-retours pour dire vingt noms.
+ */
+async function resoudreRenvois(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  projectId: string,
+  spec: AppSpec,
+  model: DataModel,
+  items: StoredRecord[],
+): Promise<Record<string, string>> {
+  const noms: Record<string, string> = {}
+  for (const field of model.fields) {
+    if (field.type !== 'reference' || field.referenceModelId === undefined) continue
+    const cible = spec.dataModels.find((candidate) => candidate.id === field.referenceModelId)
+    if (cible === undefined) continue
+    const ids = [
+      ...new Set(
+        items
+          .map((item) => item.data[field.id])
+          .filter((valeur): valeur is string => typeof valeur === 'string' && valeur !== ''),
+      ),
+    ]
+    if (ids.length === 0) continue
+    const vises = await tx.appRecord.findMany({
+      where: { id: { in: ids }, projectId, modelId: cible.id },
+      select: { id: true, data: true },
+    })
+    for (const vise of vises) noms[vise.id] = recordLabel(cible, vise.data as RecordData)
+  }
+  return noms
+}
+
+/**
+ * Le total annoncé par une liste.
+ *
+ * Il porte sur l'ensemble filtré, jamais sur la page affichée : un total qui changerait en
+ * cliquant « voir plus » ne serait pas un total. Les valeurs qui ne sont pas des nombres
+ * sont ignorées plutôt que de faire échouer la lecture — un champ peut avoir changé de type
+ * après que des fiches ont été saisies.
+ */
+async function calculer(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  ou: Prisma.Sql,
+  model: DataModel,
+  sumField: string | undefined,
+  kind: 'somme' | 'moyenne',
+): Promise<RecordAggregate | null> {
+  const champ = model.fields.find((field) => field.id === sumField && field.type === 'number')
+  if (champ === undefined) return null
+  const nombre = Prisma.sql`CASE WHEN "data"->>${champ.id} ~ '^-?[0-9]+(\.[0-9]+)?$'
+                            THEN ("data"->>${champ.id})::numeric END`
+  const [ligne] = await tx.$queryRaw<Array<{ valeur: string | null }>>(
+    kind === 'moyenne'
+      ? Prisma.sql`SELECT avg(${nombre}) AS valeur FROM "AppRecord" WHERE ${ou}`
+      : Prisma.sql`SELECT sum(${nombre}) AS valeur FROM "AppRecord" WHERE ${ou}`,
+  )
+  const brut = ligne?.valeur
+  if (brut === null || brut === undefined) return null
+  const valeur = Number(brut)
+  if (!Number.isFinite(valeur)) return null
+  // Deux décimales : au-delà, un total d'euros ou d'heures devient illisible.
+  return { field: champ.id, label: champ.label, kind, value: Math.round(valeur * 100) / 100 }
 }
 
 /**
@@ -361,6 +482,7 @@ export async function updateRecord(params: {
 
   return withRuntimeScope(params.projectId, async (tx) => {
     const record = await ownedRecord(tx, params, model, 'modifier')
+    await assertReferences(tx, params.projectId, model, data)
     const updated = await tx.appRecord.update({
       where: { id: record.id },
       data: { data: data as unknown as Prisma.InputJsonValue },

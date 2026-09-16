@@ -75,7 +75,8 @@ Sections de page (champ "type") : ${BLOCK_TYPES.join(', ')}.
                 "allowEdit" à true sauf si une correction n'aurait pas de sens (un vote,
                 une candidature déposée). "searchable" ajoute une recherche, "filterField"
                 un filtre sur un champ de type select (statut, catégorie), et "sort" l'ordre
-                d'ouverture : recent, ancien, az, za.
+                d'ouverture : recent, ancien, az, za. "sumField" nomme un champ de type
+                number dont la liste annonce le total, et "sumKind" vaut somme ou moyenne.
 - auth        : connexion et inscription des utilisateurs de l'application
 - assistant   : assistant conversationnel répondant aux visiteurs, dans le rôle décrit
                 par le champ "role". Attention : chaque réponse consomme les crédits du
@@ -90,6 +91,13 @@ section imageText ou features avec icônes, puis steps ou stats, puis faq ou cta
 les types de section : deux sections identiques à la suite font gabarit.
 
 Types de champ de données : ${FIELD_TYPES.join(', ')}.
+- select    : donne "options", au moins une.
+- reference : renvoi vers une fiche d'un autre modèle. Donne "referenceModelId", l'identifiant
+              du modèle visé. Sert à relier des données : une réservation qui désigne un
+              client, une ligne de commande qui désigne un produit. La valeur enregistrée est
+              l'identifiant de la fiche ; l'écran affiche son nom.
+Un modèle peut donner "labelField" : le champ qui nomme une fiche quand on la désigne
+ailleurs. À défaut, le premier champ texte est utilisé.
 Portée d'un modèle de données : "user" (chacun voit ses propres données) ou "shared"
 (tout le monde voit tout).
 

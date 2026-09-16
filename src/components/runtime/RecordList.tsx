@@ -7,7 +7,14 @@ import { RecordForm, type EditedRecord } from './RecordForm'
 type Item = { id: string; data: Record<string, unknown>; createdAt: string; isMine: boolean }
 
 /** Une page de résultats telle que le serveur la rend. */
-type Page = { items?: Item[]; total?: number; message?: string }
+type Aggregate = { field: string; label: string; kind: 'somme' | 'moyenne'; value: number }
+type Page = {
+  items?: Item[]
+  total?: number
+  references?: Record<string, string>
+  aggregate?: Aggregate | null
+  message?: string
+}
 
 const PAGE = 20
 
@@ -40,6 +47,7 @@ const ORDRES = [
 export function RecordList({
   projectId,
   model,
+  models,
   titleField,
   subtitleField,
   emptyText,
@@ -48,10 +56,14 @@ export function RecordList({
   searchable,
   filterField,
   sort,
+  sumField,
+  sumKind,
   refreshToken,
 }: {
   projectId: string
   model: DataModel
+  /** Tous les modèles de l'application : un renvoi doit pouvoir nommer sa cible. */
+  models: readonly DataModel[]
   titleField: string
   subtitleField?: string
   emptyText: string
@@ -60,10 +72,14 @@ export function RecordList({
   searchable: boolean
   filterField?: string
   sort: 'recent' | 'ancien' | 'az' | 'za'
+  sumField?: string
+  sumKind: 'somme' | 'moyenne'
   refreshToken: number
 }) {
   const [items, setItems] = useState<Item[] | null>(null)
   const [total, setTotal] = useState(0)
+  const [renvois, setRenvois] = useState<Record<string, string>>({})
+  const [cumul, setCumul] = useState<Aggregate | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -89,6 +105,10 @@ export function RecordList({
         params.set('champ', filtre.id)
         params.set('valeur', valeur)
       }
+      if (sumField !== undefined) {
+        params.set('champTotal', sumField)
+        if (sumKind === 'moyenne') params.set('typeTotal', 'moyenne')
+      }
       if (ordre !== 'recent') {
         params.set('sort', ordre)
         // L'ordre alphabétique porte sur ce que la liste montre, pas sur un champ caché.
@@ -110,7 +130,7 @@ export function RecordList({
         return null
       }
     },
-    [projectId, model.id, recherche, filtre, valeur, ordre, titleField],
+    [projectId, model.id, recherche, filtre, valeur, ordre, titleField, sumField, sumKind],
   )
 
   useEffect(() => {
@@ -120,6 +140,8 @@ export function RecordList({
       if (annule) return
       setItems(page?.items ?? [])
       setTotal(page?.total ?? 0)
+      setRenvois(page?.references ?? {})
+      setCumul(page?.aggregate ?? null)
       setOpenId(null)
       setEditingId(null)
       // Le total sans critère se mesure une fois, au premier chargement.
@@ -147,6 +169,7 @@ export function RecordList({
     if (page === null) return
     setItems((actuels) => [...(actuels ?? []), ...(page.items ?? [])])
     setTotal(page.total ?? 0)
+    setRenvois((actuels) => ({ ...actuels, ...(page.references ?? {}) }))
   }
 
   async function remove(id: string) {
@@ -231,9 +254,12 @@ export function RecordList({
         <p className="text-sm opacity-70">{critere ? 'Aucun résultat pour cette recherche.' : emptyText}</p>
       ) : (
         <>
-          {outils ? (
+          {outils || cumul !== null ? (
             <p className="m-0 text-sm opacity-70" role="status">
               {total === 1 ? '1 résultat' : `${total} résultats`}
+              {cumul !== null
+                ? ` · ${cumul.kind === 'moyenne' ? 'moyenne' : 'total'} ${cumul.label.toLowerCase()} : ${cumul.value}`
+                : ''}
             </p>
           ) : null}
 
@@ -257,10 +283,12 @@ export function RecordList({
                     className="flex w-full items-start justify-between gap-4 p-4 text-left"
                   >
                     <span className="min-w-0">
-                      <span className="block font-medium">{display(item.data[titleField])}</span>
+                      <span className="block font-medium">
+                        {montre(model, titleField, item.data, renvois)}
+                      </span>
                       {subtitleField !== undefined ? (
                         <span className="mt-1 block text-sm opacity-70">
-                          {display(item.data[subtitleField])}
+                          {montre(model, subtitleField, item.data, renvois)}
                         </span>
                       ) : null}
                     </span>
@@ -278,6 +306,7 @@ export function RecordList({
                         <RecordForm
                           projectId={projectId}
                           model={model}
+                          models={models}
                           submitLabel="Enregistrer les modifications"
                           successMessage=""
                           onCreated={() => undefined}
@@ -294,7 +323,7 @@ export function RecordList({
                                   {field.label}
                                 </dt>
                                 <dd className="m-0 mt-0.5 whitespace-pre-line text-sm">
-                                  {display(item.data[field.id])}
+                                  {montre(model, field.id, item.data, renvois)}
                                 </dd>
                               </div>
                             ))}
@@ -346,6 +375,26 @@ export function RecordList({
       )}
     </div>
   )
+}
+
+/**
+ * La valeur d'un champ, telle qu'on la montre.
+ *
+ * Un renvoi est stocké comme identifiant ; ce qui s'affiche est le nom de la fiche visée,
+ * résolu par le serveur. Une fiche supprimée entre-temps le dit, plutôt que d'exposer un
+ * identifiant que personne ne reconnaît.
+ */
+function montre(
+  model: DataModel,
+  fieldId: string,
+  data: Record<string, unknown>,
+  renvois: Record<string, string>,
+): string {
+  const champ = model.fields.find((field) => field.id === fieldId)
+  const valeur = data[fieldId]
+  if (champ?.type !== 'reference') return display(valeur)
+  if (typeof valeur !== 'string' || valeur === '') return '—'
+  return renvois[valeur] ?? 'Élément supprimé'
 }
 
 function display(value: unknown): string {

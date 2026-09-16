@@ -44,6 +44,30 @@ export function checkIntegrity(spec: AppSpec): IntegrityIssue[] {
     issues.push({ path: 'dataModels', message: 'Deux modèles de données portent le même identifiant.' })
   }
 
+  /*
+   * Les renvois d'un modèle vers un autre. Un renvoi qui pointe dans le vide n'est pas une
+   * imprécision : à la saisie il n'offrirait aucun choix, et à la lecture il n'afficherait
+   * rien. Mieux vaut l'arrêter avant la publication.
+   */
+  for (const [index, model] of spec.dataModels.entries()) {
+    const fieldIds = new Set(model.fields.map((field) => field.id))
+    if (model.labelField !== undefined && !fieldIds.has(model.labelField)) {
+      issues.push({
+        path: `dataModels[${index}].labelField`,
+        message: 'Ces données se nomment par un champ qui n\'existe pas.',
+      })
+    }
+    for (const [fieldIndex, field] of model.fields.entries()) {
+      if (field.type !== 'reference') continue
+      if (field.referenceModelId === undefined || !modelsById.has(field.referenceModelId)) {
+        issues.push({
+          path: `dataModels[${index}].fields[${fieldIndex}].referenceModelId`,
+          message: 'Ce renvoi pointe vers des données qui n\'existent pas.',
+        })
+      }
+    }
+  }
+
   for (const [index, item] of spec.navigation.items.entries()) {
     if (!pageIds.has(item.pageId)) {
       issues.push({
@@ -131,6 +155,14 @@ function checkBlock(
       }
       if (block.subtitleField !== undefined && !fieldIds.has(block.subtitleField)) {
         issues.push({ path: `${at}.subtitleField`, message: 'Cette liste affiche un champ qui n\'existe pas.' })
+      }
+      if (block.sumField !== undefined) {
+        const champ = model.fields.find((field) => field.id === block.sumField)
+        if (champ === undefined) {
+          issues.push({ path: `${at}.sumField`, message: 'Cette liste totalise un champ qui n\'existe pas.' })
+        } else if (champ.type !== 'number') {
+          issues.push({ path: `${at}.sumField`, message: 'On ne totalise que des nombres.' })
+        }
       }
       if (block.filterField !== undefined) {
         const champ = model.fields.find((field) => field.id === block.filterField)

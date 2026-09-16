@@ -144,6 +144,64 @@ describe('liste de données', () => {
     expect(checkIntegrity(bon).some((souci) => souci.path.endsWith('.filterField'))).toBe(false)
   })
 
+  it('refuse un renvoi qui pointe vers des données inexistantes', () => {
+    const spec = buildTemplate('booking', options)
+    const model = spec.dataModels[0]
+    if (model === undefined) return
+
+    const avecRenvoi = (cible: string) => ({
+      ...spec,
+      dataModels: [
+        {
+          ...model,
+          fields: [
+            ...model.fields,
+            {
+              id: 'renvoi',
+              label: 'Renvoi',
+              type: 'reference' as const,
+              required: false,
+              referenceModelId: cible,
+            },
+          ],
+        },
+        ...spec.dataModels.slice(1),
+      ],
+    })
+
+    expect(
+      checkIntegrity(avecRenvoi('modele-absent')).some((souci) =>
+        souci.path.endsWith('.referenceModelId'),
+      ),
+    ).toBe(true)
+    // Un renvoi du modèle vers lui-même est légitime : une tâche peut avoir une tâche mère.
+    expect(
+      checkIntegrity(avecRenvoi(model.id)).some((souci) => souci.path.endsWith('.referenceModelId')),
+    ).toBe(false)
+  })
+
+  it('refuse de totaliser un champ qui n’est pas un nombre', () => {
+    const spec = buildTemplate('booking', options)
+    const model = spec.dataModels[0]
+    const texte = model?.fields.find((field) => field.type === 'text')
+    if (model === undefined || texte === undefined) return
+
+    const avecTotal = (champ: string) => ({
+      ...spec,
+      pages: spec.pages.map((page) => ({
+        ...page,
+        blocks: page.blocks.map((block) =>
+          block.type === 'recordList' ? { ...block, sumField: champ } : block,
+        ),
+      })),
+    })
+    expect(checkIntegrity(avecTotal(texte.id)).some((souci) => souci.path.endsWith('.sumField'))).toBe(true)
+
+    const nombre = model.fields.find((field) => field.type === 'number')
+    if (nombre === undefined) return
+    expect(checkIntegrity(avecTotal(nombre.id)).some((souci) => souci.path.endsWith('.sumField'))).toBe(false)
+  })
+
   it('respecte le choix explicite du créateur', () => {
     const relu = blockSchema.parse({
       id: 'liste',
