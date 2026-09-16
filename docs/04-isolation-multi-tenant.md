@@ -43,7 +43,8 @@ d'autrui. Aucune route ni aucun composant n'importe Prisma : `tests/unit/archite
 ### Barrière 3 — Row Level Security PostgreSQL
 
 Filet de sécurité indépendant du code applicatif. Les tables `Project`,
-`ProjectVersion`, `ChatMessage`, `AppRecord`, `AppEndUser`, `AppEvent` portent une
+`ProjectVersion`, `ChatMessage`, `AppRecord`, `AppEndUser`, `AppEndUserToken`,
+`AppEvent` portent une
 politique RLS. Chaque transaction positionne le contexte :
 
 ```sql

@@ -42,6 +42,7 @@ dédiées (exigence 9 : l'utilisateur ne crée pas de tables).
 | Table | Rôle | Clé d'isolation |
 |---|---|---|
 | `AppEndUser` | Utilisateur final d'une application créée | `projectId` + `email` unique ensemble |
+| `AppEndUserToken` | Lien de réinitialisation du mot de passe d'un visiteur | `projectId`, empreinte du jeton unique |
 | `AppRecord` | Enregistrement de données (recette, réservation, favori…) | `projectId`, `modelId`, `ownerEndUserId` |
 | `AppEvent` | Événement d'usage pour les statistiques (exigence 33) | `projectId` |
 
@@ -52,6 +53,26 @@ incorrect, toute valeur hors bornes.
 
 Index : `(projectId, modelId, createdAt DESC)` et `(projectId, modelId, ownerEndUserId)`.
 Contrainte de volume par projet appliquée au niveau applicatif selon le plan.
+
+`AppEndUserToken` porte le parcours « mot de passe oublié » des visiteurs. Sans lui, un
+compte d'application est perdu au premier oubli : il n'existe que dans l'application d'un
+créateur, et personne n'a de moyen de le rendre. Il obéit aux mêmes trois règles que le
+parcours du créateur, et pour les mêmes raisons.
+
+1. **La demande répond toujours la même chose**, compte inscrit ou non. Un message qui
+   distinguerait les deux cas ferait de ce formulaire l'annuaire des visiteurs de
+   l'application.
+2. **Le jeton n'est jamais stocké en clair.** La base ne garde qu'une empreinte HMAC salée
+   par `app-end-user:` — le même sel que les jetons de session — donc une empreinte volée
+   dans une application ne vaut rien dans une autre.
+3. **Changer le mot de passe déconnecte partout.** Toutes les lignes `AppEndUserSession`
+   du compte sont révoquées, cookie de la session courante compris.
+
+Le lien vit une heure, ne sert qu'une fois, et une nouvelle demande annule la précédente.
+Son adresse est calculée au serveur à partir du nom court et de la page qui porte le bloc
+de connexion : jamais à partir d'un en-tête ou d'un champ du navigateur, sans quoi
+n'importe qui obtiendrait un courriel à l'en-tête d'une application pointant vers son
+propre site.
 
 ## 3.4 Migrations
 

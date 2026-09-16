@@ -491,6 +491,7 @@ model Project {
   checks               ProjectCheck[]
   records              AppRecord[]
   endUsers             AppEndUser[]
+  endUserTokens        AppEndUserToken[]
   events               AppEvent[]
   connections          IntegrationConnection[]
   marketing            MarketingKit[]
@@ -581,6 +582,7 @@ model AppEndUser {
   project              Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
   records              AppRecord[]
   sessions             AppEndUserSession[]
+  tokens               AppEndUserToken[]
   supportConversations SupportConversation[]
   supportTickets       SupportTicket[]
   purchases            AppPurchase[]
@@ -637,6 +639,24 @@ model AppEndUserSession {
   endUser AppEndUser @relation(fields: [endUserId], references: [id], onDelete: Cascade)
 
   @@index([endUserId])
+}
+
+/// Jeton à usage unique d'un visiteur d'application : réinitialisation de mot de passe.
+/// Jamais stocké en clair — seule une empreinte HMAC, comme les jetons de session.
+model AppEndUserToken {
+  id         String    @id @default(uuid()) @db.Uuid
+  projectId  String    @db.Uuid
+  endUserId  String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  endUser AppEndUser @relation(fields: [endUserId], references: [id], onDelete: Cascade)
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([endUserId])
+  @@index([projectId, expiresAt])
 }
 
 /// Enregistrement de données d'une application créée.

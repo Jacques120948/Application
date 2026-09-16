@@ -5,6 +5,8 @@ import { env } from '@/lib/env'
 import { withRuntimeScope } from '@/server/db/scope'
 import { assertPasswordAcceptable, hashPassword, verifyPassword } from '@/server/auth/password'
 import { consume, RULES } from '@/server/auth/rate-limit'
+import { isEmailAvailable, sendEmail } from '@/server/email/send'
+import { logger } from '@/server/observability/logger'
 
 /**
  * Comptes des utilisateurs finaux des applications créées.
@@ -138,4 +140,134 @@ export async function logoutEndUser(projectId: string): Promise<void> {
     )
   }
   store.set(cookieName(projectId), '', { path: '/', maxAge: 0 })
+}
+
+// ─────────────────── Mot de passe oublié, côté visiteur ──────────────────────
+
+/**
+ * Réinitialisation du mot de passe d'un visiteur d'application.
+ *
+ * Sans elle, un visiteur qui oublie son mot de passe est bloqué définitivement : son
+ * compte n'existe que dans l'application d'un créateur, et personne n'a de moyen de le lui
+ * rendre. Les trois règles du parcours d'Evoliia valent ici mot pour mot.
+ *
+ *   1. **La demande répond toujours la même chose.** Qu'un compte existe ou non, le message
+ *      est identique : sinon ce formulaire dirait qui est inscrit dans l'application.
+ *   2. **Le jeton n'est jamais stocké en clair.** La base ne garde qu'une empreinte, salée
+ *      par le projet comme les jetons de session : une empreinte d'une application ne peut
+ *      pas être rejouée sur une autre.
+ *   3. **Changer le mot de passe déconnecte partout.** Quelqu'un qui réinitialise parce
+ *      qu'il soupçonne une intrusion doit réellement en chasser l'intrus.
+ */
+
+const RESET_TTL_MS = 60 * 60 * 1000
+
+/**
+ * Demande un lien. Ne dit jamais si le compte existe, et n'échoue pas si l'envoi échoue :
+ * l'appelant affiche le même message dans tous les cas.
+ */
+export async function requestEndUserReset(params: {
+  projectId: string
+  appName: string
+  appUrl: string
+  email: string
+  ip?: string | null
+}): Promise<void> {
+  const email = params.email.trim().toLowerCase()
+  consume(`reset-app:ip:${params.ip ?? 'inconnu'}`, RULES.passwordReset)
+  consume(`reset-app:${params.projectId}:${email}`, RULES.passwordReset)
+
+  const token = randomBytes(32).toString('base64url')
+  const envoyer = await withRuntimeScope(params.projectId, async (tx) => {
+    const endUser = await tx.appEndUser.findFirst({
+      where: { projectId: params.projectId, email },
+      select: { id: true },
+    })
+    if (endUser === null) return false
+
+    // Une nouvelle demande annule les précédentes : un seul lien vivant à la fois.
+    await tx.appEndUserToken.updateMany({
+      where: { endUserId: endUser.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    })
+    await tx.appEndUserToken.create({
+      data: {
+        projectId: params.projectId,
+        endUserId: endUser.id,
+        tokenHash: hashToken(token),
+        expiresAt: new Date(Date.now() + RESET_TTL_MS),
+      },
+    })
+    return true
+  })
+
+  if (!envoyer) {
+    logger.info('réinitialisation visiteur sans compte correspondant', { projectId: params.projectId })
+    return
+  }
+  if (!isEmailAvailable()) {
+    logger.warn('réinitialisation visiteur impossible : aucun fournisseur de courriel')
+    return
+  }
+
+  const lien = `${params.appUrl}?jeton=${token}`
+  try {
+    await sendEmail({
+      to: email,
+      // Le message parle de l'application du créateur, pas d'Evoliia : c'est là que le
+      // compte existe, et c'est le nom que la personne reconnaîtra.
+      subject: `Réinitialiser votre mot de passe sur ${params.appName}`,
+      text: [
+        `Vous avez demandé à changer votre mot de passe sur ${params.appName}.`,
+        '',
+        'Ouvrez ce lien pour en choisir un nouveau :',
+        lien,
+        '',
+        "Ce lien est valable une heure et ne fonctionne qu'une fois.",
+        "Si vous n'êtes pas à l'origine de cette demande, ignorez ce message : votre mot de passe actuel reste valable.",
+        '',
+        `${params.appName} est une application créée avec Evoliia.`,
+      ].join('\n'),
+    })
+    logger.info('lien de réinitialisation visiteur envoyé', { projectId: params.projectId })
+  } catch {
+    // L'échec d'envoi ne doit pas révéler que le compte existe.
+    logger.error('envoi du lien de réinitialisation visiteur impossible', {
+      projectId: params.projectId,
+    })
+  }
+}
+
+/** Pose le nouveau mot de passe, consomme le jeton et ferme toutes les sessions ouvertes. */
+export async function confirmEndUserReset(params: {
+  projectId: string
+  token: string
+  password: string
+  ip?: string | null
+}): Promise<void> {
+  consume(`reset-app-confirm:ip:${params.ip ?? 'inconnu'}`, RULES.passwordReset)
+  assertPasswordAcceptable(params.password)
+  const passwordHash = await hashPassword(params.password)
+
+  await withRuntimeScope(params.projectId, async (tx) => {
+    const jeton = await tx.appEndUserToken.findFirst({
+      where: { tokenHash: hashToken(params.token), projectId: params.projectId },
+      select: { id: true, endUserId: true, consumedAt: true, expiresAt: true },
+    })
+    if (jeton === null || jeton.consumedAt !== null || jeton.expiresAt.getTime() < Date.now()) {
+      throw validation(
+        "Ce lien n'est plus valable. Demandez-en un nouveau depuis la page de connexion.",
+      )
+    }
+    await tx.appEndUserToken.update({ where: { id: jeton.id }, data: { consumedAt: new Date() } })
+    await tx.appEndUser.update({ where: { id: jeton.endUserId }, data: { passwordHash } })
+    await tx.appEndUserSession.updateMany({
+      where: { endUserId: jeton.endUserId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+  })
+
+  // Le cookie de cette application est vidé par l'appelant : la session courante fait
+  // partie de celles qu'on vient de fermer, et seule la couche HTTP touche aux cookies.
+  logger.info('mot de passe visiteur réinitialisé', { projectId: params.projectId })
 }
