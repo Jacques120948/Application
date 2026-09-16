@@ -233,3 +233,33 @@ volontairement laissée pour plus tard, avec de vrais chiffres d'usage.
 Une offre n'autorise qu'un certain nombre de connexions (`maxConnections`) : sur Launch,
 une seule, ce qui oblige à choisir entre Stripe, Anthropic et une clé d'images. C'est un
 réglage d'offre, dans le back-office.
+
+
+## Une liste de choix qui accepte l'imprévu
+
+Un champ à choix ne propose que ses options, et c'est le bon réglage par défaut : les
+données restent propres et le filtre reste fiable. Mais une liste ne prévoit jamais tout.
+Un annuaire d'artisans qui propose cinq métiers rencontrera un carreleur.
+
+Les deux réponses habituelles sont mauvaises. Ajouter une option « Autre » perd
+l'information : la fiche du carreleur s'affiche « Autre », et son métier n'est nulle part.
+Passer le champ en texte libre ruine le filtre : on obtient « Électricien »,
+« electricien », « Élec. », et plus rien ne se regroupe.
+
+D'où un troisième réglage, `allowOther`, sur les champs à choix. Éteint par défaut, donc
+toutes les listes existantes se comportent exactement comme avant.
+
+Quand il est allumé :
+
+1. le formulaire ajoute une option **« Autre… »** qui ouvre une zone de saisie ;
+2. la valeur écrite est enregistrée **telle quelle** — « carreleur » reste « carreleur » ;
+3. le menu de filtre propose les choix déclarés **et** les valeurs réellement saisies.
+
+Le troisième point est celui qui compte : sans lui, une fiche saisie à la main existerait
+sans qu'aucune recherche ne la retrouve. Les valeurs proposées sont calculées sur
+l'ensemble des fiches, sans tenir compte du filtre en cours — sinon, une fois une valeur
+choisie, le menu ne proposerait plus qu'elle et on ne pourrait plus en changer.
+
+La sortie de secours reste bornée : une valeur libre est un texte court, jamais vide,
+plafonné comme n'importe quel libellé. Sans cette borne, « autoriser une valeur libre »
+deviendrait un champ de texte illimité déguisé en liste de choix.

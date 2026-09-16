@@ -68,10 +68,19 @@ function validateField(field: DataField, raw: unknown): RecordValue {
       return raw
     }
     case 'select': {
-      if (typeof raw !== 'string' || !(field.options ?? []).includes(raw)) {
+      if (typeof raw !== 'string') {
         throw validation(`Le champ « ${field.label} » n'a pas une valeur attendue.`)
       }
-      return raw
+      if ((field.options ?? []).includes(raw)) return raw
+      /*
+       * Hors liste : accepté seulement si le champ l'autorise, et borné comme n'importe
+       * quel texte court. Sans cette borne, « autoriser une valeur libre » deviendrait un
+       * champ de texte illimité déguisé en liste de choix.
+       */
+      if (field.allowOther !== true || raw.trim() === '' || raw.length > 80) {
+        throw validation(`Le champ « ${field.label} » n'a pas une valeur attendue.`)
+      }
+      return raw.trim()
     }
     case 'reference': {
       // Seule la forme est vérifiée ici : savoir si la fiche visée existe demande la base,
@@ -197,6 +206,14 @@ export type RecordPage = {
   /** Nom des fiches désignées par les renvois de cette page, par identifiant. */
   references: Record<string, string>
   aggregate: RecordAggregate | null
+  /**
+   * Valeurs hors liste réellement présentes dans les données, pour le champ de filtre.
+   *
+   * Vide sur une liste fermée : ses choix sont déjà connus du navigateur. Renseigné quand
+   * le champ autorise une valeur libre, sans quoi un métier saisi à la main n'apparaîtrait
+   * dans aucun filtre et deviendrait introuvable.
+   */
+  filterValues: string[]
 }
 
 const PAGE_SIZE = 20
@@ -313,7 +330,7 @@ export async function listRecords(params: {
 }): Promise<RecordPage> {
   const model = findModel(params.spec, params.modelId)
   if (model.scope === 'user' && params.endUserId === null) {
-    return { items: [], total: 0, references: {}, aggregate: null }
+    return { items: [], total: 0, references: {}, aggregate: null, filterValues: [] }
   }
   return withRuntimeScope(params.projectId, (tx) =>
     lirePage(tx, {
@@ -355,10 +372,17 @@ async function lirePage(
 
   // On ne filtre que sur un champ à choix : sur du texte libre, aucune valeur ne se
   // répéterait assez pour faire un filtre utile.
-  const filterField =
-    query.filterField === undefined || query.filterValue === undefined || query.filterValue === ''
+  const champFiltre =
+    query.filterField === undefined
       ? undefined
       : model.fields.find((field) => field.id === query.filterField && field.type === 'select')
+
+  // Le champ de filtre est connu même sans valeur choisie : c'est lui qui dit s'il faut
+  // aller chercher les valeurs saisies à la main pour garnir le menu.
+  const filterField =
+    champFiltre !== undefined && query.filterValue !== undefined && query.filterValue !== ''
+      ? champFiltre
+      : undefined
 
   const ou = condition({
     projectId: params.projectId,
@@ -373,7 +397,9 @@ async function lirePage(
     Prisma.sql`SELECT count(*) AS total FROM "AppRecord" WHERE ${ou}`,
   )
   const total = Number(compte?.total ?? 0)
-  if (total === 0) return { items: [], total, references: {}, aggregate: null }
+  if (total === 0) {
+    return { items: [], total, references: {}, aggregate: null, filterValues: [] }
+  }
 
   const rows = await tx.$queryRaw<LigneBrute[]>(
     Prisma.sql`SELECT id, "data", "createdAt", "ownerEndUserId"
@@ -393,7 +419,55 @@ async function lirePage(
     total,
     references: await resoudreRenvois(tx, params.projectId, params.spec, model, items),
     aggregate: await calculer(tx, ou, model, query.sumField, query.sumKind ?? 'somme'),
+    filterValues:
+      champFiltre?.allowOther === true
+        ? await valeursSaisies(tx, {
+            projectId: params.projectId,
+            modelId: model.id,
+            ownerEndUserId: params.ownerEndUserId,
+            field: champFiltre,
+          })
+        : [],
   }
+}
+
+/** Au-delà, un menu déroulant n'aide plus personne : il faudrait chercher, pas dérouler. */
+const MAX_VALEURS_LIBRES = 50
+
+/**
+ * Les valeurs hors liste réellement présentes, pour garnir le menu de filtre.
+ *
+ * Volontairement calculées **sans** le filtre en cours ni la recherche : sinon, dès qu'une
+ * valeur serait choisie, le menu ne proposerait plus qu'elle et on ne pourrait plus en
+ * changer sans tout remettre à zéro.
+ */
+async function valeursSaisies(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  params: {
+    projectId: string
+    modelId: string
+    ownerEndUserId: string | null
+    field: DataField
+  },
+): Promise<string[]> {
+  const base = condition({
+    projectId: params.projectId,
+    modelId: params.modelId,
+    ownerEndUserId: params.ownerEndUserId,
+    search: '',
+    searchFields: [],
+  })
+  const lignes = await tx.$queryRaw<Array<{ valeur: string | null }>>(
+    Prisma.sql`SELECT DISTINCT "data"->>${params.field.id} AS valeur
+               FROM "AppRecord"
+               WHERE ${base} AND "data"->>${params.field.id} IS NOT NULL
+               ORDER BY 1
+               LIMIT ${MAX_VALEURS_LIBRES}`,
+  )
+  const declarees = new Set(params.field.options ?? [])
+  return lignes
+    .map((ligne) => ligne.valeur)
+    .filter((valeur): valeur is string => valeur !== null && valeur !== '' && !declarees.has(valeur))
 }
 
 /**

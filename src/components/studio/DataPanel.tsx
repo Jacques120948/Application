@@ -12,6 +12,7 @@ type Page = {
   total?: number
   references?: Record<string, string>
   choices?: Record<string, Choix>
+  filterValues?: string[]
   message?: string
 }
 
@@ -87,6 +88,8 @@ function ModelData({
   const [recherche, setRecherche] = useState('')
   const [valeur, setValeur] = useState('')
   const [ordre, setOrdre] = useState<(typeof ORDRES)[number]['id']>('recent')
+  /** Valeurs hors liste rencontrées dans les données, quand le champ les autorise. */
+  const [valeursLibres, setValeursLibres] = useState<string[]>([])
 
   /** Un seul filtre, sur le premier champ à choix : ailleurs, aucune valeur ne se répète. */
   const filtre = useMemo(() => model.fields.find((field) => field.type === 'select'), [model.fields])
@@ -101,9 +104,9 @@ function ModelData({
     async (depuis: number): Promise<Page | null> => {
       const params = new URLSearchParams({ limite: String(PAGE), depuis: String(depuis) })
       if (recherche !== '') params.set('recherche', recherche)
-      if (filtre !== undefined && valeur !== '') {
+      if (filtre !== undefined) {
         params.set('champ', filtre.id)
-        params.set('valeur', valeur)
+        if (valeur !== '') params.set('valeur', valeur)
       }
       if (ordre !== 'recent') {
         params.set('sort', ordre)
@@ -140,6 +143,7 @@ function ModelData({
       setTotal(page?.total ?? 0)
       setRenvois(page?.references ?? {})
       setChoix(page?.choices ?? {})
+      setValeursLibres(page?.filterValues ?? [])
       setOpenId(null)
       setEditingId(null)
     })()
@@ -217,7 +221,7 @@ function ModelData({
                 className="max-w-52"
               >
                 <option value="">{filtre.label} : tout</option>
-                {(filtre.options ?? []).map((option) => (
+                {[...(filtre.options ?? []), ...valeursLibres].map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -465,14 +469,18 @@ function Champ({
   if (field.type === 'select') {
     return (
       <Field label={label}>
-        <Select name={field.id} required={field.required} defaultValue={valeur ?? ''}>
-          <option value="">Choisir…</option>
-          {(field.options ?? []).map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
+        {field.allowOther === true ? (
+          <ChoixOuLibre field={field} initial={valeur} />
+        ) : (
+          <Select name={field.id} required={field.required} defaultValue={valeur ?? ''}>
+            <option value="">Choisir…</option>
+            {(field.options ?? []).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </Select>
+        )}
       </Field>
     )
   }
@@ -534,4 +542,72 @@ function montre(
   if (valeur === null || valeur === undefined || valeur === '') return '—'
   if (typeof valeur === 'boolean') return valeur ? 'Oui' : 'Non'
   return String(valeur).slice(0, 300)
+}
+
+/**
+ * La valeur interne du choix « Autre ».
+ *
+ * Elle ne peut pas être une constante quelconque : les options sont écrites par le
+ * créateur, donc n'importe quelle chaîne fixe pourrait un jour être un vrai choix. On part
+ * d'un motif improbable et on l'allonge tant qu'il entre en collision — ainsi la sentinelle
+ * est toujours distincte, quelles que soient les options.
+ *
+ * Elle doit aussi rester transmissible en HTML : un caractère nul, par exemple, ne survit
+ * pas à la sérialisation de la page et le choix devient inopérant. Mesuré en conditions
+ * réelles.
+ */
+function sentinelleAutre(options: readonly string[]): string {
+  let valeur = '__autre__'
+  while (options.includes(valeur)) valeur += '_'
+  return valeur
+}
+
+/**
+ * Même contrôle que dans l'application, côté créateur.
+ *
+ * Il corrige les fiches de ses visiteurs depuis son tableau de bord : s'il ne pouvait pas
+ * y saisir la même valeur libre qu'eux, corriger une faute de frappe sur un métier hors
+ * liste l'obligerait à le remplacer par un choix qui ne lui convient pas.
+ */
+function ChoixOuLibre({
+  field,
+  initial,
+}: {
+  field: DataModel['fields'][number]
+  initial?: string
+}) {
+  const options = field.options ?? []
+  const AUTRE = sentinelleAutre(options)
+  const horsListe = initial !== undefined && initial !== '' && !options.includes(initial)
+  const [choix, setChoix] = useState(horsListe ? AUTRE : (initial ?? ''))
+  const [libre, setLibre] = useState(horsListe ? initial : '')
+
+  return (
+    <>
+      <Select
+        required={field.required}
+        value={choix}
+        onChange={(event) => setChoix(event.target.value)}
+      >
+        <option value="">Choisir…</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+        <option value={AUTRE}>Autre…</option>
+      </Select>
+      {choix === AUTRE ? (
+        <Input
+          className="mt-2"
+          required
+          maxLength={80}
+          value={libre}
+          onChange={(event) => setLibre(event.target.value)}
+          placeholder={`Précisez : ${field.label.toLowerCase()}`}
+        />
+      ) : null}
+      <input type="hidden" name={field.id} value={choix === AUTRE ? libre.trim() : choix} />
+    </>
+  )
 }

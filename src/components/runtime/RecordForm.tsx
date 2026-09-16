@@ -211,7 +211,9 @@ function FieldControl({
         />
       )
     case 'select':
-      return (
+      return field.allowOther === true ? (
+        <SelectWithOther field={field} initial={value} className={className} style={style} />
+      ) : (
         <select
           name={field.id}
           required={field.required}
@@ -358,5 +360,90 @@ function ReferencePicker({
         </option>
       ))}
     </select>
+  )
+}
+
+/**
+ * La valeur interne du choix « Autre ».
+ *
+ * Elle ne peut pas être une constante quelconque : les options sont écrites par le
+ * créateur, donc n'importe quelle chaîne fixe pourrait un jour être un vrai choix. On part
+ * d'un motif improbable et on l'allonge tant qu'il entre en collision — ainsi la sentinelle
+ * est toujours distincte, quelles que soient les options.
+ *
+ * Elle doit aussi rester transmissible en HTML : un caractère nul, par exemple, ne survit
+ * pas à la sérialisation de la page et le choix devient inopérant. Mesuré en conditions
+ * réelles.
+ */
+function sentinelleAutre(options: readonly string[]): string {
+  let valeur = '__autre__'
+  while (options.includes(valeur)) valeur += '_'
+  return valeur
+}
+
+/**
+ * Une liste de choix qui accepte une valeur qu'elle n'avait pas prévue.
+ *
+ * Le besoin vient du terrain : un annuaire d'artisans qui propose cinq métiers rencontrera
+ * un carreleur. Les deux réponses habituelles sont mauvaises — une option « Autre » perd
+ * l'information, et le texte libre ruine le filtre en multipliant les orthographes. Ici, la
+ * liste reste la voie normale, et la saisie libre est une sortie de secours : la valeur
+ * écrite est conservée telle quelle, et le filtre la proposera ensuite aux autres.
+ *
+ * Un seul champ est envoyé au serveur : le champ caché. La zone de texte n'a pas de nom,
+ * sinon deux valeurs partiraient sous le même nom et le serveur en lirait une au hasard.
+ */
+function SelectWithOther({
+  field,
+  initial,
+  className,
+  style,
+}: {
+  field: DataModel['fields'][number]
+  initial?: string
+  className: string
+  style: Record<string, string>
+}) {
+  const options = field.options ?? []
+  const AUTRE = sentinelleAutre(options)
+  // Une valeur déjà enregistrée qui n'est pas dans la liste vient forcément d'une saisie
+  // libre : on rouvre la zone de texte avec, plutôt que de l'effacer en silence.
+  const horsListe = initial !== undefined && initial !== '' && !options.includes(initial)
+  const [choix, setChoix] = useState(horsListe ? AUTRE : (initial ?? ''))
+  const [libre, setLibre] = useState(horsListe ? initial : '')
+
+  const valeur = choix === AUTRE ? libre.trim() : choix
+
+  return (
+    <>
+      <select
+        required={field.required}
+        value={choix}
+        onChange={(event) => setChoix(event.target.value)}
+        className={className}
+        style={style}
+      >
+        <option value="">Choisir…</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+        <option value={AUTRE}>Autre…</option>
+      </select>
+      {choix === AUTRE ? (
+        <input
+          type="text"
+          required
+          maxLength={80}
+          value={libre}
+          onChange={(event) => setLibre(event.target.value)}
+          placeholder={`Précisez : ${field.label.toLowerCase()}`}
+          className={`${className} mt-2`}
+          style={style}
+        />
+      ) : null}
+      <input type="hidden" name={field.id} value={valeur} />
+    </>
   )
 }

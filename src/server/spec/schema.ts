@@ -94,6 +94,18 @@ export const dataFieldSchema = z
     required: z.boolean(),
     /** Renseigné uniquement pour le type `select`. */
     options: z.array(shortText).max(30).optional(),
+    /**
+     * Autorise une valeur hors liste, sur un champ à choix.
+     *
+     * Une liste fermée est le bon réglage par défaut : elle garde les données propres et
+     * rend le filtre fiable. Mais une liste ne prévoit jamais tout — un annuaire
+     * d'artisans qui propose cinq métiers rencontrera tôt ou tard un carreleur. Plutôt que
+     * d'imposer le choix entre « Autre », qui perd l'information, et le texte libre, qui
+     * ruine le filtre, le formulaire ouvre alors un champ de saisie et la valeur écrite est
+     * conservée telle quelle. Le filtre, lui, propose les choix déclarés **et** ceux
+     * réellement saisis : rien ne devient infiltrable.
+     */
+    allowOther: z.boolean().optional(),
     /** Renseigné uniquement pour le type `reference` : le modèle vers lequel on renvoie. */
     referenceModelId: slug.optional(),
     help: shortText.optional(),
@@ -105,6 +117,9 @@ export const dataFieldSchema = z
   )
   .refine((field) => field.type !== 'reference' || field.referenceModelId !== undefined, {
     message: 'Un renvoi doit dire vers quelles données il pointe.',
+  })
+  .refine((field) => field.allowOther !== true || field.type === 'select', {
+    message: 'Seul un champ à choix multiples peut autoriser une valeur hors liste.',
   })
 
 export const dataModelSchema = z

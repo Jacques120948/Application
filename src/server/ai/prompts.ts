@@ -215,6 +215,11 @@ Points qui font échouer les modifications le plus souvent :
 - Une entrée de menu n'a que "pageId" et "label". Pas d'identifiant propre.
 - Pour ajouter une formule : append sur "monetization.plans", et vérifie que
   "monetization.model" n'est pas "free".
+- Un champ à choix n'accepte que ses options. Si le créateur veut pouvoir saisir une valeur
+  imprévue, ne transforme pas le champ en texte libre et n'ajoute pas d'option "Autre" :
+  mets "allowOther" à true sur ce champ. Le formulaire ouvre alors une zone de saisie, la
+  valeur écrite est conservée telle quelle, et le filtre continue de fonctionner puisqu'il
+  propose aussi les valeurs réellement saisies.
 
 Règles :
 - Fais le minimum d'opérations nécessaires. Ne reconstruis jamais l'application entière.

@@ -13,6 +13,7 @@ type Page = {
   total?: number
   references?: Record<string, string>
   aggregate?: Aggregate | null
+  filterValues?: string[]
   message?: string
 }
 
@@ -91,6 +92,8 @@ export function RecordList({
 
   /** Le nombre de fiches sans aucun critère : il décide de l'affichage des outils. */
   const [totalNu, setTotalNu] = useState<number | null>(null)
+  /** Valeurs hors liste rencontrées dans les données, quand le champ les autorise. */
+  const [valeursLibres, setValeursLibres] = useState<string[]>([])
 
   const filtre = useMemo(
     () => model.fields.find((field) => field.id === filterField && field.type === 'select'),
@@ -101,9 +104,11 @@ export function RecordList({
     async (depuis: number): Promise<Page | null> => {
       const params = new URLSearchParams({ modelId: model.id, limite: String(PAGE), depuis: String(depuis) })
       if (recherche !== '') params.set('recherche', recherche)
-      if (filtre !== undefined && valeur !== '') {
+      if (filtre !== undefined) {
+        // Le champ est toujours annoncé, même sans valeur choisie : c'est lui qui dit au
+        // serveur d'aller chercher les valeurs saisies à la main pour garnir le menu.
         params.set('champ', filtre.id)
-        params.set('valeur', valeur)
+        if (valeur !== '') params.set('valeur', valeur)
       }
       if (sumField !== undefined) {
         params.set('champTotal', sumField)
@@ -142,6 +147,9 @@ export function RecordList({
       setTotal(page?.total ?? 0)
       setRenvois(page?.references ?? {})
       setCumul(page?.aggregate ?? null)
+      // Ces valeurs ne dépendent ni de la recherche ni du filtre en cours : le serveur
+      // les calcule sur l'ensemble, donc la dernière réponse fait foi.
+      setValeursLibres(page?.filterValues ?? [])
       setOpenId(null)
       setEditingId(null)
       // Le total sans critère se mesure une fois, au premier chargement.
@@ -194,6 +202,12 @@ export function RecordList({
     setEditingId(null)
   }
 
+  /*
+   * Les choix déclarés, puis ceux que les visiteurs ont saisis eux-mêmes. Sans ce second
+   * groupe, un métier écrit à la main n'apparaîtrait dans aucun filtre : la fiche
+   * existerait sans qu'aucune recherche ne la retrouve.
+   */
+  const choixDuFiltre = [...(filtre?.options ?? []), ...valeursLibres]
   const outils = (totalNu ?? 0) >= SEUIL_OUTILS && (searchable || filtre !== undefined)
   const critere = recherche !== '' || valeur !== ''
   const controle = 'rounded-[var(--app-radius)] border px-3 py-2 text-sm'
@@ -223,7 +237,7 @@ export function RecordList({
               style={style}
             >
               <option value="">{filtre.label} : tout</option>
-              {(filtre.options ?? []).map((option) => (
+              {choixDuFiltre.map((option) => (
                 <option key={option} value={option}>
                   {option}
                 </option>

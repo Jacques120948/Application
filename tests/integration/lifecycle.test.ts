@@ -615,6 +615,132 @@ describe('données d’une application publiée', () => {
   })
 })
 
+/**
+ * Une liste de choix qui accepte l'imprévu.
+ *
+ * Le besoin vient du terrain : un annuaire d'artisans qui propose cinq métiers rencontrera
+ * un carreleur. Ce qui se vérifie ici, c'est que la sortie de secours n'ouvre pas la porte
+ * à n'importe quoi — elle reste fermée tant que le champ ne l'autorise pas — et qu'une
+ * valeur saisie à la main reste retrouvable par le filtre.
+ */
+describe('valeur hors liste sur un champ à choix', () => {
+  let modelId: string
+  let champ: string
+
+  beforeAll(async () => {
+    const project = await getProject(userId, projectId)
+    const modele = project.spec.dataModels[0]
+    if (modele === undefined) throw new Error('aucun modèle de données dans le projet')
+    modelId = modele.id
+    const index = 0
+
+    // On ajoute un champ à choix qui autorise l'imprévu, comme le ferait l'agent. Le
+    // modèle est rendu partagé au passage : un annuaire se lit sans compte.
+    champ = 'metier'
+    await applyManualPatch(userId, projectId, {
+      summary: 'Champ métier avec saisie libre',
+      operations: [
+        { op: 'set', path: `dataModels[${index}].scope`, value: 'shared' },
+        {
+          op: 'append',
+          path: `dataModels[${index}].fields`,
+          value: {
+            id: champ,
+            label: 'Métier',
+            type: 'select',
+            required: false,
+            options: ['macon', 'electricien', 'plombier'],
+            allowOther: true,
+          },
+        },
+      ],
+    })
+  }, 30_000)
+
+  it('accepte une valeur déclarée', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    const saisie = { ...sampleInput(model), [champ]: 'plombier' }
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      input: saisie,
+    })
+    expect((record.data as Record<string, unknown>)[champ]).toBe('plombier')
+  })
+
+  it('accepte une valeur hors liste, et la conserve telle quelle', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    const saisie = { ...sampleInput(model), [champ]: '  Carreleur  ' }
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      input: saisie,
+    })
+    // Les espaces de bord sont retirés, le reste est l'écriture du visiteur.
+    expect((record.data as Record<string, unknown>)[champ]).toBe('Carreleur')
+  })
+
+  it('refuse une valeur vide ou démesurée, même quand la saisie libre est ouverte', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    for (const mauvaise of ['   ', 'x'.repeat(200)]) {
+      const saisie = { ...sampleInput(model), [champ]: mauvaise }
+      await expect(
+        createRecord({ projectId, spec: project.spec, modelId, endUserId: null, input: saisie }),
+      ).rejects.toMatchObject({ code: 'VALIDATION' })
+    }
+  })
+
+  it('propose au filtre les valeurs saisies à la main', async () => {
+    const project = await getProject(userId, projectId)
+    const page = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      query: { filterField: champ },
+    })
+    expect(page.filterValues).toContain('Carreleur')
+    // Les choix déclarés ne sont pas répétés : le navigateur les connaît déjà.
+    expect(page.filterValues).not.toContain('plombier')
+  })
+
+  it('retrouve une fiche par sa valeur libre', async () => {
+    const project = await getProject(userId, projectId)
+    const page = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      query: { filterField: champ, filterValue: 'Carreleur' },
+    })
+    expect(page.total).toBeGreaterThan(0)
+    for (const item of page.items) {
+      expect((item.data as Record<string, unknown>)[champ]).toBe('Carreleur')
+    }
+  })
+
+  it('reste fermée quand le champ ne l’autorise pas', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    const ferme = { ...model, fields: model.fields.map((f) => (f.id === champ ? { ...f, allowOther: false } : f)) }
+    const spec = {
+      ...project.spec,
+      dataModels: project.spec.dataModels.map((m) => (m.id === modelId ? ferme : m)),
+    }
+    const saisie = { ...sampleInput(model), [champ]: 'Carreleur' }
+    await expect(
+      createRecord({ projectId, spec, modelId, endUserId: null, input: saisie }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+  })
+})
+
 describe('crédits', () => {
   it('n’est pas débité par les opérations sans IA', async () => {
     const wallet = await getWallet(userId)
