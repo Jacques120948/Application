@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTemplate, chooseTemplate, TEMPLATE_KINDS } from '@/server/spec/templates'
-import { appSpecSchema, blockSchema } from '@/server/spec/schema'
+import { appSpecSchema, blockSchema, dataFieldSchema } from '@/server/spec/schema'
 import { checkIntegrity, parseAppSpec } from '@/server/spec/validate'
 import { AppError } from '@/lib/errors'
 
@@ -240,5 +240,43 @@ describe('assistant intégré à une application', () => {
 
   it("n'accepte aucun champ inconnu", () => {
     expect(() => blockSchema.parse({ ...block, apiKey: 'secret' })).toThrow()
+  })
+})
+
+describe('étapes et calculs', () => {
+  const champ = (extra: Record<string, unknown>) =>
+    dataFieldSchema.safeParse({ id: 'statut', label: 'Statut', required: false, ...extra })
+
+  it('accepte des étapes sur un champ à choix', () => {
+    expect(
+      champ({ type: 'select', options: ['Brouillon', 'Envoyé'], workflow: true }).success,
+    ).toBe(true)
+  })
+
+  it('refuse des étapes ailleurs que sur un champ à choix', () => {
+    expect(champ({ type: 'text', workflow: true }).success).toBe(false)
+  })
+
+  it('refuse des étapes ouvertes : une suite fermée n’accepte pas l’imprévu', () => {
+    expect(
+      champ({ type: 'select', options: ['A', 'B'], workflow: true, allowOther: true }).success,
+    ).toBe(false)
+  })
+
+  it('exige sa formule sur un champ calculé', () => {
+    expect(champ({ type: 'computed' }).success).toBe(false)
+    expect(champ({ type: 'computed', formula: 'prix * 2' }).success).toBe(true)
+  })
+
+  it('refuse un champ calculé obligatoire : il ne se saisit pas', () => {
+    expect(
+      dataFieldSchema.safeParse({
+        id: 'total',
+        label: 'Total',
+        type: 'computed',
+        required: true,
+        formula: 'prix * 2',
+      }).success,
+    ).toBe(false)
   })
 })

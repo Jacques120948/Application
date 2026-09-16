@@ -122,6 +122,16 @@ export const dataFieldSchema = z
     formula: z.string().max(MAX_FORMULA_LENGTH).optional(),
     /** Suffixe affiché après la valeur calculée : « € », « h », « % ». */
     unit: z.string().max(8).optional(),
+    /**
+     * Sur un champ à choix : ses options sont des étapes qui se suivent.
+     *
+     * Un devis passe de « brouillon » à « envoyé », puis « accepté ». C'est un choix comme
+     * un autre pour la base, mais pas pour celui qui travaille : il ne veut pas ouvrir un
+     * formulaire et dérouler une liste pour avancer d'un cran, il veut un bouton. Le
+     * signaler ici permet à la liste d'afficher l'étape courante et de proposer la
+     * suivante, sans rien changer à la façon dont la valeur est stockée ni validée.
+     */
+    workflow: z.boolean().optional(),
     /** Renseigné uniquement pour le type `reference` : le modèle vers lequel on renvoie. */
     referenceModelId: slug.optional(),
     help: shortText.optional(),
@@ -136,6 +146,12 @@ export const dataFieldSchema = z
   })
   .refine((field) => field.allowOther !== true || field.type === 'select', {
     message: 'Seul un champ à choix multiples peut autoriser une valeur hors liste.',
+  })
+  .refine((field) => field.workflow !== true || field.type === 'select', {
+    message: 'Seul un champ à choix multiples peut décrire des étapes.',
+  })
+  .refine((field) => field.workflow !== true || field.allowOther !== true, {
+    message: "Des étapes forment une suite fermée : elles n'acceptent pas de valeur libre.",
   })
   .refine((field) => field.type !== 'computed' || field.formula !== undefined, {
     message: 'Un champ calculé doit porter sa formule.',

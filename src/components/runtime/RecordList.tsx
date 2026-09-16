@@ -94,6 +94,14 @@ export function RecordList({
   const [totalNu, setTotalNu] = useState<number | null>(null)
   /** Valeurs hors liste rencontrées dans les données, quand le champ les autorise. */
   const [valeursLibres, setValeursLibres] = useState<string[]>([])
+  /** La fiche dont on change l'étape : évite deux avancées simultanées. */
+  const [avance, setAvance] = useState<string | null>(null)
+
+  /** Le champ qui décrit des étapes, s'il y en a un. Il n'y en a jamais deux. */
+  const etapes = useMemo(
+    () => model.fields.find((field) => field.type === 'select' && field.workflow === true),
+    [model.fields],
+  )
 
   const filtre = useMemo(
     () => model.fields.find((field) => field.id === filterField && field.type === 'select'),
@@ -191,6 +199,41 @@ export function RecordList({
       setTotal((n) => Math.max(0, n - 1))
       setTotalNu((n) => (n === null ? n : Math.max(0, n - 1)))
       setOpenId((current) => (current === id ? null : current))
+    }
+  }
+
+  /**
+   * Fait avancer une fiche d'une étape.
+   *
+   * On renvoie la fiche entière avec la seule étape changée : le serveur revalide tout
+   * contre le modèle publié, exactement comme pour une correction ordinaire. Il n'y a donc
+   * pas de chemin d'écriture « rapide » qui contournerait la validation — un raccourci
+   * d'interface ne doit pas devenir un raccourci de contrôle.
+   */
+  async function passer(item: Item, field: DataModel['fields'][number], suivante: string) {
+    if (avance !== null) return
+    setAvance(item.id)
+    const payload: Record<string, unknown> = {}
+    for (const champ of model.fields) {
+      if (champ.type === 'computed') continue
+      payload[champ.id] = champ.id === field.id ? suivante : (item.data[champ.id] ?? '')
+    }
+    try {
+      const response = await fetch(`/api/app/${projectId}/records/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ modelId: model.id, data: payload }),
+      })
+      const body = (await response.json().catch(() => null)) as { record?: EditedRecord; message?: string } | null
+      if (body === null || !response.ok) {
+        setError(body?.message ?? "L'étape n'a pas pu être changée.")
+        return
+      }
+      replace(body.record ?? { id: item.id, data: { ...item.data, [field.id]: suivante } })
+    } catch {
+      setError('La connexion a échoué.')
+    } finally {
+      setAvance(null)
     }
   }
 
@@ -305,6 +348,9 @@ export function RecordList({
                           {montre(model, subtitleField, item.data, renvois)}
                         </span>
                       ) : null}
+                      {etapes !== undefined ? (
+                        <Etape field={etapes} value={item.data[etapes.id]} />
+                      ) : null}
                     </span>
                     <span aria-hidden="true" className="shrink-0 text-sm opacity-60">
                       {open ? '▲' : '▼'}
@@ -342,6 +388,14 @@ export function RecordList({
                               </div>
                             ))}
                           </dl>
+                          {etapes !== undefined && item.isMine && allowEdit ? (
+                            <Avancer
+                              field={etapes}
+                              value={item.data[etapes.id]}
+                              busy={avance === item.id}
+                              onAdvance={(suivante) => void passer(item, etapes, suivante)}
+                            />
+                          ) : null}
                           {item.isMine && (allowEdit || allowDelete) ? (
                             <div className="mt-4 flex flex-wrap items-center gap-4">
                               {allowEdit ? (
@@ -428,4 +482,64 @@ function display(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—'
   if (typeof value === 'boolean') return value ? 'Oui' : 'Non'
   return String(value).slice(0, 300)
+}
+
+/**
+ * L'étape courante, en pastille.
+ *
+ * Elle porte son rang — « 2 / 4 » — parce qu'une étape isolée ne dit pas où l'on en est.
+ * « Envoyé » ne signifie rien pour qui ne connaît pas la suite ; « Envoyé, 2 sur 4 » se
+ * comprend sans explication.
+ */
+function Etape({
+  field,
+  value,
+}: {
+  field: DataModel['fields'][number]
+  value: unknown
+}) {
+  const options = field.options ?? []
+  const rang = typeof value === 'string' ? options.indexOf(value) : -1
+  if (rang < 0) return null
+  return (
+    <span
+      className="mt-2 inline-flex items-center gap-2 rounded-full border px-2.5 py-0.5 text-xs"
+      style={{ borderColor: 'var(--app-muted)' }}
+    >
+      <span className="font-medium">{options[rang]}</span>
+      <span className="opacity-60">
+        {rang + 1} / {options.length}
+      </span>
+    </span>
+  )
+}
+
+/** Le bouton qui fait avancer d'un cran. Absent à la dernière étape : il n'y a plus de suite. */
+function Avancer({
+  field,
+  value,
+  busy,
+  onAdvance,
+}: {
+  field: DataModel['fields'][number]
+  value: unknown
+  busy: boolean
+  onAdvance: (suivante: string) => void
+}) {
+  const options = field.options ?? []
+  const rang = typeof value === 'string' ? options.indexOf(value) : -1
+  const suivante = rang >= 0 ? options[rang + 1] : options[0]
+  if (suivante === undefined) return null
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => onAdvance(suivante)}
+      className="mt-4 rounded-[var(--app-radius)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+      style={{ background: 'var(--app-primary)' }}
+    >
+      {busy ? 'Un instant…' : `Passer à « ${suivante} »`}
+    </button>
+  )
 }

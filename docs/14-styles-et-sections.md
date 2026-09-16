@@ -310,3 +310,20 @@ chiffres sont calculés au serveur avant le rendu : la page arrive avec eux.
 est restreinte aux fiches du visiteur connecté, et ne montre rien du tout à un visiteur
 anonyme. Un tableau de bord qui compterait les fiches de tout le monde sur des données
 privées serait une fuite — discrète, chiffrée, mais une fuite.
+
+
+### Un statut qui avance
+
+Un devis passe de « brouillon » à « envoyé », puis « accepté ». Pour la base, c'est un
+champ à choix comme un autre ; pour celui qui travaille, non : il ne veut pas ouvrir un
+formulaire et dérouler une liste pour avancer d'un cran.
+
+Le marqueur `workflow` sur un champ à choix dit que ses options sont des étapes qui se
+suivent. La liste affiche alors l'étape courante **avec son rang** — « Envoyé, 2 sur 4 »,
+parce qu'une étape isolée ne dit pas où l'on en est — et propose un bouton qui fait passer
+à la suivante. Le bouton disparaît à la dernière : il n'y a plus de suite.
+
+Ce raccourci d'interface n'est pas un raccourci de contrôle : avancer renvoie la fiche
+entière au serveur, qui la revalide contre le modèle publié exactement comme une correction
+ordinaire. Et des étapes forment une suite fermée — elles ne se combinent pas avec la
+saisie libre.

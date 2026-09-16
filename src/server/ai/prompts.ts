@@ -215,6 +215,11 @@ Points qui font échouer les modifications le plus souvent :
 - Une entrée de menu n'a que "pageId" et "label". Pas d'identifiant propre.
 - Pour ajouter une formule : append sur "monetization.plans", et vérifie que
   "monetization.model" n'est pas "free".
+- Pour un statut qui avance — « brouillon, envoyé, accepté », « à faire, en cours, fait » —
+  utilise un champ à choix dont les options sont dans l'ordre, et mets "workflow" à true.
+  La liste affiche alors l'étape courante avec son rang et propose un bouton qui fait
+  passer à la suivante, sans ouvrir de formulaire. Des étapes n'acceptent pas de valeur
+  libre : ne combine pas "workflow" et "allowOther".
 - Pour « affiche le nombre de X », « le chiffre d'affaires du mois », « combien de devis
   acceptés », utilise une section "metrics" : un à quatre chiffres, chacun avec son modèle,
   son type ("nombre", "somme" ou "moyenne"), son champ pour une somme ou une moyenne, sa
