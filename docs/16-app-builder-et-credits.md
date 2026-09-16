@@ -1,0 +1,369 @@
+# Evoliia comme atelier de création piloté par l'IA
+
+Document d'architecture. Il précède l'implémentation : rien n'est modifié tant que les
+arbitrages qu'il pose ne sont pas tranchés.
+
+Il répond à une demande en vingt-six points. Une bonne partie de ce qui y est demandé
+existe déjà dans Evoliia, parfois exactement sous la forme décrite. Le dire franchement
+évite de reconstruire ce qui fonctionne — et permet de concentrer l'effort là où le produit
+bute réellement.
+
+---
+
+## 1. Ce qui existe aujourd'hui
+
+### La pile
+
+Next.js 15 (App Router), React 19, TypeScript strict, Tailwind 4, Prisma 6 sur PostgreSQL
+16, Vitest. Déploiement Vercel depuis la branche unique. 454 tests, dont une partie sur une
+vraie base soumise au Row Level Security.
+
+### Comment une application est fabriquée aujourd'hui
+
+C'est le point décisif, et celui qu'il faut comprendre avant tout le reste.
+
+**Evoliia ne génère pas de code.** Elle génère une *spécification déclarative* — l'AppSpec
+— que le moteur d'exécution interprète. Le fichier `src/server/spec/schema.ts` en donne le
+contrat exact :
+
+- 21 types de blocs (`hero`, `richText`, `features`, `pricing`, `recordForm`, `recordList`,
+  `auth`, `assistant`…) ;
+- jusqu'à 12 pages, chacune avec jusqu'à 20 blocs ;
+- jusqu'à 8 modèles de données, aux champs typés (`text`, `number`, `date`, `select`,
+  `boolean`, `email`, `url`, `reference`…) ;
+- un thème, une navigation, une monétisation, une authentification de visiteurs.
+
+Le schéma est `.strict()` : tout champ inconnu est refusé. Il interdit explicitement le
+HTML, le script et les URL arbitraires. Une AppSpec publiée est **figée** dans une
+`ProjectVersion` et servie telle quelle — le brouillon n'est jamais public.
+
+Conséquence directe : il n'y a **aucun fichier de code par application**. Les 21 blocs, le
+moteur de données, l'authentification des visiteurs, les paiements Stripe Connect, le PWA,
+l'assistant intégré : tout cela est du code d'Evoliia, écrit une fois, partagé par toutes
+les applications. C'est ce qui permet à mille applications de tourner sans mille
+déploiements, et ce qui rend l'isolation vérifiable.
+
+### Ce qui existe déjà, point par point, dans votre demande
+
+| Votre point | État réel |
+|---|---|
+| 2 — API Anthropic côté serveur | **Fait.** `src/server/ai/client.ts`, clé dans `env`, jamais envoyée au navigateur. Le créateur n'a pas besoin de compte Anthropic. |
+| 4 — Espace de conversation par projet | **Partiel.** Table `ChatMessage`, onglet « Modifier avec l'IA », historique conservé. Manque : le mode plan et la stratégie de contexte. |
+| 6 — Vérification puis preview | **Partiel.** `runChecks()` (contraste, textes-bouchons, images manquantes), aperçu en direct, une reprise automatique si la validation refuse le patch. Manque : une boucle de correction digne de ce nom. |
+| 7 — Historique et retour arrière | **Fait.** `ProjectVersion` immuable, numérotée, avec libellé ; `listVersions`, `restoreVersion`, onglet Versions. Une génération IA ne détruit jamais un projet. |
+| 8 — Solde de crédits côté serveur | **Fait.** `CreditWallet` + `CreditLedger`. Le frontend ne calcule ni ne modifie rien. |
+| 9 — Consommation réelle | **Fait à 90 %.** Table `AiUsage` : utilisateur, projet, modèle, jetons entrée/sortie/cache, coût en micro-dollars, latence, succès, code d'erreur. **Manque : `creditsSpent` est déclaré mais jamais écrit — il vaut toujours 0.** Et les tarifs sont dans le code, pas en base. |
+| 11 — Réservation de crédits | **Absent.** Le solde est vérifié avant, débité après. Pas de réservation. |
+| 12 — Protections | **Fait en grande partie.** `max_tokens` par opération, timeout 120 s, `RULES.aiOperation` (30/min), vérification du solde avant tout appel réseau, quotas mensuels par offre (Radar, Lia). Manque : limite journalière configurable. |
+| 13 — Routage des modèles | **Fait.** `src/server/ai/routing.ts` : `MODELS.reasoning / fast / economical`, un profil par opération. Les noms de modèles ne sont écrits qu'à cet endroit. **Mais ils sont dans le code, pas en base.** |
+| 14 — Afficher le coût | **Partiel.** Le solde est affiché partout ; « X crédits utilisés » remonte après opération. Manque : l'estimation avant, et la répartition. |
+| 17 — Ledger | **Fait.** `CreditLedger` avec `delta`, `balanceAfter`, `reason`, `projectId`. **Manque : type structuré, lien vers `AiUsage`, lien vers un paiement Stripe.** |
+| 18 — Crédits inclus dans l'abonnement | **Fait.** `Plan.monthlyCredits`, réglable depuis l'administration. Manque : la distinction entre crédits offerts et crédits achetés. |
+| 21 — `project_versions` | **Existe déjà** sous le nom `ProjectVersion`. |
+| 22 — Optimisation du coût | **Partiel.** Cache du prompt système, génération en deux temps (plan au modèle fort, pages au modèle rapide — le coût divisé par deux, mesuré), modèle économique pour les réponses courtes. **Manque : la sélection de contexte. Aujourd'hui `editWithAssistant` envoie `JSON.stringify(spec)`, l'application entière, pour « change le texte du bouton ».** |
+| 23 — Sécurité | **Fait.** RLS forcé en base, `withUserScope`/`withRuntimeScope`, vérification d'origine, limitation de débit, secrets chiffrés au repos, aucun secret côté navigateur, messages d'erreur expurgés des clés. |
+| 16 — Webhook Stripe | **Fait pour les abonnements.** `StripeEvent` garantit qu'un événement n'est traité qu'une fois. Rien n'est jamais crédité sur le retour navigateur. |
+
+### Ce qui manque vraiment
+
+Trois manques, et un seul est un mur.
+
+1. **L'agent est à coup unique.** `requestEdit` fait un appel, produit un patch, le valide,
+   réessaie une fois si la validation refuse. Il ne lit pas l'application avant de décider,
+   ne planifie pas, n'enchaîne pas d'étapes, ne vérifie pas son propre travail autrement
+   que par la validation du schéma. Ce n'est pas un agent : c'est un traducteur
+   demande → patch.
+
+2. **Le contexte est envoyé en entier, à chaque fois.** C'est exactement ce que votre
+   point 22 dénonce. C'est réparable, et c'est le gain le plus immédiat.
+
+3. **Le plafond, c'est l'AppSpec.** Et c'est là qu'il faut s'arrêter.
+
+---
+
+## 2. L'arbitrage qui commande tout le reste
+
+Votre point 3 demande que l'agent puisse « ajouter des APIs », « ajouter des webhooks »,
+« modifier la base de données », « créer des tables », « refactoriser », « améliorer du
+code existant ». Ces verbes supposent qu'il existe du code et des tables par application.
+Il n'y en a pas. Deux chemins s'ouvrent, et ils ne mènent pas au même produit.
+
+### Chemin A — Élargir le modèle déclaratif
+
+On garde un moteur unique et on lui donne davantage à exprimer : plus de types de blocs,
+des champs calculés, des règles métier déclaratives, des vues, des automatisations, des
+pages en nombre libre, des relations plus riches.
+
+- Le coût d'infrastructure reste **constant par application** : un déploiement, un
+  certificat, une base.
+- La sécurité reste vérifiable : aucune ligne écrite par une IA ne s'exécute.
+- Une modification ratée ne peut pas casser une application : le patch est revalidé
+  entièrement, et refusé en bloc s'il produit une AppSpec invalide.
+- Le plafond monte beaucoup, mais il existe toujours.
+
+### Chemin B — Générer du vrai code par application
+
+C'est ce que font Lovable, v0, Bolt. Il faut alors : un dépôt par application, une chaîne
+de construction, un bac à sable d'exécution, un hébergement par client, une surveillance
+par client, et une réponse à la question « que se passe-t-il quand le code généré ouvre une
+faille chez un créateur ».
+
+Il faut le dire nettement, parce que cela heurte de front une de vos règles :
+
+> « Je veux construire un système scalable dans lequel 1 000 utilisateurs connectant leurs
+> outils ne puissent pas soudainement générer des milliers d'euros de factures API à
+> Evoliia. »
+
+Le chemin B fait exactement l'inverse. Chaque application devient une dépense
+d'hébergement, de construction et de surveillance. Mille applications, mille dépenses. À
+cela s'ajoute que du code arbitraire généré par une IA et exécuté sur votre infrastructure
+est, en l'état, incompatible avec la garantie d'isolation que vous vendez aujourd'hui.
+
+**Ma recommandation : le chemin A**, et l'agent par-dessus. Presque tous vos exemples du
+point 3 deviennent réalisables sans quitter le déclaratif :
+
+| Votre exemple | Chemin A |
+|---|---|
+| « Ajoute une page tarif avec trois abonnements » | Déjà possible : bloc `pricing` + monétisation. |
+| « Ajoute Stripe » | Déjà possible : Stripe Connect est branché, l'agent n'a qu'à activer la monétisation et créer les offres. |
+| « Ajoute un espace membre » | Déjà possible : `auth.enabled`, pages `requiresAuth`, mot de passe oublié depuis hier. |
+| « Change le dashboard pour afficher les ventes des 30 derniers jours » | Nouveau bloc déclaratif à construire (`metrics`), pas de code. |
+| « Ajoute un agent IA qui analyse les produits » | Déjà possible : bloc `assistant`, avec son rôle décrit par le créateur. |
+| « Le bouton Enregistrer ne fonctionne plus, trouve le problème » | Diagnostic sur l'AppSpec + les contrôles + les erreurs enregistrées. Réalisable. |
+| « Transforme cette page en application mobile responsive » | Déjà le cas : le moteur est responsive et installable en PWA. |
+| « Ajoute des webhooks / des APIs » | **Non réalisable en A** sans une brique nouvelle : une passerelle d'automatisations déclarative, à concevoir séparément. |
+
+Le seul renoncement réel du chemin A, ce sont les APIs et webhooks sortants arbitraires.
+Ils peuvent être traités plus tard par une brique dédiée et bornée, pas par du code libre.
+
+**J'attends votre décision sur ce point avant d'écrire la moindre ligne des phases 2 et 3.**
+
+---
+
+## 3. Les huit phases
+
+Chaque phase est indépendante, livrable et réversible. Aucune ne supprime quoi que ce soit.
+
+### PHASE 1 — Tarifs, marge et réservation de crédits
+
+**Ce qui existe.** `CreditWallet`, `CreditLedger`, `AiUsage`, `creditsForCost()`,
+`MINIMUM_COST`, `MICROS_PER_CREDIT = 5 000`, `PRICING` par modèle, `MODELS` par rôle.
+
+**Ce qui doit changer.**
+- Sortir du code les tarifs des modèles, le multiplicateur de marge, l'unité de conversion
+  et les noms de modèles. Ils passent en base, réglables depuis l'administration, avec les
+  valeurs actuelles comme valeurs par défaut — donc aucun changement de comportement au
+  déploiement.
+- Écrire enfin `AiUsage.creditsSpent`, aujourd'hui toujours à 0.
+- Introduire la réservation : estimer un plafond, réserver, exécuter, débiter le réel,
+  restituer le reste, le tout dans une transaction.
+- Structurer `CreditLedger` : un type (`subscription_credit`, `credit_purchase`,
+  `ai_usage`, `refund`, `adjustment`, `bonus`, `expired_credit`), un lien facultatif vers
+  `AiUsage`, un lien facultatif vers un paiement.
+
+**Nouveaux fichiers.** `src/server/billing/ai-pricing.ts` (lecture et cache des tarifs),
+`src/server/billing/reservation.ts`, `tests/unit/ai-pricing.test.ts`,
+`tests/integration/reservation.test.ts`.
+
+**Base de données.** Nouvelle table `AiModelPricing` (modèle, entrée, sortie, cache, actif).
+Nouvelles lignes `SiteSetting` pour le multiplicateur et l'unité — la table existe déjà.
+`CreditLedger` gagne `type`, `aiUsageId`, `stripePaymentId`, tous facultatifs.
+
+**Risques.** Un multiplicateur mal réglé fait payer trop ou pas assez. Une réservation mal
+libérée gèle des crédits.
+
+**Comment ne rien casser.** Les colonnes ajoutées sont facultatives, avec des valeurs par
+défaut égales au comportement actuel. La réservation est libérée dans un `finally`, et un
+travail de ménage restitue toute réservation plus vieille que le délai d'expiration. Les
+tests existants sur les crédits font foi : ils doivent passer sans modification.
+
+---
+
+### PHASE 2 — L'agent App Builder
+
+**Ce qui existe.** `requestEdit` (un appel, un patch), `applyPatch` (chemins sûrs,
+revalidation complète), `runChecks`, `ProjectVersion`.
+
+**Ce qui doit changer.** Passer d'un appel unique à une boucle d'agent bornée, avec des
+outils déclarés : lire la structure de l'application, lire une page, lire un modèle de
+données, lire le rapport de contrôles, proposer un patch, valider un patch à blanc. Le
+modèle choisit ses outils ; le serveur les exécute. Bornes non négociables : nombre
+d'étapes maximum, jetons maximum, durée maximum, solde vérifié à chaque étape, arrêt net
+quand l'un des trois est atteint.
+
+**Nouveaux fichiers.** `src/server/agent/loop.ts`, `src/server/agent/tools.ts`,
+`src/server/agent/context.ts` (sélection de contexte), `src/server/agent/limits.ts`,
+`tests/unit/agent-context.test.ts`, `tests/integration/agent-loop.test.ts`.
+
+**Base de données.** Rien d'obligatoire. Éventuellement `AgentRun` pour tracer les étapes
+d'une exécution, utile au diagnostic.
+
+**Risques.** C'est ici que se joue le risque de coût. Une boucle non bornée, c'est la
+facture Anthropic incontrôlée que vous refusez.
+
+**Comment ne rien casser.** L'agent est une **deuxième** voie, pas un remplacement :
+`editWithAssistant` reste en place et reste le chemin par défaut jusqu'à ce que l'agent
+fasse mieux, mesuré sur des cas réels. Un interrupteur d'exploitation (`FLAGS`) permet de
+l'éteindre pour tout le monde sans déploiement.
+
+---
+
+### PHASE 3 — Conversation, mode plan, contexte
+
+**Ce qui existe.** `ChatMessage`, l'onglet « Modifier avec l'IA », l'historique.
+
+**Ce qui doit changer.**
+- Mode plan : pour une demande importante, l'agent annonce ce qu'il compte faire et attend
+  `[Appliquer] [Modifier la demande] [Annuler]`. Pour une petite demande, il applique
+  directement. Le seuil est mesurable : nombre d'opérations, pages touchées, modèles de
+  données touchés.
+- Sélection de contexte : n'envoyer que ce qui est nécessaire. « Change le texte du
+  bouton » n'envoie que la page concernée ; « ajoute un espace membre » envoie la
+  structure. Le reste est résumé, pas transmis.
+
+**Nouveaux fichiers.** `src/components/studio/AgentChat.tsx`,
+`src/app/api/projects/[id]/agent/route.ts`, `src/app/api/projects/[id]/agent/plan/route.ts`.
+
+**Base de données.** `ChatMessage` gagne `plan` (Json, facultatif) et `status` (proposé,
+appliqué, annulé). Colonnes facultatives : les messages existants restent lisibles.
+
+**Risques.** Un plan accepté puis appliqué sur une application qui a changé entre-temps.
+
+**Comment ne rien casser.** Le plan retient le numéro de version sur lequel il a été
+calculé ; s'il ne correspond plus au brouillon au moment d'appliquer, on le recalcule au
+lieu de l'appliquer à l'aveugle.
+
+---
+
+### PHASE 4 — Preview et correction automatique
+
+**Ce qui existe.** L'aperçu en direct, `runChecks`, une reprise si la validation refuse.
+
+**Ce qui doit changer.** Après application d'un patch : relancer les contrôles, et si
+quelque chose casse, laisser l'agent lire le rapport et proposer une correction — **au plus
+deux fois**, puis s'arrêter et le dire. Une correction qui n'aboutit pas est un résultat
+honnête ; une boucle qui s'acharne est une facture.
+
+**Nouveaux fichiers.** `src/server/agent/repair.ts`.
+
+**Base de données.** Rien.
+
+**Risques.** La boucle de correction est le deuxième endroit où une facture peut s'emballer.
+
+**Comment ne rien casser.** Le compteur de tentatives est global à l'exécution de l'agent,
+pas par étape. Chaque correction passe par le même `applyPatch` revalidé : elle ne peut pas
+produire une application invalide.
+
+---
+
+### PHASE 5 — Historique et versions
+
+**Ce qui existe.** Tout, ou presque : versions immuables numérotées, libellé lisible,
+restauration, onglet Versions. Votre point 7 est déjà satisfait.
+
+**Ce qui doit changer.** Peu : rattacher une version à l'exécution d'agent qui l'a produite,
+et afficher le coût en crédits à côté de chaque version. Utile, pas structurant.
+
+**Base de données.** `ProjectVersion` gagne `agentRunId` et `creditsSpent`, facultatifs.
+
+**Risques.** Aucun notable.
+
+---
+
+### PHASE 6 — Achat de crédits par Stripe
+
+**Ce qui existe.** Stripe en production, validé par un vrai paiement et un vrai
+remboursement. `StripeEvent` garantit qu'un événement n'est traité qu'une fois. Aucun crédit
+n'est jamais accordé sur un retour de navigateur.
+
+**Ce qui doit changer.** Un mode `payment` (et non `subscription`) dans Checkout, une table
+de packs administrable, et l'octroi des crédits **dans le traitement du webhook**, jamais
+ailleurs.
+
+**Nouveaux fichiers.** `src/server/billing/credit-packs.ts`,
+`src/app/api/credits/achat/route.ts`, `src/app/[locale]/credits/page.tsx`,
+`src/components/studio/CreditsBoard.tsx`.
+
+**Base de données.** Nouvelle table `CreditPackage` (nom, crédits, prix, monnaie, actif,
+ordre, identifiants Stripe). `CreditLedger.stripePaymentId` unique quand il est présent :
+c'est la garantie qu'un paiement ne crédite qu'une fois, en plus de `StripeEvent`.
+
+**Risques.** Double crédit sur un rejeu de webhook. Crédit accordé sans paiement.
+
+**Comment ne rien casser.** Deux verrous indépendants : `StripeEvent` en amont, contrainte
+d'unicité sur `stripePaymentId` en aval. Le webhook des abonnements existant n'est pas
+touché — le nouveau type d'événement est ajouté à son `switch`, sans rien retirer.
+
+**Ce que je ne fais pas sans vous.** Je ne fixe aucun prix, aucune quantité de crédits,
+aucun contenu d'offre. Vous les réglerez depuis l'administration. Vos règles là-dessus sont
+claires et je m'y tiens.
+
+---
+
+### PHASE 7 — Tableaux de bord
+
+**Ce qui existe.** Le solde affiché partout, l'abonnement détaillé, l'administration
+(offres, utilisateurs, remboursements, interrupteurs, derniers échecs IA).
+
+**Ce qui doit changer.**
+- Côté créateur : une section « Utilisation IA » — crédits restants, consommés ce mois,
+  répartition par type d'opération, bouton d'achat.
+- Côté administration : consommation Anthropic totale, par utilisateur, par projet, par
+  modèle ; coût API réel ; crédits consommés ; revenus des packs ; marge estimée ; gros
+  consommateurs. Plus les réglages : tarifs des modèles, multiplicateur, packs, crédits
+  inclus, limites.
+
+**Nouveaux fichiers.** `src/server/billing/ai-reporting.ts`,
+`src/components/studio/AiUsagePanel.tsx`, `src/components/admin/AiCostBoard.tsx`.
+
+**Base de données.** Rien de nouveau : `AiUsage` contient déjà tout, une fois `creditsSpent`
+réellement écrit (phase 1).
+
+**Risques.** Le Row Level Security masque les projets des autres, y compris à
+l'administration — c'est voulu et documenté. Les agrégats porteront sur `AiUsage`, qui est
+une table globale, pas sur les projets.
+
+---
+
+### PHASE 8 — Coût et sécurité
+
+**Ce qui existe.** Cache du prompt système, génération en deux temps, routage par modèle,
+limitation de débit, quotas mensuels, RLS, secrets chiffrés, journaux expurgés.
+
+**Ce qui doit changer.**
+- Limite journalière par utilisateur, configurable.
+- Résumé du contexte ancien plutôt que renvoi intégral de la conversation.
+- Cache étendu au contexte du projet quand il est stable.
+- Mesure : un tableau avant/après sur des cas réels, sinon on ne saura pas si ça a marché.
+
+**Risques.** Une limite trop basse bloque un client qui paie.
+
+**Comment ne rien casser.** La limite journalière est éteinte par défaut, et vous la réglez.
+
+---
+
+## 4. Ordre proposé et ce que j'attends de vous
+
+L'ordre n'est pas celui de votre liste, et c'est délibéré : la phase 1 est le socle de
+tout le reste, et la phase 8 partielle doit venir **avant** l'agent, pas après. On ne
+construit pas une boucle d'agent puis on lui met des freins ; on pose les freins d'abord.
+
+1. **Phase 1** — tarifs administrables, `creditsSpent` écrit, réservation. Sans risque.
+2. **Phase 3 (contexte seul)** — sélection de contexte. Gain de coût immédiat, aucun
+   changement visible.
+3. **Phase 2** — l'agent, derrière un interrupteur, à côté de l'existant.
+4. **Phase 3 (mode plan)** et **phase 4** — conversation, plan, correction.
+5. **Phase 5**, **phase 7** — historique enrichi, tableaux de bord.
+6. **Phase 6** — packs de crédits, quand vous aurez fixé les prix.
+7. **Phase 8** — le reste des optimisations, mesuré.
+
+**Trois décisions vous appartiennent avant que je commence :**
+
+1. **Chemin A ou chemin B** (section 2). Je recommande A.
+2. **Les bornes de l'agent** : nombre d'étapes maximum, jetons maximum par exécution, coût
+   maximum en crédits par exécution. Ce sont elles qui décident de votre facture Anthropic.
+3. **Le multiplicateur de marge** de départ. Aujourd'hui l'unité est 1 crédit pour
+   5 000 micro-dollars, sans multiplicateur explicite. Le rendre explicite ne change rien
+   tant qu'il vaut 1 ; au-delà, c'est votre marge.
+
+Rien ne bouge tant que ces trois réponses ne sont pas là.
