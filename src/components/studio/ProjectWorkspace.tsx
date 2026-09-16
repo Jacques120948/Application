@@ -9,6 +9,7 @@ import { Badge, Button, Card, CardBody, ComingSoon, Notice } from '@/components/
 import { ChatPanel } from './ChatPanel'
 import { ChecksPanel, DesignPanel, FeaturesPanel, MonetizationPanel } from './panels'
 import { DataPanel } from './DataPanel'
+import { RELAIS_ASSISTANT } from './CoachLauncher'
 import { SalesPanel } from './SalesPanel'
 import { MediaPanel } from './MediaPanel'
 import { ProgressSteps } from './ProgressSteps'
@@ -119,6 +120,7 @@ export function ProjectWorkspace({
   const [report, setReport] = useState<CheckReport>(initialReport)
   const [tab, setTab] = useState<Tab>(initialTab)
   const [builderDraft, setBuilderDraft] = useState('')
+  const [draftToken, setDraftToken] = useState(0)
   const [device, setDevice] = useState<DeviceKey>('phone')
   const [previewKey, setPreviewKey] = useState(0)
   const [versions, setVersions] = useState<Version[] | null>(null)
@@ -147,6 +149,29 @@ export function ProjectWorkspace({
     if (tab === 'versions') void loadVersions()
     if (tab === 'users') void loadData()
   }, [tab, loadVersions, loadData])
+
+  /*
+   * Le relais du coach.
+   *
+   * Le coach vit dans le cadre, la page du projet dans le contenu : ils ne se connaissent
+   * pas. Un événement du navigateur suffit à les relier, et seulement là où il y a un
+   * projet à regarder — ailleurs, personne n'écoute et le bouton du coach n'apparaît pas.
+   *
+   * Ce qui arrive ici est une demande rédigée, pas une commande : elle atterrit dans la
+   * zone de saisie, où le créateur la relit et l'envoie. Envoyer à sa place dépenserait ses
+   * crédits sans son accord.
+   */
+  useEffect(() => {
+    function recevoir(event: Event) {
+      const texte = (event as CustomEvent<string>).detail
+      if (typeof texte !== 'string' || texte === '') return
+      setBuilderDraft(texte)
+      setDraftToken((valeur) => valeur + 1)
+      setTab('assistant')
+    }
+    window.addEventListener(RELAIS_ASSISTANT, recevoir)
+    return () => window.removeEventListener(RELAIS_ASSISTANT, recevoir)
+  }, [])
 
   const sendPatch = useCallback(
     async (summary: string, operations: PatchOperation[]) => {
@@ -280,6 +305,7 @@ export function ProjectWorkspace({
                   projectId={projectId}
                   initialMessages={initialMessages}
                   initialDraft={builderDraft}
+                  draftToken={draftToken}
                   onApplied={() => {
                     reloadPreview()
                     router.refresh()
@@ -386,6 +412,7 @@ export function ProjectWorkspace({
                 insightsCredits={support.insightsCredits}
                 onSendToBuilder={(text) => {
                   setBuilderDraft(text)
+                  setDraftToken((valeur) => valeur + 1)
                   setTab('assistant')
                 }}
               />

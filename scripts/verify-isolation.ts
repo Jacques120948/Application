@@ -42,6 +42,14 @@ const PROTECTED_TABLES = [
   'Notification',
 ] as const
 
+/*
+ * CreatorReport et UnmetRequest n'y figurent pas, et c'est délibéré : comme AiUsage, elles
+ * n'existent que pour être lues par l'exploitant, et aucun écran de créateur ne les relit.
+ * Une table qu'on ne lit jamais par erreur n'a pas besoin qu'on l'empêche de mal la lire ;
+ * l'écriture, elle, tient son identifiant de la session et jamais du navigateur. Le jour où
+ * un créateur pourra relire ses propres signalements, elles rejoindront la liste.
+ */
+
 type RoleRow = { role: string; bypassrls: boolean }
 type TableRow = { relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean; policies: bigint }
 

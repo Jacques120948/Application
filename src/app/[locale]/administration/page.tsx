@@ -11,6 +11,8 @@ import {
   listUsers,
   listModelPricing,
   readAgentLimits,
+  listReports,
+  listUnmetRequests,
   readLegalIdentity,
 } from "@/server/admin/service";
 import { Shell } from "@/components/studio/Shell";
@@ -20,6 +22,8 @@ import {
   AdminUser,
   LegalIdentityForm,
   AgentLimitsEditor,
+  ReportBoard,
+  UnmetBoard,
   AiPricingEditor,
   FlagEditor,
   PlanEditor,
@@ -56,6 +60,8 @@ export default async function AdminPage({
     failures,
     pricing,
     agentLimits,
+    reports,
+    unmet,
   ] = await Promise.all([
     getAdminOverview(),
     listPlans(),
@@ -66,6 +72,8 @@ export default async function AdminPage({
     listAiFailures(),
     listModelPricing(),
     readAgentLimits(),
+    listReports(),
+    listUnmetRequests(),
   ]);
 
   const figures = [
@@ -100,6 +108,30 @@ export default async function AdminPage({
               </CardBody>
             </Card>
           ))}
+        </div>
+
+        <h2 className="mb-1 text-lg font-semibold">Ce qui bloque vos créateurs</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Ce qu’ils ont signalé depuis « Besoin d’aide ? », après que l’assistant
+          n’a pas su résoudre. Leur offre, leur solde et leurs erreurs récentes
+          partent avec le message : tout est ici, il n’y a rien à aller chercher
+          ailleurs.
+        </p>
+        <div className="mb-10">
+          <ReportBoard reports={reports} />
+        </div>
+
+        <h2 className="mb-1 text-lg font-semibold">
+          Ce qu’ils demandent et qu’on ne sait pas faire
+        </h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Votre feuille de route, écrite par vos créateurs plutôt que devinée.
+          « Hors périmètre » signifie que l’assistant a dit lui-même que la
+          demande dépassait ce qu’Evoliia sait construire : ce sont des fonctions
+          qui manquent, et c’est ce qu’il faut lire en premier.
+        </p>
+        <div className="mb-10">
+          <UnmetBoard rows={unmet} />
         </div>
 
         <h2 className="mb-1 text-lg font-semibold">Santé de l’assistant</h2>

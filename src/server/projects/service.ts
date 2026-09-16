@@ -21,6 +21,7 @@ import { heuristicBlueprint, blueprintFromIdea, blueprintFromSpecSheet } from '.
 import { getIdea } from '@/server/business/ideas'
 import { publicAppUrl } from '@/lib/apps-domain'
 import { resolveAttachments, type ChatAttachment } from '@/server/media/service'
+import { recordUnmetRequest } from '@/server/support/creator'
 import {
   assertDocumentsFit,
   documentBrief,
@@ -448,6 +449,15 @@ export async function editWithAssistant(
   }
 
   if (!response.supported || response.operations.length === 0) {
+    // Ce que les créateurs demandent et qu'Evoliia ne sait pas faire est la seule feuille
+    // de route qui ne se devine pas. Elle était jetée à mesure ; elle se compte désormais.
+    void recordUnmetRequest({
+      userId,
+      projectId,
+      request: trimmed,
+      reply: response.reply,
+      explicit: !response.supported,
+    })
     await recordAssistantMessage(userId, projectId, response.reply, null)
     return {
       reply: response.reply,
@@ -604,6 +614,19 @@ export async function editWithAgent(
   })
 
   if (outcome.operations.length === 0) {
+    /*
+     * L'agent n'annonce pas qu'il refuse : il répond en français. On enregistre donc sans
+     * l'affirmer — « explicit » reste faux, et l'écran distingue les deux. Une demande sans
+     * suite peut aussi bien être une question à laquelle il a répondu qu'une fonction qui
+     * manque ; les mêler ferait passer des conversations ordinaires pour des manques.
+     */
+    void recordUnmetRequest({
+      userId,
+      projectId,
+      request: trimmed,
+      reply: outcome.reply,
+      explicit: false,
+    })
     await recordAssistantMessage(userId, projectId, outcome.reply, null)
     return {
       reply: outcome.reply,

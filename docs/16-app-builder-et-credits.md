@@ -465,10 +465,50 @@ d'Evoliia (il le dit franchement, n'invente aucune cause, et invite à signaler)
 pas » à la place de « il ne vous restait plus de crédits » est la réponse qui fait partir un
 créateur.
 
-**Ce qui manque encore**, et qui n'est pas de l'agent : rien ne remonte jusqu'à
-l'exploitant. Un créateur bloqué par une panne ne dispose d'aucun chemin vers lui, et les
-demandes que l'assistant refuse — la meilleure feuille de route qui soit, écrite par les
-clients — sont jetées à mesure.
+#### Le coach passe la main à l'assistant
+
+Restait un défaut structurel, et il annulait presque tout ce qui précède : **le créateur en
+difficulté clique sur « Besoin d'aide ? », c'est-à-dire sur le coach, qui ne voit pas son
+application.** Le coach connaît le parcours, pas le projet — ni ses pages, ni ses contrôles,
+ni ce qui a échoué. Celui qui sait diagnostiquer se trouve derrière un onglet nommé
+« Modifier avec l'IA », un nom qui annonce un changement, pas une réparation. Le créateur
+parlait donc systématiquement à l'entité incapable de l'aider.
+
+Le coach a maintenant deux sorties, dans l'ordre où elles doivent être tentées.
+
+**« Demander à l'assistant de regarder mon application »**, présent seulement là où un projet
+est ouvert. Il ouvre l'assistant avec une demande déjà rédigée à partir de la question posée,
+qui déclenche la lecture des contrôles et des incidents. Ce qui arrive est une demande, pas
+une commande : elle atterrit dans la zone de saisie, où le créateur la relit et l'envoie —
+l'envoyer à sa place dépenserait ses crédits sans son accord.
+
+Le coach et la page du projet ne se connaissent pas : l'un vit dans le cadre, l'autre dans le
+contenu. Un événement du navigateur les relie, sans faire traverser une propriété à tout le
+cadre. Là où la page écoute, le bouton apparaît ; ailleurs, il n'existe pas — ce qui est
+exactement le bon comportement. Sa consigne lui interdit par ailleurs de deviner : dès que la
+question porte sur l'application, il dit que l'assistant va regarder, au lieu d'inventer.
+
+**« Signalez-le »**, replié, toujours disponible. C'est le dernier maillon, pour ce que
+l'assistant ne peut pas résoudre : une panne, un écran qui ne répond pas. Le message part
+avec les faits que l'exploitant aurait demandés — offre, solde, échecs des deux derniers
+jours —, rassemblés par le serveur et non par le créateur : personne ne sait dire de tête son
+solde de crédits, et le lui demander coûte trois allers-retours avant de commencer à
+comprendre. Une notification, pas un courriel : la cloche ne coûte rien, et ce chemin ne
+devait dépendre d'aucune décision de dépense.
+
+#### La feuille de route écrite par les créateurs
+
+Quand l'assistant ne change rien, la demande est désormais enregistrée. « Hors périmètre »
+quand il a dit lui-même qu'elle dépassait son vocabulaire — c'est une fonction qui manque, et
+c'est ce qu'on lit en premier. « Sans changement » sinon : une question, une réponse
+suffisante, un échec. Les mêler ferait passer des conversations ordinaires pour des manques.
+
+Ni cette table ni celle des signalements ne portent de Row Level Security, comme `AiUsage` et
+pour la même raison : elles n'existent que pour être lues par l'exploitant, et aucun écran de
+créateur ne les relit. Une table qu'on ne lit jamais par erreur n'a pas besoin qu'on
+l'empêche de mal la lire ; l'écriture, elle, tient toujours son identifiant de la session,
+jamais du navigateur. Le jour où un créateur pourra relire ses propres signalements, elles
+rejoindront la liste des tables cloisonnées.
 
 ---
 

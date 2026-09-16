@@ -1033,3 +1033,130 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
     </Card>
   )
 }
+
+// ──────────────────── Ce que les créateurs n'ont pas pu résoudre ─────────────
+
+export type AdminReport = {
+  id: string
+  email: string
+  screen: string
+  message: string
+  context: string
+  status: string
+  createdAt: string
+}
+
+/**
+ * Les signalements des créateurs.
+ *
+ * C'est le seul écran qui apprend qu'une personne est bloquée. Le contexte s'affiche sous
+ * le message, jamais derrière un lien : aller chercher l'offre, le solde et les erreurs
+ * dans trois autres écrans est précisément ce que ce mécanisme sert à éviter.
+ */
+export function ReportBoard({ reports }: { reports: AdminReport[] }) {
+  const [traites, setTraites] = useState<string[]>([])
+  const [error, setError] = useState<string | null>(null)
+
+  async function clore(id: string) {
+    setError(null)
+    const response = await fetch('/api/admin/signalements', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    if (!response.ok) {
+      setError("Le signalement n'a pas pu être marqué comme traité.")
+      return
+    }
+    setTraites((current) => [...current, id])
+  }
+
+  if (reports.length === 0) {
+    return (
+      <Notice tone="neutral">
+        Aucun signalement. Ce qui veut dire soit que tout va bien, soit que personne n’a
+        trouvé le bouton — les deux méritent d’être vérifiés de temps en temps.
+      </Notice>
+    )
+  }
+
+  return (
+    <div className="grid gap-3">
+      {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+      {reports.map((report) => {
+        const clos = report.status === 'handled' || traites.includes(report.id)
+        return (
+          <Card key={report.id}>
+            <CardBody className="grid gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={clos ? 'neutral' : 'caution'}>{clos ? 'Traité' : 'Ouvert'}</Badge>
+                <span className="text-sm font-medium">{report.email}</span>
+                <span className="text-xs text-[var(--color-ink-faint)]">
+                  écran « {report.screen} » · {new Date(report.createdAt).toLocaleString('fr-FR')}
+                </span>
+              </div>
+              <p className="m-0 whitespace-pre-line text-sm">{report.message}</p>
+              <pre className="m-0 overflow-x-auto rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3 text-xs text-[var(--color-ink-soft)]">
+                {report.context}
+              </pre>
+              {clos ? null : (
+                <div>
+                  <Button variant="secondary" onClick={() => void clore(report.id)}>
+                    Marquer comme traité
+                  </Button>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        )
+      })}
+    </div>
+  )
+}
+
+export type AdminUnmet = {
+  id: string
+  email: string
+  request: string
+  reply: string
+  explicit: boolean
+  createdAt: string
+}
+
+/**
+ * Ce que les créateurs demandent et qu'Evoliia ne sait pas faire.
+ *
+ * La feuille de route écrite par les clients plutôt que devinée. Les demandes explicitement
+ * hors périmètre d'abord : ce sont des fonctions qui manquent. Le reste — les demandes
+ * auxquelles rien n'a changé — mêle des questions, des réponses suffisantes et des échecs ;
+ * utile, mais à lire avec plus de recul.
+ */
+export function UnmetBoard({ rows }: { rows: AdminUnmet[] }) {
+  if (rows.length === 0) {
+    return (
+      <Notice tone="neutral">
+        Aucune demande restée sans suite pour l’instant.
+      </Notice>
+    )
+  }
+  return (
+    <div className="grid gap-2">
+      {rows.map((row) => (
+        <Card key={row.id}>
+          <CardBody className="grid gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={row.explicit ? 'caution' : 'neutral'}>
+                {row.explicit ? 'Hors périmètre' : 'Sans changement'}
+              </Badge>
+              <span className="text-xs text-[var(--color-ink-faint)]">
+                {row.email} · {new Date(row.createdAt).toLocaleDateString('fr-FR')}
+              </span>
+            </div>
+            <p className="m-0 text-sm font-medium">{row.request}</p>
+            <p className="m-0 text-xs text-[var(--color-ink-soft)]">{row.reply}</p>
+          </CardBody>
+        </Card>
+      ))}
+    </div>
+  )
+}

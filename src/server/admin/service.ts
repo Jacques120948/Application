@@ -501,3 +501,98 @@ export async function updateAgentLimits(input: z.infer<typeof agentLimitsInput>)
   await writeSetting(DOCUMENT_SETTINGS.maxTokens, String(input.documentTokens))
   logger.info('bornes de l’agent modifiées', { adminId: admin.id, ...input })
 }
+
+// ──────────────────── Ce que les créateurs n'ont pas pu résoudre ─────────────
+
+export type ReportRow = {
+  id: string
+  email: string
+  screen: string
+  message: string
+  context: string
+  status: string
+  createdAt: string
+}
+
+/**
+ * Les signalements, les ouverts d'abord.
+ *
+ * C'est le seul écran où l'on apprend qu'un créateur est bloqué. Le contexte est affiché
+ * avec le message et non derrière un lien : chercher l'offre et les erreurs dans trois
+ * autres écrans est exactement ce que ce mécanisme sert à éviter.
+ */
+export async function listReports(take = 30): Promise<ReportRow[]> {
+  await requireAdmin()
+  const rows = await prisma.creatorReport.findMany({
+    orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+    take,
+    select: {
+      id: true,
+      screen: true,
+      message: true,
+      context: true,
+      status: true,
+      createdAt: true,
+      user: { select: { email: true } },
+    },
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.user.email,
+    screen: row.screen,
+    message: row.message,
+    context: row.context,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+  }))
+}
+
+export async function closeReport(id: string): Promise<void> {
+  const admin = await requireAdmin()
+  await prisma.creatorReport.update({
+    where: { id },
+    data: { status: 'handled', handledAt: new Date() },
+  })
+  logger.info('signalement traité', { adminId: admin.id, id })
+}
+
+export type UnmetRow = {
+  id: string
+  email: string
+  request: string
+  reply: string
+  explicit: boolean
+  createdAt: string
+}
+
+/**
+ * Les demandes restées sans suite, les explicites d'abord.
+ *
+ * « Explicite » veut dire que l'assistant a dit lui-même que la demande sortait de son
+ * vocabulaire : c'est une fonction qui manque, et c'est ce qu'il faut lire en premier. Le
+ * reste — les demandes auxquelles rien n'a changé — contient des questions, des réponses
+ * suffisantes et des échecs mêlés ; utile, mais moins net.
+ */
+export async function listUnmetRequests(take = 40): Promise<UnmetRow[]> {
+  await requireAdmin()
+  const rows = await prisma.unmetRequest.findMany({
+    orderBy: [{ explicit: 'desc' }, { createdAt: 'desc' }],
+    take,
+    select: {
+      id: true,
+      request: true,
+      reply: true,
+      explicit: true,
+      createdAt: true,
+      user: { select: { email: true } },
+    },
+  })
+  return rows.map((row) => ({
+    id: row.id,
+    email: row.user.email,
+    request: row.request,
+    reply: row.reply,
+    explicit: row.explicit,
+    createdAt: row.createdAt.toISOString(),
+  }))
+}

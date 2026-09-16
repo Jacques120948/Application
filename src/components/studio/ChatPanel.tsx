@@ -81,12 +81,21 @@ export function ChatPanel({
   initialMessages,
   onApplied,
   initialDraft = '',
+  draftToken = 0,
 }: {
   projectId: string
   initialMessages: Message[]
   onApplied: () => void
   /** Une demande préparée ailleurs (une analyse de Lia, par exemple) : proposée, jamais envoyée seule. */
   initialDraft?: string
+  /**
+   * Change à chaque nouvelle proposition, même identique à la précédente.
+   *
+   * Sans lui, redemander deux fois la même chose au coach ne remplirait la zone qu'une
+   * fois : React ne rejoue pas un effet dont la dépendance n'a pas bougé, et le créateur
+   * conclurait que le bouton est cassé.
+   */
+  draftToken?: number
 }) {
   const [messages, setMessages] = useState<Message[]>(initialMessages)
   const [draft, setDraft] = useState(initialDraft)
@@ -112,7 +121,8 @@ export function ChatPanel({
   // ferait remonter toute la fenêtre et chasserait l'aperçu hors de l'écran.
   useEffect(() => {
     if (initialDraft !== '') setDraft(initialDraft)
-  }, [initialDraft])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- le jeton est là pour rejouer
+  }, [initialDraft, draftToken])
 
   useEffect(() => {
     const container = scrollRef.current
