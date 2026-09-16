@@ -177,6 +177,14 @@ export const dataModelSchema = z
      * des champs, qui n'a pas été pensé pour ça.
      */
     labelField: slug.optional(),
+    /**
+     * Prévenir le créateur par courriel quand un visiteur saisit une fiche.
+     *
+     * Éteint par défaut, et plafonné par l'offre : l'envoi est à la charge d'Evoliia, donc
+     * il se règle là où se règlent les autres quotas, pas dans l'application. La
+     * notification dans l'atelier, elle, a toujours lieu — elle ne coûte rien.
+     */
+    notifyOwner: z.boolean().optional(),
   })
   .strict()
 

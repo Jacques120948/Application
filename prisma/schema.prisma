@@ -76,6 +76,7 @@ model User {
   supportTickets       SupportTicket[]
   supportInsights      SupportInsight[]
   notifications        Notification[]
+  ownerAlerts          OwnerAlert[]
   profile              CreatorProfile?
   ideas                Idea[]
   tokens               VerificationToken[]
@@ -154,6 +155,9 @@ model Plan {
   radarRunsPerMonth        Int      @default(1)
   liaAnswersPerMonth       Int      @default(0)
   liaConversationsPerMonth Int      @default(0)
+  /// Alertes par courriel envoyées au créateur quand un visiteur saisit une fiche.
+  /// Zéro par défaut : la fonction s'ouvre offre par offre, depuis le back-office.
+  alertsPerMonth           Int      @default(0)
   monthlyCredits           Int
   allowExport              Boolean  @default(false)
   allowCustomDomain        Boolean  @default(false)
@@ -564,6 +568,7 @@ model Project {
   connections          IntegrationConnection[]
   marketing            MarketingKit[]
   medias               MediaAsset[]
+  ownerAlerts          OwnerAlert[]
   agentNotes           AgentNote[]
   radarRuns            RadarRun[]
   supportSettings      SupportSettings?
@@ -1082,6 +1087,30 @@ model SupportInsight {
 // ═══════════════════════════ Notifications ════════════════════════════════
 
 /// Une notification interne. Une seule table : une seule cloche suffit.
+/// Une alerte envoyée au créateur parce qu'un visiteur a saisi une fiche.
+///
+/// Sa raison d'être est le comptage : le quota mensuel de l'offre et le plafond journalier
+/// par application se lisent ici. Elle sert aussi de trace — « pourquoi n'ai-je pas été
+/// prévenu ? » a une réponse vérifiable, ce qu'un simple compteur ne donnerait pas.
+model OwnerAlert {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  modelId   String
+  recordId  String   @db.Uuid
+  /// Faux quand l'alerte a été retenue : quota atteint, plafond du jour, ou envoi en échec.
+  sent      Boolean  @default(true)
+  /// Motif de la retenue, pour le diagnostic. Jamais montré au visiteur.
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
+}
+
 model Notification {
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @db.Uuid

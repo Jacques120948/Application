@@ -61,6 +61,8 @@ export const planUpdateInput = z.object({
    */
   radarRunsPerMonth: z.number().int().min(0).max(1_000),
   liaAnswersPerMonth: z.number().int().min(0).max(100_000),
+  /** Alertes par courriel au créateur. Zéro ferme la fonction pour cette offre. */
+  alertsPerMonth: z.number().int().min(0).max(100_000),
   liaConversationsPerMonth: z.number().int().min(0).max(100_000),
   allowBuild: z.boolean(),
   isRecommended: z.boolean(),

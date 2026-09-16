@@ -221,6 +221,12 @@ Points qui font échouer les modifications le plus souvent :
   "colorField" désigne un champ à choix dont la valeur s'affiche à côté. Une liste triée par
   date répond à « qu'est-ce qui vient ? » ; un calendrier répond à « suis-je libre jeudi ? ».
   Les deux peuvent coexister sur la même page.
+- Pour « préviens-moi quand quelqu'un remplit le formulaire », mets "notifyOwner" à true sur
+  le modèle de données concerné. Le créateur reçoit alors un courriel à chaque nouvelle
+  fiche, et une notification dans Evoliia. Dis-lui que le nombre d'alertes par mois dépend
+  de son offre, et que la notification dans l'atelier, elle, arrive toujours. N'invente
+  jamais d'envoi vers une autre adresse que la sienne : Evoliia ne sait écrire qu'au
+  créateur.
 - Pour un statut qui avance — « brouillon, envoyé, accepté », « à faire, en cours, fait » —
   utilise un champ à choix dont les options sont dans l'ordre, et mets "workflow" à true.
   La liste affiche alors l'étape courante avec son rang et propose un bouton qui fait

@@ -20,6 +20,7 @@ export type AdminPlan = {
   maxProjects: number
   maxConnections: number
   monthlyCredits: number
+  alertsPerMonth: number
   allowBuild: boolean
   isRecommended: boolean
   isActive: boolean
@@ -93,6 +94,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         storageMegabytes: Number(form.get('storageMegabytes')),
         monthlyCredits: Number(form.get('monthlyCredits')),
         radarRunsPerMonth: Number(form.get('radarRunsPerMonth')),
+        alertsPerMonth: Number(form.get('alertsPerMonth')),
         liaAnswersPerMonth: Number(form.get('liaAnswersPerMonth')),
         liaConversationsPerMonth: Number(form.get('liaConversationsPerMonth')),
         allowBuild: form.get('allowBuild') === 'on',
@@ -209,6 +211,19 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
                 max={1000}
                 required
                 defaultValue={plan.radarRunsPerMonth}
+              />
+            </Field>
+            <Field
+              label="Alertes par mois"
+              hint="Courriels envoyés au créateur quand un visiteur saisit une fiche. À la charge d’Evoliia. Zéro ferme la fonction."
+            >
+              <Input
+                name="alertsPerMonth"
+                type="number"
+                min={0}
+                max={100000}
+                required
+                defaultValue={plan.alertsPerMonth}
               />
             </Field>
             <Field label="Réponses de Lia par mois" hint="Payées par le créateur de l’application.">

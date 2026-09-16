@@ -3,6 +3,8 @@ import { resolveRuntimeSpec } from '@/server/runtime/context'
 import { createRecord, listRecords, RECORD_SORTS, type RecordSort } from '@/server/runtime/records'
 import { getEndUser } from '@/server/runtime/end-users'
 import { consume, RULES } from '@/server/auth/rate-limit'
+import { alertOwnerOfNewRecord } from '@/server/runtime/alerts'
+import { publicAppUrl } from '@/lib/apps-domain'
 import { assertSameOrigin, clientIp, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -81,6 +83,26 @@ export async function POST(request: Request, context: { params: Promise<{ projec
       endUserId: endUser?.id ?? null,
       input: body.data,
     })
+
+    /*
+     * Le créateur est prévenu si son modèle le demande. L'alerte n'est pas attendue : le
+     * visiteur a rempli son formulaire, sa fiche est enregistrée, et l'acheminement d'un
+     * courriel ne le regarde pas. Rien de ce qui suit ne peut retarder ni faire échouer sa
+     * réponse — `alertOwnerOfNewRecord` ne lève jamais.
+     */
+    const model = runtime.spec.dataModels.find((candidate) => candidate.id === body.modelId)
+    if (model?.notifyOwner === true && !runtime.isOwnerPreview) {
+      void alertOwnerOfNewRecord({
+        ownerId: runtime.ownerId,
+        projectId: runtime.projectId,
+        appName: runtime.spec.name,
+        appUrl: publicAppUrl(runtime.slug),
+        model,
+        recordId: record.id,
+        data: record.data,
+      })
+    }
+
     return ok({ record }, 201)
   } catch (error) {
     return fail(error)

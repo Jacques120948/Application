@@ -12,7 +12,13 @@ import { logger } from '@/server/observability/logger'
  * Aucun contenu personnel d'un tiers n'y est copié : un titre, une phrase, un lien.
  */
 
-export type NotificationKind = 'radar_new' | 'support_ticket' | 'support_insight' | 'support_unanswered'
+export type NotificationKind =
+  | 'radar_new'
+  | 'support_ticket'
+  | 'support_insight'
+  | 'support_unanswered'
+  /** Un visiteur vient de saisir une fiche dans une application publiée. */
+  | 'app_record'
 
 export type NotificationView = {
   id: string

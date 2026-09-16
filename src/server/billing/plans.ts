@@ -39,6 +39,14 @@ export type PlanDefaults = {
   radarRunsPerMonth: number
   liaAnswersPerMonth: number
   liaConversationsPerMonth: number
+  /**
+   * Alertes par courriel au créateur quand un visiteur saisit une fiche.
+   *
+   * Zéro partout au départ, y compris sur les offres payantes : l'envoi est à la charge
+   * d'Evoliia, et une fonction qui coûte ne s'ouvre pas toute seule. C'est l'exploitant qui
+   * décide, offre par offre, depuis le back-office.
+   */
+  alertsPerMonth: number
   monthlyCredits: number
   allowBuild: boolean
   allowExport: boolean
@@ -69,6 +77,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     radarRunsPerMonth: 1,
     liaAnswersPerMonth: 0,
     liaConversationsPerMonth: 0,
+    alertsPerMonth: 0,
     // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
     // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
     // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
@@ -92,6 +101,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     radarRunsPerMonth: 3,
     liaAnswersPerMonth: 100,
     liaConversationsPerMonth: 50,
+    alertsPerMonth: 0,
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -112,6 +122,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     radarRunsPerMonth: 6,
     liaAnswersPerMonth: 500,
     liaConversationsPerMonth: 200,
+    alertsPerMonth: 0,
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: true,
@@ -132,6 +143,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     radarRunsPerMonth: 12,
     liaAnswersPerMonth: 2000,
     liaConversationsPerMonth: 1000,
+    alertsPerMonth: 0,
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: true,
