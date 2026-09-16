@@ -63,7 +63,7 @@ déploiements, et ce qui rend l'isolation vérifiable.
 | 17 — Ledger | **Fait en phase 1.** `CreditLedger` gagne un type (`AI_USAGE`, `SUBSCRIPTION_CREDIT`, `CREDIT_PURCHASE`, `REFUND`, `ADJUSTMENT`, `BONUS`, `EXPIRED_CREDIT`), un lien vers l'appel qui a causé le débit, et un lien vers le paiement Stripe — unique, donc un paiement ne crédite qu'une fois. L'historique déjà écrit a été reclassé par la migration. |
 | 18 — Crédits inclus dans l'abonnement | **Fait.** `Plan.monthlyCredits`, réglable depuis l'administration. Manque : la distinction entre crédits offerts et crédits achetés. |
 | 21 — `project_versions` | **Existe déjà** sous le nom `ProjectVersion`. |
-| 22 — Optimisation du coût | **Partiel.** Cache du prompt système, génération en deux temps (plan au modèle fort, pages au modèle rapide — le coût divisé par deux, mesuré), modèle économique pour les réponses courtes. **Manque : la sélection de contexte. Aujourd'hui `editWithAssistant` envoie `JSON.stringify(spec)`, l'application entière, pour « change le texte du bouton ».** |
+| 22 — Optimisation du coût | **Partiel.** Cache du prompt système, génération en deux temps (plan au modèle fort, pages au modèle rapide — le coût divisé par deux, mesuré), modèle économique pour les réponses courtes, et depuis peu la sélection de contexte. Reste : le résumé de l'historique de conversation. |
 | 23 — Sécurité | **Fait.** RLS forcé en base, `withUserScope`/`withRuntimeScope`, vérification d'origine, limitation de débit, secrets chiffrés au repos, aucun secret côté navigateur, messages d'erreur expurgés des clés. |
 | 16 — Webhook Stripe | **Fait pour les abonnements.** `StripeEvent` garantit qu'un événement n'est traité qu'une fois. Rien n'est jamais crédité sur le retour navigateur. |
 
@@ -228,9 +228,22 @@ l'éteindre pour tout le monde sans déploiement.
   `[Appliquer] [Modifier la demande] [Annuler]`. Pour une petite demande, il applique
   directement. Le seuil est mesurable : nombre d'opérations, pages touchées, modèles de
   données touchés.
-- Sélection de contexte : n'envoyer que ce qui est nécessaire. « Change le texte du
-  bouton » n'envoie que la page concernée ; « ajoute un espace membre » envoie la
-  structure. Le reste est résumé, pas transmis.
+- ~~Sélection de contexte~~ : **livrée**, avec un résultat plus modeste qu'annoncé — voir
+  ci-dessous.
+
+**La sélection de contexte, et ce qu'elle rapporte vraiment.** Je l'avais présentée comme
+« le gain le plus immédiat ». Mesure faite sur les applications réellement publiées :
+**11 à 23 % sur les plus fournies, et rien du tout sur les petites**. La raison est simple
+et méritait d'être vérifiée avant de promettre : l'essentiel d'une AppSpec est de la
+structure — des clés, des identifiants, des types de blocs — et non de la prose. Résumer
+la prose ne touche donc qu'une part du volume.
+
+Le mécanisme est gardé pour trois raisons. Il ne peut jamais coûter plus qu'il ne
+rapporte : en dessous de 8 000 caractères, l'application est transmise telle quelle, ce qui
+est exactement le comportement d'avant. Son rendement croît avec la taille des
+applications, c'est-à-dire avec le chemin A. Et il apporte une garantie qui vaut par
+elle-même : un texte coupé dans le résumé ne peut pas revenir coupé dans l'application —
+la tentative est refusée, et la reprise voit le texte entier.
 
 **Nouveaux fichiers.** `src/components/studio/AgentChat.tsx`,
 `src/app/api/projects/[id]/agent/route.ts`, `src/app/api/projects/[id]/agent/plan/route.ts`.
@@ -360,8 +373,8 @@ tout le reste, et la phase 8 partielle doit venir **avant** l'agent, pas après.
 construit pas une boucle d'agent puis on lui met des freins ; on pose les freins d'abord.
 
 1. **Phase 1** — tarifs administrables, `creditsSpent` écrit, réservation. Sans risque.
-2. **Phase 3 (contexte seul)** — sélection de contexte. Gain de coût immédiat, aucun
-   changement visible.
+2. ~~**Phase 3 (contexte seul)**~~ — **livrée.** 11 à 23 % sur les applications fournies,
+   rien sur les petites, aucun changement visible pour le créateur.
 3. **Phase 2** — l'agent, derrière un interrupteur, à côté de l'existant.
 4. **Phase 3 (mode plan)** et **phase 4** — conversation, plan, correction.
 5. **Phase 5**, **phase 7** — historique enrichi, tableaux de bord.

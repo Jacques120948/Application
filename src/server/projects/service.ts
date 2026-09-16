@@ -9,6 +9,7 @@ import { isAiAvailable } from '@/server/ai/client'
 import { generateBlueprint, generateSpec, requestEdit } from '@/server/ai/operations'
 import { blueprintSchema, type Blueprint } from '@/server/ai/schemas'
 import { applyPatch, specPatchSchema, type SpecPatch } from '@/server/spec/patch'
+import { truncationLeak } from '@/server/agent/context'
 import { runChecks, type CheckReport } from '@/server/spec/checks'
 import { buildTemplate, THEME_PRESETS, DEFAULT_THEME } from '@/server/spec/templates'
 import { parseAppSpec } from '@/server/spec/validate'
@@ -310,6 +311,13 @@ export async function editWithAssistant(
         summary: response.summary,
         operations: response.operations,
       })
+      /*
+       * L'assistant ne voit pas toujours les textes longs en entier (voir
+       * `agent/context.ts`). S'il en recopie un, il le recopierait coupé : on refuse, et
+       * la reprise lui montre l'application entière.
+       */
+      const fuite = truncationLeak(current, patch.operations)
+      if (fuite !== null) throw validation(fuite)
       updated = applyPatch(current, patch)
       break
     } catch (error) {

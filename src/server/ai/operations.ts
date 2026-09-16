@@ -12,6 +12,7 @@ import {
 } from '@/server/billing/credits'
 import { costMicros, creditsFor, loadPricing } from '@/server/billing/ai-pricing'
 import { releaseReservation, reserveCredits } from '@/server/billing/reservation'
+import { selectEditContext } from '@/server/agent/context'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import type { AppSpec, Block } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
@@ -644,12 +645,19 @@ export async function requestEdit(
   request: string,
   previous?: FailedAttempt,
 ): Promise<RunResult<EditOperations>> {
+  /*
+   * À la première tentative, le modèle reçoit la structure complète mais les textes longs
+   * coupés, plus le détail entier des pages que la demande désigne. À la reprise, il
+   * reçoit tout : si la première a échoué, c'est peut-être qu'il manquait quelque chose,
+   * et payer une fois le prix fort vaut mieux qu'une modification impossible.
+   */
+  const contexte = selectEditContext(spec, request, { full: previous !== undefined })
   const result = await runSingleCall({
     accounting: { userId, projectId, operation: 'edit' },
     system: EDIT_SYSTEM,
     schema: editResponseSchema,
     userContent: [
-      asUserData('application_actuelle', JSON.stringify(spec)),
+      asUserData('application_actuelle', contexte.text),
       asUserData('demande', request),
       ...(previous === undefined
         ? []
