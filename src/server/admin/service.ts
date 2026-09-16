@@ -16,6 +16,7 @@ import {
   PRICING_SETTINGS,
 } from '@/server/billing/ai-pricing'
 import { writeSetting } from '@/server/settings/store'
+import { AGENT_SETTINGS, loadAgentLimits } from '@/server/agent/limits'
 import {
   getLegalIdentity,
   legalIdentityInput,
@@ -412,4 +413,36 @@ export async function updateCreditSettings(input: z.infer<typeof creditSettingsI
     adminId: admin.id,
     multiplier: input.multiplier,
   })
+}
+
+// ───────────────────── Bornes de l'agent de construction ─────────────────────
+
+/**
+ * Ce qu'une exécution de l'agent a le droit de consommer.
+ *
+ * C'est le réglage le plus sensible de l'installation : c'est lui qui décide de ce qu'une
+ * seule demande peut coûter, et donc de ce qu'un usage anormal peut produire comme
+ * facture. Les valeurs du code sont prudentes ; les élargir se fait sur mesures, pas sur
+ * impression.
+ */
+export async function readAgentLimits() {
+  await requireAdmin()
+  return loadAgentLimits()
+}
+
+export const agentLimitsInput = z.object({
+  maxSteps: z.number().int().min(2).max(24),
+  maxTokens: z.number().int().min(5_000).max(400_000),
+  maxCredits: z.number().int().min(5).max(400),
+  /** En secondes dans l'interface : des millisecondes ne se saisissent pas à la main. */
+  maxDurationSeconds: z.number().int().min(30).max(600),
+})
+
+export async function updateAgentLimits(input: z.infer<typeof agentLimitsInput>) {
+  const admin = await requireAdmin()
+  await writeSetting(AGENT_SETTINGS.maxSteps, String(input.maxSteps))
+  await writeSetting(AGENT_SETTINGS.maxTokens, String(input.maxTokens))
+  await writeSetting(AGENT_SETTINGS.maxCredits, String(input.maxCredits))
+  await writeSetting(AGENT_SETTINGS.maxDurationMs, String(input.maxDurationSeconds * 1000))
+  logger.info('bornes de l’agent modifiées', { adminId: admin.id, ...input })
 }

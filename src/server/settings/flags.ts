@@ -58,6 +58,20 @@ export const FLAGS = {
     help: 'Questions fréquentes, fonctions demandées, bugs possibles, tirés des conversations par lot.',
     fallback: false,
   },
+  /**
+   * L'agent qui modifie une application en plusieurs étapes.
+   *
+   * Éteint par défaut, et à côté de l'existant plutôt qu'à sa place : la modification à
+   * coup unique continue de fonctionner, et reste le chemin emprunté tant que
+   * l'interrupteur n'est pas ouvert. Une fonction s'allume quand elle fait mieux que ce
+   * qu'elle remplace, mesuré sur des cas réels, pas avant.
+   */
+  appBuilder: {
+    key: 'flag.agent.builder',
+    label: 'Agent de construction',
+    help: "Modifier une application en plusieurs étapes : l'agent lit les pages concernées avant de décider, corrige ses propres erreurs, et s'arrête sur des bornes d'étapes, de jetons et de crédits. Fermé, la modification assistée classique reste en place.",
+    fallback: false,
+  },
 } as const
 
 export type FlagName = keyof typeof FLAGS

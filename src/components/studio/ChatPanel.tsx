@@ -3,7 +3,32 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Notice, Textarea } from '@/components/ui'
 
-type Message = { id: string; role: 'USER' | 'ASSISTANT' | 'SYSTEM'; content: string }
+type Message = {
+  id: string
+  role: 'USER' | 'ASSISTANT' | 'SYSTEM'
+  content: string
+  /** Ce que l'agent a fait pour répondre. Absent des messages relus depuis la base. */
+  trace?: Trace
+}
+
+/**
+ * Ce que l'agent a regardé et ce qu'il a coûté.
+ *
+ * Affiché discrètement sous sa réponse, et pour une raison qui n'est pas cosmétique : le
+ * créateur paie l'opération, il a le droit de savoir ce qu'elle a mobilisé. Une réponse qui
+ * arrive sans rien dire de son travail est une boîte noire, et une boîte noire qui facture
+ * n'inspire pas confiance longtemps.
+ */
+type Trace = { read: string[]; steps: number; credits: number }
+
+/** « Pages lues : accueil, tarifs · 3 étapes · 4 crédits ». Rien quand il n'y a rien à dire. */
+function describeTrace(trace: Trace): string {
+  const morceaux: string[] = []
+  if (trace.read.length > 0) morceaux.push(`Pages lues : ${trace.read.join(', ')}`)
+  morceaux.push(`${trace.steps} étape${trace.steps > 1 ? 's' : ''}`)
+  if (trace.credits > 0) morceaux.push(`${trace.credits} crédit${trace.credits > 1 ? 's' : ''}`)
+  return morceaux.join(' · ')
+}
 
 /**
  * Conversation avec l'assistant (sections 5 et 20).
@@ -55,17 +80,39 @@ export function ChatPanel({
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ message }),
     })
-    const body = (await response.json()) as { reply?: string; applied?: boolean; message?: string }
+    // Une réponse qui n'est pas du JSON vient de l'hébergeur, pas de l'assistant : elle ne
+    // doit pas laisser le bouton en attente pour toujours.
+    const body = (await response.json().catch(() => null)) as {
+      reply?: string
+      applied?: boolean
+      message?: string
+      read?: string[]
+      steps?: number
+      creditsSpent?: number
+    } | null
 
-    if (!response.ok) {
-      setError(body.message ?? "L'assistant n'a pas pu traiter votre demande.")
+    if (body === null || !response.ok) {
+      setError(body?.message ?? "L'assistant n'a pas pu traiter votre demande.")
       setBusy(false)
       return
     }
 
     setMessages((current) => [
       ...current,
-      { id: `reply-${current.length}`, role: 'ASSISTANT', content: body.reply ?? '' },
+      {
+        id: `reply-${current.length}`,
+        role: 'ASSISTANT',
+        content: body.reply ?? '',
+        ...(body.steps === undefined
+          ? {}
+          : {
+              trace: {
+                read: body.read ?? [],
+                steps: body.steps,
+                credits: body.creditsSpent ?? 0,
+              },
+            }),
+      },
     ])
     setBusy(false)
     if (body.applied === true) onApplied()
@@ -82,15 +129,21 @@ export function ChatPanel({
         ) : null}
         <div className="grid gap-3">
           {messages.map((message) => (
-            <div
-              key={message.id}
-              className={
-                message.role === 'USER'
-                  ? 'justify-self-end rounded-[var(--radius-card)] bg-[var(--color-brand)] px-3.5 py-2.5 text-sm text-white max-w-[85%]'
-                  : 'justify-self-start rounded-[var(--radius-card)] bg-[var(--color-canvas)] px-3.5 py-2.5 text-sm max-w-[90%]'
-              }
-            >
-              {message.content}
+            <div key={message.id} className="grid gap-1">
+              <div
+                className={
+                  message.role === 'USER'
+                    ? 'justify-self-end rounded-[var(--radius-card)] bg-[var(--color-brand)] px-3.5 py-2.5 text-sm text-white max-w-[85%] whitespace-pre-wrap'
+                    : 'justify-self-start rounded-[var(--radius-card)] bg-[var(--color-canvas)] px-3.5 py-2.5 text-sm max-w-[90%] whitespace-pre-wrap'
+                }
+              >
+                {message.content}
+              </div>
+              {message.trace !== undefined ? (
+                <p className="m-0 justify-self-start text-xs text-[var(--color-ink-soft)]">
+                  {describeTrace(message.trace)}
+                </p>
+              ) : null}
             </div>
           ))}
           {busy ? (

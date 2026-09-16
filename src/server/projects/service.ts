@@ -10,6 +10,7 @@ import { generateBlueprint, generateSpec, requestEdit } from '@/server/ai/operat
 import { blueprintSchema, type Blueprint } from '@/server/ai/schemas'
 import { applyPatch, specPatchSchema, type SpecPatch } from '@/server/spec/patch'
 import { truncationLeak } from '@/server/agent/context'
+import { runAgent } from '@/server/agent/loop'
 import { runChecks, type CheckReport } from '@/server/spec/checks'
 import { buildTemplate, THEME_PRESETS, DEFAULT_THEME } from '@/server/spec/templates'
 import { parseAppSpec } from '@/server/spec/validate'
@@ -399,6 +400,104 @@ export async function editWithAssistant(
     spec: appliedSpec,
     creditsSpent,
     versionNumber,
+  }
+}
+
+/**
+ * Étape 6 bis : modifier l'application avec l'agent, en plusieurs étapes.
+ *
+ * Deux chemins cohabitent volontairement. `editWithAssistant` traduit une demande en un
+ * patch, d'un seul coup ; celui-ci laisse l'agent regarder l'application avant de décider,
+ * corriger ses propres erreurs et enchaîner plusieurs modifications. Le second ne remplace
+ * le premier que le jour où il fait mieux, mesuré — d'ici là, l'interrupteur
+ * « appBuilder » décide lequel répond, et le fermer suffit à revenir en arrière.
+ *
+ * Ce qui est commun aux deux, et ne changera pas : rien n'est écrit tant que la
+ * spécification obtenue n'est pas valide, et chaque modification crée une version. Une
+ * demande ratée ne coûte donc jamais l'application.
+ */
+export async function editWithAgent(
+  userId: string,
+  projectId: string,
+  message: string,
+): Promise<EditOutcome & { read: string[]; steps: number }> {
+  const trimmed = message.trim()
+  if (trimmed.length < 3) throw validation('Dites en quelques mots ce que vous voulez changer.')
+  if (trimmed.length > 2000) throw validation('Votre message est trop long.')
+
+  const { spec: current, history } = await withUserScope(userId, async (tx) => {
+    const project = await requireOwnedProject(tx, projectId, userId)
+    await tx.chatMessage.create({ data: { projectId, userId, role: 'USER', content: trimmed } })
+    const previous = await tx.chatMessage.findMany({
+      where: { projectId, role: { in: ['USER', 'ASSISTANT'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 7,
+      select: { role: true, content: true },
+    })
+    return {
+      spec: parseAppSpec(project.draftSpec),
+      // Le message qu'on vient d'écrire est déjà dans la demande : on ne le répète pas.
+      history: previous
+        .slice(1)
+        .reverse()
+        .map((entry) => ({
+          role: entry.role === 'USER' ? ('user' as const) : ('assistant' as const),
+          content: entry.content,
+        })),
+    }
+  })
+
+  const outcome = await runAgent({ userId, projectId, spec: current, request: trimmed, history })
+
+  if (outcome.operations.length === 0) {
+    await recordAssistantMessage(userId, projectId, outcome.reply, null)
+    return {
+      reply: outcome.reply,
+      applied: false,
+      summary: null,
+      spec: current,
+      creditsSpent: outcome.creditsSpent,
+      versionNumber: null,
+      read: outcome.read,
+      steps: outcome.steps,
+    }
+  }
+
+  const label = outcome.summary ?? 'Modification par l’agent'
+  const appliedSpec = outcome.spec
+
+  const versionNumber = await withUserScope(userId, async (tx) => {
+    await requireOwnedProject(tx, projectId, userId)
+    const version = await createVersion(tx, projectId, appliedSpec, label, 'AI')
+    await tx.project.update({
+      where: { id: projectId },
+      data: {
+        draftSpec: appliedSpec as unknown as Prisma.InputJsonValue,
+        name: appliedSpec.name,
+        status: 'TESTING',
+      },
+    })
+    await tx.chatMessage.create({
+      data: {
+        projectId,
+        role: 'ASSISTANT',
+        content: outcome.reply,
+        operation: 'agent',
+        versionId: version.id,
+      },
+    })
+    return version.number
+  })
+
+  return {
+    reply: outcome.reply,
+    applied: true,
+    summary: label,
+    spec: appliedSpec,
+    creditsSpent: outcome.creditsSpent,
+    versionNumber,
+    read: outcome.read,
+    steps: outcome.steps,
   }
 }
 

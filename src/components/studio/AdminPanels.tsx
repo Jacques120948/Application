@@ -821,3 +821,122 @@ function ModelPriceCard({ price }: { price: AdminModelPrice }) {
     </Card>
   )
 }
+
+// ───────────────────── Bornes de l'agent de construction ─────────────────────
+
+export type AdminAgentLimits = {
+  maxSteps: number
+  maxTokens: number
+  maxCredits: number
+  maxDurationMs: number
+}
+
+/**
+ * Ce qu'une exécution de l'agent a le droit de consommer.
+ *
+ * C'est le réglage qui décide de ce qu'une seule demande peut coûter. Les quatre bornes
+ * sont indépendantes et la première atteinte arrête l'agent : compter les étapes sans
+ * compter les jetons laisserait passer six appels énormes.
+ */
+export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
+  const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [valeurs, setValeurs] = useState({
+    maxSteps: String(limits.maxSteps),
+    maxTokens: String(limits.maxTokens),
+    maxCredits: String(limits.maxCredits),
+    maxDurationSeconds: String(Math.round(limits.maxDurationMs / 1000)),
+  })
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setStatus('busy')
+    setError(null)
+    const response = await fetch('/api/admin/agent', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        maxSteps: Number(valeurs.maxSteps),
+        maxTokens: Number(valeurs.maxTokens),
+        maxCredits: Number(valeurs.maxCredits),
+        maxDurationSeconds: Number(valeurs.maxDurationSeconds),
+      }),
+    })
+    const body = (await response.json().catch(() => null)) as { message?: string } | null
+    if (body === null || !response.ok) {
+      setError(body?.message ?? "L'enregistrement n'a pas abouti.")
+      setStatus('idle')
+      return
+    }
+    setStatus('saved')
+  }
+
+  return (
+    <Card>
+      <CardBody>
+        <form onSubmit={submit} className="grid gap-3">
+          <h3 className="m-0 text-base font-semibold">Ce qu’une demande peut consommer</h3>
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+            Les quatre bornes sont indépendantes : la première atteinte arrête l’agent, qui
+            l’explique alors au créateur. Élargissez-les sur mesures, pas sur impression.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Étapes" hint="Un aller-retour avec le modèle. 2 à 24.">
+              <Input
+                type="number"
+                min={2}
+                max={24}
+                value={valeurs.maxSteps}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, maxSteps: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Jetons" hint="Entrée et sortie cumulées sur toute la demande.">
+              <Input
+                type="number"
+                min={5000}
+                max={400000}
+                value={valeurs.maxTokens}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, maxTokens: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Crédits" hint="Ce qu’une seule demande peut coûter au créateur.">
+              <Input
+                type="number"
+                min={5}
+                max={400}
+                value={valeurs.maxCredits}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, maxCredits: event.target.value }))
+                }
+              />
+            </Field>
+            <Field label="Durée (secondes)" hint="30 à 600.">
+              <Input
+                type="number"
+                min={30}
+                max={600}
+                value={valeurs.maxDurationSeconds}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, maxDurationSeconds: event.target.value }))
+                }
+              />
+            </Field>
+          </div>
+          {error !== null ? <Notice tone="critical">{error}</Notice> : null}
+          {status === 'saved' ? (
+            <Notice tone="positive">Enregistré. Les demandes suivantes suivent ces bornes.</Notice>
+          ) : null}
+          <div>
+            <Button type="submit" disabled={status === 'busy'}>
+              {status === 'busy' ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
+  )
+}

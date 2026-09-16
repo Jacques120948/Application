@@ -190,7 +190,7 @@ journal.
 
 ---
 
-### PHASE 2 — L'agent App Builder
+### PHASE 2 — L'agent App Builder · **livrée, éteinte par défaut**
 
 **Ce qui existe.** `requestEdit` (un appel, un patch), `applyPatch` (chemins sûrs,
 revalidation complète), `runChecks`, `ProjectVersion`.
@@ -214,8 +214,33 @@ facture Anthropic incontrôlée que vous refusez.
 
 **Comment ne rien casser.** L'agent est une **deuxième** voie, pas un remplacement :
 `editWithAssistant` reste en place et reste le chemin par défaut jusqu'à ce que l'agent
-fasse mieux, mesuré sur des cas réels. Un interrupteur d'exploitation (`FLAGS`) permet de
-l'éteindre pour tout le monde sans déploiement.
+fasse mieux, mesuré sur des cas réels. L'interrupteur « Agent de construction » décide
+lequel répond, sur la même adresse, donc le fermer suffit à revenir en arrière.
+
+**Ce qui a réellement été livré.**
+
+- `agent/limits.ts` — quatre bornes indépendantes (étapes, jetons, crédits, durée),
+  vérifiées **avant** chaque appel, réglables depuis l'administration. Valeurs de départ :
+  6 étapes, 40 000 jetons, 40 crédits, 4 minutes.
+- `agent/tools.ts` — quatre outils, et rien d'autre : lire une page, lire un modèle de
+  données, lire le rapport des contrôles, proposer des modifications. Aucun accès à la
+  base, aucun appel réseau, aucune écriture directe. L'agent propose ; le serveur valide et
+  applique sur une copie de travail, puis lui rend « appliqué » ou le motif exact du refus.
+- `agent/prompt.ts` — la consigne de modification, augmentée du travail en étapes :
+  regarder avant de décider, lire le motif d'un refus plutôt que réessayer à l'identique,
+  et garder le droit de dire non.
+- `agent/loop.ts` — la boucle, avec réservation des crédits au plafond avant le premier
+  appel, débit du réel à la fin, restitution du reste, et une ligne d'usage par étape.
+- `editWithAgent` dans le service des projets, la route qui choisit d'après l'interrupteur,
+  et l'affichage dans la conversation de ce que l'agent a lu, en combien d'étapes et pour
+  combien de crédits.
+
+**Ce qui n'a pas pu être vérifié ici.** L'installation de développement n'a pas de clé
+Anthropic : la boucle a été éprouvée contre un modèle scripté, ce qui vérifie la mécanique
+— les résultats d'outils reviennent au modèle, un refus est relu, les bornes arrêtent une
+boucle qui tourne en rond, les crédits sont rendus — mais pas la qualité des décisions de
+l'agent. Celle-là se mesure en ligne, sur de vraies demandes, et c'est précisément pourquoi
+l'interrupteur existe et pourquoi il est fermé.
 
 ---
 
@@ -375,7 +400,8 @@ construit pas une boucle d'agent puis on lui met des freins ; on pose les freins
 1. **Phase 1** — tarifs administrables, `creditsSpent` écrit, réservation. Sans risque.
 2. ~~**Phase 3 (contexte seul)**~~ — **livrée.** 11 à 23 % sur les applications fournies,
    rien sur les petites, aucun changement visible pour le créateur.
-3. **Phase 2** — l'agent, derrière un interrupteur, à côté de l'existant.
+3. ~~**Phase 2**~~ — **livrée**, derrière un interrupteur, à côté de l'existant. Reste à
+   l'ouvrir en ligne et à comparer les deux chemins sur les mêmes demandes.
 4. **Phase 3 (mode plan)** et **phase 4** — conversation, plan, correction.
 5. **Phase 5**, **phase 7** — historique enrichi, tableaux de bord.
 6. **Phase 6** — packs de crédits, quand vous aurez fixé les prix.
