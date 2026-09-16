@@ -432,6 +432,44 @@ offre ne comprend pas d'images ». Une image créée sans savoir qu'elle coûte 
 une mauvaise surprise, et une mauvaise surprise sur de l'argent coûte plus cher que la
 fonction ne rapporte.
 
+#### Quand le créateur est bloqué
+
+Un créateur qui ne sait pas coder appelle « bug » tout ce qui ne se passe pas comme prévu :
+une page mal réglée, un crédit épuisé, une panne. Personne ne fera le tri à sa place, donc
+l'agent le fait.
+
+Il dispose pour cela de deux lectures. **`lire_controles`** lui rend le rapport de
+l'application — page d'accueil absente, texte resté à compléter, contraste illisible,
+formulaire qui vise des données qui n'existent plus. C'est le cas le plus fréquent, et de
+loin, et il sait le corriger seul. **`lire_incidents`** lui rend ce qui a récemment échoué
+pour ce créateur-là : une construction interrompue, une image refusée, une modification qui
+n'a pas abouti. C'est ce qui manquait le plus : le créateur signale « j'ai essayé et ça n'a
+pas marché » sans pouvoir en dire plus, parce qu'il a refermé le message d'erreur.
+
+Trois règles bornent cette seconde lecture, et chacune est une limite qu'on se donne. **Seulement
+les siens** — la requête est bornée à son identifiant ; lire les incidents d'un autre serait
+une fuite, même sans intention. **Seulement ce qui le concerne** — le message brut du
+fournisseur ne sort pas du module, car il peut porter un nom d'hôte ou une limite de compte ;
+seul le code en sort, traduit en une phrase que le créateur comprend. **Seulement le
+récent** — quarante-huit heures : un échec d'il y a trois semaines n'explique pas ce qui
+vient d'arriver, et l'évoquer ferait douter d'une application qui marche.
+
+Le chargement a lieu **avant la boucle**, en une requête, et l'outil ne fait que lire en
+mémoire. Un outil qui irait chercher en base ferait attendre le modèle au milieu d'une étape
+déjà payée, et ouvrirait la porte à des outils qui écrivent.
+
+La consigne lui demande enfin de nommer lequel des trois cas il a devant lui : ce qui est
+dans l'application (il corrige), ce qui tient au compte ou à l'offre (il ne peut pas
+corriger, mais il nomme précisément et dit quel écran ouvrir), et ce qui est une panne
+d'Evoliia (il le dit franchement, n'invente aucune cause, et invite à signaler). « Je ne sais
+pas » à la place de « il ne vous restait plus de crédits » est la réponse qui fait partir un
+créateur.
+
+**Ce qui manque encore**, et qui n'est pas de l'agent : rien ne remonte jusqu'à
+l'exploitant. Un créateur bloqué par une panne ne dispose d'aucun chemin vers lui, et les
+demandes que l'assistant refuse — la meilleure feuille de route qui soit, écrite par les
+clients — sont jetées à mesure.
+
 ---
 
 ### PHASE 4 — Preview et correction automatique

@@ -15,6 +15,7 @@ import type { AppSpec } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
 import { canContinue, loadAgentLimits, newBudget, type AgentLimits } from './limits'
 import { AGENT_SYSTEM } from './prompt'
+import { recentIncidents } from './incidents'
 import { AGENT_TOOLS, newWorkspace, outline, runTool, type Workspace } from './tools'
 
 /**
@@ -151,7 +152,14 @@ export async function runAgent(params: {
 
   const limits = await loadAgentLimits()
   const budget = newBudget()
-  const workspace: Workspace = newWorkspace(params.spec)
+  /*
+   * Les incidents sont chargés avant la boucle, jamais pendant.
+   *
+   * Une seule requête, et l'outil qui les rend reste une lecture en mémoire : un outil qui
+   * irait chercher en base ferait attendre le modèle au milieu d'une étape déjà payée, et
+   * ouvrirait la porte à des outils qui écrivent.
+   */
+  const workspace: Workspace = newWorkspace(params.spec, await recentIncidents(params.userId))
 
   const reservation = await reserveCredits({
     userId: params.userId,

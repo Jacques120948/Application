@@ -72,12 +72,20 @@ describe('plan de l’application', () => {
 
 describe('outils', () => {
   it('ne déclare que des outils de lecture et une proposition', () => {
+    // La liste est écrite en toutes lettres pour qu'un outil de plus oblige quelqu'un à
+    // relire cette ligne : un agent est défini par ses outils bien plus que par ses
+    // consignes.
     expect(AGENT_TOOLS.map((tool) => tool.name).sort()).toEqual([
       'lire_controles',
+      'lire_incidents',
       'lire_modele_de_donnees',
       'lire_page',
       'proposer_modifications',
     ])
+    // Et la propriété, qui survit à l'ajout suivant : une seule porte écrit, les autres
+    // lisent.
+    const ecrivains = AGENT_TOOLS.filter((tool) => !tool.name.startsWith('lire_'))
+    expect(ecrivains.map((tool) => tool.name)).toEqual(['proposer_modifications'])
   })
 
   it('rend une page et retient qu’elle a été lue', () => {

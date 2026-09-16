@@ -3,6 +3,7 @@ import { runChecks } from '@/server/spec/checks'
 import { applyPatch, specPatchSchema, type PatchOperation } from '@/server/spec/patch'
 import type { AppSpec } from '@/server/spec/schema'
 import { truncationLeak } from './context'
+import { describeIncidents, type Incident } from './incidents'
 
 /**
  * Ce que l'agent a le droit de faire.
@@ -32,6 +33,7 @@ export type ToolName =
   | 'lire_page'
   | 'lire_modele_de_donnees'
   | 'lire_controles'
+  | 'lire_incidents'
   | 'proposer_modifications'
 
 /** Déclaration transmise au modèle. Le format est celui de l'API Claude. */
@@ -72,6 +74,12 @@ export const AGENT_TOOLS: ToolSpec[] = [
     name: 'lire_controles',
     description:
       "Le rapport des contrôles de l'application dans son état actuel : contraste, textes à compléter, images manquantes. À utiliser pour diagnostiquer un problème signalé par le créateur.",
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'lire_incidents',
+    description:
+      "Ce qui a récemment échoué pour ce créateur : construction, publication, image, modification. À utiliser quand il dit qu'une action « n'a pas marché » sans pouvoir expliquer pourquoi. Ne raconte jamais de détail technique : dis ce qui s'est passé et ce qu'il peut faire.",
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -167,10 +175,17 @@ export type Workspace = {
   summaries: string[]
   /** Les pages que l'agent a ouvertes. Utile pour expliquer ce qu'il a regardé. */
   read: string[]
+  /**
+   * Ce qui a récemment échoué pour ce créateur, chargé avant la boucle.
+   *
+   * Lu une fois plutôt qu'à la demande, pour que l'exécution d'un outil reste ce qu'elle
+   * est : une fonction pure sur l'espace de travail, sans base de données ni attente.
+   */
+  incidents: readonly Incident[]
 }
 
-export function newWorkspace(spec: AppSpec): Workspace {
-  return { spec, applied: [], summaries: [], read: [] }
+export function newWorkspace(spec: AppSpec, incidents: readonly Incident[] = []): Workspace {
+  return { spec, applied: [], summaries: [], read: [], incidents }
 }
 
 /** Ce qu'un outil renvoie au modèle : du texte, jamais un objet à interpréter. */
@@ -253,6 +268,9 @@ export function runTool(name: string, input: unknown, workspace: Workspace): Too
           : [`Score : ${report.score}/100.`, ...lignes].join('\n'),
       )
     }
+
+    case 'lire_incidents':
+      return ok(describeIncidents(workspace.incidents))
 
     case 'proposer_modifications': {
       let operations: PatchOperation[]
