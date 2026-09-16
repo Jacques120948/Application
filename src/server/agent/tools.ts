@@ -34,6 +34,7 @@ export type ToolName =
   | 'lire_modele_de_donnees'
   | 'lire_controles'
   | 'lire_incidents'
+  | 'lire_images'
   | 'proposer_modifications'
 
 /** Déclaration transmise au modèle. Le format est celui de l'API Claude. */
@@ -74,6 +75,12 @@ export const AGENT_TOOLS: ToolSpec[] = [
     name: 'lire_controles',
     description:
       "Le rapport des contrôles de l'application dans son état actuel : contraste, textes à compléter, images manquantes. À utiliser pour diagnostiquer un problème signalé par le créateur.",
+    input_schema: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'lire_images',
+    description:
+      "Les images de la bibliothèque du projet, avec leur identifiant. Sans cet outil tu ne peux nommer aucune image, donc n'en poser aucune : appelle-le dès qu'il est question d'une photo à placer. Pour poser une image, écris son identifiant dans le champ « imageId » de la section voulue.",
     input_schema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {
@@ -182,10 +189,24 @@ export type Workspace = {
    * est : une fonction pure sur l'espace de travail, sans base de données ni attente.
    */
   incidents: readonly Incident[]
+  /**
+   * Les images du projet, pour la même raison.
+   *
+   * Sans elles, l'agent ne peut nommer aucune image — donc en poser aucune. Il répondait
+   * jusqu'ici à côté quand on lui demandait de placer une photo, non par mauvaise volonté
+   * mais par impossibilité : il ne savait pas qu'elles existaient.
+   */
+  images: readonly LibraryImage[]
 }
 
-export function newWorkspace(spec: AppSpec, incidents: readonly Incident[] = []): Workspace {
-  return { spec, applied: [], summaries: [], read: [], incidents }
+export type LibraryImage = { id: string; filename: string; width: number; height: number }
+
+export function newWorkspace(
+  spec: AppSpec,
+  incidents: readonly Incident[] = [],
+  images: readonly LibraryImage[] = [],
+): Workspace {
+  return { spec, applied: [], summaries: [], read: [], incidents, images }
 }
 
 /** Ce qu'un outil renvoie au modèle : du texte, jamais un objet à interpréter. */
@@ -271,6 +292,22 @@ export function runTool(name: string, input: unknown, workspace: Workspace): Too
 
     case 'lire_incidents':
       return ok(describeIncidents(workspace.incidents))
+
+    case 'lire_images': {
+      if (workspace.images.length === 0) {
+        return ok(
+          "La bibliothèque de ce projet est vide. Dis-le au créateur : il ajoute ses images depuis l'onglet « Images », ou en fait créer une par l'IA depuis le même écran.",
+        )
+      }
+      return ok(
+        [
+          'Images disponibles, à poser dans un champ « imageId » :',
+          ...workspace.images.map(
+            (image) => `- ${image.id} — « ${image.filename} » (${image.width}x${image.height})`,
+          ),
+        ].join('\n'),
+      )
+    }
 
     case 'proposer_modifications': {
       let operations: PatchOperation[]

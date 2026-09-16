@@ -457,3 +457,28 @@ export async function resolveAttachments(
   // compte quand il écrit « la première en haut, la seconde en bas ».
   return uniques.flatMap((id) => rows.filter((row) => row.id === id))
 }
+
+/**
+ * Les images d'un projet, réduites à ce qu'il faut pour en désigner une.
+ *
+ * Servie à l'agent avant sa boucle. Ni octets, ni vignettes : il place des identifiants, il
+ * ne regarde pas les images — et rapatrier des mégaoctets pour une liste de noms serait
+ * doublement inutile.
+ *
+ * Les photos reçues des visiteurs en sont exclues : elles appartiennent aux fiches de
+ * l'application, et en poser une dans un bandeau publierait la photo d'un client.
+ */
+export async function libraryForAgent(
+  userId: string,
+  projectId: string,
+  take = 40,
+): Promise<Array<{ id: string; filename: string; width: number; height: number }>> {
+  return withUserScope(userId, (tx) =>
+    tx.mediaAsset.findMany({
+      where: { userId, projectId, origin: { not: VISITOR } },
+      orderBy: { createdAt: 'desc' },
+      take,
+      select: { id: true, filename: true, width: true, height: true },
+    }),
+  ).catch(() => [])
+}

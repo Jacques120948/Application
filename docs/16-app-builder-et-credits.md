@@ -483,6 +483,28 @@ raison.
 Ce défaut n'apparaissait dans aucun test parce qu'aucun test n'était pauvre. Deux le sont
 désormais.
 
+#### Voir les images, et les poser
+
+Un créateur a passé plusieurs minutes à expliquer à l'agent qu'il n'arrivait pas à poser une
+image, sans jamais se faire comprendre. L'agent ne le comprenait pas parce qu'il en était
+**incapable** : aucun outil ne lui montrait la bibliothèque du projet. Ne pouvant nommer
+aucune image, il ne pouvait en poser aucune — et il tournait autour du pot au lieu de le
+dire.
+
+`lire_images` lui rend les images du projet avec leur identifiant, chargées avant la boucle
+comme les incidents. Ni octets ni vignettes : il place des identifiants, il ne regarde pas
+les images. Les photos reçues des visiteurs en sont exclues — en poser une dans un bandeau
+publierait la photo d'un client. Sa consigne est explicite : poser une image déjà déposée est
+son travail, pas celui du créateur ; il ne renvoie vers l'onglet Images que pour en ajouter
+une qui n'existe pas encore.
+
+Le même échange a révélé un second défaut, humain celui-là. La liste « Où vont vos images »
+était plate : six lignes aux vignettes identiques, le nom de la page en petit gris en bout de
+ligne. Le créateur y cherchait le deuxième emplacement d'une page qui en avait deux, et a
+conclu qu'il n'existait pas. Elle est désormais **groupée par page, avec le nombre
+d'emplacements** — « Accueil · 2 emplacements » —, parce que ce qu'on cherche n'est jamais
+« le troisième emplacement » mais « les images de ma page Animaux ».
+
 #### Une seule conversation par projet
 
 Le créateur en difficulté cliquait sur « Besoin d'aide ? », c'est-à-dire sur le coach — qui

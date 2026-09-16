@@ -77,6 +77,7 @@ describe('outils', () => {
     // consignes.
     expect(AGENT_TOOLS.map((tool) => tool.name).sort()).toEqual([
       'lire_controles',
+      'lire_images',
       'lire_incidents',
       'lire_modele_de_donnees',
       'lire_page',
@@ -171,6 +172,25 @@ describe('outils', () => {
 
   it('refuse un outil inconnu au lieu de le tenter', () => {
     expect(runTool('supprimer_la_base', {}, newWorkspace(spec)).isError).toBe(true)
+  })
+
+  it('rend les images avec leurs identifiants, seul moyen d’en poser une', () => {
+    const workspace = newWorkspace(spec, [], [
+      { id: '11111111-2222-3333-4444-555555555555', filename: 'chien.webp', width: 1600, height: 900 },
+    ])
+    const result = runTool('lire_images', {}, workspace)
+    expect(result.isError).toBe(false)
+    expect(result.text).toContain('11111111-2222-3333-4444-555555555555')
+    expect(result.text).toContain('chien.webp')
+    // L'identifiant seul ne suffit pas : encore faut-il savoir où l'écrire.
+    expect(result.text).toContain('imageId')
+  })
+
+  it('dit où en déposer quand la bibliothèque est vide', () => {
+    const result = runTool('lire_images', {}, newWorkspace(spec))
+    expect(result.isError).toBe(false)
+    expect(result.text).toMatch(/vide/i)
+    expect(result.text).toMatch(/Images/)
   })
 
   it('rend le rapport des contrôles', () => {

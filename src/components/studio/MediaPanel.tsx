@@ -208,6 +208,17 @@ export function MediaPanel({
   }
 
   const slots = imageSlots(spec)
+  /*
+   * Les emplacements, rangés par page, dans l'ordre des pages.
+   * Ce que le créateur cherche n'est jamais « le troisième emplacement » : c'est « les
+   * images de ma page Animaux ». La liste doit suivre sa question, pas la structure.
+   */
+  const pages = slots.reduce<Array<{ title: string; slots: Slot[] }>>((groupes, slot) => {
+    const dernier = groupes[groupes.length - 1]
+    if (dernier !== undefined && dernier.title === slot.pageTitle) dernier.slots.push(slot)
+    else groupes.push({ title: slot.pageTitle, slots: [slot] })
+    return groupes
+  }, [])
   const used = library?.usedBytes ?? 0
   const quota = library?.quotaBytes ?? 0
   const visitor = library?.visitorBytes ?? 0
@@ -420,7 +431,21 @@ export function MediaPanel({
               </p>
             </div>
 
-            {slots.map((slot) => (
+            {pages.map((page) => (
+              <div key={page.title} className="grid gap-2">
+                {/*
+                  Regroupées par page, avec leur nombre.
+                  Une liste à plat de six lignes aux vignettes identiques donne à croire
+                  qu'on voit tout : un créateur y a cherché en vain le deuxième emplacement
+                  d'une page qui en avait deux, et a conclu qu'il n'existait pas.
+                */}
+                <p className="m-0 mt-2 text-sm font-semibold">
+                  {page.title}{' '}
+                  <span className="font-normal text-[var(--color-ink-faint)]">
+                    · {page.slots.length} emplacement{page.slots.length > 1 ? 's' : ''}
+                  </span>
+                </p>
+                {page.slots.map((slot) => (
               <div
                 key={slot.path}
                 /*
@@ -455,7 +480,6 @@ export function MediaPanel({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">{slot.label}</span>
                   <Badge tone="neutral">{slot.section}</Badge>
-                  <span className="text-xs text-[var(--color-ink-faint)]">{slot.pageTitle}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {library?.generation.source != null && library !== undefined ? (
@@ -520,6 +544,8 @@ export function MediaPanel({
                     )
                   })}
                 </div>
+              </div>
+                ))}
               </div>
             ))}
           </CardBody>

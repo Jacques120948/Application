@@ -16,6 +16,7 @@ import type { PatchOperation } from '@/server/spec/patch'
 import { canContinue, loadAgentLimits, MINIMUM_RESERVATION, newBudget, type AgentLimits } from './limits'
 import { AGENT_SYSTEM } from './prompt'
 import { recentIncidents } from './incidents'
+import { libraryForAgent } from '@/server/media/service'
 import { AGENT_TOOLS, newWorkspace, outline, runTool, type Workspace } from './tools'
 
 /**
@@ -159,7 +160,11 @@ export async function runAgent(params: {
    * irait chercher en base ferait attendre le modèle au milieu d'une étape déjà payée, et
    * ouvrirait la porte à des outils qui écrivent.
    */
-  const workspace: Workspace = newWorkspace(params.spec, await recentIncidents(params.userId))
+  const [incidents, images] = await Promise.all([
+    recentIncidents(params.userId),
+    libraryForAgent(params.userId, params.projectId),
+  ])
+  const workspace: Workspace = newWorkspace(params.spec, incidents, images)
 
   /*
    * On réserve le plafond, ou ce qui reste s'il est plus bas.
