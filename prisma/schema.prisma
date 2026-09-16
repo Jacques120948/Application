@@ -86,6 +86,8 @@ model User {
   creditReservations   CreditReservation[]
   aiUsage              AiUsage[]
   chatMessages         ChatMessage[]
+  reports              CreatorReport[]
+  unmetRequests        UnmetRequest[]
 
   @@index([createdAt])
 }
@@ -381,6 +383,51 @@ model AiModelPricing {
 }
 
 /// Comptabilité fine des appels IA : jetons, coût réel, latence (exigence 37).
+/// Un créateur signale ce qu'il n'a pas pu résoudre lui-même.
+///
+/// Sans Row Level Security, comme AiUsage et pour la même raison : ces lignes n'existent
+/// que pour être lues par l'exploitant, et aucun écran de créateur ne les relit. Une table
+/// qu'on ne lit jamais par erreur n'a pas besoin qu'on l'empêche de mal la lire ; l'écriture,
+/// elle, tient son identifiant de la session et jamais du navigateur.
+model CreatorReport {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  projectId String?   @db.Uuid
+  /// L'écran d'où il écrit, tel que l'interface le nomme.
+  screen    String
+  message   String
+  /// Les faits rassemblés par le serveur : offre, crédits, incidents récents.
+  context   String
+  /// open | handled
+  status    String    @default("open")
+  handledAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+/// Une demande à laquelle l'assistant n'a rien pu faire.
+///
+/// C'est la feuille de route écrite par les créateurs plutôt que devinée : ce qu'ils
+/// demandent et qu'Evoliia ne sait pas encore construire. Jetée jusqu'ici à mesure.
+model UnmetRequest {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  projectId String   @db.Uuid
+  request   String
+  reply     String
+  /// Vrai quand l'assistant a dit explicitement que la demande sortait de son vocabulaire.
+  /// Faux quand il n'a simplement rien changé : une question, un refus implicite, un échec.
+  explicit  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([explicit, createdAt])
+}
+
 model AiUsage {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @db.Uuid

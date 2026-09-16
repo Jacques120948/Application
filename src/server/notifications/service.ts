@@ -19,6 +19,8 @@ export type NotificationKind =
   | 'support_unanswered'
   /** Un visiteur vient de saisir une fiche dans une application publiée. */
   | 'app_record'
+  /** Un créateur signale un problème qu'il n'a pas pu résoudre. Adressée à l'exploitant. */
+  | 'creator_report'
 
 export type NotificationView = {
   id: string

@@ -113,6 +113,9 @@ export function MediaPanel({
   /** Génération : la description saisie, et l'emplacement qui recevra l'image. */
   const [prompt, setPrompt] = useState('')
   const [targetPath, setTargetPath] = useState<string | null>(null)
+  /** L'image en cours de déplacement, et l'emplacement survolé. Rien d'autre à retenir. */
+  const [dragged, setDragged] = useState<string | null>(null)
+  const [hovered, setHovered] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
   const promptField = useRef<HTMLTextAreaElement>(null)
 
@@ -360,7 +363,19 @@ export function MediaPanel({
               <img
                 src={`/api/app/${projectId}/medias/${media.id}?format=thumb`}
                 alt={media.filename}
-                className="aspect-[4/3] w-full rounded-[var(--radius-control)] border border-[var(--color-line)] object-cover"
+                /*
+                  Saisissable. Une image qu'on prend et qu'on dépose là où on la veut demande
+                  moins d'explications qu'une rangée de vignettes à cliquer : on voit le trou,
+                  on y met la photo. Le clic reste, pour le clavier et pour le tactile.
+                */
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData('text/plain', media.id)
+                  event.dataTransfer.effectAllowed = 'copy'
+                  setDragged(media.id)
+                }}
+                onDragEnd={() => setDragged(null)}
+                className="aspect-[4/3] w-full cursor-grab rounded-[var(--radius-control)] border border-[var(--color-line)] object-cover active:cursor-grabbing"
               />
               <figcaption className="mt-1.5 grid gap-1">
                 <span className="truncate text-xs text-[var(--color-ink-soft)]">
@@ -396,7 +411,8 @@ export function MediaPanel({
               */}
               <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
                 <strong className="font-medium text-[var(--color-ink)]">
-                  Cliquez sur une vignette de la ligne pour la poser à cet emplacement.
+                  Glissez une image depuis « Vos images » sur la ligne voulue, ou cliquez sur une
+                  vignette de cette ligne.
                 </strong>{' '}
                 Sans image, un motif aux couleurs de votre application garde la place ; avec,
                 c&apos;est votre photo qui fait la page. Sur un bandeau, elle passe sous un voile
@@ -405,7 +421,37 @@ export function MediaPanel({
             </div>
 
             {slots.map((slot) => (
-              <div key={slot.path} className="grid gap-2">
+              <div
+                key={slot.path}
+                /*
+                  La ligne entière est la cible, pas une petite zone : viser au pixel près est
+                  le meilleur moyen de rater son geste, et de conclure que ça ne marche pas.
+                */
+                onDragOver={(event) => {
+                  if (dragged === null) return
+                  event.preventDefault()
+                  event.dataTransfer.dropEffect = 'copy'
+                  setHovered(slot.path)
+                }}
+                onDragLeave={() => setHovered((current) => (current === slot.path ? null : current))}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  const mediaId = event.dataTransfer.getData('text/plain')
+                  setHovered(null)
+                  setDragged(null)
+                  if (mediaId === '' || busy) return
+                  void send(`Image posée : ${slot.label}`, [
+                    { op: 'set', path: slot.path, value: mediaId },
+                  ])
+                }}
+                className={`grid gap-2 rounded-[var(--radius-control)] p-2 transition-colors ${
+                  hovered === slot.path
+                    ? 'bg-[var(--color-brand-soft)] outline-2 outline-dashed outline-[var(--color-brand)]'
+                    : dragged !== null
+                      ? 'outline-1 outline-dashed outline-[var(--color-line)]'
+                      : ''
+                }`}
+              >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">{slot.label}</span>
                   <Badge tone="neutral">{slot.section}</Badge>
