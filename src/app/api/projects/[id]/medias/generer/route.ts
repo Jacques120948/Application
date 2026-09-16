@@ -3,7 +3,7 @@ import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { getProject } from '@/server/projects/service'
 import { addMedia } from '@/server/media/service'
-import { requestImage } from '@/server/media/generate'
+import { CREATOR_ORIGIN, EVOLIIA_ORIGIN, requestImage } from '@/server/media/generate'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 export const maxDuration = 120
@@ -11,10 +11,14 @@ export const maxDuration = 120
 const input = z.object({ prompt: z.string().trim().min(5).max(600) })
 
 /**
- * Une image générée avec la clé du créateur, rangée dans sa bibliothèque.
+ * Une image créée par l'IA, rangée dans la bibliothèque du créateur.
  *
  * Deux temps volontairement séparés : l'appel au fournisseur, hors de toute transaction,
  * puis l'enregistrement, qui applique les mêmes contrôles qu'un téléversement.
+ *
+ * L'origine enregistrée dit qui a payé, et c'est elle qui décomptera le quota mensuel : une
+ * image payée par le créateur sur son propre compte ne doit rien consommer de ce qu'Evoliia
+ * lui accorde.
  */
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
@@ -29,10 +33,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const media = await addMedia(user.id, id, {
       name: `ia-${prompt.slice(0, 40).replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase()}.webp`,
       bytes: image.bytes,
-      origin: 'ai',
+      origin: image.source === 'evoliia' ? EVOLIIA_ORIGIN : CREATOR_ORIGIN,
       prompt: image.prompt,
     })
-    return ok({ media, provider: image.provider })
+    return ok({
+      media,
+      provider: image.provider,
+      source: image.source,
+      creditsSpent: image.creditsSpent,
+    })
   } catch (error) {
     return fail(error)
   }

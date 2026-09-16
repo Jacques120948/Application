@@ -320,7 +320,9 @@ describe('document joint', () => {
     const premier = observed.appels[0]!
     const contenu = premier.messages[premier.messages.length - 1]!.content
     expect(Array.isArray(contenu)).toBe(true)
-    const blocs = contenu as Anthropic.Messages.ContentBlockParam[]
+    const blocs = contenu as Array<
+      Anthropic.Messages.TextBlockParam | Anthropic.Messages.DocumentBlockParam
+    >
 
     // Le document d'abord, la demande ensuite : le contexte avant la question.
     const document = blocs[0]!
@@ -346,8 +348,9 @@ describe('document joint', () => {
     })
 
     const premier = observed.appels[0]!
-    const blocs = premier.messages[premier.messages.length - 1]!
-      .content as Anthropic.Messages.ContentBlockParam[]
+    const blocs = premier.messages[premier.messages.length - 1]!.content as Array<
+      Anthropic.Messages.TextBlockParam | Anthropic.Messages.DocumentBlockParam
+    >
     expect(blocs).toHaveLength(1)
     expect(blocs[0]?.cache_control).toBeUndefined()
   })

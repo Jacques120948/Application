@@ -104,6 +104,16 @@ export const env = {
     return read('APP_URL') ?? 'http://localhost:3000'
   },
   /**
+   * Clé Google AI d'Evoliia, pour créer des images au nom des créateurs.
+   *
+   * Elle ne quitte jamais le serveur : aucune route ne la renvoie, aucun composant ne la
+   * lit, elle n'entre dans aucun prompt et dans aucun journal. Absente, la fonction est
+   * simplement éteinte — le créateur garde la voie de sa propre clé, et rien n'échoue.
+   */
+  get geminiApiKey(): string | undefined {
+    return read('GEMINI_API_KEY')
+  },
+  /**
    * Domaine des applications publiées, par exemple `evoliia.app`. Chaque application y
    * reçoit un sous-domaine tiré de son nom court. Sans cette variable, les applications
    * restent servies sous `/a/<nom-court>` et rien ne change : la fonction est éteinte,

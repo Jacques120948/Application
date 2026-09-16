@@ -56,9 +56,21 @@ export const DEFAULT_MICROS_PER_CREDIT = 5_000
 /** Marge appliquée au coût réel. À 1, le créateur paie exactement ce qu'Evoliia dépense. */
 export const DEFAULT_COST_MULTIPLIER = 1
 
+/**
+ * Ce qu'une image coûte à Evoliia, en micro-dollars.
+ *
+ * Elle ne se compte pas en jetons : le fournisseur facture à l'image, à prix ferme. La
+ * valeur ci-dessous est celle de Nano Banana (`gemini-2.5-flash-image`) constatée en
+ * septembre 2026 — environ quatre centimes, soit huit crédits pour le créateur. Comme tous
+ * les tarifs, elle se règle depuis l'administration : le jour où Google change son prix est
+ * précisément celui où il ne faut pas avoir à déployer.
+ */
+export const DEFAULT_IMAGE_MICROS = 39_000
+
 export const PRICING_SETTINGS = {
   multiplier: 'ai.cost.multiplier',
   microsPerCredit: 'ai.credit.micros',
+  imageMicros: 'ai.image.micros',
 } as const
 
 export type PricingTable = {
@@ -66,6 +78,8 @@ export type PricingTable = {
   /** Marge Evoliia. Multiplie le coût réel avant conversion en crédits. */
   multiplier: number
   microsPerCredit: number
+  /** Coût d'une image, en micro-dollars. Facturé à l'image, jamais aux jetons. */
+  imageMicros: number
 }
 
 /**
@@ -94,12 +108,17 @@ export async function loadPricing(): Promise<PricingTable> {
     prices: { ...DEFAULT_MODEL_PRICING },
     multiplier: DEFAULT_COST_MULTIPLIER,
     microsPerCredit: DEFAULT_MICROS_PER_CREDIT,
+    imageMicros: DEFAULT_IMAGE_MICROS,
   }
 
   try {
     const [rows, settings] = await Promise.all([
       prisma.aiModelPricing.findMany({ where: { isActive: true } }),
-      readSettings([PRICING_SETTINGS.multiplier, PRICING_SETTINGS.microsPerCredit]),
+      readSettings([
+        PRICING_SETTINGS.multiplier,
+        PRICING_SETTINGS.microsPerCredit,
+        PRICING_SETTINGS.imageMicros,
+      ]),
     ])
     const prices = { ...DEFAULT_MODEL_PRICING }
     for (const row of rows) {
@@ -124,6 +143,9 @@ export async function loadPricing(): Promise<PricingTable> {
             DEFAULT_MICROS_PER_CREDIT,
           ),
         ),
+      ),
+      imageMicros: Math.round(
+        positiveNumber(settings[PRICING_SETTINGS.imageMicros] ?? null, DEFAULT_IMAGE_MICROS),
       ),
     }
   } catch {

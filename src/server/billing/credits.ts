@@ -49,6 +49,8 @@ export type CreditedOperation =
   | 'liaFaq'
   /** Analyse par lot des conversations : ce que les clients demandent (V2). */
   | 'liaInsights'
+  /** Une image créée par l'IA sur le compte d'Evoliia, refacturée à son créateur. */
+  | 'image'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -97,6 +99,12 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   liaAnswer: 1,
   liaFaq: 3,
   liaInsights: 3,
+  /*
+   * Une image a un prix ferme chez le fournisseur : il n'y a pas de « petit appel » à
+   * protéger d'un plancher trop haut, ni de gros à laisser filer. Le plancher vaut donc
+   * un, et c'est le coût réel — lu dans le tarif réglable — qui décide.
+   */
+  image: 1,
 }
 
 /**

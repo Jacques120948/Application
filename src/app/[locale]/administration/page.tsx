@@ -179,6 +179,7 @@ export default async function AdminPage({
           models={pricing.models}
           multiplier={pricing.multiplier}
           microsPerCredit={pricing.microsPerCredit}
+          imageMicros={pricing.imageMicros}
         />
 
         <h2 className="mt-12 mb-1 text-lg font-semibold">

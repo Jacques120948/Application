@@ -24,6 +24,7 @@ function plan(overrides: Partial<Plan>): Plan {
     liaAnswersPerMonth: 0,
     liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
+  imagesPerMonth: 0,
     monthlyCredits: 30,
     allowExport: false,
     allowCustomDomain: false,

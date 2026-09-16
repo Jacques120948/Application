@@ -378,6 +378,60 @@ la demande se poursuit et l'incident est tracé. Refuser punirait le créateur p
 qui n'est pas la sienne, alors que la réservation de crédits et les bornes de l'agent le
 protègent déjà d'un document démesuré, moins finement mais sûrement.
 
+#### Les images créées par l'IA, aux frais d'Evoliia
+
+Jusqu'ici, générer une image exigeait que le créateur connecte sa propre clé OpenAI ou
+Google. C'était le bon choix tant qu'Evoliia n'avait pas de système de crédits : personne ne
+pouvait refacturer une dépense qui n'était mesurée nulle part. Ce n'est plus le cas.
+
+Le modèle est **Nano Banana** (`gemini-2.5-flash-image`) — celui que le connecteur appelait
+déjà. Ce qui change n'est pas le modèle, c'est quelle clé paie.
+
+**La clé du créateur passe toujours en premier.** Elle ne coûte rien à Evoliia, ne consomme
+aucun crédit, et celui qui a pris la peine de la connecter veut s'en servir. C'est la voie
+de qui veut en faire beaucoup, et elle reste la première servie.
+
+**La clé d'Evoliia est le filet pour tous les autres** — c'est-à-dire pour l'immense
+majorité, qui n'ouvrira jamais un compte Google AI. Là, c'est de l'argent qui sort
+réellement du compte de la plateforme.
+
+**Deux bornes indépendantes, et elles ne protègent pas la même chose.**
+
+Le *quota mensuel de l'offre* protège Evoliia. Zéro par défaut, comme les alertes : la
+fonction s'ouvre offre par offre depuis le back-office, jamais toute seule. Le maximum
+réglable est volontairement bas — à quatre centimes l'image, mille par mois et par créateur
+seraient quarante dollars.
+
+Les *crédits* protègent le créateur de sa propre gourmandise. Une image coûte environ huit
+crédits quand une application entière en coûte vingt et un : sans cette borne, douze images
+videraient le mois d'une offre d'entrée, et le créateur découvrirait ensuite qu'il ne peut
+plus modifier son application. C'est nous qu'il appellerait.
+
+Un plafond journalier double le tout, des deux côtés. Il ne borne pas une dépense mais un
+emballement — celui d'une boucle qui partirait toute seule.
+
+**L'ordre des gestes** est celui qui protège des deux erreurs opposées : réserver les crédits
+*avant* d'appeler (vérifier le solde après coup laisserait passer un appel qu'on ne peut pas
+facturer, et deux demandes simultanées passeraient toutes les deux), et ne débiter qu'*après*
+un succès (un fournisseur qui refuse ne facture pas Evoliia, donc le créateur ne doit rien
+payer). La réservation est rendue dans tous les cas.
+
+**Les deux origines sont distinguées en base** — `ai` et `ai-evoliia` — pour une seule
+raison : le quota mensuel ne doit compter que ce qu'Evoliia a réellement payé. Les confondre
+ferait consommer, au créateur qui a sa propre clé, un quota dont il ne prend rien.
+
+**Le prix se règle depuis l'administration**, en micro-dollars par image. C'est le seul
+tarif qui ne vit pas dans la table des modèles : le fournisseur facture à l'image, pas aux
+jetons. Le jour où Google change son prix est précisément celui où il ne faut pas avoir à
+déployer.
+
+**Et le créateur sait ce qu'il paie avant de cliquer.** L'écran dit laquelle des trois
+situations est la sienne : « facturée sur votre compte Google, vos crédits ne sont pas
+touchés », « comprise dans votre offre : 5 images restantes, 8 crédits chacune », ou « votre
+offre ne comprend pas d'images ». Une image créée sans savoir qu'elle coûte huit crédits est
+une mauvaise surprise, et une mauvaise surprise sur de l'argent coûte plus cher que la
+fonction ne rapporte.
+
 ---
 
 ### PHASE 4 — Preview et correction automatique

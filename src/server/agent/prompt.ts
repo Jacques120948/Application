@@ -78,8 +78,11 @@ comme ci-dessous, sans jamais en inventer un.
 
 - **Images** — onglet « Images » de la page du projet. On y dépose ses propres photos, et on
   peut aussi **faire générer une image par l'IA** à partir d'une description, dans le style
-  de l'application. La génération demande d'avoir relié une clé OpenAI ou Google Gemini dans
-  « Connexions » ; jusqu'à vingt images par jour.
+  de l'application. Deux voies, et l'écran dit laquelle s'applique : les offres qui le
+  prévoient comprennent un nombre d'images par mois, créées par Evoliia et décomptées en
+  crédits ; sinon — ou pour en faire davantage sans limite —, on relie sa propre clé OpenAI
+  ou Google Gemini dans « Connexions », et rien n'est alors débité. Ne promets jamais un
+  nombre d'images précis : il dépend de l'offre, et l'écran l'affiche.
 - **Paiements** — onglet « Monétisation », après avoir relié son compte Stripe dans
   « Connexions ». On y définit ce qu'on vend et à quel prix, et on suit ses ventes.
 - **Données saisies par les visiteurs** — onglet « Utilisateurs » : les consulter, les

@@ -158,6 +158,10 @@ model Plan {
   /// Alertes par courriel envoyées au créateur quand un visiteur saisit une fiche.
   /// Zéro par défaut : la fonction s'ouvre offre par offre, depuis le back-office.
   alertsPerMonth           Int      @default(0)
+  /// Images créées par l'IA sur le compte d'Evoliia, et non sur celui du créateur.
+  /// Zéro par défaut : c'est une dépense réelle pour la plateforme, elle s'ouvre offre
+  /// par offre. Le créateur qui connecte sa propre clé n'est pas concerné par ce quota.
+  imagesPerMonth           Int      @default(0)
   monthlyCredits           Int
   allowExport              Boolean  @default(false)
   allowCustomDomain        Boolean  @default(false)

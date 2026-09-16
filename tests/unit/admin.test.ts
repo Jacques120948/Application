@@ -18,6 +18,7 @@ describe('validation du back-office', () => {
     radarRunsPerMonth: 4,
     liaAnswersPerMonth: 500,
     alertsPerMonth: 0,
+    imagesPerMonth: 0,
     liaConversationsPerMonth: 100,
     allowBuild: true,
     isRecommended: true,

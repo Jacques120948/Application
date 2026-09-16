@@ -41,7 +41,16 @@ export const GENERATION_STEPS = {
   page: { model: MODELS.fast, maxTokens: 6_000, effort: 'medium' },
 } as const satisfies Record<string, OperationProfile>
 
+/**
+ * Ce qu'une opération sollicite.
+ *
+ * `image` y figure pour que la table reste complète, mais son profil n'est jamais lu : une
+ * image ne passe pas par un modèle de texte, elle est demandée à un fournisseur d'images et
+ * facturée à l'unité. La laisser hors de la table obligerait à l'assouplir, et on perdrait
+ * la garantie qu'aucune opération facturée n'est oubliée.
+ */
 export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
+  image: { model: MODELS.economical, maxTokens: 0, effort: 'low' },
   ideas: { model: MODELS.reasoning, maxTokens: 8_000, effort: 'medium' },
   // La validation engage l'utilisateur à construire ou à renoncer : elle mérite le
   // modèle de raisonnement, même si elle est appelée souvent.

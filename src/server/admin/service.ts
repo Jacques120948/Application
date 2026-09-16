@@ -64,6 +64,14 @@ export const planUpdateInput = z.object({
   liaAnswersPerMonth: z.number().int().min(0).max(100_000),
   /** Alertes par courriel au créateur. Zéro ferme la fonction pour cette offre. */
   alertsPerMonth: z.number().int().min(0).max(100_000),
+  /**
+   * Images créées sur le compte d'Evoliia. Zéro ferme la fonction pour cette offre.
+   *
+   * Cette borne-là n'est pas comme les autres : elle ne plafonne pas du calcul déjà payé,
+   * elle plafonne de l'argent qui sort. Le maximum est donc volontairement bas — à quatre
+   * centimes l'image, mille par mois et par créateur seraient quarante dollars.
+   */
+  imagesPerMonth: z.number().int().min(0).max(1_000),
   liaConversationsPerMonth: z.number().int().min(0).max(100_000),
   allowBuild: z.boolean(),
   isRecommended: z.boolean(),
@@ -344,6 +352,7 @@ export async function listModelPricing(): Promise<{
   models: ModelPricingRow[]
   multiplier: number
   microsPerCredit: number
+  imageMicros: number
 }> {
   await requireAdmin()
   const [rows, table] = await Promise.all([prisma.aiModelPricing.findMany(), loadPricing()])
@@ -364,7 +373,12 @@ export async function listModelPricing(): Promise<{
     }
   })
 
-  return { models, multiplier: table.multiplier, microsPerCredit: table.microsPerCredit }
+  return {
+    models,
+    multiplier: table.multiplier,
+    microsPerCredit: table.microsPerCredit,
+    imageMicros: table.imageMicros,
+  }
 }
 
 export const modelPricingInput = z.object({
@@ -405,12 +419,20 @@ export const creditSettingsInput = z.object({
   multiplier: z.number().min(0.1).max(20),
   /** Micro-dollars de coût API pour un crédit. */
   microsPerCredit: z.number().int().min(1).max(1_000_000),
+  /**
+   * Micro-dollars que coûte une image à Evoliia.
+   *
+   * Elle ne se compte pas en jetons : le fournisseur facture à l'image. C'est donc le seul
+   * tarif qui vit ici plutôt que dans la table des modèles.
+   */
+  imageMicros: z.number().int().min(100).max(5_000_000),
 })
 
 export async function updateCreditSettings(input: z.infer<typeof creditSettingsInput>) {
   const admin = await requireAdmin()
   await writeSetting(PRICING_SETTINGS.multiplier, String(input.multiplier))
   await writeSetting(PRICING_SETTINGS.microsPerCredit, String(input.microsPerCredit))
+  await writeSetting(PRICING_SETTINGS.imageMicros, String(input.imageMicros))
   forgetPricingCache()
   logger.info('conversion des crédits modifiée', {
     adminId: admin.id,

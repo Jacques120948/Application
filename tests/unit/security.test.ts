@@ -9,6 +9,7 @@ import {
   costMicros,
   creditsFor,
   DEFAULT_COST_MULTIPLIER,
+  DEFAULT_IMAGE_MICROS,
   DEFAULT_MICROS_PER_CREDIT,
   DEFAULT_MODEL_PRICING,
   type PricingTable,
@@ -68,6 +69,7 @@ describe('coût des opérations IA', () => {
     prices: DEFAULT_MODEL_PRICING,
     multiplier: DEFAULT_COST_MULTIPLIER,
     microsPerCredit: DEFAULT_MICROS_PER_CREDIT,
+    imageMicros: DEFAULT_IMAGE_MICROS,
   }
 
   it('facture les jetons lus en cache moins cher que les jetons neufs', () => {

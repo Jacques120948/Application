@@ -47,6 +47,15 @@ export type PlanDefaults = {
    * décide, offre par offre, depuis le back-office.
    */
   alertsPerMonth: number
+  /**
+   * Images créées par l'IA sur le compte d'Evoliia.
+   *
+   * Zéro par défaut, et c'est délibéré : chaque image est une dépense réelle pour la
+   * plateforme — environ quatre centimes — là où le reste des quotas ne borne que du calcul
+   * déjà payé. La fonction s'ouvre offre par offre depuis le back-office. Le créateur qui
+   * connecte sa propre clé n'est pas concerné : sa voie ne coûte rien à Evoliia.
+   */
+  imagesPerMonth: number
   monthlyCredits: number
   allowBuild: boolean
   allowExport: boolean
@@ -78,6 +87,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     liaAnswersPerMonth: 0,
     liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
+    imagesPerMonth: 0,
     // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
     // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
     // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
@@ -102,6 +112,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     liaAnswersPerMonth: 100,
     liaConversationsPerMonth: 50,
     alertsPerMonth: 0,
+    imagesPerMonth: 0,
     monthlyCredits: 100,
     allowBuild: true,
     allowExport: false,
@@ -123,6 +134,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     liaAnswersPerMonth: 500,
     liaConversationsPerMonth: 200,
     alertsPerMonth: 0,
+    imagesPerMonth: 0,
     monthlyCredits: 350,
     allowBuild: true,
     allowExport: true,
@@ -144,6 +156,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     liaAnswersPerMonth: 2000,
     liaConversationsPerMonth: 1000,
     alertsPerMonth: 0,
+    imagesPerMonth: 0,
     monthlyCredits: 800,
     allowBuild: true,
     allowExport: true,

@@ -163,10 +163,11 @@ export async function addMedia(
     name: string
     bytes: Uint8Array
     /**
-     * `ai` quand l'image vient d'un fournisseur, avec la description qui l'a produite ;
-     * `visitor` quand elle a été envoyée depuis un formulaire de l'application publiée.
+     * `ai` quand l'image vient d'un fournisseur payé par le créateur, `ai-evoliia` quand
+     * c'est la plateforme qui a payé — la distinction décide du quota décompté ; `visitor`
+     * quand elle a été envoyée depuis un formulaire de l'application publiée.
      */
-    origin?: 'upload' | 'ai' | 'visitor'
+    origin?: 'upload' | 'ai' | 'ai-evoliia' | 'visitor'
     prompt?: string
   },
 ): Promise<MediaView> {

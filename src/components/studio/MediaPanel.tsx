@@ -28,7 +28,17 @@ type Library = {
   usedBytes: number
   quotaBytes: number
   visitorBytes: number
-  generation: { provider: string | null; providerLabel: string | null; dailyLimit: number; dailyLeft: number }
+  generation: {
+    provider: string | null
+    providerLabel: string | null
+    /** `creator` : sa clé, gratuit en crédits. `evoliia` : la nôtre, quota + crédits. */
+    source: 'creator' | 'evoliia' | null
+    dailyLimit: number
+    dailyLeft: number
+    monthlyLimit: number
+    monthlyLeft: number
+    creditsPerImage: number
+  }
 }
 
 function size(bytes: number): string {
@@ -260,24 +270,46 @@ export function MediaPanel({
           <CardBody className="grid gap-3">
             <div>
               <h3 className="m-0 text-sm font-semibold">Créer une image avec l&apos;IA</h3>
-              {library.generation.provider === null ? (
+              {/*
+                Trois situations, et le créateur doit savoir laquelle est la sienne avant de
+                cliquer : qui paie, et combien. Une image créée sans savoir qu'elle coûte huit
+                crédits est une mauvaise surprise, et une mauvaise surprise sur de l'argent
+                coûte plus cher que la fonction ne rapporte.
+              */}
+              {library.generation.source === 'creator' ? (
                 <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
-                  Connectez votre clé OpenAI ou Google Gemini depuis{' '}
+                  Générée avec votre compte {library.generation.providerLabel}, facturée là-bas
+                  quelques centimes l&apos;image — vos crédits Evoliia ne sont pas touchés. Il
+                  vous reste {library.generation.dailyLeft} image(s) sur{' '}
+                  {library.generation.dailyLimit} pour aujourd&apos;hui.
+                </p>
+              ) : null}
+              {library.generation.source === 'evoliia' ? (
+                <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
+                  Comprise dans votre offre : il vous reste{' '}
+                  <strong>{library.generation.monthlyLeft} image(s) sur{' '}
+                  {library.generation.monthlyLimit}</strong> ce mois-ci, et chacune coûte{' '}
+                  {library.generation.creditsPerImage} crédits. Pour en créer davantage sans
+                  limite, connectez votre propre clé depuis{' '}
                   <a href="/fr/connexions" className="text-[var(--color-brand-strong)]">
                     Connexions
                   </a>
-                  . Les images sont alors générées et facturées sur votre compte, jamais sur
-                  vos crédits Evoliia.
+                  .
                 </p>
-              ) : (
+              ) : null}
+              {library.generation.source === null ? (
                 <p className="m-0 mt-1 text-xs text-[var(--color-ink-soft)]">
-                  Générée avec votre compte {library.generation.providerLabel}, facturée là-bas
-                  quelques centimes l&apos;image. Il vous reste {library.generation.dailyLeft} image(s)
-                  sur {library.generation.dailyLimit} pour aujourd&apos;hui.
+                  Votre offre ne comprend pas d&apos;images créées par l&apos;IA. Vous pouvez
+                  connecter votre clé OpenAI ou Google Gemini depuis{' '}
+                  <a href="/fr/connexions" className="text-[var(--color-brand-strong)]">
+                    Connexions
+                  </a>
+                  {' '}: les images sont alors générées et facturées sur votre compte, jamais
+                  sur vos crédits Evoliia.
                 </p>
-              )}
+              ) : null}
             </div>
-            {library.generation.provider !== null ? (
+            {library.generation.source !== null ? (
               <>
                 <textarea
                   ref={promptField}
@@ -290,7 +322,13 @@ export function MediaPanel({
                 />
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
-                    disabled={generating || prompt.trim().length < 5 || library.generation.dailyLeft === 0}
+                    disabled={
+                      generating ||
+                      prompt.trim().length < 5 ||
+                      library.generation.dailyLeft === 0 ||
+                      (library.generation.source === 'evoliia' &&
+                        library.generation.monthlyLeft === 0)
+                    }
                     onClick={() => void generate()}
                   >
                     {generating ? 'Création en cours…' : 'Créer l’image'}
@@ -365,7 +403,7 @@ export function MediaPanel({
                   <span className="text-xs text-[var(--color-ink-faint)]">{slot.pageTitle}</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {library?.generation.provider !== null && library !== undefined ? (
+                  {library?.generation.source != null && library !== undefined ? (
                     <button
                       type="button"
                       disabled={busy || generating}

@@ -21,6 +21,7 @@ export type AdminPlan = {
   maxConnections: number
   monthlyCredits: number
   alertsPerMonth: number
+  imagesPerMonth: number
   allowBuild: boolean
   isRecommended: boolean
   isActive: boolean
@@ -95,6 +96,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         monthlyCredits: Number(form.get('monthlyCredits')),
         radarRunsPerMonth: Number(form.get('radarRunsPerMonth')),
         alertsPerMonth: Number(form.get('alertsPerMonth')),
+        imagesPerMonth: Number(form.get('imagesPerMonth')),
         liaAnswersPerMonth: Number(form.get('liaAnswersPerMonth')),
         liaConversationsPerMonth: Number(form.get('liaConversationsPerMonth')),
         allowBuild: form.get('allowBuild') === 'on',
@@ -224,6 +226,19 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
                 max={100000}
                 required
                 defaultValue={plan.alertsPerMonth}
+              />
+            </Field>
+            <Field
+              label="Images IA par mois"
+              hint="Créées sur le compte d’Evoliia, donc payées par elle avant d’être refacturées en crédits. Zéro ferme la fonction ; le créateur garde sa propre clé."
+            >
+              <Input
+                name="imagesPerMonth"
+                type="number"
+                min={0}
+                max={1000}
+                required
+                defaultValue={plan.imagesPerMonth}
               />
             </Field>
             <Field label="Réponses de Lia par mois" hint="Payées par le créateur de l’application.">
@@ -632,14 +647,20 @@ export function AiPricingEditor({
   models,
   multiplier,
   microsPerCredit,
+  imageMicros,
 }: {
   models: AdminModelPrice[]
   multiplier: number
   microsPerCredit: number
+  imageMicros: number
 }) {
   return (
     <div className="grid gap-4">
-      <ConversionCard multiplier={multiplier} microsPerCredit={microsPerCredit} />
+      <ConversionCard
+        multiplier={multiplier}
+        microsPerCredit={microsPerCredit}
+        imageMicros={imageMicros}
+      />
       {models.map((model) => (
         <ModelPriceCard key={model.model} price={model} />
       ))}
@@ -650,15 +671,18 @@ export function AiPricingEditor({
 function ConversionCard({
   multiplier,
   microsPerCredit,
+  imageMicros,
 }: {
   multiplier: number
   microsPerCredit: number
+  imageMicros: number
 }) {
   const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [valeurs, setValeurs] = useState({
     multiplier: String(multiplier),
     microsPerCredit: String(microsPerCredit),
+    imageMicros: String(imageMicros),
   })
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -671,6 +695,7 @@ function ConversionCard({
       body: JSON.stringify({
         multiplier: Number(valeurs.multiplier.replace(',', '.')),
         microsPerCredit: Number(valeurs.microsPerCredit),
+        imageMicros: Number(valeurs.imageMicros),
       }),
     })
     const body = (await response.json().catch(() => null)) as { message?: string } | null
@@ -707,6 +732,19 @@ function ConversionCard({
                 value={valeurs.microsPerCredit}
                 onChange={(event) =>
                   setValeurs((state) => ({ ...state, microsPerCredit: event.target.value }))
+                }
+              />
+            </Field>
+            <Field
+              label="Micro-dollars par image"
+              hint="Le fournisseur facture à l’image, pas aux jetons. 39 000 = 0,039 $ (Nano Banana)."
+            >
+              <Input
+                type="number"
+                min={100}
+                value={valeurs.imageMicros}
+                onChange={(event) =>
+                  setValeurs((state) => ({ ...state, imageMicros: event.target.value }))
                 }
               />
             </Field>

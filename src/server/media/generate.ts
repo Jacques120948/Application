@@ -1,23 +1,46 @@
 import { AppError, validation } from '@/lib/errors'
+import { env } from '@/lib/env'
+import { prisma } from '@/server/db/client'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { hasConnection, markConnectionError, useCredential } from '@/server/integrations/service'
 import { generateOpenAiImage, type ImageResult } from '@/server/integrations/providers/openai'
-import { generateGeminiImage } from '@/server/integrations/providers/gemini'
+import { generateGeminiImage, GEMINI_IMAGE_MODEL } from '@/server/integrations/providers/gemini'
+import { getEffectivePlan } from '@/server/billing/plans'
+import { currentPeriod } from '@/server/radar/quota'
+import { creditsFor, loadPricing } from '@/server/billing/ai-pricing'
+import { MINIMUM_COST, spendCredits } from '@/server/billing/credits'
+import { releaseReservation, reserveCredits } from '@/server/billing/reservation'
 import type { AppSpec } from '@/server/spec/schema'
 import { fontPairing } from '@/lib/fonts'
 
 /**
- * Images générées avec la clé du créateur.
+ * Images créées par l'IA.
  *
- * Le principe : Evoliia ne possède aucune clé d'images. Le créateur connecte son compte
- * OpenAI ou Google, et chaque image est facturée là-bas. Ce que la plateforme apporte,
- * c'est le garde-fou — un plafond journalier pour qu'une boucle ou un abus ne vide pas
- * son compte — et le rangement : l'image entre dans sa bibliothèque par le même chemin
- * qu'une photo téléversée (ré-encodée, sans métadonnées, comptée dans son quota).
+ * Deux voies coexistent, et l'ordre entre elles n'est pas indifférent.
+ *
+ * **La clé du créateur d'abord.** Il connecte son compte OpenAI ou Google, chaque image
+ * est facturée là-bas, et Evoliia ne dépense rien : ni quota, ni crédit. C'est la voie de
+ * celui qui veut en faire beaucoup, et elle reste la première servie.
+ *
+ * **La clé d'Evoliia ensuite**, pour tous les autres — c'est-à-dire pour l'immense majorité,
+ * qui n'ouvrira jamais un compte Google AI. Là, c'est de l'argent qui sort réellement du
+ * compte de la plateforme, et deux bornes indépendantes l'encadrent : le quota mensuel de
+ * l'offre, à zéro par défaut, et les crédits du créateur, réservés avant l'appel et débités
+ * au coût constaté. La première atteinte arrête.
+ *
+ * Pourquoi les deux plutôt qu'une ? Parce qu'elles ne protègent pas la même chose. Le quota
+ * protège Evoliia d'une offre trop généreuse ; les crédits protègent le créateur de sa
+ * propre gourmandise — une image coûte huit crédits quand une application entière en coûte
+ * vingt et un, et douze images videraient le mois d'une offre d'entrée sans qu'il l'ait vu
+ * venir.
+ *
+ * Un plafond journalier double le tout, des deux côtés : il ne borne pas une dépense mais
+ * un emballement, celui d'une boucle qui partirait toute seule.
  *
  * La description envoyée au fournisseur est celle du créateur, complétée par le style de
- * l'application. Aucune donnée personnelle, aucun prompt système n'y passe.
+ * l'application. Aucune donnée personnelle, aucun prompt système n'y passe. La clé
+ * d'Evoliia, elle, ne quitte jamais le serveur.
  */
 
 export const IMAGE_DAILY_LIMIT = 20
@@ -29,18 +52,61 @@ export const PROVIDER_LABEL: Record<ImageProvider, string> = {
   'google-gemini': 'Google Gemini',
 }
 
+/**
+ * Qui paie l'image.
+ *
+ * `creator` : sa propre clé, comme avant — gratuit pour Evoliia, donc sans quota ni crédit.
+ * `evoliia` : la clé de la plateforme, bornée par le quota de l'offre ET par les crédits.
+ *
+ * Les deux origines sont distinguées en base pour cette seule raison : le quota mensuel ne
+ * doit compter que ce qu'Evoliia a réellement payé. Les confondre ferait payer au créateur
+ * qui a sa propre clé un quota dont il ne consomme rien.
+ */
+export const CREATOR_ORIGIN = 'ai'
+export const EVOLIIA_ORIGIN = 'ai-evoliia'
+const AI_ORIGINS = [CREATOR_ORIGIN, EVOLIIA_ORIGIN]
+
+export type ImageSource = 'creator' | 'evoliia'
+
 export type GenerationStatus = {
+  /** Le fournisseur sollicité, ou `null` quand aucune voie n'est ouverte. */
   provider: ImageProvider | null
   providerLabel: string | null
+  /** Qui paie. `null` quand la génération n'est pas disponible pour ce créateur. */
+  source: ImageSource | null
   dailyLimit: number
   dailyLeft: number
+  /** Quota mensuel de l'offre, quand c'est Evoliia qui paie. Zéro sinon. */
+  monthlyLimit: number
+  monthlyLeft: number
+  /** Ce qu'une image coûtera en crédits. Zéro quand le créateur paie chez son fournisseur. */
+  creditsPerImage: number
 }
 
 async function generatedToday(userId: string): Promise<number> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
   return withUserScope(userId, (tx) =>
-    tx.mediaAsset.count({ where: { userId, origin: 'ai', createdAt: { gte: since } } }),
+    tx.mediaAsset.count({
+      where: { userId, origin: { in: AI_ORIGINS }, createdAt: { gte: since } },
+    }),
   )
+}
+
+/** Images payées par Evoliia depuis le début de la période d'abonnement en cours. */
+async function generatedThisMonth(userId: string): Promise<{ used: number; resetsAt: Date }> {
+  const period = await currentPeriod(userId)
+  const used = await withUserScope(userId, (tx) =>
+    tx.mediaAsset.count({
+      where: { userId, origin: EVOLIIA_ORIGIN, createdAt: { gte: period.start } },
+    }),
+  )
+  return { used, resetsAt: period.end }
+}
+
+/** Ce qu'une image coûte au créateur, au tarif en vigueur. */
+export async function creditsPerImage(): Promise<number> {
+  const table = await loadPricing()
+  return creditsFor(table.imageMicros, MINIMUM_COST.image, table)
 }
 
 /** Le premier fournisseur connecté, dans l'ordre du catalogue. */
@@ -51,13 +117,59 @@ async function connectedProvider(userId: string): Promise<ImageProvider | null> 
   return null
 }
 
+/** Evoliia peut-elle créer des images elle-même ? Sans clé, la fonction est simplement éteinte. */
+export function isEvoliiaImageAvailable(): boolean {
+  return env.geminiApiKey !== undefined
+}
+
+/**
+ * Ce qui est possible, et à quel prix.
+ *
+ * L'ordre compte : **la clé du créateur passe d'abord**. Elle ne coûte rien à Evoliia, elle
+ * ne consomme aucun crédit, et celui qui a pris la peine de la connecter veut s'en servir.
+ * La voie d'Evoliia est le filet pour tous les autres.
+ */
 export async function generationStatus(userId: string): Promise<GenerationStatus> {
-  const [provider, used] = await Promise.all([connectedProvider(userId), generatedToday(userId)])
+  const [provider, today] = await Promise.all([connectedProvider(userId), generatedToday(userId)])
+  const dailyLeft = Math.max(0, IMAGE_DAILY_LIMIT - today)
+
+  if (provider !== null) {
+    return {
+      provider,
+      providerLabel: PROVIDER_LABEL[provider],
+      source: 'creator',
+      dailyLimit: IMAGE_DAILY_LIMIT,
+      dailyLeft,
+      monthlyLimit: 0,
+      monthlyLeft: 0,
+      creditsPerImage: 0,
+    }
+  }
+
+  const plan = await getEffectivePlan(userId)
+  if (!isEvoliiaImageAvailable() || plan.imagesPerMonth <= 0) {
+    return {
+      provider: null,
+      providerLabel: null,
+      source: null,
+      dailyLimit: IMAGE_DAILY_LIMIT,
+      dailyLeft,
+      monthlyLimit: plan.imagesPerMonth,
+      monthlyLeft: 0,
+      creditsPerImage: 0,
+    }
+  }
+
+  const [month, credits] = await Promise.all([generatedThisMonth(userId), creditsPerImage()])
   return {
-    provider,
-    providerLabel: provider === null ? null : PROVIDER_LABEL[provider],
+    provider: 'google-gemini',
+    providerLabel: PROVIDER_LABEL['google-gemini'],
+    source: 'evoliia',
     dailyLimit: IMAGE_DAILY_LIMIT,
-    dailyLeft: Math.max(0, IMAGE_DAILY_LIMIT - used),
+    dailyLeft,
+    monthlyLimit: plan.imagesPerMonth,
+    monthlyLeft: Math.max(0, plan.imagesPerMonth - month.used),
+    creditsPerImage: credits,
   }
 }
 
@@ -89,7 +201,16 @@ export function buildImagePrompt(subject: string, spec: Pick<AppSpec, 'name' | '
   ].join(' ')
 }
 
-export type GeneratedImage = { bytes: Uint8Array; mime: string; provider: ImageProvider; prompt: string }
+export type GeneratedImage = {
+  bytes: Uint8Array
+  mime: string
+  provider: ImageProvider
+  prompt: string
+  /** Qui a payé. Décide de l'origine enregistrée, donc du quota qui sera décompté. */
+  source: ImageSource
+  /** Crédits réellement débités. Zéro quand le créateur a payé chez son fournisseur. */
+  creditsSpent: number
+}
 
 /**
  * Demande une image au fournisseur connecté. Ne stocke rien : c'est `addMedia` qui range,
@@ -105,28 +226,44 @@ export async function requestImage(
   if (cleaned.length < 5) throw validation('Décrivez l’image en quelques mots au moins.')
   if (cleaned.length > 600) throw validation('La description est trop longue (600 caractères au maximum).')
 
-  const provider = await connectedProvider(userId)
-  if (provider === null) {
+  const status = await generationStatus(userId)
+  if (status.source === null) {
     throw new AppError(
       'UNSUPPORTED_REQUEST',
-      'Connectez votre clé OpenAI ou Google Gemini depuis l’écran Connexions pour créer des images.',
+      isEvoliiaImageAvailable()
+        ? "Votre offre ne comprend pas d'images créées par l'IA. Vous pouvez aussi connecter votre propre clé OpenAI ou Google depuis l'écran Connexions."
+        : "Connectez votre clé OpenAI ou Google Gemini depuis l'écran Connexions pour créer des images.",
     )
   }
 
-  const used = await generatedToday(userId)
-  if (used >= IMAGE_DAILY_LIMIT) {
+  // Le plafond journalier borne l'emballement, des deux côtés : une boucle qui partirait
+  // toute seule s'arrête ici, avant le quota mensuel comme avant les crédits.
+  if (status.dailyLeft <= 0) {
     throw new AppError(
       'PLAN_LIMIT',
-      `Vous avez créé ${IMAGE_DAILY_LIMIT} images ces dernières 24 heures. C'est le plafond, pour protéger votre compte ${PROVIDER_LABEL[provider]}.`,
+      `Vous avez créé ${IMAGE_DAILY_LIMIT} images ces dernières 24 heures. C'est le plafond quotidien ; il se relâche au fil des heures.`,
     )
   }
 
+  const prompt = buildImagePrompt(cleaned, spec)
+  return status.source === 'creator'
+    ? avecLaCleDuCreateur(userId, cleaned, prompt, status)
+    : auxFraisDEvoliia(userId, cleaned, prompt, status)
+}
+
+/** La voie d'avant : le fournisseur du créateur facture le créateur. Evoliia ne dépense rien. */
+async function avecLaCleDuCreateur(
+  userId: string,
+  subject: string,
+  prompt: string,
+  status: GenerationStatus,
+): Promise<GeneratedImage> {
+  const provider = status.provider as ImageProvider
   const credential = await useCredential(userId, provider, { target: 'EVOLIIA' })
   if (credential === null) {
     throw new AppError('UNSUPPORTED_REQUEST', 'La clé du fournisseur est introuvable. Reconnectez le service.')
   }
 
-  const prompt = buildImagePrompt(cleaned, spec)
   const result: ImageResult =
     provider === 'openai'
       ? await generateOpenAiImage(credential.secret, prompt)
@@ -140,6 +277,94 @@ export async function requestImage(
     throw new AppError(result.kind === 'quota' ? 'PLAN_LIMIT' : 'UNSUPPORTED_REQUEST', result.reason)
   }
 
-  logger.info('image ia générée', { userId, provider, bytes: result.bytes.length })
-  return { bytes: result.bytes, mime: result.mime, provider, prompt: cleaned }
+  logger.info('image ia générée', { userId, provider, source: 'creator' })
+  return {
+    bytes: result.bytes,
+    mime: result.mime,
+    provider,
+    prompt: subject,
+    source: 'creator',
+    creditsSpent: 0,
+  }
+}
+
+/**
+ * La voie d'Evoliia : la plateforme paie le fournisseur, le créateur paie en crédits.
+ *
+ * L'ordre des gestes est celui qui protège des deux erreurs opposées.
+ *
+ * **Réserver avant d'appeler.** Vérifier le solde après coup laisserait passer un appel
+ * qu'on ne peut pas facturer, et deux demandes simultanées passeraient toutes les deux.
+ *
+ * **Ne débiter qu'après un succès.** Un fournisseur qui refuse ne facture pas Evoliia ; le
+ * créateur ne doit donc rien payer non plus. La réservation est rendue dans tous les cas.
+ */
+async function auxFraisDEvoliia(
+  userId: string,
+  subject: string,
+  prompt: string,
+  status: GenerationStatus,
+): Promise<GeneratedImage> {
+  if (status.monthlyLeft <= 0) {
+    throw new AppError(
+      'PLAN_LIMIT',
+      `Votre offre comprend ${status.monthlyLimit} image${status.monthlyLimit > 1 ? 's' : ''} par mois, et elles sont utilisées. Connectez votre propre clé Google ou OpenAI pour continuer sans limite.`,
+    )
+  }
+
+  const cle = env.geminiApiKey
+  if (cle === undefined) {
+    throw new AppError('UNSUPPORTED_REQUEST', "La création d'images n'est pas disponible pour le moment.")
+  }
+
+  const reservation = await reserveCredits({
+    userId,
+    operation: 'image',
+    amount: status.creditsPerImage,
+  })
+
+  try {
+    const result = await generateGeminiImage(cle, prompt)
+    if (!result.ok) {
+      // La clé est celle d'Evoliia : un refus est un incident de la plateforme, pas une
+      // faute du créateur. On le trace pour nous, et on lui dit ce qui le concerne.
+      logger.error('image ia refusée sur la clé Evoliia', { userId, kind: result.kind })
+      throw new AppError(
+        'AI_UNAVAILABLE',
+        "La création d'image n'a pas abouti. Rien ne vous a été débité — réessayez dans un instant.",
+      )
+    }
+
+    const table = await loadPricing()
+    const credits = creditsFor(table.imageMicros, MINIMUM_COST.image, table)
+    const usage = await prisma.aiUsage
+      .create({
+        data: {
+          userId,
+          operation: 'image',
+          model: GEMINI_IMAGE_MODEL,
+          costMicros: table.imageMicros,
+          creditsSpent: credits,
+          success: true,
+        },
+        select: { id: true },
+      })
+      .catch(() => null)
+
+    await spendCredits(userId, credits, 'image', undefined, {
+      ...(usage === null ? {} : { aiUsageId: usage.id }),
+    })
+
+    logger.info('image ia générée', { userId, source: 'evoliia', credits })
+    return {
+      bytes: result.bytes,
+      mime: result.mime,
+      provider: 'google-gemini',
+      prompt: subject,
+      source: 'evoliia',
+      creditsSpent: credits,
+    }
+  } finally {
+    await releaseReservation(reservation.id)
+  }
 }
