@@ -42,12 +42,22 @@ export type Reservation = { id: string; amount: number }
  * `amount` est une estimation haute, pas une facture : c'est le coût maximum que
  * l'opération pourrait atteindre. Mieux vaut réserver large et rendre beaucoup que
  * réserver juste et découvrir le dépassement une fois l'argent dépensé.
+ *
+ * `atLeast` change ce qui se passe quand le solde ne couvre pas cette estimation haute.
+ * Sans lui, l'opération est refusée — ce qui est juste pour une opération dont on ne peut
+ * pas réduire l'ampleur. Avec lui, on réserve ce qui reste, et l'appelant borne son travail
+ * à ce qui a été réservé. C'est le cas de l'agent : il s'arrête tout seul quand il atteint
+ * son plafond, donc un plafond plus bas ne le met pas en danger — il le fait simplement
+ * travailler moins. Exiger le pire cas d'avance bloquerait toute demande, même minuscule,
+ * en dessous de ce pire cas, et laisserait dormir les crédits restants.
  */
 export async function reserveCredits(params: {
   userId: string
   operation: string
   amount: number
   projectId?: string | undefined
+  /** Plancher en dessous duquel il n'y a plus de quoi travailler. Actif seulement s'il est donné. */
+  atLeast?: number | undefined
 }): Promise<Reservation> {
   // Crée le portefeuille et applique le renouvellement mensuel s'il est dû, avant de
   // regarder le solde : sinon on refuserait une opération au motif d'un solde périmé.
@@ -69,19 +79,24 @@ export async function reserveCredits(params: {
     })
     const available = balance - (held._sum.amount ?? 0)
 
-    if (available < amount) {
+    // Le plancher, quand il est donné, remplace l'estimation haute comme condition d'entrée.
+    const requis = params.atLeast === undefined ? amount : Math.max(1, Math.ceil(params.atLeast))
+    if (available < requis) {
       throw new AppError(
         'INSUFFICIENT_CREDITS',
         "Vous n'avez plus assez de crédits pour cette opération. Vos crédits se renouvellent chaque mois.",
-        { details: { available, required: amount } },
+        { details: { available, required: requis } },
       )
     }
+
+    // On réserve ce qu'on espère, ou ce qui reste — jamais plus que le solde disponible.
+    const retenu = Math.min(amount, available)
 
     const reservation = await tx.creditReservation.create({
       data: {
         userId: params.userId,
         operation: params.operation,
-        amount,
+        amount: retenu,
         expiresAt,
         projectId: params.projectId ?? null,
       },

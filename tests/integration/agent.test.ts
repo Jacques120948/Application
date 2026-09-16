@@ -355,3 +355,56 @@ describe('document joint', () => {
     expect(blocs[0]?.cache_control).toBeUndefined()
   })
 })
+
+/**
+ * Le solde qui ne couvre pas le plafond.
+ *
+ * Réserver le pire cas d'avance paraissait prudent ; c'était un mur. Un créateur à trente
+ * crédits se voyait refuser toute demande, même minuscule, au motif qu'elle pourrait en
+ * coûter quarante — et l'offre d'entrée laissait dormir trente-neuf crédits inutilisables.
+ * C'est exactement le genre de défaut qu'aucun test ne voyait parce qu'aucun test n'était
+ * pauvre.
+ */
+describe('un solde inférieur au plafond', () => {
+  it('laisse travailler, en bornant l’agent à ce qui reste', async () => {
+    const wallet = await getWallet(userId)
+    await prisma.creditWallet.update({ where: { userId }, data: { balance: 12 } })
+
+    const observed = { appels: [] as Anthropic.Messages.MessageCreateParamsNonStreaming[] }
+    const project = await getProject(userId, projectId)
+    const outcome = await runAgent({
+      userId,
+      projectId,
+      spec: project.spec,
+      request: 'Mets le bouton en bleu.',
+      client: scriptedClient([{ text: 'C’est fait.' }], observed),
+    })
+
+    expect(outcome.reply).toBe('C’est fait.')
+    // Et le solde n'est jamais dépassé : on ne dépense pas ce qu'on n'a pas réservé.
+    expect(await availableCredits(userId)).toBeGreaterThanOrEqual(0)
+
+    await prisma.creditWallet.update({ where: { userId }, data: { balance: wallet.balance } })
+  })
+
+  it('refuse quand il ne reste plus de quoi faire une étape', async () => {
+    const wallet = await getWallet(userId)
+    await prisma.creditWallet.update({ where: { userId }, data: { balance: 2 } })
+
+    const observed = { appels: [] as Anthropic.Messages.MessageCreateParamsNonStreaming[] }
+    const project = await getProject(userId, projectId)
+    await expect(
+      runAgent({
+        userId,
+        projectId,
+        spec: project.spec,
+        request: 'Mets le bouton en bleu.',
+        client: scriptedClient([{ text: 'C’est fait.' }], observed),
+      }),
+    ).rejects.toMatchObject({ code: 'INSUFFICIENT_CREDITS' })
+    // Rien n'a été tenté : dépenser pour s'arrêter aussitôt serait pire qu'un refus.
+    expect(observed.appels).toHaveLength(0)
+
+    await prisma.creditWallet.update({ where: { userId }, data: { balance: wallet.balance } })
+  })
+})

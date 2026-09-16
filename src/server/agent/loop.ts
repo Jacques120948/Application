@@ -13,7 +13,7 @@ import { MODELS } from '@/server/ai/routing'
 import { logger } from '@/server/observability/logger'
 import type { AppSpec } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
-import { canContinue, loadAgentLimits, newBudget, type AgentLimits } from './limits'
+import { canContinue, loadAgentLimits, MINIMUM_RESERVATION, newBudget, type AgentLimits } from './limits'
 import { AGENT_SYSTEM } from './prompt'
 import { recentIncidents } from './incidents'
 import { AGENT_TOOLS, newWorkspace, outline, runTool, type Workspace } from './tools'
@@ -161,15 +161,29 @@ export async function runAgent(params: {
    */
   const workspace: Workspace = newWorkspace(params.spec, await recentIncidents(params.userId))
 
+  /*
+   * On réserve le plafond, ou ce qui reste s'il est plus bas.
+   *
+   * Exiger le plafond d'avance paraissait prudent ; c'était en réalité un mur. Un créateur
+   * à trente crédits se voyait refuser toute demande, même minuscule, au motif qu'elle
+   * pourrait en coûter quarante — et l'offre d'entrée laissait dormir trente-neuf crédits
+   * inutilisables. L'agent, lui, sait s'arrêter sur son plafond : un plafond plus bas ne le
+   * met pas en danger, il le fait simplement travailler moins.
+   */
   const reservation = await reserveCredits({
     userId: params.userId,
     operation: 'edit',
     amount: limits.maxCredits,
+    atLeast: MINIMUM_RESERVATION,
     projectId: params.projectId,
   })
 
+  // Le plafond effectif est celui qui a été réservé : on ne dépense jamais ce qu'on n'a pas
+  // mis de côté, et le créateur en est averti par le motif d'arrêt.
+  const effectifs: AgentLimits = { ...limits, maxCredits: Math.min(limits.maxCredits, reservation.amount) }
+
   try {
-    return await boucle({ ...params, limits, budget, workspace })
+    return await boucle({ ...params, limits: effectifs, budget, workspace })
   } finally {
     await releaseReservation(reservation.id)
   }

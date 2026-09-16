@@ -465,6 +465,24 @@ d'Evoliia (il le dit franchement, n'invente aucune cause, et invite à signaler)
 pas » à la place de « il ne vous restait plus de crédits » est la réponse qui fait partir un
 créateur.
 
+#### Réserver ce qui reste, plutôt que le pire cas
+
+L'agent réservait son plafond — quarante crédits — avant de commencer. Cela paraissait
+prudent ; c'était un mur. Un créateur à trente crédits se voyait refuser **toute** demande,
+même minuscule, au motif qu'elle *pourrait* en coûter quarante. L'offre d'entrée laissait
+ainsi dormir trente-neuf crédits inutilisables, et l'offre gratuite, à trente crédits, ne
+pouvait jamais toucher l'agent.
+
+La réservation prend désormais ce qui est espéré **ou ce qui reste**, et le plafond effectif
+de l'exécution devient le montant réservé. L'agent sait s'arrêter sur son plafond : un
+plafond plus bas ne le met pas en danger, il le fait simplement travailler moins. Un
+plancher — cinq crédits — refuse d'emblée ce qui ne permettrait qu'une étape sans résultat :
+dépenser pour s'arrêter aussitôt est pire qu'un refus, et le message dit alors la vraie
+raison.
+
+Ce défaut n'apparaissait dans aucun test parce qu'aucun test n'était pauvre. Deux le sont
+désormais.
+
 #### Le coach passe la main à l'assistant
 
 Restait un défaut structurel, et il annulait presque tout ce qui précède : **le créateur en

@@ -44,6 +44,15 @@ export const DEFAULT_AGENT_LIMITS: AgentLimits = {
   maxDurationMs: 4 * 60_000,
 }
 
+/**
+ * En dessous, il n'y a plus de quoi travailler.
+ *
+ * Une étape coûte deux à trois crédits ; à moins de cinq, l'agent lirait une page et
+ * s'arrêterait, en ayant dépensé sans rien produire. Refuser d'emblée est plus honnête, et
+ * le message dit alors la vraie raison : il manque des crédits, pas de la capacité.
+ */
+export const MINIMUM_RESERVATION = 5
+
 export const AGENT_SETTINGS = {
   maxSteps: 'agent.max.steps',
   maxTokens: 'agent.max.tokens',
