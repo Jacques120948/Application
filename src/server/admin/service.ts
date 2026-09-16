@@ -16,6 +16,7 @@ import {
   PRICING_SETTINGS,
 } from '@/server/billing/ai-pricing'
 import { readSetting, writeSetting } from '@/server/settings/store'
+import { isEvoliiaImageAvailable } from '@/server/media/generate'
 import { DEFAULT_MAX_DOCUMENT_TOKENS, DOCUMENT_SETTINGS } from '@/server/ai/documents'
 import { AGENT_SETTINGS, loadAgentLimits } from '@/server/agent/limits'
 import {
@@ -353,6 +354,15 @@ export async function listModelPricing(): Promise<{
   multiplier: number
   microsPerCredit: number
   imageMicros: number
+  /**
+   * La clé d'images d'Evoliia est-elle en place ? Jamais sa valeur — seulement le fait.
+   *
+   * Sans cet indicateur, le créateur et l'administrateur lisent le même message —
+   * « votre offre ne comprend pas d'images » — pour deux causes opposées : un quota à
+   * zéro, ou une clé absente. Le premier se règle dans l'écran d'à côté, le second dans
+   * l'hébergeur. Les confondre coûte une heure de recherche à chaque fois.
+   */
+  imageKeyConfigured: boolean
 }> {
   await requireAdmin()
   const [rows, table] = await Promise.all([prisma.aiModelPricing.findMany(), loadPricing()])
@@ -378,6 +388,7 @@ export async function listModelPricing(): Promise<{
     multiplier: table.multiplier,
     microsPerCredit: table.microsPerCredit,
     imageMicros: table.imageMicros,
+    imageKeyConfigured: isEvoliiaImageAvailable(),
   }
 }
 

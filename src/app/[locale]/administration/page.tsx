@@ -180,6 +180,7 @@ export default async function AdminPage({
           multiplier={pricing.multiplier}
           microsPerCredit={pricing.microsPerCredit}
           imageMicros={pricing.imageMicros}
+          imageKeyConfigured={pricing.imageKeyConfigured}
         />
 
         <h2 className="mt-12 mb-1 text-lg font-semibold">

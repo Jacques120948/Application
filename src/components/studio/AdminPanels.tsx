@@ -648,11 +648,13 @@ export function AiPricingEditor({
   multiplier,
   microsPerCredit,
   imageMicros,
+  imageKeyConfigured,
 }: {
   models: AdminModelPrice[]
   multiplier: number
   microsPerCredit: number
   imageMicros: number
+  imageKeyConfigured: boolean
 }) {
   return (
     <div className="grid gap-4">
@@ -660,6 +662,7 @@ export function AiPricingEditor({
         multiplier={multiplier}
         microsPerCredit={microsPerCredit}
         imageMicros={imageMicros}
+        imageKeyConfigured={imageKeyConfigured}
       />
       {models.map((model) => (
         <ModelPriceCard key={model.model} price={model} />
@@ -672,10 +675,12 @@ function ConversionCard({
   multiplier,
   microsPerCredit,
   imageMicros,
+  imageKeyConfigured,
 }: {
   multiplier: number
   microsPerCredit: number
   imageMicros: number
+  imageKeyConfigured: boolean
 }) {
   const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
   const [error, setError] = useState<string | null>(null)
@@ -749,6 +754,24 @@ function ConversionCard({
               />
             </Field>
           </div>
+          {/*
+            Sans cette ligne, « votre offre ne comprend pas d'images » s'affiche pour deux
+            causes opposées — un quota à zéro, ou une clé absente — et rien ne permet de les
+            distinguer. L'une se règle dans l'écran des offres, l'autre chez l'hébergeur.
+          */}
+          {imageKeyConfigured ? (
+            <Notice tone="positive">
+              Clé d’images en place. Il reste à accorder un quota « Images IA par mois » à
+              chaque offre concernée, dans l’écran des offres : à zéro, rien n’est proposé.
+            </Notice>
+          ) : (
+            <Notice tone="caution" title="Aucune clé d’images">
+              La variable d’environnement GEMINI_API_KEY n’est pas lue par ce déploiement.
+              Tant qu’elle manque, les créateurs voient « votre offre ne comprend pas
+              d’images », quel que soit le quota réglé. Ajoutez-la chez l’hébergeur, puis
+              redéployez — une variable ajoutée ne s’applique qu’aux déploiements suivants.
+            </Notice>
+          )}
           {error !== null ? <Notice tone="critical">{error}</Notice> : null}
           {status === 'saved' ? (
             <Notice tone="positive">
