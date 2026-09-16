@@ -483,36 +483,38 @@ raison.
 Ce défaut n'apparaissait dans aucun test parce qu'aucun test n'était pauvre. Deux le sont
 désormais.
 
-#### Le coach passe la main à l'assistant
+#### Une seule conversation par projet
 
-Restait un défaut structurel, et il annulait presque tout ce qui précède : **le créateur en
-difficulté clique sur « Besoin d'aide ? », c'est-à-dire sur le coach, qui ne voit pas son
-application.** Le coach connaît le parcours, pas le projet — ni ses pages, ni ses contrôles,
-ni ce qui a échoué. Celui qui sait diagnostiquer se trouve derrière un onglet nommé
-« Modifier avec l'IA », un nom qui annonce un changement, pas une réparation. Le créateur
+Le créateur en difficulté cliquait sur « Besoin d'aide ? », c'est-à-dire sur le coach — qui
+ne voit pas son application. Celui qui sait diagnostiquer se trouvait derrière un onglet
+nommé « Modifier avec l'IA », un nom qui annonce un changement, pas une réparation. Il
 parlait donc systématiquement à l'entité incapable de l'aider.
 
-Le coach a maintenant deux sorties, dans l'ordre où elles doivent être tentées.
+La première réponse fut une passerelle : un bouton du coach ouvrait l'assistant avec une
+demande rédigée. Elle marchait, et elle était mauvaise — **elle obligeait à traverser deux
+conversations pour une seule question.** Un créateur n'a pas à savoir que construire et
+dépanner sont deux métiers ; il a un problème, il le dit, une fois, à un seul interlocuteur.
 
-**« Demander à l'assistant de regarder mon application »**, présent seulement là où un projet
-est ouvert. Il ouvre l'assistant avec une demande déjà rédigée à partir de la question posée,
-qui déclenche la lecture des contrôles et des incidents. Ce qui arrive est une demande, pas
-une commande : elle atterrit dans la zone de saisie, où le créateur la relit et l'envoie —
-l'envoyer à sa place dépenserait ses crédits sans son accord.
+**Sur la page d'un projet, il n'y a donc plus qu'une conversation.** Le bouton d'aide y ouvre
+directement l'assistant : c'est lui qui construit et lui qui dépanne, dans le même fil.
+L'accueil de la conversation le dit — « dites ce que vous voulez changer, **ou ce qui ne
+marche pas** » —, et les exemples mêlent les deux. Le coach, lui, reste seul maître des
+écrans sans projet — objectif, idées, tableau de bord —, là où il n'y a pas d'assistant et où
+expliquer le parcours est exactement ce qu'il sait faire. Sa consigne lui interdit de deviner
+pour autant : une question sur une application le fait renvoyer vers le projet concerné.
 
-Le coach et la page du projet ne se connaissent pas : l'un vit dans le cadre, l'autre dans le
-contenu. Un événement du navigateur les relie, sans faire traverser une propriété à tout le
-cadre. Là où la page écoute, le bouton apparaît ; ailleurs, il n'existe pas — ce qui est
-exactement le bon comportement. Sa consigne lui interdit par ailleurs de deviner : dès que la
-question porte sur l'application, il dit que l'assistant va regarder, au lieu d'inventer.
+Le bouton vit dans le cadre, la page du projet dans le contenu : un événement du navigateur
+les relie sans faire traverser une propriété à toute l'application. Là où la page écoute, le
+bouton ouvre la conversation ; ailleurs, il ouvre le coach.
 
-**« Signalez-le »**, replié, toujours disponible. C'est le dernier maillon, pour ce que
-l'assistant ne peut pas résoudre : une panne, un écran qui ne répond pas. Le message part
-avec les faits que l'exploitant aurait demandés — offre, solde, échecs des deux derniers
-jours —, rassemblés par le serveur et non par le créateur : personne ne sait dire de tête son
-solde de crédits, et le lui demander coûte trois allers-retours avant de commencer à
-comprendre. Une notification, pas un courriel : la cloche ne coûte rien, et ce chemin ne
-devait dépendre d'aucune décision de dépense.
+**« Signalez-le »** est replié au bas des deux, et c'est le même composant : deux copies
+finiraient par demander deux choses différentes et par en oublier une. C'est le dernier
+maillon, pour ce que l'assistant ne peut pas résoudre. Le message part avec les faits que
+l'exploitant aurait demandés — offre, solde, échecs des deux derniers jours —, rassemblés par
+le serveur et non par le créateur : personne ne sait dire de tête son solde de crédits, et le
+lui demander coûte trois allers-retours avant de commencer à comprendre. Une notification,
+pas un courriel : la cloche ne coûte rien, et ce chemin ne devait dépendre d'aucune décision
+de dépense.
 
 #### La feuille de route écrite par les créateurs
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Notice, Textarea } from '@/components/ui'
 import { PHOTO_ACCEPT } from '@/lib/photo-upload'
+import { ReportProblem } from './ReportProblem'
 
 /**
  * Une image jointe à la demande en cours.
@@ -282,8 +283,14 @@ export function ChatPanel({
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <p className="text-sm text-[var(--color-ink-soft)]">
-            Dites ce que vous voulez changer. Par exemple : « Mets le bouton en bleu », « Ajoute
-            une page à propos », « Ajoute un abonnement à 9,90 € par mois ».
+            {/*
+              Une seule conversation pour construire et pour dépanner : le créateur n'a pas à
+              deviner que ce sont deux métiers. Les exemples le disent — deux modifications,
+              un problème.
+            */}
+            Dites ce que vous voulez changer, ou ce qui ne marche pas. Par exemple : « Mets le
+            bouton en bleu », « Ajoute une page à propos », « Je n’arrive pas à mettre une image
+            sur la page Animaux ».
           </p>
         ) : null}
         <div className="grid gap-3">
@@ -439,6 +446,8 @@ export function ChatPanel({
             {busy ? '…' : 'Envoyer'}
           </Button>
         </div>
+
+        <ReportProblem screen="projet" projectId={projectId} />
 
         {jointes.length > 0 ? (
           <p className="m-0 mt-2 text-xs text-[var(--color-ink-faint)]">

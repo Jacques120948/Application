@@ -151,22 +151,24 @@ export function ProjectWorkspace({
   }, [tab, loadVersions, loadData])
 
   /*
-   * Le relais du coach.
+   * L'ouverture de la conversation depuis le bouton d'aide.
    *
-   * Le coach vit dans le cadre, la page du projet dans le contenu : ils ne se connaissent
+   * Le bouton vit dans le cadre, la page du projet dans le contenu : ils ne se connaissent
    * pas. Un événement du navigateur suffit à les relier, et seulement là où il y a un
-   * projet à regarder — ailleurs, personne n'écoute et le bouton du coach n'apparaît pas.
+   * projet — ailleurs, personne n'écoute et le bouton ouvre le coach.
    *
-   * Ce qui arrive ici est une demande rédigée, pas une commande : elle atterrit dans la
-   * zone de saisie, où le créateur la relit et l'envoie. Envoyer à sa place dépenserait ses
-   * crédits sans son accord.
+   * Il n'y a qu'une conversation sur cette page, et c'est le point : le bouton d'aide y mène
+   * directement, plutôt que d'ouvrir un second chat qui renverrait vers le premier.
    */
   useEffect(() => {
     function recevoir(event: Event) {
-      const texte = (event as CustomEvent<string>).detail
-      if (typeof texte !== 'string' || texte === '') return
-      setBuilderDraft(texte)
-      setDraftToken((valeur) => valeur + 1)
+      const texte = (event as CustomEvent<string | undefined>).detail
+      // Une demande rédigée est proposée dans la zone de saisie, jamais envoyée : l'envoyer
+      // à sa place dépenserait ses crédits sans son accord. Sans texte, on ouvre seulement.
+      if (typeof texte === 'string' && texte !== '') {
+        setBuilderDraft(texte)
+        setDraftToken((valeur) => valeur + 1)
+      }
       setTab('assistant')
     }
     window.addEventListener(RELAIS_ASSISTANT, recevoir)

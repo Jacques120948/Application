@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { ReportProblem } from './ReportProblem'
 
 /**
  * Coach, accessible depuis tous les écrans du studio.
@@ -21,15 +22,21 @@ const SUGGESTIONS = [
 ] as const
 
 /**
- * Le passage de relais du coach vers l'assistant.
+ * Ouvrir la conversation du projet.
  *
- * Le coach explique le parcours ; il ne voit pas l'application. L'assistant, lui, sait
- * l'ouvrir, lire ses contrôles et ce qui a échoué — mais il vit dans un onglet du projet,
- * auquel le coach n'a aucun accès direct. Un événement du navigateur les relie sans faire
- * passer une propriété à travers tout le cadre : là où la page du projet écoute, le bouton
- * apparaît ; ailleurs, il n'existe pas, ce qui est exactement le bon comportement.
+ * Sur la page d'un projet, il n'y a qu'un seul interlocuteur : l'assistant. Il construit et
+ * il dépanne, et le créateur n'a pas à savoir lequel des deux il est en train de demander.
+ * Le bouton d'aide y mène donc directement, au lieu d'ouvrir un second chat qui renverrait
+ * vers le premier — c'était une passerelle entre deux conversations là où il n'en fallait
+ * qu'une.
+ *
+ * Le coach reste seul maître des écrans sans projet : objectif, idées, tableau de bord. Là,
+ * il n'y a pas d'assistant, et expliquer le parcours est exactement ce qu'il sait faire.
+ *
+ * Un événement du navigateur suffit à relier le cadre au contenu, sans faire traverser une
+ * propriété à toute l'application.
  */
-export const RELAIS_ASSISTANT = 'evoliia:demander-a-l-assistant'
+export const RELAIS_ASSISTANT = 'evoliia:ouvrir-l-assistant'
 
 export function CoachLauncher({ screen }: { screen: string }) {
   const [open, setOpen] = useState(false)
@@ -37,48 +44,9 @@ export function CoachLauncher({ screen }: { screen: string }) {
   const [question, setQuestion] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [signalement, setSignalement] = useState('')
-  const [envoi, setEnvoi] = useState<'idle' | 'busy' | 'sent'>('idle')
   const scroller = useRef<HTMLDivElement>(null)
-  // Le relais n'a de sens que là où un projet est ouvert, et c'est la page qui le sait.
+  // Là où un projet est ouvert, l'assistant est le seul interlocuteur : le coach s'efface.
   const surUnProjet = screen === 'projet'
-  const derniere = turns[turns.length - 1]?.question ?? ''
-
-  /** Ouvre l'assistant du projet avec une demande déjà rédigée. */
-  function passerLaMain() {
-    const sujet = derniere === '' ? 'Quelque chose ne marche pas dans mon application.' : derniere
-    window.dispatchEvent(
-      new CustomEvent(RELAIS_ASSISTANT, {
-        detail: [
-          `Il y a un problème dans mon application : « ${sujet} »`,
-          '',
-          'Regarde les contrôles et ce qui a échoué récemment, dis-moi ce qui se passe, et',
-          'corrige-le si tu peux.',
-        ].join('\n'),
-      }),
-    )
-    setOpen(false)
-  }
-
-  async function signaler() {
-    const texte = signalement.trim()
-    if (texte.length < 10 || envoi === 'busy') return
-    setEnvoi('busy')
-    setError(null)
-    const response = await fetch('/api/coach/signaler', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: texte, screen }),
-    })
-    const body = (await response.json().catch(() => null)) as { message?: string } | null
-    if (body === null || !response.ok) {
-      setError(body?.message ?? "Le signalement n'a pas pu être envoyé.")
-      setEnvoi('idle')
-      return
-    }
-    setSignalement('')
-    setEnvoi('sent')
-  }
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight })
@@ -110,7 +78,12 @@ export function CoachLauncher({ screen }: { screen: string }) {
     return (
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // Sur un projet, l'aide mène à la conversation qui peut agir, pas à une seconde
+          // conversation qui y renverrait.
+          if (surUnProjet) window.dispatchEvent(new CustomEvent(RELAIS_ASSISTANT))
+          else setOpen(true)
+        }}
         className="fixed bottom-5 right-5 z-40 rounded-full px-5 py-3 text-sm font-medium text-white shadow-lg"
         style={{ background: 'var(--gradient-brand)' }}
       >
@@ -175,60 +148,7 @@ export function CoachLauncher({ screen }: { screen: string }) {
           <p className="mt-4 text-sm text-[var(--color-critical)]">{error}</p>
         ) : null}
 
-        {/*
-          Les deux sorties du coach, dans l'ordre où elles doivent être tentées.
-          Le coach explique ; il ne voit pas l'application. Quand le problème est dedans,
-          c'est l'assistant qui doit regarder, et le créateur n'a pas à savoir que ce sont
-          deux entités différentes : un bouton suffit.
-        */}
-        {surUnProjet ? (
-          <div className="mt-5 border-t border-[var(--color-line)] pt-4">
-            <p className="m-0 mb-2 text-xs text-[var(--color-ink-soft)]">
-              Le coach explique le parcours, mais il ne voit pas votre application.
-            </p>
-            <button
-              type="button"
-              onClick={passerLaMain}
-              className="w-full rounded-[var(--radius-control)] border border-[var(--color-brand)] px-3 py-2 text-sm font-medium text-[var(--color-brand-strong)]"
-            >
-              Demander à l’assistant de regarder mon application
-            </button>
-          </div>
-        ) : null}
-
-        <details className="mt-4 border-t border-[var(--color-line)] pt-4">
-          <summary className="cursor-pointer text-xs text-[var(--color-ink-soft)]">
-            Rien ne résout votre problème ? Signalez-le.
-          </summary>
-          {envoi === 'sent' ? (
-            <p className="m-0 mt-2 text-sm">
-              C’est envoyé, merci. Nous savons désormais que vous êtes bloqué, et sur quoi.
-            </p>
-          ) : (
-            <div className="mt-2 grid gap-2">
-              <p className="m-0 text-xs text-[var(--color-ink-faint)]">
-                Décrivez ce qui ne se passe pas comme prévu. Votre offre, vos crédits et les
-                erreurs récentes de votre compte partent avec : inutile de les chercher.
-              </p>
-              <textarea
-                value={signalement}
-                onChange={(event) => setSignalement(event.target.value)}
-                rows={3}
-                maxLength={2000}
-                placeholder="J’ai voulu publier et il ne se passe rien…"
-                className="w-full rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-sm"
-              />
-              <button
-                type="button"
-                onClick={() => void signaler()}
-                disabled={envoi === 'busy' || signalement.trim().length < 10}
-                className="justify-self-start rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2 text-sm disabled:opacity-50"
-              >
-                {envoi === 'busy' ? 'Envoi…' : 'Envoyer le signalement'}
-              </button>
-            </div>
-          )}
-        </details>
+        <ReportProblem screen={screen} />
       </div>
 
       <form
