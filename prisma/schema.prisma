@@ -167,6 +167,14 @@ model Plan {
   /// Zéro par défaut : c'est une dépense réelle pour la plateforme, elle s'ouvre offre
   /// par offre. Le créateur qui connecte sa propre clé n'est pas concerné par ce quota.
   imagesPerMonth           Int      @default(0)
+  /// Sites qu'une offre permet de suivre, et pages analysées à chaque audit.
+  /// Zéro par défaut : une offre d'une version précédente ne doit pas se retrouver à
+  /// promettre un produit qui n'existait pas quand elle a été souscrite.
+  sitesMax                 Int      @default(0)
+  pagesPerAudit            Int      @default(0)
+  /// Audits accordés par mois et par site. Borne la seule dépense qui grandirait avec
+  /// l'usage : chaque audit est un parcours réel de pages sur le réseau.
+  auditsPerMonth           Int      @default(0)
   monthlyCredits           Int
   allowExport              Boolean  @default(false)
   allowCustomDomain        Boolean  @default(false)

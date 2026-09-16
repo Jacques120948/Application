@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENTS, AGENT_IDS, findAgent, TEAM_FEATURE } from '@/server/agents/catalog'
 import { FEATURES, findFeature, resolveEntitlements } from '@/server/billing/features'
-import { DEFAULT_PLAN_FEATURES } from '@/server/billing/features'
 import { MINIMUM_COST } from '@/server/billing/credits'
 import { OPERATION_PROFILES } from '@/server/ai/routing'
 
@@ -14,24 +13,39 @@ import { OPERATION_PROFILES } from '@/server/ai/routing'
  * prix déclaré, faute de quoi le créateur découvrirait sa dépense après coup.
  */
 
+/*
+ * Les offres de ce test déclarent elles-mêmes ce qu'elles ouvrent.
+ *
+ * Elles empruntaient le catalogue commercial, et le jour où il a changé de métier ces
+ * vérifications ont échoué sans qu'une règle de droits ait bougé d'une ligne. Ce qui est
+ * vérifié ici est le mécanisme — accordé, verrouillé, prévu — pas la composition des offres
+ * du moment, qui se décide ailleurs et se change sans prévenir.
+ */
 const PLANS = [
   { id: 'free', name: 'Découverte', features: [], sortOrder: 0 },
   {
     id: 'launch',
     name: 'Launch',
-    features: [...(DEFAULT_PLAN_FEATURES.launch ?? [])],
+    features: ['social_launch_basic', 'social_angles'],
     sortOrder: 1,
   },
   {
     id: 'builder',
     name: 'Builder',
-    features: [...(DEFAULT_PLAN_FEATURES.builder ?? [])],
+    features: ['social_launch_basic', 'social_angles', 'social_agent'],
     sortOrder: 2,
   },
   {
     id: 'business',
     name: 'Business',
-    features: [...(DEFAULT_PLAN_FEATURES.business ?? [])],
+    features: [
+      'social_launch_basic',
+      'social_angles',
+      'social_agent',
+      'marketing_team',
+      'seo_agent',
+      'analytics_agent',
+    ],
     sortOrder: 3,
   },
 ]

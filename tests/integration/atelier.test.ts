@@ -8,6 +8,7 @@ import { register } from '@/server/auth/service'
 import { getWallet } from '@/server/billing/credits'
 import { createMonth, createVariations } from '@/server/marketing/atelier'
 import { DEMO_APPS } from '@/server/demos/catalog'
+import { FREE_PLAN_ID } from '@/server/billing/plans'
 
 /**
  * L'atelier du kit, de bout en bout.
@@ -115,9 +116,20 @@ beforeAll(async () => {
 
   // L'offre gratuite ouvre les deux fonctions le temps du test, puis les referme.
   await prisma.plan.update({
-    where: { id: 'free' },
+    where: { id: FREE_PLAN_ID },
     data: { features: ['social_launch_basic', 'social_content_generation', 'social_calendar'] },
   })
+
+  /*
+   * La réserve est posée à la main, et non héritée de l'offre.
+   *
+   * Ce qui est vérifié ici est qu'une opération débite ce qu'elle annonce — pas qu'une
+   * offre commerciale est assez généreuse pour la payer. Faire dépendre l'un de l'autre,
+   * c'est voir ces tests tomber le jour où quelqu'un révise une grille tarifaire, ce qui
+   * est exactement arrivé.
+   */
+  await getWallet(userId)
+  await prisma.creditWallet.update({ where: { userId }, data: { balance: 500 } })
 
   const project = await withUserScope(userId, (tx) =>
     tx.project.create({
@@ -160,7 +172,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await prisma.user.deleteMany({ where: { email } })
-  await prisma.plan.update({ where: { id: 'free' }, data: { features: [] } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { features: [] } })
   delete process.env.SOCIAL_ENGINE_URL
   delete process.env.SOCIAL_ENGINE_SECRET
 })
@@ -239,7 +251,7 @@ describe('calendrier du mois', () => {
 
 describe('droits', () => {
   it('referme les deux fonctions dès que l’offre ne les ouvre plus', async () => {
-    await prisma.plan.update({ where: { id: 'free' }, data: { features: ['social_launch_basic'] } })
+    await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { features: ['social_launch_basic'] } })
     await expect(
       createVariations(userId, { kitId, index: 0, intent: 'REWRITE', count: 1 }),
     ).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
@@ -248,7 +260,7 @@ describe('droits', () => {
 
   it('ne laisse pas un autre compte retravailler ce kit', async () => {
     await prisma.plan.update({
-      where: { id: 'free' },
+      where: { id: FREE_PLAN_ID },
       data: { features: ['social_launch_basic', 'social_content_generation', 'social_calendar'] },
     })
     const autre = `atelier-autre-${Date.now()}@exemple.test`

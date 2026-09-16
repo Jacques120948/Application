@@ -12,6 +12,7 @@ import { addMedia, listMedias } from '@/server/media/service'
 import { generationStatus, IMAGE_DAILY_LIMIT, requestImage } from '@/server/media/generate'
 import { DEFAULT_THEME } from '@/server/spec/templates'
 import * as openai from '@/server/integrations/providers/openai'
+import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
 
 /**
  * Génération d'images sur une vraie base : sans clé rien ne part, avec une clé l'image
@@ -38,8 +39,10 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
+  // L'offre technique des tests : elle ouvre tout, et ne dépend d'aucune décision commerciale.
+  await ensureTestPlan()
   userId = (await register({ email: `${randomUUID()}@exemple.test`, password: 'motdepasse-42', locale: 'fr' }, { ip: randomUUID() })).userId
-  await prisma.subscription.create({ data: { userId, planId: 'builder', status: 'ACTIVE' } })
+  await prisma.subscription.create({ data: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' } })
   projectId = await withUserScope(userId, async (tx) =>
     (
       await tx.project.create({

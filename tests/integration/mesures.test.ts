@@ -10,6 +10,7 @@ import { computePageMetrics } from '@/server/runtime/metrics'
 import { withRuntimeScope } from '@/server/db/scope'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import type { AppSpec, DataField } from '@/server/spec/schema'
+import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
 
 /**
  * Les chiffres d'un tableau de bord.
@@ -126,6 +127,8 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
+  // L'offre technique des tests : elle ouvre tout, et ne dépend d'aucune décision commerciale.
+  await ensureTestPlan()
   email = `mesures-${Date.now()}@exemple.test`
   const created = await register(
     { email, password: 'motdepasse-2026-solide', locale: 'fr' },
@@ -134,8 +137,8 @@ beforeAll(async () => {
   userId = created.userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: 'builder', status: 'ACTIVE' },
-    update: { planId: 'builder', status: 'ACTIVE' },
+    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
   })
   const idea = 'Un suivi des devis pour un artisan'
   const project = await createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) })

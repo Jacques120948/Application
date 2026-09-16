@@ -5,6 +5,7 @@ import { withUserScope } from '@/server/db/scope'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { DEMO_APPS } from '@/server/demos/catalog'
+import { FREE_PLAN_ID } from '@/server/billing/plans'
 import {
   addMedia,
   addVisitorPhoto,
@@ -65,12 +66,12 @@ beforeAll(async () => {
   projectId = await makeProject(userId)
   otherProjectId = await makeProject(otherId)
   // L'offre gratuite n'accorde aucun espace : on en donne pour la durée de la suite.
-  await prisma.plan.update({ where: { id: 'free' }, data: { storageBytes: 300 * 1024 } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { storageBytes: 300 * 1024 } })
 }, 60_000)
 
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { email: { in: [email, otherEmail] } } })
-  await prisma.plan.update({ where: { id: 'free' }, data: { storageBytes: 0 } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { storageBytes: 0 } })
 })
 
 describe('ajout d’une image', () => {
@@ -112,7 +113,7 @@ describe('quota', () => {
      */
     const before = await listMedias(userId, projectId)
     await prisma.plan.update({
-      where: { id: 'free' },
+      where: { id: FREE_PLAN_ID },
       data: { storageBytes: before.usedBytes + 512 },
     })
 
@@ -125,15 +126,15 @@ describe('quota', () => {
     expect(after.items.length).toBe(before.items.length)
     expect(after.usedBytes).toBe(before.usedBytes)
 
-    await prisma.plan.update({ where: { id: 'free' }, data: { storageBytes: 300 * 1024 } })
+    await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { storageBytes: 300 * 1024 } })
   })
 
   it('refuse tout ajout quand l’offre n’accorde aucun espace', async () => {
-    await prisma.plan.update({ where: { id: 'free' }, data: { storageBytes: 0 } })
+    await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { storageBytes: 0 } })
     await expect(
       addMedia(userId, projectId, { name: 'interdite.png', bytes: await image(100, 100) }),
     ).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
-    await prisma.plan.update({ where: { id: 'free' }, data: { storageBytes: 300 * 1024 } })
+    await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { storageBytes: 300 * 1024 } })
   })
 
   it('rend de la place quand une image est supprimée', async () => {

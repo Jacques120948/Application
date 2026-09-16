@@ -9,8 +9,6 @@ import { DEFAULT_PLAN_FEATURES } from './features'
  * sans redéploiement (exigence 34).
  */
 
-const MEGABYTE = 1024 * 1024
-
 export type PlanDefaults = {
   id: string
   name: string
@@ -56,7 +54,19 @@ export type PlanDefaults = {
    * connecte sa propre clé n'est pas concerné : sa voie ne coûte rien à Evoliia.
    */
   imagesPerMonth: number
+  /**
+   * Ce que l'offre accorde dans le produit de visibilité.
+   *
+   * `auditsPerMonth` borne la seule dépense qui grandit avec l'usage : un audit n'est pas
+   * du calcul gratuit, c'est un parcours réel de pages sur le réseau, à la charge
+   * d'Evoliia. Les deux autres bornent ce qu'on promet, pas ce qu'on dépense.
+   */
+  sitesMax: number
+  pagesPerAudit: number
+  auditsPerMonth: number
   monthlyCredits: number
+  /** Monnaie de l'offre. Le franc pour un produit vendu d'abord en Suisse. */
+  currency: string
   allowBuild: boolean
   allowExport: boolean
   allowCustomDomain: boolean
@@ -74,24 +84,30 @@ export type PlanDefaults = {
  */
 export const DEFAULT_PLANS: readonly PlanDefaults[] = [
   {
-    id: 'free',
-    name: 'Découverte',
+    id: 'vis-essai',
+    name: 'Essai',
     description:
-      "Définissez votre objectif, recevez des idées adaptées à votre profil et faites analyser celle qui vous plaît.",
+      'Un audit complet de votre site, ses deux notes et vos premières priorités. De quoi savoir ce qui vous manque avant de payer quoi que ce soit.',
     priceCents: 0,
+    currency: 'CHF',
+    /*
+     * Un seul audit, et c'est tout l'objet de cette offre : montrer ce que le produit
+     * trouve chez vous. Les corrections rédigées par l'IA, elles, coûtent de l'argent à
+     * Evoliia — d'où une réserve de crédits volontairement courte.
+     */
+    sitesMax: 1,
+    pagesPerAudit: 20,
+    auditsPerMonth: 1,
+    monthlyCredits: 20,
     maxProjects: 0,
     maxConnections: 0,
-    features: DEFAULT_PLAN_FEATURES['free'] ?? [],
+    features: DEFAULT_PLAN_FEATURES['vis-essai'] ?? [],
     storageBytes: 0,
-    radarRunsPerMonth: 1,
+    radarRunsPerMonth: 0,
     liaAnswersPerMonth: 0,
     liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
     imagesPerMonth: 0,
-    // Mesuré à l'usage : une recherche d'idées coûte environ 12 crédits et une analyse
-    // approfondie environ 7. L'offre de découverte doit couvrir au moins une recherche
-    // et deux analyses, sinon elle s'arrête avant d'avoir montré sa valeur.
-    monthlyCredits: 30,
     allowBuild: false,
     allowExport: false,
     allowCustomDomain: false,
@@ -100,21 +116,26 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     sortOrder: 0,
   },
   {
-    id: 'launch',
-    name: 'Launch',
-    description: 'Pour lancer votre première application et la mettre en ligne.',
-    priceCents: 2900,
-    maxProjects: 1,
+    id: 'vis-starter',
+    name: 'Starter',
+    description:
+      'Pour les indépendants, artisans et petites entreprises qui veulent commencer à améliorer leur visibilité.',
+    priceCents: 1900,
+    currency: 'CHF',
+    sitesMax: 1,
+    pagesPerAudit: 50,
+    auditsPerMonth: 4,
+    monthlyCredits: 150,
+    maxProjects: 0,
     maxConnections: 1,
-    features: DEFAULT_PLAN_FEATURES['launch'] ?? [],
-    storageBytes: 50 * MEGABYTE,
-    radarRunsPerMonth: 3,
-    liaAnswersPerMonth: 100,
-    liaConversationsPerMonth: 50,
+    features: DEFAULT_PLAN_FEATURES['vis-starter'] ?? [],
+    storageBytes: 0,
+    radarRunsPerMonth: 0,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
     imagesPerMonth: 0,
-    monthlyCredits: 100,
-    allowBuild: true,
+    allowBuild: false,
     allowExport: false,
     allowCustomDomain: false,
     allowMobilePrep: false,
@@ -122,52 +143,77 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     sortOrder: 1,
   },
   {
-    id: 'builder',
-    name: 'Builder',
-    description: 'Plusieurs projets, accompagnement au lancement et export de votre site.',
-    priceCents: 5900,
-    maxProjects: 5,
+    id: 'vis-pro',
+    name: 'Pro',
+    description:
+      'Pour les e-commerçants et les entreprises qui travaillent leur visibilité régulièrement.',
+    priceCents: 4900,
+    currency: 'CHF',
+    sitesMax: 3,
+    pagesPerAudit: 250,
+    auditsPerMonth: 12,
+    monthlyCredits: 600,
+    maxProjects: 0,
     maxConnections: 3,
-    features: DEFAULT_PLAN_FEATURES['builder'] ?? [],
-    storageBytes: 250 * MEGABYTE,
-    radarRunsPerMonth: 6,
-    liaAnswersPerMonth: 500,
-    liaConversationsPerMonth: 200,
+    features: DEFAULT_PLAN_FEATURES['vis-pro'] ?? [],
+    storageBytes: 0,
+    radarRunsPerMonth: 0,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
     imagesPerMonth: 0,
-    monthlyCredits: 350,
-    allowBuild: true,
-    allowExport: true,
+    allowBuild: false,
+    allowExport: false,
     allowCustomDomain: false,
     allowMobilePrep: false,
+    // L'offre du milieu est celle qui convient au plus grand nombre : la mettre en avant
+    // évite à la plupart des gens un arbitrage qu'ils n'ont pas les moyens de faire.
     isRecommended: true,
     sortOrder: 2,
   },
   {
-    id: 'business',
+    id: 'vis-business',
     name: 'Business',
-    description: "Pour exploiter plusieurs applications et aller plus loin dans l'acquisition.",
+    description:
+      'Pour les entreprises, les petites agences et ceux qui suivent plusieurs sites ou produisent beaucoup de contenu.',
     priceCents: 9900,
-    maxProjects: 20,
+    currency: 'CHF',
+    sitesMax: 10,
+    pagesPerAudit: 1000,
+    auditsPerMonth: 40,
+    monthlyCredits: 1500,
+    maxProjects: 0,
     maxConnections: 10,
-    features: DEFAULT_PLAN_FEATURES['business'] ?? [],
-    storageBytes: 1024 * MEGABYTE,
-    radarRunsPerMonth: 12,
-    liaAnswersPerMonth: 2000,
-    liaConversationsPerMonth: 1000,
+    features: DEFAULT_PLAN_FEATURES['vis-business'] ?? [],
+    storageBytes: 0,
+    radarRunsPerMonth: 0,
+    liaAnswersPerMonth: 0,
+    liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
     imagesPerMonth: 0,
-    monthlyCredits: 800,
-    allowBuild: true,
+    allowBuild: false,
     allowExport: true,
     allowCustomDomain: false,
-    allowMobilePrep: true,
+    allowMobilePrep: false,
     isRecommended: false,
     sortOrder: 3,
   },
 ] as const
 
-export const FREE_PLAN_ID = 'free'
+/*
+ * L'identifiant de l'offre d'entrée du produit de visibilité.
+ *
+ * Il est préfixé, et cela vient d'un vrai défaut. Les identifiants « starter », « pro » et
+ * « business » existaient déjà, d'un catalogue précédent, avec d'autres prix et d'autres
+ * réserves. Or le semis ne réécrit jamais une offre déjà en base — elle appartient à
+ * l'exploitant —, si bien que les nouvelles offres auraient hérité en silence des valeurs
+ * des anciennes : un prix en euros au lieu de francs, huit cents crédits au lieu de mille
+ * cinq cents. Le client aurait vu le bon nom et le mauvais chiffre.
+ *
+ * Un préfixe sépare les deux générations une fois pour toutes. Les anciennes offres sont
+ * désactivées par le semis, jamais supprimées : des abonnements les référencent encore.
+ */
+export const FREE_PLAN_ID = 'vis-essai'
 
 /** Capacité d'offre, au sens d'un interrupteur booléen de la table `Plan`. */
 export type PlanCapability =
@@ -215,7 +261,6 @@ export async function getEffectivePlan(userId: string) {
   const defaults = DEFAULT_PLANS[0]!
   return {
     ...defaults,
-    currency: 'EUR',
     interval: 'month',
     isActive: true,
     createdAt: new Date(),

@@ -14,6 +14,7 @@ import {
 import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import type { PatchOperation } from '@/server/spec/patch'
+import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
 
 /**
  * Le mode plan, de bout en bout.
@@ -71,6 +72,8 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
+  // L'offre technique des tests : elle ouvre tout, et ne dépend d'aucune décision commerciale.
+  await ensureTestPlan()
   email = `plan-${Date.now()}@exemple.test`
   const created = await register(
     { email, password: 'motdepasse-2026-solide', locale: 'fr' },
@@ -79,8 +82,8 @@ beforeAll(async () => {
   userId = created.userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: 'builder', status: 'ACTIVE' },
-    update: { planId: 'builder', status: 'ACTIVE' },
+    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
   })
   const idea = 'Un annuaire des artisans de ma ville'
   const project = await createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) })

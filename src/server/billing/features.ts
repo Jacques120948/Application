@@ -189,33 +189,38 @@ export function liveFeatures(): Feature[] {
  * modifie. Ces valeurs servent à initialiser une installation neuve et à documenter
  * l'intention commerciale.
  */
+/**
+ * Ce que chaque offre ouvre, par identifiant.
+ *
+ * Les quatre spécialistes y figurent dès l'offre d'entrée, et ce n'est pas une largesse :
+ * une équipe dont on ne voit qu'un membre n'est pas une équipe, et l'écart entre les offres
+ * se joue sur ce qu'on peut leur demander — les crédits, les sites, les pages — pas sur le
+ * droit de leur parler. Ils sont d'ailleurs déclarés « prévu » tant qu'ils ne fonctionnent
+ * pas, et une fonction prévue n'entre jamais dans les droits accordés : les nommer ici ne
+ * les ouvre donc pas avant l'heure.
+ *
+ * L'essai n'ouvre rien : il montre l'audit et ses notes, et s'arrête là où il faudrait
+ * dépenser pour Evoliia.
+ */
 export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
-  free: ['radar'],
-  launch: ['radar', 'lia_support', 'social_launch_basic', 'social_angles', 'social_week'],
-  builder: [
-    'radar',
-    'lia_support',
-    'social_launch_basic',
-    'social_angles',
-    'social_week',
-    'social_calendar',
-    'social_content_generation',
-    'social_agent',
-    'social_analytics_basic',
+  'vis-essai': [],
+  'vis-starter': [
+    'visibility_audit_agent',
+    'visibility_seo_agent',
+    'visibility_geo_agent',
+    'visibility_content_agent',
   ],
-  business: [
-    'radar',
-    'lia_support',
-    'social_launch_basic',
-    'social_angles',
-    'social_week',
-    'social_calendar',
-    'social_content_generation',
-    'social_agent',
-    'social_analytics_basic',
-    'marketing_team',
-    'seo_agent',
-    'analytics_agent',
+  'vis-pro': [
+    'visibility_audit_agent',
+    'visibility_seo_agent',
+    'visibility_geo_agent',
+    'visibility_content_agent',
+  ],
+  'vis-business': [
+    'visibility_audit_agent',
+    'visibility_seo_agent',
+    'visibility_geo_agent',
+    'visibility_content_agent',
   ],
 }
 

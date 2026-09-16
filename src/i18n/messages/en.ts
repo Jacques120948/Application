@@ -927,4 +927,161 @@ export const en: Record<keyof typeof fr, string> = {
     'The analysis and the scores use none: that is computation. Credits go when you ask an agent for a text, a correction or an explanation, and the cost of each action is shown before you start it.',
 
   'vis.signupSite': 'Site to analyse: {site}. Create your account to start the analysis.',
+
+  /* ── New public-page sections ───────────────────────────────────────────── */
+  'vis.navFeatures': 'Features',
+  'vis.navSeo': 'SEO',
+  'vis.navGeo': 'GEO',
+
+  'vis.heroBadges': 'SEO • GEO • Content • Social',
+  'vis.heroCtaHow': 'See how it works',
+  'vis.mockTitle': 'Your visibility',
+  'vis.mockPages': 'pages analysed',
+  'vis.mockPriorities': 'priorities',
+  'vis.mockTeam': 'Léa, Néo, Gia and Milo are on it',
+
+  'vis.painTitle': 'Being found is getting harder.',
+  'vis.painBody':
+    'You already had to be found on Google. Now you also have to be understood by AI assistants, which answer in place of a list of links. For a small business that adds up to a lot of invisible work, and nobody to say where to start.',
+  'vis.pain1': 'I don’t know what to improve.',
+  'vis.pain2': 'I don’t have time for SEO.',
+  'vis.pain3': 'I have no idea whether my site suits AI engines.',
+  'vis.painAnswer': 'Evoliia turns that complexity into a list of things to do.',
+
+  'vis.solutionTitle': 'Evoliia tells you what to improve, and how.',
+  'vis.solutionBody': 'Four steps. You only do two of them: the first and the last.',
+  'vis.step1Title': 'Add your site',
+  'vis.step1Body': 'You enter your address. Nothing else is asked of you.',
+  'vis.step2Title': 'Evoliia analyses',
+  'vis.step2Body': 'Your pages are crawled and checked, on the Google side and the AI side.',
+  'vis.step3Title': 'Your team prioritises',
+  'vis.step3Body': 'Problems are ranked by what they actually cost you.',
+  'vis.step4Title': 'Fix it with AI',
+  'vis.step4Body': 'You get the corrected text, ready to paste onto your site.',
+
+  'vis.teamHelp':
+    'You do not have to become an expert: your team explains what to do, step by step, in a single conversation.',
+
+  'vis.dashTitle': 'Your visibility, at a glance.',
+  'vis.dashBody':
+    'Two scores, the number of pages analysed, the priorities of the moment. And above all how they move: the only way to know whether what you are doing is working.',
+  'vis.dashFollow': 'Track your progress, audit after audit.',
+
+  'vis.seoSectionTitle': 'Improve your Google ranking.',
+  'vis.seoSectionBody':
+    'Néo reviews what decides your place in the results — and what decides whether anyone clicks once you are there.',
+  'vis.seoCta': 'What Néo looks at',
+
+  'vis.geoSectionTitle': 'Get your site ready for AI-assisted search.',
+  'vis.geoSectionBody':
+    'More and more people put their question to an assistant rather than a search engine. An assistant does not rank links: it answers, and quotes what it understood. Gia analyses how clear and structured your content is, and what is getting in the way.',
+  'vis.geoSectionClaim':
+    'The goal is not to “rank first in ChatGPT” — that cannot be sold, because it cannot be bought. It is to make your content clearer, better structured and easier for a machine to understand.',
+
+  'vis.fixTitle': 'Do not get a problem. Get the solution.',
+  'vis.fixBody':
+    'That is the whole difference between an audit and a working tool. An audit tells you what is missing; Evoliia writes it.',
+  'vis.fixProblem': 'Problem found',
+  'vis.fixProblemText': 'Meta description missing',
+  'vis.fixAgent': 'Fix it with Néo',
+  'vis.fixProposal': 'Evoliia’s proposal',
+  'vis.fixProposalText':
+    'Hand-poured artisan candles from the Gruyère. Soy wax, natural fragrances, delivered across Switzerland within 48 hours.',
+  'vis.fixCopy': 'Copy',
+  'vis.fixNote':
+    'Evoliia turns a technical recommendation into something you can paste right away.',
+
+  'vis.contentTitle': 'Write the content your site actually needs.',
+  'vis.contentBody':
+    'Milo does not produce text by the yard. He starts from what the analysis found on your site: the pages that answer nothing, the questions nobody addresses, the descriptions that are missing.',
+  'vis.contentNote':
+    'Content comes from a gap found on your site, never from a topic picked at random.',
+
+  'vis.bridgeEvoliia': 'Evoliia',
+  'vis.bridgeEvoliiaSub': 'SEO • GEO • Content',
+  'vis.bridgeArrow': 'Send to Postelya',
+  'vis.bridgeNetworks': 'Instagram · Facebook · LinkedIn · Pinterest',
+
+  'vis.audienceTitle': 'For people who want to be found without becoming experts.',
+  'vis.audienceBody': 'Search marketing is a job. You already have one.',
+  'vis.audience1': 'E-commerce',
+  'vis.audience2': 'Tradespeople',
+  'vis.audience3': 'Freelancers',
+  'vis.audience4': 'Small businesses',
+  'vis.audience5': 'Agencies',
+  'vis.audience6': 'Creators',
+  'vis.audience7': 'Service providers',
+
+  'vis.diffTitle': 'A search tool built for non-experts.',
+  'vis.diffBody':
+    'The existing tools are aimed at people who do this for a living. This one is aimed at you.',
+  'vis.diff1Title': 'Priorities, not a list',
+  'vis.diff1Body': 'You know what to do first, and why it is that one.',
+  'vis.diff2Title': 'Explanations you can read',
+  'vis.diff2Body': 'No technical term is left untranslated.',
+  'vis.diff3Title': 'Fixes already written',
+  'vis.diff3Body': 'You leave with the text, not with an instruction.',
+  'vis.diff4Title': 'Google and AI engines',
+  'vis.diff4Body': 'Both ways of being found, measured separately.',
+
+  'vis.plansTitle': 'Three plans, and credits that only pay for AI.',
+  'vis.plansBody':
+    'Analysing your site consumes nothing: it is computation. Credits go when an agent writes, fixes or explains.',
+  'vis.plansPerMonth': '/ month',
+  'vis.plansPopular': 'Most chosen',
+  'vis.plansSites': '{count} site tracked',
+  'vis.plansSitesMany': '{count} sites tracked',
+  'vis.plansPages': 'up to {count} pages analysed per audit',
+  'vis.plansAudits': '{count} audits per month',
+  'vis.plansCredits': '{count} AI credits per month',
+  'vis.plansTeam': 'Léa, Néo, Gia and Milo',
+  'vis.plansHistory': 'Audit history and comparison',
+  'vis.plansPostelya': 'Postelya connector',
+  'vis.plansExport': 'Report exports',
+  'vis.plansCta': 'Choose {plan}',
+  'vis.plansFreeCta': 'Try it free',
+
+  'vis.trialTitle': 'Start without paying.',
+  'vis.trialBody':
+    'One full audit, both your scores and your first priorities, with no card. You will see what your site is missing before deciding whether it is worth a subscription. Written fixes and history come with a plan.',
+
+  'vis.packsTitle': 'Need more credits?',
+  'vis.packsBody':
+    'A busy month should not force you to change plan. You top up, and those credits do not expire — they were paid for.',
+  'vis.packsCredits': '{count} credits',
+  'vis.packsNote':
+    'Purchased credits are added to your monthly allowance and stay available until you use them.',
+
+  'vis.costsTitle': 'What costs credits, and what costs nothing.',
+  'vis.costsFree': 'Included, no credits',
+  'vis.costsPaid': 'Uses credits',
+  'vis.costsNote':
+    'The ranges are indicative and shown before each action. The actual charge is measured on the work really done: nobody is billed on an estimate.',
+
+  'vis.compareTitle': 'Compare the three plans',
+  'vis.compareSites': 'Sites tracked',
+  'vis.comparePages': 'Pages per audit',
+  'vis.compareAudits': 'Audits per month',
+  'vis.compareCredits': 'AI credits per month',
+  'vis.compareTeam': 'AI team',
+  'vis.compareHistory': 'History',
+  'vis.compareContent': 'AI-written content',
+  'vis.comparePostelya': 'Postelya',
+  'vis.compareExports': 'Exports',
+  'vis.compareYes': 'Yes',
+  'vis.compareNo': '—',
+
+  'vis.pricingCtaTitle': 'Start by seeing what is holding your visibility back.',
+  'vis.pricingCtaNote': 'No search-marketing knowledge required.',
+
+  'vis.finalTitle': 'Find out what is holding your visibility back.',
+  'vis.finalBody':
+    'Add your site and let Evoliia find your first chances to improve, on Google and on the AI side.',
+
+  'vis.faq7Q': 'What is an SEO audit, concretely?',
+  'vis.faq7A':
+    'Evoliia walks through your pages the way an engine would and checks around thirty points: what shows in the results, the structure of your headings, your internal links, your images, your structured data. Out of it comes a score, and above all a ranked list of what is costing you most.',
+  'vis.faq8Q': 'Can I change plan along the way?',
+  'vis.faq8A':
+    'Yes, in both directions, from your account. The change goes through Stripe and takes effect immediately.',
 }

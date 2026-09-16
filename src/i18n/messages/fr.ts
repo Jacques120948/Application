@@ -971,6 +971,165 @@ export const fr = {
     'L’analyse et les notes ne consomment rien : c’est du calcul. Les crédits partent quand vous demandez un texte, une correction ou une explication à un agent, et le coût de chaque action est affiché avant que vous la lanciez.',
 
   'vis.signupSite': 'Site à analyser : {site}. Créez votre compte pour lancer l’analyse.',
+
+  /* ── Nouvelles sections de la page publique ─────────────────────────────── */
+  'vis.navFeatures': 'Fonctionnalités',
+  'vis.navSeo': 'SEO',
+  'vis.navGeo': 'GEO',
+
+  'vis.heroBadges': 'SEO • GEO • Contenu • Réseaux sociaux',
+  'vis.heroCtaHow': 'Découvrir comment ça marche',
+  'vis.mockTitle': 'Votre visibilité',
+  'vis.mockPages': 'pages analysées',
+  'vis.mockPriorities': 'priorités',
+  'vis.mockTeam': 'Léa, Néo, Gia et Milo travaillent dessus',
+
+  'vis.painTitle': 'Être visible devient de plus en plus compliqué.',
+  'vis.painBody':
+    'Il fallait déjà être trouvé sur Google. Il faut désormais aussi être compris par les assistants IA, qui répondent à la place des listes de liens. Pour une petite entreprise, cela fait beaucoup de travail invisible, et personne pour dire par où commencer.',
+  'vis.pain1': 'Je ne sais pas quoi améliorer.',
+  'vis.pain2': 'Je n’ai pas le temps de m’occuper du SEO.',
+  'vis.pain3': 'J’ignore si mon site est adapté aux moteurs IA.',
+  'vis.painAnswer': 'Evoliia transforme cette complexité en une liste de choses à faire.',
+
+  'vis.solutionTitle': 'Evoliia vous dit quoi améliorer, et comment le faire.',
+  'vis.solutionBody':
+    'Quatre étapes. Vous n’en faites que deux : la première et la dernière.',
+  'vis.step1Title': 'Ajoutez votre site',
+  'vis.step1Body': 'Vous entrez votre adresse. Rien d’autre ne vous est demandé.',
+  'vis.step2Title': 'Evoliia analyse',
+  'vis.step2Body': 'Vos pages sont parcourues et passées au crible, côté Google et côté IA.',
+  'vis.step3Title': 'Votre équipe priorise',
+  'vis.step3Body': 'Les problèmes sont classés par ce qu’ils vous coûtent réellement.',
+  'vis.step4Title': 'Corrigez avec l’IA',
+  'vis.step4Body': 'Vous recevez le texte corrigé, prêt à coller sur votre site.',
+
+  'vis.teamHelp':
+    'Vous n’avez pas à devenir expert : votre équipe vous explique quoi faire, étape par étape, dans une seule conversation.',
+
+  'vis.dashTitle': 'Votre visibilité, d’un coup d’œil.',
+  'vis.dashBody':
+    'Deux notes, le nombre de pages analysées, les priorités du moment. Et surtout leur évolution : la seule façon de savoir si ce que vous faites sert à quelque chose.',
+  'vis.dashFollow': 'Suivez vos progrès, audit après audit.',
+
+  'vis.seoSectionTitle': 'Améliorez votre référencement Google.',
+  'vis.seoSectionBody':
+    'Néo passe en revue ce qui décide de votre place dans les résultats — et ce qui décide qu’on clique une fois que vous y êtes.',
+  'vis.seoCta': 'Ce que Néo regarde',
+
+  'vis.geoSectionTitle': 'Préparez votre site à la recherche assistée par IA.',
+  'vis.geoSectionBody':
+    'De plus en plus de gens posent leur question à un assistant plutôt qu’à un moteur. L’assistant ne classe pas des liens : il répond, et cite ce qu’il a compris. Gia analyse la clarté et la structure de vos contenus pour repérer ce qui l’en empêche.',
+  'vis.geoSectionClaim':
+    'L’objectif n’est pas d’« être premier dans ChatGPT » — cela ne se vend pas, parce que cela ne s’achète pas. Il est de rendre vos contenus plus clairs, mieux structurés et plus faciles à comprendre pour une machine.',
+
+  'vis.fixTitle': 'Ne recevez pas un problème. Recevez la solution.',
+  'vis.fixBody':
+    'C’est toute la différence entre un audit et un outil de travail. Un audit vous dit ce qui manque ; Evoliia l’écrit.',
+  'vis.fixProblem': 'Problème détecté',
+  'vis.fixProblemText': 'Meta description absente',
+  'vis.fixAgent': 'Corriger avec Néo',
+  'vis.fixProposal': 'Proposition d’Evoliia',
+  'vis.fixProposalText':
+    'Bougies artisanales coulées à la main en Gruyère. Cire de soja, parfums naturels, livraison en Suisse sous 48 h.',
+  'vis.fixCopy': 'Copier',
+  'vis.fixNote':
+    'Evoliia transforme une recommandation technique en quelque chose que vous pouvez coller tout de suite.',
+
+  'vis.contentTitle': 'Écrivez les contenus dont votre site a réellement besoin.',
+  'vis.contentBody':
+    'Milo ne fabrique pas du texte au kilomètre. Il part de ce que l’analyse a trouvé chez vous : les pages sans réponse, les questions auxquelles personne ne répond, les descriptions qui manquent.',
+  'vis.contentNote':
+    'Le contenu naît d’un manque constaté sur votre site, jamais d’un sujet tiré au hasard.',
+
+  'vis.bridgeEvoliia': 'Evoliia',
+  'vis.bridgeEvoliiaSub': 'SEO • GEO • Contenu',
+  'vis.bridgeArrow': 'Envoyer vers Postelya',
+  'vis.bridgeNetworks': 'Instagram · Facebook · LinkedIn · Pinterest',
+
+  'vis.audienceTitle': 'Pour celles et ceux qui veulent être visibles sans devenir experts.',
+  'vis.audienceBody':
+    'Le référencement est un métier. Vous en avez déjà un.',
+  'vis.audience1': 'E-commerce',
+  'vis.audience2': 'Artisans',
+  'vis.audience3': 'Indépendants',
+  'vis.audience4': 'Petites entreprises',
+  'vis.audience5': 'Agences',
+  'vis.audience6': 'Créateurs',
+  'vis.audience7': 'Prestataires de services',
+
+  'vis.diffTitle': 'Un outil de référencement fait pour les non-experts.',
+  'vis.diffBody':
+    'Les outils existants s’adressent à des gens dont c’est le métier. Celui-ci s’adresse à vous.',
+  'vis.diff1Title': 'Des priorités, pas une liste',
+  'vis.diff1Body': 'Vous savez quoi faire en premier, et pourquoi c’est celui-là.',
+  'vis.diff2Title': 'Des explications lisibles',
+  'vis.diff2Body': 'Aucun terme technique n’est laissé sans traduction.',
+  'vis.diff3Title': 'Des corrections écrites',
+  'vis.diff3Body': 'Vous repartez avec le texte, pas avec une consigne.',
+  'vis.diff4Title': 'Google et les moteurs IA',
+  'vis.diff4Body': 'Les deux façons d’être trouvé, mesurées séparément.',
+
+  'vis.plansTitle': 'Trois offres, et des crédits qui ne servent qu’à l’IA.',
+  'vis.plansBody':
+    'Analyser votre site ne consomme rien : c’est du calcul. Les crédits partent quand un agent écrit, corrige ou explique.',
+  'vis.plansPerMonth': '/ mois',
+  'vis.plansPopular': 'Le plus choisi',
+  'vis.plansSites': '{count} site suivi',
+  'vis.plansSitesMany': '{count} sites suivis',
+  'vis.plansPages': 'jusqu’à {count} pages analysées par audit',
+  'vis.plansAudits': '{count} audits par mois',
+  'vis.plansCredits': '{count} crédits IA par mois',
+  'vis.plansTeam': 'Léa, Néo, Gia et Milo',
+  'vis.plansHistory': 'Historique et comparaison des audits',
+  'vis.plansPostelya': 'Connecteur Postelya',
+  'vis.plansExport': 'Export des rapports',
+  'vis.plansCta': 'Choisir {plan}',
+  'vis.plansFreeCta': 'Essayer gratuitement',
+
+  'vis.trialTitle': 'Commencez sans payer.',
+  'vis.trialBody':
+    'Un audit complet, vos deux notes et vos premières priorités, sans carte bancaire. Vous verrez ce qui manque à votre site avant de décider si cela vaut un abonnement. Les corrections rédigées et l’historique viennent avec une offre.',
+
+  'vis.packsTitle': 'Besoin de plus de crédits ?',
+  'vis.packsBody':
+    'Un mois chargé ne doit pas obliger à changer d’abonnement. Vous rechargez, et ces crédits-là n’expirent pas — ils sont payés.',
+  'vis.packsCredits': '{count} crédits',
+  'vis.packsNote':
+    'Les crédits achetés s’ajoutent à votre réserve mensuelle et restent disponibles tant que vous ne les utilisez pas.',
+
+  'vis.costsTitle': 'Ce qui coûte, et ce qui ne coûte rien.',
+  'vis.costsFree': 'Inclus, sans crédit',
+  'vis.costsPaid': 'Consomme des crédits',
+  'vis.costsNote':
+    'Les fourchettes sont indicatives et annoncées avant chaque action. Le débit réel est mesuré sur le travail réellement fourni : personne n’est facturé sur une estimation.',
+
+  'vis.compareTitle': 'Comparer les trois offres',
+  'vis.compareSites': 'Sites suivis',
+  'vis.comparePages': 'Pages par audit',
+  'vis.compareAudits': 'Audits par mois',
+  'vis.compareCredits': 'Crédits IA par mois',
+  'vis.compareTeam': 'Équipe IA',
+  'vis.compareHistory': 'Historique',
+  'vis.compareContent': 'Contenu rédigé par l’IA',
+  'vis.comparePostelya': 'Postelya',
+  'vis.compareExports': 'Exports',
+  'vis.compareYes': 'Oui',
+  'vis.compareNo': '—',
+
+  'vis.pricingCtaTitle': 'Commencez par voir ce qui limite votre visibilité.',
+  'vis.pricingCtaNote': 'Aucune connaissance en référencement n’est nécessaire.',
+
+  'vis.finalTitle': 'Découvrez ce qui limite votre visibilité.',
+  'vis.finalBody':
+    'Ajoutez votre site et laissez Evoliia trouver vos premières occasions de progresser, sur Google comme du côté des moteurs IA.',
+
+  'vis.faq7Q': 'Qu’est-ce qu’un audit SEO, concrètement ?',
+  'vis.faq7A':
+    'Evoliia parcourt vos pages comme le ferait un moteur et vérifie une trentaine de points : ce qui s’affiche dans les résultats, la structure de vos titres, vos liens internes, vos images, vos données structurées. Il en sort une note, et surtout une liste classée de ce qui vous coûte le plus.',
+  'vis.faq8Q': 'Puis-je changer d’offre en cours de route ?',
+  'vis.faq8A':
+    'Oui, dans les deux sens, depuis votre compte. Le changement passe par Stripe et prend effet immédiatement.',
 } as const
 
 export type MessageKey = keyof typeof fr

@@ -10,6 +10,7 @@ import { connectWithApiKey, disconnect, listConnections } from '@/server/integra
 import { sendWeekToSocial } from '@/server/marketing/publish'
 import { setFlag } from '@/server/settings/flags'
 import { DEMO_APPS } from '@/server/demos/catalog'
+import { FREE_PLAN_ID } from '@/server/billing/plans'
 
 /**
  * Liaison d'un espace Postelya, de bout en bout.
@@ -105,14 +106,14 @@ beforeAll(async () => {
 
   email = `liaison-${Date.now()}@exemple.test`
   userId = (await register({ email, password: 'motdepasse-2026-solide', locale: 'fr' })).userId
-  await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 2 } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { maxConnections: 2 } })
 }, 30_000)
 
 afterAll(async () => {
   await setFlag('socialPublishing', false)
   await new Promise<void>((resolve) => server.close(() => resolve()))
   await prisma.user.deleteMany({ where: { email } })
-  await prisma.plan.update({ where: { id: 'free' }, data: { maxConnections: 0 } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { maxConnections: 0 } })
   delete process.env.SOCIAL_ENGINE_URL
   delete process.env.SOCIAL_ENGINE_SECRET
 })

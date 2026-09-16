@@ -5,7 +5,7 @@ import { withUserScope } from '@/server/db/scope'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { DEMO_APPS } from '@/server/demos/catalog'
-import { DEFAULT_PLANS } from '@/server/billing/plans'
+import { FREE_PLAN_ID, DEFAULT_PLANS } from '@/server/billing/plans'
 import { availableCredits, getWallet } from '@/server/billing/credits'
 import { forgetPricingCache, PRICING_SETTINGS } from '@/server/billing/ai-pricing'
 import { writeSetting } from '@/server/settings/store'
@@ -45,7 +45,7 @@ let email: string
 const spec = DEMO_APPS[0]!.spec
 
 async function offreAvecImages(images: number): Promise<void> {
-  await prisma.plan.update({ where: { id: 'free' }, data: { imagesPerMonth: images } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { imagesPerMonth: images } })
 }
 
 beforeAll(async () => {
@@ -73,7 +73,7 @@ afterEach(() => {
 
 afterAll(async () => {
   await prisma.user.deleteMany({ where: { email } })
-  await prisma.plan.update({ where: { id: 'free' }, data: { imagesPerMonth: 0 } })
+  await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { imagesPerMonth: 0 } })
   await prisma.siteSetting.deleteMany({ where: { key: PRICING_SETTINGS.imageMicros } })
   delete process.env.GEMINI_API_KEY
   forgetPricingCache()
@@ -154,7 +154,7 @@ describe('ce que coûte une image', () => {
     // Le quota ne bouge qu'une fois l'image rangée : c'est l'enregistrement qui compte,
     // pas l'appel.
     expect((await generationStatus(userId)).monthlyLeft).toBe(5)
-    await prisma.plan.update({ where: { id: 'free' }, data: { storageBytes: 1024 * 1024 } })
+    await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { storageBytes: 1024 * 1024 } })
     const projet = await withUserScope(userId, (tx) =>
       tx.project.create({
         data: {

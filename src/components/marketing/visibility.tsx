@@ -35,17 +35,47 @@ const TEINTES: Record<VisibilityAgent['tint'], { fond: string; anneau: string }>
  * la moitié chaude de la palette ne tient pas un texte blanc, et une pastille illisible
  * serait pire qu'une pastille sans caractère.
  */
-export function AgentAvatar({ agent, size = 56 }: { agent: VisibilityAgent; size?: number }) {
+/** Trois tailles, et pas une de plus : la pastille, la carte, le portrait. */
+export const AVATAR_SIZES = { sm: 32, md: 56, lg: 88 } as const
+
+export type AvatarSize = keyof typeof AVATAR_SIZES
+
+export function AgentAvatar({
+  agent,
+  size = 'md',
+  halo = false,
+}: {
+  agent: VisibilityAgent
+  size?: AvatarSize
+  halo?: boolean
+}) {
   const teinte = TEINTES[agent.tint]
+  const cote = AVATAR_SIZES[size]
+  const cercle = {
+    width: cote,
+    height: cote,
+    // Le halo est posé à l'extérieur du cercle : il entoure sans rogner le portrait.
+    boxShadow: halo
+      ? `0 0 0 3px var(--color-surface), 0 0 0 5px ${teinte.anneau}33`
+      : `inset 0 0 0 2px ${teinte.anneau}`,
+  }
+
   if (agent.avatar !== undefined) {
     return (
       <img
         src={agent.avatar}
         alt=""
-        width={size}
-        height={size}
-        className="rounded-[var(--radius-pill)] object-cover"
-        style={{ width: size, height: size }}
+        width={cote}
+        height={cote}
+        loading="lazy"
+        decoding="async"
+        /*
+         * `object-cover` sur un carré : un portrait livré dans un autre format est recadré
+         * au centre plutôt que déformé. C'est ce qui permet de déposer des images sans
+         * retoucher une ligne de code ici.
+         */
+        className="shrink-0 rounded-[var(--radius-pill)] object-cover"
+        style={{ ...cercle, background: teinte.fond }}
       />
     )
   }
@@ -53,13 +83,7 @@ export function AgentAvatar({ agent, size = 56 }: { agent: VisibilityAgent; size
     <span
       aria-hidden="true"
       className="inline-flex shrink-0 items-center justify-center rounded-[var(--radius-pill)] font-semibold text-[var(--color-ink)]"
-      style={{
-        width: size,
-        height: size,
-        background: teinte.fond,
-        boxShadow: `inset 0 0 0 2px ${teinte.anneau}`,
-        fontSize: Math.round(size * 0.42),
-      }}
+      style={{ ...cercle, background: teinte.fond, fontSize: Math.round(cote * 0.42) }}
     >
       {initiale(agent)}
     </span>
@@ -81,7 +105,7 @@ export function AgentCard({
   return (
     <div className="flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
       <div className="flex items-center gap-4">
-        <AgentAvatar agent={agent} />
+        <AgentAvatar agent={agent} size="lg" halo />
         <div>
           <h3 className="m-0 text-lg font-semibold">{agent.name}</h3>
           <p className="m-0 text-sm text-[var(--color-ink-faint)]">{agent.role}</p>
@@ -223,5 +247,168 @@ export function PriorityExample({
         {cta}
       </span>
     </div>
+  )
+}
+
+/**
+ * Le tableau de bord, montré tel qu'il sera.
+ *
+ * C'est la pièce qui fait comprendre le produit en trois secondes, là où trois paragraphes
+ * n'y arrivent pas. Elle est dessinée et non capturée : une capture d'écran d'un produit en
+ * construction serait périmée dans la semaine, et une capture retouchée serait un mensonge.
+ *
+ * Les chiffres portent la mention « exemple » dans le même bloc, parce qu'une note sur cent
+ * posée sur une page de vente se lit comme un engagement.
+ */
+export function DashboardMockup({
+  labels,
+}: {
+  labels: {
+    title: string
+    seo: string
+    geo: string
+    pages: string
+    priorities: string
+    sample: string
+    team: string
+  }
+}) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-white/15 bg-white/[0.07] p-5 backdrop-blur-sm">
+      <div className="flex items-center justify-between gap-4">
+        <p className="m-0 text-sm font-medium text-white">{labels.title}</p>
+        <span className="rounded-[var(--radius-pill)] border border-white/20 px-2.5 py-0.5 text-[11px] text-white/60">
+          {labels.sample}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <ScoreDial label={labels.seo} value={74} delta={6} />
+        <ScoreDial label={labels.geo} value={61} delta={11} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="rounded-[var(--radius-control)] border border-white/10 bg-white/5 px-4 py-3">
+          <p className="m-0 text-2xl font-semibold text-white">36</p>
+          <p className="m-0 text-xs text-white/60">{labels.pages}</p>
+        </div>
+        <div className="rounded-[var(--radius-control)] border border-white/10 bg-white/5 px-4 py-3">
+          <p className="m-0 text-2xl font-semibold text-white">5</p>
+          <p className="m-0 text-xs text-white/60">{labels.priorities}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-4">
+        <span className="flex -space-x-2">
+          {['L', 'N', 'G', 'M'].map((lettre) => (
+            <span
+              key={lettre}
+              aria-hidden="true"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-pill)] border-2 border-[var(--color-night)] bg-white/90 text-xs font-semibold text-[var(--color-ink)]"
+            >
+              {lettre}
+            </span>
+          ))}
+        </span>
+        <p className="m-0 text-xs text-white/60">{labels.team}</p>
+      </div>
+    </div>
+  )
+}
+
+/** Une inquiétude que le visiteur reconnaît, dite avec ses mots. */
+export function PainCard({ text }: { text: string }) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+      <p className="m-0 text-base leading-relaxed text-[var(--color-ink)] italic">« {text} »</p>
+    </div>
+  )
+}
+
+/** Une étape numérotée du parcours. */
+export function StepCard({
+  index,
+  title,
+  body,
+}: {
+  index: number
+  title: string
+  body: string
+}) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+      <span
+        className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-pill)] text-sm font-semibold text-white"
+        style={{ background: 'var(--gradient-cta)' }}
+      >
+        {index}
+      </span>
+      <h3 className="mt-4 mb-0 text-base font-semibold">{title}</h3>
+      <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">{body}</p>
+    </div>
+  )
+}
+
+/**
+ * Le problème, puis la proposition, puis le geste.
+ *
+ * La forme compte autant que le texte : montrer côte à côte ce qu'on a et ce qu'on obtient
+ * est ce qui distingue un outil qui diagnostique d'un outil qui aide. Le bouton « Copier »
+ * est dessiné, pas actif — un bouton qui ne fait rien sur une page de vente se remarque.
+ */
+export function FixExample({
+  problemLabel,
+  problem,
+  proposalLabel,
+  proposal,
+  copyLabel,
+  agentLabel,
+}: {
+  problemLabel: string
+  problem: string
+  proposalLabel: string
+  proposal: string
+  copyLabel: string
+  agentLabel: string
+}) {
+  return (
+    <div className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-center">
+      <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+        <p className="m-0 text-xs font-semibold tracking-wide text-[var(--color-critical)] uppercase">
+          {problemLabel}
+        </p>
+        <p className="mt-2 mb-0 text-base font-medium">{problem}</p>
+      </div>
+
+      <span
+        aria-hidden="true"
+        className="justify-self-center rounded-[var(--radius-pill)] px-4 py-2 text-sm font-medium text-white"
+        style={{ background: 'var(--gradient-cta)' }}
+      >
+        {agentLabel}
+      </span>
+
+      <div className="rounded-[var(--radius-card)] border border-[var(--color-brand)]/30 bg-[var(--color-brand-soft)] p-6">
+        <p className="m-0 text-xs font-semibold tracking-wide text-[var(--color-brand-strong)] uppercase">
+          {proposalLabel}
+        </p>
+        <p className="mt-2 mb-0 text-base leading-relaxed">« {proposal} »</p>
+        <span
+          aria-hidden="true"
+          className="mt-4 inline-block rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-1.5 text-sm text-[var(--color-ink-soft)]"
+        >
+          {copyLabel}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+/** Un type d'entreprise à qui le produit s'adresse. */
+export function AudienceChip({ label }: { label: string }) {
+  return (
+    <li className="rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm text-[var(--color-ink-soft)]">
+      {label}
+    </li>
   )
 }

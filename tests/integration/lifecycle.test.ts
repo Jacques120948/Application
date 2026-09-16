@@ -20,6 +20,7 @@ import { createRecord, listRecords, updateRecord } from '@/server/runtime/record
 import { withRuntimeScope } from '@/server/db/scope'
 import { AppError } from '@/lib/errors'
 import type { DataField } from '@/server/spec/schema'
+import { ensureTestPlan, TEST_PLAN_CREDITS, TEST_PLAN_ID } from '../helpers/plan'
 
 /** Parcours complet du MVP : créer, modifier, versionner, tester, publier, utiliser. */
 
@@ -63,7 +64,7 @@ let projectId: string
  * L'offre de découverte s'arrête volontairement avant : sans cet abonnement, créer un
  * projet est refusé, ce qui est le comportement voulu du produit.
  */
-async function subscribeToBuildPlan(userId: string, planId = 'builder'): Promise<void> {
+async function subscribeToBuildPlan(userId: string, planId = TEST_PLAN_ID): Promise<void> {
   await prisma.subscription.upsert({
     where: { userId },
     create: { userId, planId, status: 'ACTIVE' },
@@ -79,6 +80,8 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
+  // L'offre technique des tests : elle ouvre tout, et ne dépend d'aucune décision commerciale.
+  await ensureTestPlan()
   clearAll()
   const account = await register(
     { email: `${randomUUID()}@exemple.test`, password: 'motdepasse-42', locale: 'fr' },
@@ -744,20 +747,32 @@ describe('valeur hors liste sur un champ à choix', () => {
 describe('crédits', () => {
   it('n’est pas débité par les opérations sans IA', async () => {
     const wallet = await getWallet(userId)
-    const plan = DEFAULT_PLANS.find((candidate) => candidate.id === 'builder')!
     // Tout le parcours ci-dessus s'est fait sans appel au copilote : rien n'est débité.
-    expect(wallet.balance).toBe(plan.monthlyCredits)
+    expect(wallet.balance).toBe(TEST_PLAN_CREDITS)
   })
 
   it('donne accès aux crédits de la nouvelle offre dès le changement', async () => {
-    await subscribeToBuildPlan(userId, 'launch')
-    const downgraded = await getWallet(userId)
-    expect(downgraded.monthlyGrant).toBe(100)
+    /*
+     * Les montants sont lus dans le catalogue, jamais recopiés : ce qui est vérifié est que
+     * le changement d'offre prend effet tout de suite, pas qu'une offre vaut tel chiffre —
+     * lequel se décide au back-office et change sans prévenir.
+     */
+    const petite = DEFAULT_PLANS.find((candidate) => candidate.id === 'vis-starter')!
+    const grande = DEFAULT_PLANS.find((candidate) => candidate.id === 'vis-business')!
 
-    await subscribeToBuildPlan(userId, 'business')
+    await subscribeToBuildPlan(userId, petite.id)
+    const downgraded = await getWallet(userId)
+    expect(downgraded.monthlyGrant).toBe(petite.monthlyCredits)
+
+    await subscribeToBuildPlan(userId, grande.id)
     const upgraded = await getWallet(userId)
-    expect(upgraded.monthlyGrant).toBe(800)
-    expect(upgraded.balance).toBe(800)
+    expect(upgraded.monthlyGrant).toBe(grande.monthlyCredits)
+    /*
+     * Au moins, et non exactement : un solde plus élevé que la nouvelle réserve n'est pas
+     * rogné. Ce qui est déjà acquis reste acquis, et c'est ce qu'attend quiconque change
+     * d'offre en cours de mois.
+     */
+    expect(upgraded.balance).toBeGreaterThanOrEqual(grande.monthlyCredits)
   })
 })
 

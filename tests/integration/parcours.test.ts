@@ -11,6 +11,7 @@ import { getCreatorOverview } from '@/server/business/overview'
 import { createProject } from '@/server/projects/service'
 import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { AppError } from '@/lib/errors'
+import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
 
 /**
  * Parcours recentré : objectif d'abord, idée ensuite, construction seulement après.
@@ -31,6 +32,8 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
+  // L'offre technique des tests : elle ouvre tout, et ne dépend d'aucune décision commerciale.
+  await ensureTestPlan()
   clearAll()
   const account = await register(
     { email: `${randomUUID()}@exemple.test`, password: 'motdepasse-42', locale: 'fr' },
@@ -151,8 +154,8 @@ describe('l’offre de découverte s’arrête avant la construction', () => {
   it('autorise la construction une fois abonné', async () => {
     await prisma.subscription.upsert({
       where: { userId },
-      create: { userId, planId: 'launch', status: 'ACTIVE' },
-      update: { planId: 'launch', status: 'ACTIVE' },
+      create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
+      update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
     })
     const idea = 'Un outil de devis pour les artisans du bâtiment'
     const created = await createProject(userId, {
@@ -168,6 +171,9 @@ describe('l’offre de découverte s’arrête avant la construction', () => {
   })
 
   it('fait respecter la limite de projets de l’offre', async () => {
+    // L'offre de test ouvre tout : on lui pose une borne, puisque c'est la borne qu'on veut
+    // éprouver. Un projet a déjà été créé plus haut.
+    await prisma.plan.update({ where: { id: TEST_PLAN_ID }, data: { maxProjects: 1 } })
     const idea = 'Une seconde application de test'
     await expect(
       createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) }),

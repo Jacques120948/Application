@@ -137,7 +137,12 @@ beforeAll(async () => {
   // Une offre propre à ce test, inactive donc invisible dans la liste des offres : le Radar
   // ouvert avec deux recherches par mois. Les offres partagées ne sont pas touchées, car
   // d'autres suites tournent en même temps sur la même base.
-  const launch = DEFAULT_PLANS.find((plan) => plan.id === 'launch')!
+  /*
+   * La base de cette offre de test est la première offre payante du catalogue, quelle
+   * qu'elle soit — et non une offre nommée. Nommer « launch » a coûté une suite entière le
+   * jour où le catalogue a changé de métier.
+   */
+  const launch = DEFAULT_PLANS.find((plan) => plan.priceCents > 0)!
   await prisma.plan.upsert({
     where: { id: PLAN_ID },
     update: { features: [...launch.features, 'radar'], radarRunsPerMonth: 2 },

@@ -118,7 +118,12 @@ beforeAll(async () => {
       create: { ...plan, features: [...plan.features], currency: 'EUR', interval: 'month' },
     })
   }
-  const launch = DEFAULT_PLANS.find((plan) => plan.id === 'launch')!
+  /*
+   * La base de cette offre de test est la première offre payante du catalogue, quelle
+   * qu'elle soit — et non une offre nommée. Nommer « launch » a coûté une suite entière le
+   * jour où le catalogue a changé de métier.
+   */
+  const launch = DEFAULT_PLANS.find((plan) => plan.priceCents > 0)!
   await prisma.plan.upsert({
     where: { id: PLAN_ID },
     update: { features: [...launch.features, 'lia_support'], liaAnswersPerMonth: 3, liaConversationsPerMonth: 4 },

@@ -45,7 +45,13 @@ describe('offres', () => {
     const paid = DEFAULT_PLANS.filter((plan) => plan.priceCents > 0).sort(
       (a, b) => a.priceCents - b.priceCents,
     )
-    const mesures = ['monthlyCredits', 'maxProjects', 'storageBytes'] as const
+    /*
+     * Les mesures qui font la valeur du produit de visibilité. Elles ont remplacé les
+     * projets et l'espace d'images, qui mesuraient le constructeur d'applications : un
+     * palier doit donner davantage de ce qu'on vient y chercher, et plus personne ne vient
+     * y chercher des projets.
+     */
+    const mesures = ['monthlyCredits', 'sitesMax', 'pagesPerAudit', 'auditsPerMonth'] as const
     const regressions = paid.flatMap((plan, index) => {
       if (index === 0) return []
       const precedent = paid[index - 1]!

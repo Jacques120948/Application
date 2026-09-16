@@ -19,18 +19,33 @@ import {
  * moteur sans qu'on ait inventé ce que le créateur n'a pas dit.
  */
 
+/*
+ * Les offres de ce test déclarent elles-mêmes ce qu'elles ouvrent.
+ *
+ * Elles empruntaient le catalogue commercial, et le jour où il a changé de métier ces
+ * vérifications ont échoué sans qu'une règle de droits ait bougé d'une ligne. Ce qui est
+ * vérifié ici est le mécanisme — accordé, verrouillé, prévu — pas la composition des offres
+ * du moment, qui se décide ailleurs et se change sans prévenir.
+ */
 const PLANS = [
   { id: 'free', name: 'Découverte', features: [], sortOrder: 0 },
   {
     id: 'launch',
     name: 'Launch',
-    features: [...(DEFAULT_PLAN_FEATURES.launch ?? [])],
+    features: ['social_launch_basic', 'social_angles', 'social_week'],
     sortOrder: 1,
   },
   {
     id: 'builder',
     name: 'Builder',
-    features: [...(DEFAULT_PLAN_FEATURES.builder ?? [])],
+    features: [
+      'social_launch_basic',
+      'social_angles',
+      'social_week',
+      'social_calendar',
+      'social_content_generation',
+      'social_agent',
+    ],
     sortOrder: 2,
   },
 ]
