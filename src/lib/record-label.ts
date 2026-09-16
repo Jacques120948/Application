@@ -13,12 +13,24 @@ import type { DataModel } from '@/server/spec/schema'
  * d'un écran à l'autre.
  */
 export function recordLabel(model: DataModel, data: Record<string, unknown>): string {
-  const champ =
-    model.fields.find((field) => field.id === model.labelField) ??
-    model.fields.find((field) => field.type === 'text') ??
-    model.fields[0]
+  const champ = labelFieldOf(model)
   const valeur = champ === undefined ? null : data[champ.id]
   return valeur === null || valeur === undefined || valeur === ''
     ? 'Sans nom'
     : String(valeur).slice(0, 120)
+}
+
+/**
+ * Le champ qui nomme une fiche.
+ *
+ * Un renvoi est écarté, même désigné explicitement : sa valeur est l'identifiant d'une
+ * autre fiche, et un identifiant ne nomme rien pour qui le lit.
+ */
+export function labelFieldOf(model: DataModel): DataModel['fields'][number] | undefined {
+  const nomme = model.fields.find((field) => field.id === model.labelField)
+  if (nomme !== undefined && nomme.type !== 'reference') return nomme
+  return (
+    model.fields.find((field) => field.type === 'text') ??
+    model.fields.find((field) => field.type !== 'reference')
+  )
 }

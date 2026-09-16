@@ -8,6 +8,7 @@ import type { PatchOperation } from '@/server/spec/patch'
 import { Badge, Button, Card, CardBody, ComingSoon, Notice } from '@/components/ui'
 import { ChatPanel } from './ChatPanel'
 import { ChecksPanel, DesignPanel, FeaturesPanel, MonetizationPanel } from './panels'
+import { DataPanel } from './DataPanel'
 import { SalesPanel } from './SalesPanel'
 import { MediaPanel } from './MediaPanel'
 import { ProgressSteps } from './ProgressSteps'
@@ -302,51 +303,21 @@ export function ProjectWorkspace({
             ) : null}
 
             {tab === 'users' ? (
-              <div className="grid gap-4 p-4">
+              <div className="p-4">
                 {data === null ? (
                   <p className="text-sm text-[var(--color-ink-soft)]">Chargement…</p>
                 ) : (
-                  <>
-                    <Card>
-                      <CardBody>
-                        <p className="m-0 text-sm text-[var(--color-ink-soft)]">
-                          Comptes créés dans votre application
-                        </p>
-                        <p className="m-0 mt-1 text-2xl font-semibold">{data.endUserCount}</p>
-                      </CardBody>
-                    </Card>
-                    {data.models.map((model) => (
-                      <Card key={model.id}>
-                        <CardBody>
-                          <div className="flex items-center gap-2">
-                            <h3 className="m-0 text-sm font-semibold">{model.label}</h3>
-                            <span className="ml-auto">
-                              <Badge tone="neutral">{model.count} enregistrement(s)</Badge>
-                            </span>
-                          </div>
-                          {model.recent.length === 0 ? (
-                            <p className="mt-3 text-sm text-[var(--color-ink-soft)]">
-                              Rien n&apos;a encore été enregistré.
-                            </p>
-                          ) : (
-                            <ul className="mt-3 grid gap-2 p-0 text-sm list-none">
-                              {model.recent.map((item) => (
-                                <li
-                                  key={item.id}
-                                  className="rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2"
-                                >
-                                  <p className="m-0">{item.summary}</p>
-                                  <p className="m-0 mt-0.5 text-xs text-[var(--color-ink-soft)]">
-                                    {new Date(item.createdAt).toLocaleString(locale)}
-                                  </p>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </CardBody>
-                      </Card>
-                    ))}
-                  </>
+                  /*
+                    Les modèles viennent de la spécification en cours, non de la réponse du
+                    serveur : c'est elle qui décrit les champs, et le panneau doit pouvoir
+                    afficher et corriger chacun d'eux.
+                  */
+                  <DataPanel
+                    projectId={projectId}
+                    models={spec.dataModels}
+                    endUserCount={data.endUserCount}
+                    locale={locale}
+                  />
                 )}
               </div>
             ) : null}

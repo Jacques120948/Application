@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { createZip, type ZipEntry } from './zip'
 import { fileNameFor, renderPage, renderStylesheet } from './site'
 import { fontFiles } from '@/lib/fonts'
+import { csvCell } from '@/lib/csv'
 
 /**
  * Export d'un projet.
@@ -42,23 +43,6 @@ export type ExportResult = {
 /** Nom de fichier d'archive : le créateur en aura plusieurs, la date les distingue. */
 function archiveName(slug: string, now: Date): string {
   return `${slug}-${now.toISOString().slice(0, 10)}.zip`
-}
-
-/**
- * Échappe une valeur pour un fichier CSV.
- *
- * Le guillemet doublé et l'encadrement systématique évitent le piège classique : une
- * réponse contenant une virgule ou un retour à la ligne décalerait toutes les colonnes
- * suivantes, sans que rien ne signale l'erreur.
- */
-function csvCell(value: unknown): string {
-  const texte =
-    value === null || value === undefined
-      ? ''
-      : typeof value === 'object'
-        ? JSON.stringify(value)
-        : String(value)
-  return `"${texte.replace(/"/g, '""')}"`
 }
 
 export async function exportProject(userId: string, projectId: string): Promise<ExportResult> {

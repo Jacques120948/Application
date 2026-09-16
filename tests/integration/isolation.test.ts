@@ -4,7 +4,14 @@ import { prisma } from '@/server/db/client'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { createProject, getProject, publishProject } from '@/server/projects/service'
-import { createRecord, listRecords } from '@/server/runtime/records'
+import {
+  createRecord,
+  deleteOwnerRecord,
+  exportOwnerRecords,
+  listOwnerRecords,
+  listRecords,
+  updateOwnerRecord,
+} from '@/server/runtime/records'
 import { withRuntimeScope, withUserScope } from '@/server/db/scope'
 import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { AppError } from '@/lib/errors'
@@ -145,6 +152,130 @@ describe('isolation des données des applications générées', () => {
       tx.appRecord.findMany({ where: { projectId: alice.projectId } }),
     )
     expect(fromBobScope).toEqual([])
+  })
+})
+
+/*
+ * Le créateur agit sur les données de son application, et seulement sur les siennes.
+ * C'est le point le plus sensible de cette fonction : elle donne à quelqu'un le droit de
+ * corriger et de supprimer des fiches qu'il n'a pas saisies.
+ */
+describe('données vues et corrigées par le créateur', () => {
+  it('ne laisse pas un créateur toucher aux données d’un autre', async () => {
+    const aliceProject = await getProject(alice.userId, alice.projectId)
+    const model = aliceProject.spec.dataModels.find((candidate) => candidate.scope === 'shared')
+    if (model === undefined) return
+
+    const champ = model.fields.find((field) => field.type === 'text')
+    if (champ === undefined) return
+    const values: Record<string, unknown> = {}
+    for (const field of model.fields) {
+      values[field.id] =
+        field.type === 'number'
+          ? 1
+          : field.type === 'boolean'
+            ? true
+            : field.type === 'date'
+              ? '2026-04-04'
+              : field.type === 'select'
+                ? field.options?.[0]
+                : field.type === 'email'
+                  ? 'client@exemple.test'
+                  : field.type === 'url'
+                    ? 'https://exemple.test'
+                    : 'Valeur'
+    }
+    const record = await createRecord({
+      projectId: alice.projectId,
+      spec: aliceProject.spec,
+      modelId: model.id,
+      endUserId: null,
+      input: values,
+    })
+
+    // Alice voit et corrige ce que son application a collecté.
+    const page = await listOwnerRecords({
+      userId: alice.userId,
+      projectId: alice.projectId,
+      spec: aliceProject.spec,
+      modelId: model.id,
+    })
+    expect(page.total).toBeGreaterThan(0)
+
+    const corrige = await updateOwnerRecord({
+      userId: alice.userId,
+      projectId: alice.projectId,
+      spec: aliceProject.spec,
+      modelId: model.id,
+      recordId: record.id,
+      input: { ...values, [champ.id]: 'Confirmé par Alice' },
+    })
+    expect(corrige.data[champ.id]).toBe('Confirmé par Alice')
+
+    // Bob ne voit rien du projet d'Alice, et ne peut ni corriger ni supprimer ses fiches.
+    await expect(
+      listOwnerRecords({
+        userId: bob.userId,
+        projectId: alice.projectId,
+        spec: aliceProject.spec,
+        modelId: model.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    await expect(
+      updateOwnerRecord({
+        userId: bob.userId,
+        projectId: alice.projectId,
+        spec: aliceProject.spec,
+        modelId: model.id,
+        recordId: record.id,
+        input: values,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    await expect(
+      deleteOwnerRecord({
+        userId: bob.userId,
+        projectId: alice.projectId,
+        modelId: model.id,
+        recordId: record.id,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    // Et la fiche est toujours là, inchangée.
+    const apres = await listOwnerRecords({
+      userId: alice.userId,
+      projectId: alice.projectId,
+      spec: aliceProject.spec,
+      modelId: model.id,
+    })
+    expect(apres.items.some((item) => item.data[champ.id] === 'Confirmé par Alice')).toBe(true)
+
+    // L'export sort une ligne d'en-tête et une ligne par fiche.
+    const fichier = await exportOwnerRecords({
+      userId: alice.userId,
+      projectId: alice.projectId,
+      spec: aliceProject.spec,
+      modelId: model.id,
+    })
+    expect(fichier.filename).toMatch(/\.csv$/)
+    expect(fichier.content.split('\n').length).toBe(apres.total + 1)
+    expect(fichier.content).toContain('Confirmé par Alice')
+
+    // Alice peut écarter une fiche qu'elle n'a pas saisie ; c'est le sens de la fonction.
+    await deleteOwnerRecord({
+      userId: alice.userId,
+      projectId: alice.projectId,
+      modelId: model.id,
+      recordId: record.id,
+    })
+    const final = await listOwnerRecords({
+      userId: alice.userId,
+      projectId: alice.projectId,
+      spec: aliceProject.spec,
+      modelId: model.id,
+    })
+    expect(final.items.some((item) => item.id === record.id)).toBe(false)
   })
 })
 

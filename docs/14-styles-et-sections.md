@@ -136,6 +136,30 @@ entre comme paramètre et jamais par concaténation, et les jokers de SQL sont n
 dans le texte cherché — sans quoi chercher « 100 % » ramènerait tout. Elle s'exécute dans
 la portée du projet, donc sous la même protection de la base que le reste.
 
+### Le créateur agit sur les données de son application
+
+L'onglet **Utilisateurs** ne montrait qu'un compteur et les dix derniers résumés. Une
+application de réservation dont le propriétaire ne peut pas confirmer un rendez-vous est
+une demi-application : il dispose donc des mêmes gestes que ses visiteurs — chercher,
+filtrer, trier, parcourir, ouvrir, corriger — plus deux qui n'appartiennent qu'à lui.
+
+- **Écarter une fiche** qu'il n'a pas saisie. C'est le sens de la fonction : il répond des
+  données de son application.
+- **Exporter un modèle en CSV**, par un lien ordinaire. Le navigateur sait enregistrer un
+  fichier, et un tableur s'ouvre là où les données servent vraiment. Une colonne par champ
+  déclaré, dans l'ordre du modèle : un export dont les colonnes suivraient les clés
+  trouvées en base changerait de forme d'un jour à l'autre. Les renvois y sortent sous le
+  nom de la fiche visée, pas sous son identifiant.
+
+La lecture est **le même code** que celle du visiteur : recherche, filtre, ordre,
+pagination et total sont calculés par une seule fonction. Seules changent la portée de la
+base et la restriction à une personne. Deux implémentations finiraient par ne pas compter
+pareil.
+
+Chaque requête passe par la portée « propriétaire » : le service vérifie que le projet
+appartient à la personne connectée, et la base le vérifie encore. Un créateur qui viserait
+le projet d'un autre reçoit « introuvable », jamais « interdit ».
+
 ### Relier deux modèles
 
 Un champ de type `reference` désigne une fiche d'un autre modèle : une réservation qui

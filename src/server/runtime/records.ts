@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client'
 import { notFound, validation } from '@/lib/errors'
 import { recordLabel } from '@/lib/record-label'
-import { withOwnerRuntimeScope, withRuntimeScope } from '@/server/db/scope'
+import { csvRow } from '@/lib/csv'
+import { requireOwnedProject, withOwnerRuntimeScope, withRuntimeScope } from '@/server/db/scope'
 import type { AppSpec, DataField, DataModel } from '@/server/spec/schema'
 
 /**
@@ -311,13 +312,46 @@ export async function listRecords(params: {
   query?: RecordQuery
 }): Promise<RecordPage> {
   const model = findModel(params.spec, params.modelId)
-  const query = params.query ?? {}
-  const limit = Math.min(Math.max(query.limit ?? PAGE_SIZE, 1), MAX_PAGE)
-  const offset = Math.max(query.offset ?? 0, 0)
-
   if (model.scope === 'user' && params.endUserId === null) {
     return { items: [], total: 0, references: {}, aggregate: null }
   }
+  return withRuntimeScope(params.projectId, (tx) =>
+    lirePage(tx, {
+      projectId: params.projectId,
+      spec: params.spec,
+      model,
+      // Sur un modèle privé, chacun ne lit que ses propres fiches.
+      ownerEndUserId: model.scope === 'user' ? params.endUserId : null,
+      viewerEndUserId: params.endUserId,
+      query: params.query ?? {},
+    }),
+  )
+}
+
+/**
+ * Une page de résultats, quel que soit celui qui la demande.
+ *
+ * Visiteur ou créateur, la recherche, le filtre, l'ordre, la pagination et le total sont
+ * les mêmes ; seuls changent la portée de la base et le fait de restreindre ou non aux
+ * fiches d'une personne. Deux implémentations de cette lecture finiraient par ne pas
+ * compter pareil.
+ */
+async function lirePage(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  params: {
+    projectId: string
+    spec: AppSpec
+    model: DataModel
+    /** Restreint la lecture aux fiches de cette personne. `null` : toutes. */
+    ownerEndUserId: string | null
+    /** Qui regarde, pour dire de quelles fiches il dispose. */
+    viewerEndUserId: string | null
+    query: RecordQuery
+  },
+): Promise<RecordPage> {
+  const { model, query } = params
+  const limit = Math.min(Math.max(query.limit ?? PAGE_SIZE, 1), MAX_PAGE)
+  const offset = Math.max(query.offset ?? 0, 0)
 
   // On ne filtre que sur un champ à choix : sur du texte libre, aucune valeur ne se
   // répéterait assez pour faire un filtre utile.
@@ -328,40 +362,38 @@ export async function listRecords(params: {
 
   const ou = condition({
     projectId: params.projectId,
-    modelId: params.modelId,
-    ownerEndUserId: model.scope === 'user' ? params.endUserId : null,
+    modelId: model.id,
+    ownerEndUserId: params.ownerEndUserId,
     ...(filterField !== undefined ? { filterField, filterValue: query.filterValue } : {}),
     search: (query.search ?? '').trim().slice(0, MAX_SEARCH),
     searchFields: searchableFields(model),
   })
 
-  return withRuntimeScope(params.projectId, async (tx) => {
-    const [compte] = await tx.$queryRaw<Array<{ total: bigint }>>(
-      Prisma.sql`SELECT count(*) AS total FROM "AppRecord" WHERE ${ou}`,
-    )
-    const total = Number(compte?.total ?? 0)
-    if (total === 0) return { items: [], total, references: {}, aggregate: null }
+  const [compte] = await tx.$queryRaw<Array<{ total: bigint }>>(
+    Prisma.sql`SELECT count(*) AS total FROM "AppRecord" WHERE ${ou}`,
+  )
+  const total = Number(compte?.total ?? 0)
+  if (total === 0) return { items: [], total, references: {}, aggregate: null }
 
-    const rows = await tx.$queryRaw<LigneBrute[]>(
-      Prisma.sql`SELECT id, "data", "createdAt", "ownerEndUserId"
-                 FROM "AppRecord"
-                 WHERE ${ou}
-                 ORDER BY ${ordre(model, query.sort ?? 'recent', query.sortField)}
-                 LIMIT ${limit} OFFSET ${offset}`,
-    )
-    const items = rows.map((row) => ({
-      id: row.id,
-      data: row.data,
-      createdAt: row.createdAt,
-      isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.endUserId,
-    }))
-    return {
-      items,
-      total,
-      references: await resoudreRenvois(tx, params.projectId, params.spec, model, items),
-      aggregate: await calculer(tx, ou, model, query.sumField, query.sumKind ?? 'somme'),
-    }
-  })
+  const rows = await tx.$queryRaw<LigneBrute[]>(
+    Prisma.sql`SELECT id, "data", "createdAt", "ownerEndUserId"
+               FROM "AppRecord"
+               WHERE ${ou}
+               ORDER BY ${ordre(model, query.sort ?? 'recent', query.sortField)}
+               LIMIT ${limit} OFFSET ${offset}`,
+  )
+  const items = rows.map((row) => ({
+    id: row.id,
+    data: row.data,
+    createdAt: row.createdAt,
+    isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.viewerEndUserId,
+  }))
+  return {
+    items,
+    total,
+    references: await resoudreRenvois(tx, params.projectId, params.spec, model, items),
+    aggregate: await calculer(tx, ou, model, query.sumField, query.sumKind ?? 'somme'),
+  }
 }
 
 /**
@@ -502,6 +534,164 @@ export async function deleteRecord(params: {
   await withRuntimeScope(params.projectId, async (tx) => {
     const record = await ownedRecord(tx, params, model, 'supprimer')
     await tx.appRecord.delete({ where: { id: record.id } })
+  })
+}
+
+/**
+ * Les données d'une application, vues par son créateur.
+ *
+ * Il voit et corrige tout ce que son application collecte, y compris les fiches d'un
+ * modèle privé : c'est lui qui répond des données de son application, et il en voyait déjà
+ * le contenu dans l'aperçu. Ce qui change ici, c'est qu'il peut enfin agir dessus —
+ * confirmer une réservation, rectifier une faute de frappe, écarter un doublon.
+ *
+ * Toutes ces fonctions passent par la portée « propriétaire » : la base vérifie elle-même
+ * que le projet est bien le sien, en plus de la vérification faite ici.
+ */
+export type OwnerRecordPage = RecordPage & {
+  /** Fiches proposées par chaque champ de renvoi, pour le formulaire de correction. */
+  choices: Record<string, Array<{ id: string; label: string }>>
+}
+
+const MAX_CHOICES = 200
+
+export async function listOwnerRecords(params: {
+  userId: string
+  projectId: string
+  spec: AppSpec
+  modelId: string
+  query?: RecordQuery
+}): Promise<OwnerRecordPage> {
+  const model = findModel(params.spec, params.modelId)
+  return withOwnerRuntimeScope(params.userId, params.projectId, async (tx) => {
+    await requireOwnedProject(tx, params.projectId, params.userId)
+    const page = await lirePage(tx, {
+      projectId: params.projectId,
+      spec: params.spec,
+      model,
+      // Le créateur lit tout ce que son application a collecté, sans restriction de
+      // personne : c'est le seul point de vue depuis lequel il peut en répondre.
+      ownerEndUserId: null,
+      viewerEndUserId: null,
+      query: params.query ?? {},
+    })
+    return { ...page, choices: await lireChoix(tx, params.projectId, params.spec, model) }
+  })
+}
+
+/** Les fiches qu'un champ de renvoi peut désigner, pour la correction côté créateur. */
+async function lireChoix(
+  tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
+  projectId: string,
+  spec: AppSpec,
+  model: DataModel,
+): Promise<Record<string, Array<{ id: string; label: string }>>> {
+  const choix: Record<string, Array<{ id: string; label: string }>> = {}
+  for (const field of model.fields) {
+    if (field.type !== 'reference' || field.referenceModelId === undefined) continue
+    const cible = spec.dataModels.find((candidate) => candidate.id === field.referenceModelId)
+    if (cible === undefined) continue
+    const rows = await tx.appRecord.findMany({
+      where: { projectId, modelId: cible.id },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_CHOICES,
+      select: { id: true, data: true },
+    })
+    choix[field.id] = rows.map((row) => ({
+      id: row.id,
+      label: recordLabel(cible, row.data as RecordData),
+    }))
+  }
+  return choix
+}
+
+export async function updateOwnerRecord(params: {
+  userId: string
+  projectId: string
+  spec: AppSpec
+  modelId: string
+  recordId: string
+  input: Record<string, unknown>
+}): Promise<StoredRecord> {
+  const model = findModel(params.spec, params.modelId)
+  const data = validateRecordData(model, params.input)
+  return withOwnerRuntimeScope(params.userId, params.projectId, async (tx) => {
+    await requireOwnedProject(tx, params.projectId, params.userId)
+    const record = await tx.appRecord.findFirst({
+      where: { id: params.recordId, projectId: params.projectId, modelId: params.modelId },
+    })
+    if (record === null) throw notFound('Cet élément est introuvable.')
+    await assertReferences(tx, params.projectId, model, data)
+    const updated = await tx.appRecord.update({
+      where: { id: record.id },
+      data: { data: data as unknown as Prisma.InputJsonValue },
+    })
+    return { id: updated.id, data, createdAt: updated.createdAt, isMine: false }
+  })
+}
+
+export async function deleteOwnerRecord(params: {
+  userId: string
+  projectId: string
+  modelId: string
+  recordId: string
+}): Promise<void> {
+  await withOwnerRuntimeScope(params.userId, params.projectId, async (tx) => {
+    await requireOwnedProject(tx, params.projectId, params.userId)
+    const supprimees = await tx.appRecord.deleteMany({
+      where: { id: params.recordId, projectId: params.projectId, modelId: params.modelId },
+    })
+    if (supprimees.count === 0) throw notFound('Cet élément est introuvable.')
+  })
+}
+
+/**
+ * Les fiches d'un modèle, en CSV.
+ *
+ * Une colonne par champ déclaré, dans l'ordre du modèle, plus l'identifiant et la date : un
+ * export dont les colonnes suivraient les clés trouvées en base changerait de forme d'un
+ * jour à l'autre. Les renvois sortent sous le nom de la fiche visée, pas sous son
+ * identifiant — c'est un fichier fait pour être lu.
+ */
+export async function exportOwnerRecords(params: {
+  userId: string
+  projectId: string
+  spec: AppSpec
+  modelId: string
+}): Promise<{ filename: string; content: string }> {
+  const model = findModel(params.spec, params.modelId)
+  return withOwnerRuntimeScope(params.userId, params.projectId, async (tx) => {
+    await requireOwnedProject(tx, params.projectId, params.userId)
+    const rows = await tx.appRecord.findMany({
+      where: { projectId: params.projectId, modelId: params.modelId },
+      orderBy: { createdAt: 'desc' },
+      take: MAX_RECORDS_PER_MODEL,
+    })
+    const items = rows.map((row) => ({
+      id: row.id,
+      data: row.data as RecordData,
+      createdAt: row.createdAt,
+      isMine: false,
+    }))
+    const noms = await resoudreRenvois(tx, params.projectId, params.spec, model, items)
+
+    const entete = csvRow(['id', 'cree_le', ...model.fields.map((field) => field.label)])
+    const corps = items.map((item) =>
+      csvRow([
+        item.id,
+        item.createdAt.toISOString(),
+        ...model.fields.map((field) => {
+          const valeur = item.data[field.id]
+          if (field.type !== 'reference') return valeur
+          return typeof valeur === 'string' && valeur !== '' ? (noms[valeur] ?? '') : ''
+        }),
+      ]),
+    )
+    const jour = new Date().toISOString().slice(0, 10)
+    return {
+      filename: `${params.modelId}-${jour}.csv`,
+      content: [entete, ...corps].join('\n'),
+    }
   })
 }
 
