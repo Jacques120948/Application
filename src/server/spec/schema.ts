@@ -495,6 +495,64 @@ export const assistantBlockSchema = z
   })
   .strict()
 
+/**
+ * Tableau de bord chiffré : ce que les données disent, en trois ou quatre nombres.
+ *
+ * Une liste montre les fiches ; elle ne dit pas « combien » ni « combien ce mois-ci ».
+ * C'est pourtant la première question d'un créateur qui ouvre son application le matin, et
+ * la seule qui l'intéresse vraiment quand elle en contient deux mille.
+ *
+ * Trois partis pris.
+ *
+ * **Les chiffres sont calculés par la base, jamais dans le navigateur.** Compter les fiches
+ * déjà chargées donnerait un nombre faux dès la vingt-et-unième.
+ *
+ * **Une mesure respecte la portée de ses données.** Sur un modèle privé, chacun ne compte
+ * que ses propres fiches — un tableau de bord ne peut pas devenir une fuite.
+ *
+ * **Peu de mesures.** Quatre au maximum. Un tableau de bord qui en affiche douze n'est plus
+ * un tableau de bord, c'est un tableur, et plus personne ne le regarde.
+ */
+export const metricsBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal('metrics'),
+    title: shortText,
+    intro: mediumText.optional(),
+    items: z
+      .array(
+        z
+          .object({
+            id: slug,
+            label: shortText,
+            /** Les données mesurées. */
+            modelId: slug,
+            /**
+             * `nombre`  : combien de fiches.
+             * `somme`   : le total d'un champ chiffré.
+             * `moyenne` : sa moyenne.
+             */
+            kind: z.enum(['nombre', 'somme', 'moyenne']),
+            /** Le champ chiffré. Obligatoire sauf pour `nombre`. */
+            field: slug.optional(),
+            /** Fenêtre de temps, calculée sur la date de saisie. */
+            period: z.enum(['tout', '7j', '30j', '12m']).default('tout'),
+            /** Restreint la mesure à une valeur d'un champ à choix : « statut = payé ». */
+            filterField: slug.optional(),
+            filterValue: shortText.optional(),
+            /** Suffixe affiché après le nombre : « € », « h », « fiches ». */
+            unit: z.string().max(8).optional(),
+          })
+          .strict()
+          .refine((item) => item.kind === 'nombre' || item.field !== undefined, {
+            message: 'Une somme ou une moyenne doit dire quel champ elle mesure.',
+          }),
+      )
+      .min(1)
+      .max(4),
+  })
+  .strict()
+
 export const BLOCK_SCHEMAS = {
   hero: heroBlockSchema,
   richText: richTextBlockSchema,
@@ -517,6 +575,7 @@ export const BLOCK_SCHEMAS = {
   recordList: recordListBlockSchema,
   auth: authBlockSchema,
   assistant: assistantBlockSchema,
+  metrics: metricsBlockSchema,
 } as const
 
 export const blockSchema = z.discriminatedUnion('type', [
@@ -541,6 +600,7 @@ export const blockSchema = z.discriminatedUnion('type', [
   recordListBlockSchema,
   authBlockSchema,
   assistantBlockSchema,
+  metricsBlockSchema,
 ])
 
 export const BLOCK_TYPES = [
@@ -565,6 +625,7 @@ export const BLOCK_TYPES = [
   'recordList',
   'auth',
   'assistant',
+  'metrics',
 ] as const
 
 export type BlockType = (typeof BLOCK_TYPES)[number]

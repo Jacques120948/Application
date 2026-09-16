@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { resolveRuntimeSpec } from '@/server/runtime/context'
 import { getEndUser } from '@/server/runtime/end-users'
 import { paymentContext } from '@/server/runtime/payments'
+import { computePageMetrics } from '@/server/runtime/metrics'
 import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
 import { LiaWidget } from '@/components/runtime/LiaWidget'
@@ -58,6 +59,17 @@ export default async function PreviewPage({
     readPublicSupportSettings(runtime.projectId),
     paymentContext(runtime, null),
   ])
+  /*
+   * L'aperçu montre les vrais chiffres du projet, jamais des nombres d'exemple. Un tableau
+   * de bord qui afficherait des valeurs inventées apprendrait au créateur à ne pas croire
+   * ses propres chiffres, et il les publierait sans les avoir vérifiés.
+   */
+  const metrics = await computePageMetrics({
+    projectId: runtime.projectId,
+    spec: runtime.spec,
+    page,
+    endUserId: endUser?.id ?? null,
+  })
 
   return (
     <>
@@ -70,6 +82,7 @@ export default async function PreviewPage({
         endUserEmail: endUser?.email ?? null,
         preview: true,
         payments: { enabled: payments.enabled, purchase: null, returned: null },
+        metrics,
       }}
     />
     {lia !== null ? (

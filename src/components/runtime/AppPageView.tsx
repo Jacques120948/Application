@@ -47,6 +47,12 @@ export type RuntimeContext = {
   /** En aperçu, on signale que l'on regarde le brouillon et non la version en ligne. */
   preview: boolean
   payments?: RuntimePayments
+  /**
+   * Les chiffres des tableaux de bord de la page, calculés au serveur avant le rendu.
+   * La page arrive avec eux : pas de requête depuis le navigateur, pas d'écran qui se
+   * remplit après coup.
+   */
+  metrics?: Record<string, Array<{ id: string; label: string; value: number | null; unit?: string; period: string }>>
 }
 
 export function AppPageView({
@@ -607,6 +613,48 @@ function BlockView({
         </Band>
       )
 
+    case 'metrics': {
+      const valeurs = context.metrics?.[block.id] ?? []
+      return (
+        <Band position={position}>
+          <Heading>{block.title}</Heading>
+          {block.intro !== undefined ? (
+            <p className="-mt-3 mb-6 text-lg opacity-75">{block.intro}</p>
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {(valeurs.length > 0 ? valeurs : block.items.map((item) => ({
+              id: item.id,
+              label: item.label,
+              value: null as number | null,
+              unit: item.unit,
+              period: '',
+            }))).map((mesure) => (
+              <div
+                key={mesure.id}
+                className="rounded-[var(--app-radius-lg)] border p-5"
+                style={{
+                  borderColor: 'var(--app-border)',
+                  background: 'var(--app-surface)',
+                  boxShadow: 'var(--app-shadow)',
+                }}
+              >
+                <p className="m-0 text-sm opacity-70">{mesure.label}</p>
+                <p
+                  className="m-0 mt-1 text-3xl"
+                  style={{ fontWeight: 'var(--app-heading-weight)' }}
+                >
+                  {chiffre(mesure.value, mesure.unit)}
+                </p>
+                {mesure.period !== '' ? (
+                  <p className="m-0 mt-1 text-xs opacity-60">{mesure.period}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </Band>
+      )
+    }
+
     case 'assistant':
       return (
         <Band position={position} tinted>
@@ -784,4 +832,16 @@ function PricingCards({
 function formatPrice(cents: number, currency: string): string {
   if (cents === 0) return 'Gratuit'
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(cents / 100)
+}
+
+/**
+ * Un chiffre de tableau de bord, écrit à la française.
+ *
+ * « rien » s'affiche par un tiret, jamais par zéro : un zéro s'interprète comme un fait,
+ * et il ne doit pas être le déguisement d'une absence de données.
+ */
+function chiffre(value: number | null, unit: string | undefined): string {
+  if (value === null) return '—'
+  const ecrit = value.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+  return unit === undefined ? ecrit : `${ecrit} ${unit}`
 }

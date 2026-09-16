@@ -6,6 +6,7 @@ import { AppError } from '@/lib/errors'
 import { getPublishedApp, recordVisit } from '@/server/runtime/published'
 import { getEndUser } from '@/server/runtime/end-users'
 import { paymentContext } from '@/server/runtime/payments'
+import { computePageMetrics } from '@/server/runtime/metrics'
 import { HOME_PATH } from '@/server/spec/validate'
 import { AppPageView } from '@/components/runtime/AppPageView'
 import { LiaWidget } from '@/components/runtime/LiaWidget'
@@ -106,7 +107,15 @@ export default async function PublishedAppPage({
 
   await recordVisit(app.projectId, wanted)
   const [endUser, lia] = await Promise.all([getEndUser(app.projectId), readPublicSupportSettings(app.projectId)])
-  const payments = await paymentContext({ projectId: app.projectId, ownerId: app.ownerId }, endUser?.id ?? null)
+  const [payments, metrics] = await Promise.all([
+    paymentContext({ projectId: app.projectId, ownerId: app.ownerId }, endUser?.id ?? null),
+    computePageMetrics({
+      projectId: app.projectId,
+      spec: app.spec,
+      page,
+      endUserId: endUser?.id ?? null,
+    }),
+  ])
 
   return (
     <>
@@ -118,6 +127,7 @@ export default async function PublishedAppPage({
         basePath: appBasePath(host, app.slug),
         endUserEmail: endUser?.email ?? null,
         preview: false,
+        metrics,
         payments: {
           enabled: payments.enabled,
           purchase: payments.purchase,

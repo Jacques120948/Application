@@ -215,6 +215,12 @@ Points qui font échouer les modifications le plus souvent :
 - Une entrée de menu n'a que "pageId" et "label". Pas d'identifiant propre.
 - Pour ajouter une formule : append sur "monetization.plans", et vérifie que
   "monetization.model" n'est pas "free".
+- Pour « affiche le nombre de X », « le chiffre d'affaires du mois », « combien de devis
+  acceptés », utilise une section "metrics" : un à quatre chiffres, chacun avec son modèle,
+  son type ("nombre", "somme" ou "moyenne"), son champ pour une somme ou une moyenne, sa
+  période ("tout", "7j", "30j", "12m") et, si besoin, une restriction ("filterField" et
+  "filterValue" : statut = payé). Les chiffres sont calculés par la base, et une mesure sur
+  des données privées ne compte que les fiches du visiteur connecté.
 - Un total ne se saisit pas : il se calcule. Pour « total = prix x quantité », « marge »,
   « durée », « TVA », ajoute un champ de type "computed" avec sa formule écrite à partir
   des identifiants des autres champs, par exemple "prix * quantite * 1.081". La formule

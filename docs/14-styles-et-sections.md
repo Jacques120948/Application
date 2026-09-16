@@ -263,3 +263,50 @@ choisie, le menu ne proposerait plus qu'elle et on ne pourrait plus en changer.
 La sortie de secours reste bornée : une valeur libre est un texte court, jamais vide,
 plafonné comme n'importe quel libellé. Sans cette borne, « autoriser une valeur libre »
 deviendrait un champ de texte illimité déguisé en liste de choix.
+
+
+## Calculer et mesurer
+
+Deux manques séparaient « une liste de fiches » d'un vrai outil de gestion : rien ne se
+calculait, et rien ne se comptait.
+
+### Les champs calculés
+
+Un champ de type `computed` porte une formule écrite avec les identifiants des autres
+champs du modèle : `prix * quantite`, `montant * 1,081`, `(fin - debut) / 60`.
+
+Ce n'est pas un langage, et c'est délibéré : des nombres, des champs, quatre opérations,
+des parenthèses. Ni fonction, ni condition, ni accès à quoi que ce soit. Une formule est
+écrite par un modèle de langage à partir d'une demande d'utilisateur ; elle doit être
+inévaluable autrement que comme du calcul. Il n'y a aucun `eval`, aucune construction
+dynamique de code, et la traduction en SQL se fait depuis l'arbre issu de l'analyse, jamais
+depuis le texte.
+
+Trois conséquences qui tiennent au fait que **la valeur n'est jamais enregistrée** :
+
+- corriger un prix corrige aussitôt tous les totaux qui en dépendent ;
+- le champ n'apparaît pas au formulaire et ne peut pas être obligatoire ;
+- ce que le navigateur prétendrait y mettre est ignoré, donc un total ne peut pas être
+  « corrigé » pour ne plus correspondre à ses composantes.
+
+Une formule qui ne peut pas aboutir — champ vide, texte au lieu d'un nombre, division par
+zéro — rend « rien », jamais zéro. Afficher 0 € là où la donnée manque ferait décider sur
+un chiffre inventé. Une formule fausse est refusée à la publication, avec son motif.
+
+### La section « chiffres »
+
+Une section `metrics` affiche un à quatre nombres : un compte de fiches, une somme ou une
+moyenne, éventuellement restreints à une période (7 jours, 30 jours, 12 mois) et à une
+valeur d'un champ à choix (« statut = payé »). Elle sait totaliser un champ calculé, dont
+la formule est alors traduite en SQL.
+
+Deux règles la gouvernent.
+
+**La base compte, pas le navigateur.** Compter les fiches déjà chargées donnerait un nombre
+juste sur vingt fiches et faux sur deux mille, sans que personne s'en aperçoive. Les
+chiffres sont calculés au serveur avant le rendu : la page arrive avec eux.
+
+**Une mesure ne voit que ce que son lecteur a le droit de voir.** Sur un modèle privé, elle
+est restreinte aux fiches du visiteur connecté, et ne montre rien du tout à un visiteur
+anonyme. Un tableau de bord qui compterait les fiches de tout le monde sur des données
+privées serait une fuite — discrète, chiffrée, mais une fuite.

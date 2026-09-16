@@ -182,6 +182,38 @@ function checkBlock(
       }
       break
     }
+    case 'metrics': {
+      for (const [itemIndex, item] of block.items.entries()) {
+        const ici = `${at}.items[${itemIndex}]`
+        const model = models.get(item.modelId)
+        if (!model) {
+          issues.push({ path: `${ici}.modelId`, message: 'Cette mesure porte sur des données qui n\'existent pas.' })
+          continue
+        }
+        if (item.kind !== 'nombre') {
+          const champ = model.fields.find((field) => field.id === item.field)
+          if (champ === undefined) {
+            issues.push({ path: `${ici}.field`, message: 'Cette mesure porte sur un champ qui n\'existe pas.' })
+          } else if (champ.type !== 'number' && champ.type !== 'computed') {
+            issues.push({ path: `${ici}.field`, message: 'On ne totalise que des nombres.' })
+          }
+        }
+        if (item.filterField !== undefined) {
+          const champ = model.fields.find((field) => field.id === item.filterField)
+          if (champ === undefined) {
+            issues.push({ path: `${ici}.filterField`, message: 'Cette mesure filtre sur un champ qui n\'existe pas.' })
+          } else if (champ.type === 'computed') {
+            // Un champ calculé n'existe pas en base : on ne peut pas comparer sa valeur
+            // à une chaîne dans la condition.
+            issues.push({
+              path: `${ici}.filterField`,
+              message: 'Une mesure ne peut pas être restreinte par un champ calculé.',
+            })
+          }
+        }
+      }
+      break
+    }
     case 'recordList': {
       const model = models.get(block.modelId)
       if (!model) {
