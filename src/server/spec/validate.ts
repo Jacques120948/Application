@@ -1,3 +1,4 @@
+import { formulaFields, FormulaError, parseFormula } from '@/lib/formula'
 import { validation } from '@/lib/errors'
 import { appSpecSchema, type AppSpec, type Block } from './schema'
 
@@ -57,13 +58,51 @@ export function checkIntegrity(spec: AppSpec): IntegrityIssue[] {
         message: 'Ces données se nomment par un champ qui n\'existe pas.',
       })
     }
+    const champsSaisis = new Set(
+      model.fields.filter((field) => field.type !== 'computed').map((field) => field.id),
+    )
     for (const [fieldIndex, field] of model.fields.entries()) {
-      if (field.type !== 'reference') continue
-      if (field.referenceModelId === undefined || !modelsById.has(field.referenceModelId)) {
+      const chemin = `dataModels[${index}].fields[${fieldIndex}]`
+
+      if (field.type === 'reference') {
+        if (field.referenceModelId === undefined || !modelsById.has(field.referenceModelId)) {
+          issues.push({
+            path: `${chemin}.referenceModelId`,
+            message: 'Ce renvoi pointe vers des données qui n\'existent pas.',
+          })
+        }
+        continue
+      }
+
+      if (field.type !== 'computed') continue
+
+      /*
+       * Une formule est vérifiée ici, à la publication, et non à l'exécution. Une formule
+       * fausse découverte par un visiteur devant un total vide serait un bug invisible du
+       * créateur ; refusée à la publication, elle est un message qu'il peut corriger.
+       */
+      let node
+      try {
+        node = parseFormula(field.formula ?? '')
+      } catch (error) {
         issues.push({
-          path: `dataModels[${index}].fields[${fieldIndex}].referenceModelId`,
-          message: 'Ce renvoi pointe vers des données qui n\'existent pas.',
+          path: `${chemin}.formula`,
+          message: error instanceof FormulaError ? error.message : 'Cette formule est illisible.',
         })
+        continue
+      }
+
+      for (const utilise of formulaFields(node)) {
+        if (utilise === field.id) {
+          issues.push({ path: `${chemin}.formula`, message: 'Une formule ne peut pas se calculer elle-même.' })
+        } else if (!champsSaisis.has(utilise)) {
+          // Un champ calculé ne peut pas en utiliser un autre : cela ouvrirait la porte aux
+          // dépendances circulaires, qu'il faudrait alors détecter et expliquer.
+          issues.push({
+            path: `${chemin}.formula`,
+            message: `La formule utilise « ${utilise} », qui n'est pas un champ saisi de ces données.`,
+          })
+        }
       }
     }
   }
@@ -160,7 +199,7 @@ function checkBlock(
         const champ = model.fields.find((field) => field.id === block.sumField)
         if (champ === undefined) {
           issues.push({ path: `${at}.sumField`, message: 'Cette liste totalise un champ qui n\'existe pas.' })
-        } else if (champ.type !== 'number') {
+        } else if (champ.type !== 'number' && champ.type !== 'computed') {
           issues.push({ path: `${at}.sumField`, message: 'On ne totalise que des nombres.' })
         }
       }

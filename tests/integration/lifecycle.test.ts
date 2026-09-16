@@ -760,3 +760,156 @@ describe('crédits', () => {
     expect(upgraded.balance).toBe(800)
   })
 })
+
+/**
+ * Les champs calculés, sur une vraie base.
+ *
+ * Trois propriétés valent d'être vérifiées ici plutôt qu'en unité : la valeur n'est pas
+ * enregistrée — corriger un prix corrige le total —, elle ne peut pas être imposée par le
+ * navigateur, et la somme d'un champ calculé est bien faite par la base sur l'ensemble des
+ * fiches, pas sur la page affichée.
+ */
+describe('champs calculés', () => {
+  let modelId: string
+
+  beforeAll(async () => {
+    const project = await getProject(userId, projectId)
+    const modele = project.spec.dataModels[0]!
+    modelId = modele.id
+
+    await applyManualPatch(userId, projectId, {
+      summary: 'Total calculé',
+      operations: [
+        { op: 'set', path: 'dataModels[0].scope', value: 'shared' },
+        {
+          op: 'append',
+          path: 'dataModels[0].fields',
+          value: { id: 'prix', label: 'Prix', type: 'number', required: false },
+        },
+        {
+          op: 'append',
+          path: 'dataModels[0].fields',
+          value: { id: 'quantite', label: 'Quantité', type: 'number', required: false },
+        },
+        {
+          op: 'append',
+          path: 'dataModels[0].fields',
+          value: {
+            id: 'total',
+            label: 'Total',
+            type: 'computed',
+            required: false,
+            formula: 'prix * quantite',
+            unit: '€',
+          },
+        },
+      ],
+    })
+  }, 30_000)
+
+  it('calcule à la lecture, sans rien enregistrer', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      input: { ...sampleInput(model), prix: 12.5, quantite: 4 },
+    })
+
+    expect((record.data as Record<string, unknown>).total).toBe(50)
+    // Rien n'est écrit en base : la colonne n'existe que le temps de la lecture.
+    const brut = await withRuntimeScope(projectId, (tx) =>
+      tx.appRecord.findUniqueOrThrow({ where: { id: record.id }, select: { data: true } }),
+    )
+    expect((brut.data as Record<string, unknown>).total).toBeNull()
+  })
+
+  it('suit la correction d’un prix, sans qu’on ait à recalculer', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    // Corriger demande d'être celui qui a saisi : la fiche est donc créée par un visiteur.
+    const visiteur = await creerVisiteur()
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: visiteur.id,
+      input: { ...sampleInput(model), prix: 10, quantite: 2 },
+    })
+
+    const corrige = await updateRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      recordId: record.id,
+      endUserId: visiteur.id,
+      input: { ...sampleInput(model), prix: 30, quantite: 2 },
+    })
+    expect((corrige.data as Record<string, unknown>).total).toBe(60)
+  })
+
+  it('ignore un total imposé par le navigateur', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      input: { ...sampleInput(model), prix: 10, quantite: 3, total: 999_999 },
+    })
+    expect((record.data as Record<string, unknown>).total).toBe(30)
+  })
+
+  it('totalise un champ calculé sur l’ensemble des fiches, pas sur la page', async () => {
+    const project = await getProject(userId, projectId)
+    const page = await listRecords({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      query: { sumField: 'total', sumKind: 'somme', limit: 1 },
+    })
+    // Une seule fiche est rendue, mais le total porte sur toutes les fiches chiffrées.
+    expect(page.items).toHaveLength(1)
+    expect(page.aggregate?.value).toBe(140)
+  })
+
+  it('n’affiche rien plutôt que zéro quand une donnée manque', async () => {
+    const project = await getProject(userId, projectId)
+    const model = project.spec.dataModels.find((candidate) => candidate.id === modelId)!
+    const record = await createRecord({
+      projectId,
+      spec: project.spec,
+      modelId,
+      endUserId: null,
+      // La quantité manque : le total ne peut pas être connu.
+      input: { ...sampleInput(model), prix: 10, quantite: null },
+    })
+    expect((record.data as Record<string, unknown>).total).toBeNull()
+  })
+
+  it('refuse à la publication une formule qui vise un champ inexistant', async () => {
+    await expect(
+      applyManualPatch(userId, projectId, {
+        summary: 'Formule fausse',
+        operations: [
+          { op: 'set', path: 'dataModels[0].fields[-1]', value: null },
+          {
+            op: 'append',
+            path: 'dataModels[0].fields',
+            value: {
+              id: 'faux',
+              label: 'Faux',
+              type: 'computed',
+              required: false,
+              formula: 'prix * inconnu',
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow(AppError)
+  })
+})

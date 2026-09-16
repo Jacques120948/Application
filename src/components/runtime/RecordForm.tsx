@@ -49,6 +49,9 @@ export function RecordForm({
   const [state, setState] = useState<'idle' | 'sending' | 'done'>('idle')
   const [error, setError] = useState<string | null>(null)
   const correction = record !== undefined
+  // Un champ calculé n'apparaît pas au formulaire : il se déduit des autres, et le montrer
+  // laisserait croire qu'on peut le corriger à la main.
+  const saisissables = model.fields.filter((field) => field.type !== 'computed')
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -61,7 +64,7 @@ export function RecordForm({
 
     const form = new FormData(formElement)
     const payload: Record<string, unknown> = {}
-    for (const field of model.fields) {
+    for (const field of saisissables) {
       payload[field.id] =
         field.type === 'boolean' ? form.get(field.id) === 'on' : form.get(field.id) ?? ''
     }
@@ -109,7 +112,7 @@ export function RecordForm({
 
   return (
     <form onSubmit={submit} className="grid gap-4">
-      {model.fields.map((field) => (
+      {saisissables.map((field) => (
         <label key={field.id} className="block text-sm">
           <span className="mb-1 block font-medium">
             {field.label}

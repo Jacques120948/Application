@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { DENSITIES, FONT_IDS, PATTERNS } from '@/lib/fonts'
 import { ICON_NAMES } from '@/lib/icons'
+import { MAX_FORMULA_LENGTH } from '@/lib/formula'
 
 /**
  * AppSpec — description déclarative d'une application créée sur la plateforme.
@@ -84,6 +85,13 @@ export const FIELD_TYPES = [
    * visée ; ce qui s'affiche est son nom, relu à la lecture.
    */
   'reference',
+  /**
+   * Champ calculé : un total, une marge, une durée. Sa valeur n'est jamais saisie ni
+   * enregistrée — elle est recalculée à chaque lecture depuis la formule. Corriger un prix
+   * corrige donc aussitôt tous les totaux, ce qu'une valeur figée en base n'aurait pas
+   * fait.
+   */
+  'computed',
 ] as const
 
 export const dataFieldSchema = z
@@ -106,6 +114,14 @@ export const dataFieldSchema = z
      * réellement saisis : rien ne devient infiltrable.
      */
     allowOther: z.boolean().optional(),
+    /**
+     * Renseigné uniquement pour le type `computed` : le calcul, écrit avec les
+     * identifiants des autres champs du modèle. Voir `@/lib/formula` pour la grammaire,
+     * volontairement réduite aux quatre opérations et aux parenthèses.
+     */
+    formula: z.string().max(MAX_FORMULA_LENGTH).optional(),
+    /** Suffixe affiché après la valeur calculée : « € », « h », « % ». */
+    unit: z.string().max(8).optional(),
     /** Renseigné uniquement pour le type `reference` : le modèle vers lequel on renvoie. */
     referenceModelId: slug.optional(),
     help: shortText.optional(),
@@ -120,6 +136,12 @@ export const dataFieldSchema = z
   })
   .refine((field) => field.allowOther !== true || field.type === 'select', {
     message: 'Seul un champ à choix multiples peut autoriser une valeur hors liste.',
+  })
+  .refine((field) => field.type !== 'computed' || field.formula !== undefined, {
+    message: 'Un champ calculé doit porter sa formule.',
+  })
+  .refine((field) => field.type !== 'computed' || field.required === false, {
+    message: "Un champ calculé ne se saisit pas : il ne peut pas être obligatoire.",
   })
 
 export const dataModelSchema = z

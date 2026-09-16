@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { notFound, validation } from '@/lib/errors'
 import { recordLabel } from '@/lib/record-label'
+import { evaluateFormula, parseFormula, type FormulaNode } from '@/lib/formula'
 import { csvRow } from '@/lib/csv'
 import { requireOwnedProject, withOwnerRuntimeScope, withRuntimeScope } from '@/server/db/scope'
 import type { AppSpec, DataField, DataModel } from '@/server/spec/schema'
@@ -26,7 +27,38 @@ function findModel(spec: AppSpec, modelId: string): DataModel {
   return model
 }
 
+/**
+ * Ajoute les valeurs calculées à une fiche, au moment de la lire.
+ *
+ * Elles ne sont jamais enregistrées : corriger un prix corrige aussitôt tous les totaux qui
+ * en dépendent. Une valeur figée en base aurait menti dès la première correction, et
+ * personne n'aurait su lesquelles étaient à jour.
+ *
+ * Une formule illisible ne fait rien échouer : le champ vaut « rien », comme lorsqu'une
+ * donnée manque. Une fiche ne doit pas devenir inaffichable parce qu'un calcul est mal
+ * écrit.
+ */
+function garnirCalculs(model: DataModel, data: RecordData): RecordData {
+  const calcules = model.fields.filter((field) => field.type === 'computed')
+  if (calcules.length === 0) return data
+
+  const enrichi: RecordData = { ...data }
+  for (const champ of calcules) {
+    try {
+      enrichi[champ.id] = evaluateFormula(parseFormula(champ.formula ?? ''), data)
+    } catch {
+      enrichi[champ.id] = null
+    }
+  }
+  return enrichi
+}
+
 function validateField(field: DataField, raw: unknown): RecordValue {
+  // Un champ calculé ne se saisit pas : quoi que le navigateur envoie, rien n'est
+  // enregistré. C'est ce qui garantit qu'un total ne peut pas être « corrigé » à la main
+  // pour ne plus correspondre à ses composantes.
+  if (field.type === 'computed') return null
+
   const missing = raw === undefined || raw === null || raw === ''
   if (missing) {
     if (field.required) throw validation(`Le champ « ${field.label} » est obligatoire.`)
@@ -165,8 +197,10 @@ export async function createRecord(params: {
       },
     })
     return {
+      // Les calculs partent avec la fiche : le formulaire affiche le total sans attendre
+      // un second aller-retour.
       id: created.id,
-      data,
+      data: garnirCalculs(model, data),
       createdAt: created.createdAt,
       isMine: params.endUserId !== null,
     }
@@ -410,7 +444,7 @@ async function lirePage(
   )
   const items = rows.map((row) => ({
     id: row.id,
-    data: row.data,
+    data: garnirCalculs(model, row.data),
     createdAt: row.createdAt,
     isMine: row.ownerEndUserId !== null && row.ownerEndUserId === params.viewerEndUserId,
   }))
@@ -513,6 +547,46 @@ async function resoudreRenvois(
  * sont ignorées plutôt que de faire échouer la lecture — un champ peut avoir changé de type
  * après que des fiches ont été saisies.
  */
+/**
+ * Un champ, traduit en nombre pour PostgreSQL.
+ *
+ * Le filtre par expression régulière n'est pas une précaution de style : une colonne JSON
+ * contient ce qu'on y a mis, et une conversion directe ferait échouer toute la requête sur
+ * une seule fiche mal formée — un total impossible à afficher parce qu'une ligne contient
+ * un tiret.
+ */
+function nombreSql(id: string): Prisma.Sql {
+  return Prisma.sql`CASE WHEN "data"->>${id} ~ '^-?[0-9]+(\.[0-9]+)?$'
+                    THEN ("data"->>${id})::numeric END`
+}
+
+/**
+ * Une formule, traduite en expression SQL.
+ *
+ * Elle est construite depuis l'arbre issu de l'analyse, jamais depuis le texte : aucune
+ * chaîne écrite par un modèle de langage n'entre dans la requête, seuls des identifiants de
+ * champs passés en paramètres. Une division est protégée par `NULLIF` — diviser par zéro
+ * doit rendre « rien », comme du côté JavaScript, et non faire échouer la requête.
+ */
+function formuleSql(node: FormulaNode): Prisma.Sql {
+  switch (node.kind) {
+    case 'number':
+      return Prisma.sql`${node.value}::numeric`
+    case 'field':
+      return nombreSql(node.id)
+    case 'negate':
+      return Prisma.sql`(- ${formuleSql(node.value)})`
+    case 'binary': {
+      const gauche = formuleSql(node.left)
+      const droite = formuleSql(node.right)
+      if (node.op === '+') return Prisma.sql`(${gauche} + ${droite})`
+      if (node.op === '-') return Prisma.sql`(${gauche} - ${droite})`
+      if (node.op === '*') return Prisma.sql`(${gauche} * ${droite})`
+      return Prisma.sql`(${gauche} / NULLIF(${droite}, 0))`
+    }
+  }
+}
+
 async function calculer(
   tx: Parameters<Parameters<typeof withRuntimeScope>[1]>[0],
   ou: Prisma.Sql,
@@ -520,10 +594,23 @@ async function calculer(
   sumField: string | undefined,
   kind: 'somme' | 'moyenne',
 ): Promise<RecordAggregate | null> {
-  const champ = model.fields.find((field) => field.id === sumField && field.type === 'number')
+  const champ = model.fields.find(
+    (field) => field.id === sumField && (field.type === 'number' || field.type === 'computed'),
+  )
   if (champ === undefined) return null
-  const nombre = Prisma.sql`CASE WHEN "data"->>${champ.id} ~ '^-?[0-9]+(\.[0-9]+)?$'
-                            THEN ("data"->>${champ.id})::numeric END`
+
+  // Un champ calculé n'existe pas en base : c'est sa formule qui est totalisée, pas une
+  // colonne. Sans cela, « la somme des totaux » serait toujours vide.
+  let nombre: Prisma.Sql
+  if (champ.type === 'computed') {
+    try {
+      nombre = formuleSql(parseFormula(champ.formula ?? ''))
+    } catch {
+      return null
+    }
+  } else {
+    nombre = nombreSql(champ.id)
+  }
   const [ligne] = await tx.$queryRaw<Array<{ valeur: string | null }>>(
     kind === 'moyenne'
       ? Prisma.sql`SELECT avg(${nombre}) AS valeur FROM "AppRecord" WHERE ${ou}`
@@ -593,7 +680,7 @@ export async function updateRecord(params: {
       where: { id: record.id },
       data: { data: data as unknown as Prisma.InputJsonValue },
     })
-    return { id: updated.id, data, createdAt: updated.createdAt, isMine: true }
+    return { id: updated.id, data: garnirCalculs(model, data), createdAt: updated.createdAt, isMine: true }
   })
 }
 

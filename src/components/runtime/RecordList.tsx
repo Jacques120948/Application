@@ -406,9 +406,22 @@ function montre(
 ): string {
   const champ = model.fields.find((field) => field.id === fieldId)
   const valeur = data[fieldId]
+
+  if (champ?.type === 'computed') {
+    // « rien » n'est pas zéro : une donnée manquante ne doit pas s'afficher « 0 € », ce
+    // qui ferait décider sur un chiffre inventé.
+    if (typeof valeur !== 'number') return '—'
+    return champ.unit === undefined ? nombre(valeur) : `${nombre(valeur)} ${champ.unit}`
+  }
+
   if (champ?.type !== 'reference') return display(valeur)
   if (typeof valeur !== 'string' || valeur === '') return '—'
   return renvois[valeur] ?? 'Élément supprimé'
+}
+
+/** Un nombre écrit à la française, sans décimales inutiles. */
+function nombre(valeur: number): string {
+  return valeur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
 }
 
 function display(value: unknown): string {

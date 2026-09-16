@@ -298,7 +298,9 @@ function ModelData({
                         ) : (
                           <>
                             <dl className="m-0 grid gap-2">
-                              {model.fields.map((field) => (
+                              {model.fields
+        .filter((field) => field.type !== 'computed')
+        .map((field) => (
                                 <div key={field.id}>
                                   <dt className="text-xs font-medium uppercase tracking-wide text-[var(--color-ink-faint)]">
                                     {field.label}
@@ -374,6 +376,7 @@ function EditForm({
     const form = new FormData(formElement)
     const payload: Record<string, unknown> = {}
     for (const field of model.fields) {
+      if (field.type === 'computed') continue
       payload[field.id] =
         field.type === 'boolean' ? form.get(field.id) === 'on' : (form.get(field.id) ?? '')
     }
@@ -397,15 +400,19 @@ function EditForm({
 
   return (
     <form onSubmit={submit} className="grid gap-3">
-      {model.fields.map((field) => (
-        <Champ
-          key={field.id}
-          field={field}
-          initial={item.data[field.id]}
-          choix={choix[field.id]}
-          models={models}
-        />
-      ))}
+      {/* Un champ calculé n'apparaît pas : il se déduit des autres, et le montrer
+          laisserait croire qu'on peut le corriger à la main. */}
+      {model.fields
+        .filter((field) => field.type !== 'computed')
+        .map((field) => (
+          <Champ
+            key={field.id}
+            field={field}
+            initial={item.data[field.id]}
+            choix={choix[field.id]}
+            models={models}
+          />
+        ))}
       {error !== null ? <Notice tone="critical">{error}</Notice> : null}
       <div className="flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={busy}>
@@ -538,6 +545,12 @@ function montre(
   if (champ?.type === 'reference') {
     if (typeof valeur !== 'string' || valeur === '') return '—'
     return renvois[valeur] ?? 'Élément supprimé'
+  }
+  if (champ?.type === 'computed') {
+    // « rien » n'est pas zéro : une donnée manquante ne doit pas s'afficher « 0 € ».
+    if (typeof valeur !== 'number') return '—'
+    const ecrit = valeur.toLocaleString('fr-FR', { maximumFractionDigits: 2 })
+    return champ.unit === undefined ? ecrit : `${ecrit} ${champ.unit}`
   }
   if (valeur === null || valeur === undefined || valeur === '') return '—'
   if (typeof valeur === 'boolean') return valeur ? 'Oui' : 'Non'

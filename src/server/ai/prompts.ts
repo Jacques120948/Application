@@ -215,6 +215,13 @@ Points qui font échouer les modifications le plus souvent :
 - Une entrée de menu n'a que "pageId" et "label". Pas d'identifiant propre.
 - Pour ajouter une formule : append sur "monetization.plans", et vérifie que
   "monetization.model" n'est pas "free".
+- Un total ne se saisit pas : il se calcule. Pour « total = prix x quantité », « marge »,
+  « durée », « TVA », ajoute un champ de type "computed" avec sa formule écrite à partir
+  des identifiants des autres champs, par exemple "prix * quantite * 1.081". La formule
+  n'accepte que des nombres, des identifiants de champs, + - * / et des parenthèses — ni
+  fonction, ni condition. Un champ calculé n'apparaît jamais au formulaire, n'est jamais
+  obligatoire, se recalcule à chaque lecture, et peut être totalisé par une liste
+  ("sumField"). Le champ "unit" ajoute un suffixe à l'affichage : "€", "h", "%".
 - Un champ à choix n'accepte que ses options. Si le créateur veut pouvoir saisir une valeur
   imprévue, ne transforme pas le champ en texte libre et n'ajoute pas d'option "Autre" :
   mets "allowOther" à true sur ce champ. Le formulaire ouvre alors une zone de saisie, la
