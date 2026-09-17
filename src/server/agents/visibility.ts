@@ -21,10 +21,14 @@
  * modèle. Un agent reçoit des faits mesurés et les explique ; il ne les devine pas, et quand
  * la donnée manque, le contexte le dit et la consigne est de le dire aussi.
  *
- * Un mot sur les portraits. Ils sont pour l'instant des monogrammes : une pastille, une
- * initiale, une couleur. Ce n'est pas un provisoire honteux — c'est lisible, cohérent,
- * gratuit, et ça ne fait passer personne pour une personne réelle. Le jour où de vrais
- * portraits existeront, ils se posent dans `avatar` sans toucher au reste.
+ * Un mot sur les portraits. Les fichiers de `public/equipe` sont pour l'instant des aplats
+ * dégradés à l'initiale, aux couleurs de chaque spécialiste. Ils existent pour une raison
+ * précise : une image absente laisse une icône cassée, et une icône cassée sur une page
+ * d'accueil coûte plus cher qu'un portrait sobre. `scripts/avatars-equipe.ts` les remplace
+ * par de vrais portraits sans qu'une ligne change ici — même nom, même dossier.
+ *
+ * La pastille à initiale du composant reste le filet : elle prend le relais pour tout
+ * spécialiste ajouté plus tard sans portrait.
  */
 
 export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content'] as const
@@ -63,6 +67,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle lit votre site page par page, relève ce qui cloche et dit par quoi commencer. Elle constate : elle ne touche à rien.',
     handles: ['Analyse du site', 'Problèmes détectés', 'Priorités', 'Progression'],
     feature: 'visibility_audit_agent',
+    avatar: '/equipe/lea.webp',
     tint: 'brand',
     starters: [
       'Pourquoi mon score a-t-il baissé ?',
@@ -78,6 +83,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Il travaille ce qu’un moteur de recherche regarde : les titres, les descriptions, la structure et les liens entre vos pages.',
     handles: ['Titles', 'Meta descriptions', 'H1 et H2', 'Structure', 'Maillage interne'],
     feature: 'visibility_seo_agent',
+    avatar: '/equipe/neo.webp',
     tint: 'night',
     starters: [
       'Mes titres de pages sont-ils bons ?',
@@ -93,6 +99,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle rend vos pages compréhensibles par les assistants : des réponses directes, des faits nets, une entreprise clairement identifiée.',
     handles: ['Réponses directes', 'FAQ', 'Données structurées', 'Identité de la marque'],
     feature: 'visibility_geo_agent',
+    avatar: '/equipe/gia.webp',
     tint: 'accent',
     starters: [
       'Pourquoi mon score GEO est-il bas ?',
@@ -108,6 +115,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Il écrit et réécrit : descriptions, pages, questions fréquentes, articles. Toujours à partir de votre site, jamais à partir d’un modèle générique.',
     handles: ['Descriptions', 'Pages', 'FAQ', 'Articles', 'Introductions'],
     feature: 'visibility_content_agent',
+    avatar: '/equipe/milo.webp',
     tint: 'warm',
     starters: [
       'Réécris la description de cette page.',

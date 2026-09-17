@@ -40,7 +40,20 @@ type GeminiResponse = {
   }>
 }
 
-export async function generateGeminiImage(apiKey: string, prompt: string): Promise<ImageResult> {
+/**
+ * Le cadrage demandé à Google.
+ *
+ * Trois demis par défaut, le format d'une image de page. Le carré sert aux portraits : une
+ * image large recadrée en rond perd la moitié du visage, et aucun recadrage après coup ne
+ * rattrape ce qui n'a jamais été dessiné.
+ */
+export type AspectRatio = '3:2' | '1:1'
+
+export async function generateGeminiImage(
+  apiKey: string,
+  prompt: string,
+  aspectRatio: AspectRatio = '3:2',
+): Promise<ImageResult> {
   let response: Response
   try {
     response = await fetch(`${API}/models/${GEMINI_IMAGE_MODEL}:generateContent`, {
@@ -48,7 +61,7 @@ export async function generateGeminiImage(apiKey: string, prompt: string): Promi
       headers: { 'x-goog-api-key': apiKey, 'content-type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: '3:2' } },
+        generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio } },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
