@@ -198,6 +198,33 @@ describe('l’audit avance par tranches, et finit', () => {
     expect(pages.some((page) => page.path === '/boutique')).toBe(true)
   })
 
+  it('laisse reprendre une analyse interrompue même au plafond de l’offre', async () => {
+    /*
+     * Le cas est arrivé en production : l'exploration avance tranche par tranche, et c'est
+     * le navigateur qui la fait avancer — un onglet fermé la met donc en pause. Si le quota
+     * était vérifié avant la reprise, l'audit déjà compté l'était une seconde fois, et la
+     * personne se voyait refuser sa propre analyse. Reprendre n'est pas commencer.
+     */
+    statutAccueil = 200
+    const { addSite, startAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const ouvert = await startAudit(userId, site.siteId)
+
+    const offre = await prisma.plan.findFirstOrThrow({ where: { id: FREE_PLAN_ID } })
+    await prisma.plan.update({ where: { id: FREE_PLAN_ID }, data: { auditsPerMonth: 1 } })
+    try {
+      // Au plafond, une reprise reste possible : c'est le même audit.
+      expect((await startAudit(userId, site.siteId)).auditId).toBe(ouvert.auditId)
+    } finally {
+      await prisma.plan.update({
+        where: { id: FREE_PLAN_ID },
+        data: { auditsPerMonth: offre.auditsPerMonth },
+      })
+    }
+    // On le termine pour ne pas gêner les tests suivants.
+    await jusquAuBout(ouvert.auditId)
+  }, 60_000)
+
   it('reprend un audit déjà ouvert au lieu d’en lancer un second', async () => {
     const { addSite, startAudit } = await import('@/server/audit/service')
     const site = await addSite(userId, { url: SITE })

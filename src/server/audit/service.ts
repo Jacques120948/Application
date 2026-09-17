@@ -164,6 +164,25 @@ export async function startAudit(userId: string, siteId: string): Promise<{ audi
   )
   if (site === null) throw notFound('Ce site est introuvable.')
 
+  /*
+   * La reprise passe avant le quota, et l'ordre inverse était un piège.
+   *
+   * Un audit déjà en cours a été compté au moment où il a été ouvert. Vérifier le quota
+   * d'abord revenait à le compter une seconde fois : quelqu'un au plafond de son offre dont
+   * l'analyse s'était interrompue — un onglet fermé suffit — se voyait refuser sa propre
+   * reprise, et perdait l'audit qu'il avait déjà payé. Reprendre n'est pas commencer.
+   */
+  const enCours = await withUserScope(userId, (tx) =>
+    tx.audit.findFirst({
+      where: { siteId, userId, status: { in: ['pending', 'running'] } },
+      orderBy: { startedAt: 'desc' },
+      select: { id: true },
+    }),
+  )
+  // Deux explorations simultanées du même site, ce serait deux fois la charge chez le
+  // client pour rien.
+  if (enCours !== null) return { auditId: enCours.id }
+
   const dejaFaits = await withUserScope(userId, (tx) =>
     tx.audit.count({ where: { userId, startedAt: { gte: debutDuMois() } } }),
   )
@@ -173,17 +192,6 @@ export async function startAudit(userId: string, siteId: string): Promise<{ audi
       `Votre offre comprend ${plan.auditsPerMonth} audit${plan.auditsPerMonth > 1 ? 's' : ''} par mois. Le compteur repart au début du mois prochain.`,
     )
   }
-
-  // Un audit déjà en cours sur ce site est repris plutôt que doublé : deux explorations
-  // simultanées du même site, c'est deux fois la charge chez le client pour rien.
-  const enCours = await withUserScope(userId, (tx) =>
-    tx.audit.findFirst({
-      where: { siteId, userId, status: { in: ['pending', 'running'] } },
-      orderBy: { startedAt: 'desc' },
-      select: { id: true },
-    }),
-  )
-  if (enCours !== null) return { auditId: enCours.id }
 
   const audit = await withUserScope(userId, (tx) =>
     tx.audit.create({

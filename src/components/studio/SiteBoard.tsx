@@ -18,6 +18,13 @@ import { Button, Card, CardBody, Field, Input, Notice, Textarea } from '@/compon
  * **Une tranche qui échoue n'arrête rien.** Chaque appel est indépendant : on réessaie une
  * fois, et si le serveur d'en face ne répond décidément pas, on le dit sans perdre ce qui a
  * déjà été trouvé.
+ *
+ * **Une analyse abandonnée se reprend.** C'est le navigateur qui fait avancer les tranches :
+ * fermer l'onglet interrompt donc l'exploration, et rien ne la relance tout seul. La
+ * première version n'en disait rien et n'offrait aucun bouton — un audit interrompu restait
+ * « en cours » pour toujours, et il fallait ressaisir l'adresse pour le débloquer. Le cas
+ * s'est produit en production avant d'être vu ici. L'écran le dit maintenant avant de
+ * lancer, et propose de reprendre là où l'on s'était arrêté.
  */
 
 export type SiteVu = {
@@ -57,6 +64,8 @@ export function SiteBoard({
   const [etat, setEtat] = useState<'idle' | 'busy'>('idle')
   const [erreur, setErreur] = useState<string | null>(null)
   const [avancement, setAvancement] = useState<Avancement | null>(null)
+  /** L'analyse qu'on est en train de reprendre, pour désigner la bonne carte. */
+  const [reprise, setReprise] = useState<string | null>(null)
 
   // Arrête la boucle si la personne quitte l'écran : rien ne sert de continuer à appeler
   // pour un affichage que plus personne ne regarde.
@@ -89,6 +98,24 @@ export function SiteBoard({
       if (!body.encore) return
     }
   }, [])
+
+  /**
+   * Reprend une analyse laissée en plan.
+   *
+   * Le serveur rend le même audit tant qu'il n'est pas terminé : reprendre ne consomme donc
+   * pas un audit de plus dans l'offre, et ne perd pas les pages déjà relevées.
+   */
+  async function reprendre(auditId: string) {
+    if (etat === 'busy') return
+    setEtat('busy')
+    setErreur(null)
+    setAvancement(null)
+    setReprise(auditId)
+    await avancer(auditId)
+    setEtat('idle')
+    setReprise(null)
+    window.location.assign(`/${locale}/visibilite`)
+  }
 
   async function envoyer() {
     const adresse = url.trim()
@@ -129,7 +156,8 @@ export function SiteBoard({
           <h2 className="m-0 text-lg font-semibold">Analyser un site</h2>
           <p className="mt-2 mb-5 text-sm text-[var(--color-ink-soft)]">
             Entrez son adresse. Nous lisons vos pages comme le ferait un moteur — rien n’est
-            modifié chez vous, et aucun accès ne vous est demandé.
+            modifié chez vous, et aucun accès ne vous est demandé. Gardez cette page ouverte
+            pendant l’analyse : c’est elle qui la fait avancer, et la fermer la met en pause.
           </p>
 
           <div className="grid gap-4">
@@ -209,6 +237,29 @@ export function SiteBoard({
                   dit quelque chose. Une note absente s'affiche comme absente, pas comme un
                   zéro, qui se lirait comme un résultat.
                 */}
+                {/*
+                  Une analyse interrompue se reprend d'ici. Sans ce bouton, la carte disait
+                  « en cours » indéfiniment et le seul recours était de ressaisir l'adresse —
+                  ce qui a l'air de tout recommencer alors que rien n'est perdu.
+                */}
+                {site.dernierAudit !== null &&
+                (site.dernierAudit.status === 'running' || site.dernierAudit.status === 'pending') ? (
+                  <div className="mt-3">
+                    <Button
+                      variant="secondary"
+                      onClick={() => void reprendre(site.dernierAudit?.id ?? '')}
+                      disabled={etat === 'busy'}
+                    >
+                      {reprise === site.dernierAudit.id
+                        ? 'Reprise en cours…'
+                        : 'Reprendre l’analyse'}
+                    </Button>
+                    <p className="mt-2 mb-0 text-sm text-[var(--color-ink-faint)]">
+                      Elle repartira des {site.dernierAudit.pagesCrawled} pages déjà lues.
+                    </p>
+                  </div>
+                ) : null}
+
                 {site.dernierAudit?.status === 'done' ? (
                   <p className="mt-3 mb-0 flex flex-wrap gap-x-6 gap-y-1 text-sm">
                     <span>
