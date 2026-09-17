@@ -51,10 +51,33 @@ export function assertSameOrigin(request: Request): void {
   }
 }
 
+/**
+ * L'adresse d'où vient la requête.
+ *
+ * Elle sert à compter les tentatives de connexion, donc elle décide d'un refus : sa valeur
+ * doit venir de l'infrastructure, pas de celui qui frappe à la porte.
+ *
+ * `x-forwarded-for` est une liste, et sa première entrée est celle que le client a envoyée.
+ * Un hébergement sérieux la réécrit, mais rien dans le protocole ne l'y oblige : la lire en
+ * premier revient à laisser l'attaquant choisir sous quel nom on le compte, et donc à
+ * repartir de zéro à chaque requête. On préfère donc les en-têtes que la plateforme pose
+ * elle-même et qu'un client ne peut pas usurper, et on ne retombe sur la liste qu'à défaut.
+ *
+ * Le compteur par compte, lui, ne dépend d'aucun en-tête : c'est lui qui tient la limite de
+ * cinq essais, quoi qu'un attaquant raconte sur son origine.
+ */
 export function clientIp(request: Request): string | null {
+  const plateforme =
+    request.headers.get('x-vercel-forwarded-for') ?? request.headers.get('x-real-ip')
+  if (plateforme !== null && plateforme.trim() !== '') return plateforme.trim()
   const forwarded = request.headers.get('x-forwarded-for')
-  if (forwarded !== null) return forwarded.split(',')[0]?.trim() ?? null
-  return request.headers.get('x-real-ip')
+  if (forwarded === null) return null
+  /*
+   * À défaut, la dernière entrée plutôt que la première : c'est celle ajoutée par le saut le
+   * plus proche de nous, donc la moins facile à dicter depuis l'extérieur.
+   */
+  const entrees = forwarded.split(',').map((entree) => entree.trim()).filter((entree) => entree !== '')
+  return entrees[entrees.length - 1] ?? null
 }
 
 /** Lit un corps JSON borné en taille. */

@@ -97,14 +97,17 @@ model User {
 
 /// Session du studio. Le jeton n'est jamais stocké en clair.
 model Session {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  ip        String?
-  userAgent String?
-  createdAt DateTime  @default(now())
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  /// Dernier signe de vie. Sert la déconnexion pour inactivité : une session oubliée sur
+  /// un poste partagé ne doit pas rester ouverte jusqu'à son échéance lointaine.
+  lastSeenAt DateTime  @default(now())
+  revokedAt  DateTime?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -1360,4 +1363,27 @@ model ActionItem {
 
   @@unique([siteId, checkId])
   @@index([userId, state])
+}
+
+/// Tentatives de connexion ratées, comptées là où elles survivent au redémarrage.
+///
+/// Le compteur en mémoire du processus ne suffit pas : sur un hébergement sans état, chaque
+/// requête peut tomber sur une instance neuve, dont le compteur est vide. Une limite qui ne
+/// tient que dans une mémoire volatile n'est pas une limite.
+///
+/// Rien n'est stocké en clair. Ni l'adresse visée, ni l'adresse IP : seulement leur
+/// empreinte. Une copie de cette table ne dit pas qui a essayé de se connecter, ni d'où.
+model AuthThrottle {
+  id           String    @id @default(uuid()) @db.Uuid
+  /// « email » ou « ip » : ce que compte cette ligne.
+  scope        String
+  /// Empreinte HMAC de la valeur comptée. Jamais la valeur elle-même.
+  keyHash      String
+  failures     Int       @default(0)
+  windowStart  DateTime  @default(now())
+  blockedUntil DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([scope, keyHash])
+  @@index([blockedUntil])
 }

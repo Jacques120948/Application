@@ -53,6 +53,11 @@ const PROTECTED_TABLES = [
  * Une table qu'on ne lit jamais par erreur n'a pas besoin qu'on l'empêche de mal la lire ;
  * l'écriture, elle, tient son identifiant de la session et jamais du navigateur. Le jour où
  * un créateur pourra relire ses propres signalements, elles rejoindront la liste.
+ *
+ * AuthThrottle est absente pour une raison plus forte encore : elle est écrite avant toute
+ * authentification, au moment précis où il n'existe aucune identité à laquelle une politique
+ * pourrait se rattacher. Elle ne contient d'ailleurs aucune donnée personnelle — ni adresse
+ * visée, ni adresse IP, seulement leur empreinte — et aucun écran ne la relit.
  */
 
 type RoleRow = { role: string; bypassrls: boolean }

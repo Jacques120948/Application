@@ -5,6 +5,7 @@ import { conflict, validation } from '@/lib/errors'
 import { logger } from '@/server/observability/logger'
 import { assertPasswordAcceptable, hashPassword, verifyPassword } from './password'
 import { consume, reset, RULES } from './rate-limit'
+import { assertNotBlocked, clearFailures, recordFailure, sweepThrottles } from './throttle'
 import { createSession } from './session'
 import { grantInitialCredits } from '@/server/billing/credits'
 import { SUPPORTED_LOCALES } from '@/i18n/config'
@@ -68,10 +69,22 @@ export async function login(
   input: LoginInput,
   context: RequestContext = {},
 ): Promise<{ userId: string; token: string; expiresAt: Date }> {
-  const ipKey = `login:ip:${context.ip ?? 'inconnu'}`
+  const ip = context.ip ?? 'inconnu'
+  const ipKey = `login:ip:${ip}`
   const accountKey = `login:compte:${input.email}`
+
+  /*
+   * Deux barrières, et elles ne font pas le même travail.
+   *
+   * Celle en mémoire coupe une rafale sans toucher la base, mais ne survit ni à une autre
+   * instance ni à un redémarrage : seule, elle ne serait pas une limite. Celle en base
+   * survit à tout, et c'est elle qui tient la promesse de cinq tentatives.
+   */
   consume(ipKey, RULES.login)
   consume(accountKey, RULES.login)
+  await assertNotBlocked('email', input.email)
+  await assertNotBlocked('ip', ip)
+  await sweepThrottles()
 
   const user = await prisma.user.findUnique({ where: { email: input.email } })
 
@@ -82,11 +95,25 @@ export async function login(
 
   if (!user || !passwordOk || user.disabledAt !== null) {
     logger.warn('échec de connexion', { hasAccount: user !== null })
+    /*
+     * L'échec est compté avant d'être annoncé, et pour les deux clés. Compter l'adresse
+     * visée protège un compte qu'on s'acharne à ouvrir ; compter l'adresse d'où l'on vient
+     * protège tous les comptes de quelqu'un qui essaie un mot de passe courant sur des
+     * milliers d'adresses. L'une sans l'autre laisse une attaque entière.
+     */
+    await recordFailure('email', input.email)
+    await recordFailure('ip', ip)
     throw validation('Adresse e-mail ou mot de passe incorrect.')
   }
 
   reset(ipKey)
   reset(accountKey)
+  /*
+   * L'ardoise de l'adresse visée est effacée, jamais celle de l'IP : quelqu'un qui finit par
+   * ouvrir un compte au hasard ne doit pas s'offrir un crédit de tentatives neuf pour le
+   * suivant.
+   */
+  await clearFailures('email', input.email)
 
   const session = await createSession(user.id, context)
   return { userId: user.id, token: session.token, expiresAt: session.expiresAt }

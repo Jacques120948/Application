@@ -13,9 +13,30 @@ import { unauthenticated } from '@/lib/errors'
  */
 
 export const SESSION_COOKIE = 'af_session'
+
+/** Durée de vie absolue d'une session, quelle que soit l'activité. */
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+
 /** En dessous de ce seuil restant, la session est prolongée à l'usage. */
 const SESSION_REFRESH_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
+ * Inactivité tolérée avant déconnexion.
+ *
+ * L'échéance absolue ne protège de rien au quotidien : une session ouverte sur un poste
+ * partagé et oubliée y restait ouverte des semaines. Vingt minutes sans le moindre signe de
+ * vie, et le serveur révoque — quel que soit ce que dit le cookie.
+ */
+export const IDLE_TIMEOUT_MS = 20 * 60_000
+
+/**
+ * Pas plus d'une écriture de fraîcheur par minute et par session.
+ *
+ * Sans ce palier, chaque page vue écrirait en base, y compris les images et les appels
+ * d'arrière-plan : beaucoup d'écritures pour une précision dont personne n'a l'usage. La
+ * minute est très en dessous des vingt minutes mesurées, donc elle ne fausse rien.
+ */
+const TOUCH_INTERVAL_MS = 60_000
 
 export type AuthenticatedUser = {
   id: string
@@ -78,12 +99,39 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   if (!session || session.revokedAt !== null || session.expiresAt <= new Date()) return null
   if (session.user.disabledAt !== null) return null
 
-  const remaining = session.expiresAt.getTime() - Date.now()
-  if (remaining < SESSION_REFRESH_THRESHOLD_MS) {
-    await prisma.session.update({
-      where: { id: session.id },
-      data: { expiresAt: new Date(Date.now() + SESSION_TTL_MS) },
-    })
+  const maintenant = Date.now()
+
+  /*
+   * Inactivité : la session est révoquée, pas seulement ignorée.
+   *
+   * La révoquer ferme la porte pour de bon — un jeton volé après coup ne rouvre rien, et la
+   * personne le voit dans la liste de ses sessions. L'ignorer silencieusement laisserait une
+   * ligne valide en base, qui redeviendrait utilisable à la moindre erreur de calcul de date.
+   */
+  if (maintenant - session.lastSeenAt.getTime() > IDLE_TIMEOUT_MS) {
+    await prisma.session
+      .updateMany({
+        where: { id: session.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      })
+      .catch(() => undefined)
+    return null
+  }
+
+  const remaining = session.expiresAt.getTime() - maintenant
+  const prolonge = remaining < SESSION_REFRESH_THRESHOLD_MS
+  const rafraichir = maintenant - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS
+
+  if (prolonge || rafraichir) {
+    await prisma.session
+      .update({
+        where: { id: session.id },
+        data: {
+          ...(prolonge ? { expiresAt: new Date(maintenant + SESSION_TTL_MS) } : {}),
+          ...(rafraichir ? { lastSeenAt: new Date(maintenant) } : {}),
+        },
+      })
+      .catch(() => undefined)
   }
 
   return {

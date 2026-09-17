@@ -23,7 +23,15 @@ export type RateLimitRule = {
 }
 
 export const RULES = {
-  login: { limit: 8, windowMs: 10 * 60_000, blockMs: 10 * 60_000 },
+  /**
+   * Connexion. Cinq essais, comme la barrière persistante qui la double.
+   *
+   * Ce compteur-ci coupe une rafale sur une instance donnée ; c'est celui de la base
+   * (server/auth/throttle.ts) qui tient réellement la limite. Garder les deux au même
+   * chiffre évite qu'une personne honnête voie deux messages différents selon l'instance
+   * qui l'a reçue.
+   */
+  login: { limit: 5, windowMs: 15 * 60_000, blockMs: 15 * 60_000 },
   register: { limit: 5, windowMs: 60 * 60_000, blockMs: 30 * 60_000 },
   passwordReset: { limit: 5, windowMs: 60 * 60_000, blockMs: 30 * 60_000 },
   aiOperation: { limit: 30, windowMs: 60_000 },
