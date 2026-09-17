@@ -40,6 +40,7 @@ import {
   IDEAS_SYSTEM,
   SPECSHEET_SYSTEM,
   VALIDATION_SYSTEM,
+  CORRECTIONS_SYSTEM,
 } from './prompts'
 import {
   appPlanSchema,
@@ -59,6 +60,8 @@ import {
   liaAnswerSchema,
   liaFaqSchema,
   liaInsightsSchema,
+  correctionsSchema,
+  type Corrections,
   type LiaAnswer,
   type LiaFaq,
   type LiaInsights,
@@ -1328,6 +1331,59 @@ export async function analyzeSupportConversations(
       `Langue des titres et des exemples : ${locale}.`,
       asUserData('conversations', transcript),
       'Dégage les thèmes utiles au créateur.',
+    ].join('\n\n'),
+  })
+}
+
+// ══════════════════════════ Visibilité — corrections ═════════════════════════
+
+/** Ce qu'on donne au modèle d'une page concernée : son adresse et ce qu'elle contient. */
+export type PageACorriger = {
+  path: string
+  title: string
+  description: string
+  h1: string
+  intro: string
+  wordCount: number
+}
+
+/**
+ * Rédige les corrections d'un constat d'audit.
+ *
+ * C'est la seule dépense du produit de visibilité, et elle passe par la même mécanique que
+ * toutes les autres opérations : réservation avant l'appel, débit sur les jetons réellement
+ * consommés, ligne d'usage rattachée au débit. Rien de neuf n'a été construit pour elle —
+ * un second système de crédits serait un second endroit où se tromper.
+ *
+ * Le modèle ne choisit ni les pages ni le défaut : les deux lui arrivent déjà décidés par
+ * les contrôles, qui sont du calcul. Il n'écrit que le texte.
+ */
+export async function writeCorrections(params: {
+  userId: string
+  /** Le défaut, dit comme le créateur le lit dans son plan d'action. */
+  constat: string
+  /** Ce que ce défaut lui coûte : le modèle en tire ce qu'il faut réparer. */
+  pourquoi: string
+  /** Les consignes de forme propres au contrôle : longueurs, champ à remplir. */
+  consigne: string
+  /** Ce que le créateur dit de son activité, quand il l'a écrit. */
+  about: string
+  pages: readonly PageACorriger[]
+  locale: string
+}): Promise<RunResult<Corrections>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'visibilityFix' },
+    system: CORRECTIONS_SYSTEM,
+    schema: correctionsSchema,
+    userContent: [
+      `Langue par défaut des textes à produire : ${params.locale}. Si une page est écrite dans une autre langue, suis la sienne.`,
+      params.about.trim() === ''
+        ? "Le créateur n'a rien écrit sur son activité : n'en déduis rien, tiens-t'en au contenu des pages."
+        : asUserData('activite_du_createur', params.about),
+      asUserData('constat', `${params.constat}\n${params.pourquoi}`),
+      asUserData('consigne', params.consigne),
+      asUserData('pages_concernees', JSON.stringify(params.pages, null, 2)),
+      'Rédige la correction de chaque page concernée.',
     ].join('\n\n'),
   })
 }

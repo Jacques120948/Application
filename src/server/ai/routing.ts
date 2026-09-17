@@ -89,6 +89,13 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   liaAnswer: { model: MODELS.economical, maxTokens: 600, effort: 'low' },
   liaFaq: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
   liaInsights: { model: MODELS.fast, maxTokens: 6_000, effort: 'medium' },
+  /*
+   * Écrire un titre et une description pour dix pages, à partir de ce que chacune contient
+   * déjà. Le modèle économique s'en tire mal : il produit des formules interchangeables,
+   * exactement ce qu'on reproche aux pages qu'on corrige. Le modèle rapide lit le contenu
+   * et en tire ce qui distingue la page.
+   */
+  visibilityFix: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
 }
 
 export type TokenUsage = {

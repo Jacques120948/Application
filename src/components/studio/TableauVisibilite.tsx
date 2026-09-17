@@ -43,6 +43,8 @@ export type TableauProps = {
   lignes: readonly LigneVue[]
   /** Ce qui a été traité et ne figure plus dans la dernière analyse. */
   reglees: readonly { checkId: string; label: string; engine: string; state: string }[]
+  /** Fourchette annoncée pour une rédaction, lue dans le catalogue administrable. */
+  cout: { min: number; max: number } | null
 }
 
 /** Une date écrite comme on la dit. */
@@ -338,6 +340,7 @@ export function TableauVisibilite({
   autresSites,
   lignes,
   reglees,
+  cout,
 }: TableauProps) {
   const aCorriger = lignes.length
   const critiques = lignes.filter((ligne) => ligne.severity === 'critical').length
@@ -433,7 +436,7 @@ export function TableauVisibilite({
             </CardBody>
           </Card>
         ) : (
-          <PlanAction siteId={site.id} lignes={lignes} />
+          <PlanAction siteId={site.id} lignes={lignes} locale={locale} cout={cout} />
         )}
 
         {/*

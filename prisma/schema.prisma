@@ -91,6 +91,7 @@ model User {
   sites                Site[]
   audits               Audit[]
   actionItems          ActionItem[]
+  auditCorrections     AuditCorrection[]
 
   @@index([createdAt])
 }
@@ -1223,6 +1224,7 @@ model Site {
   user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   audits Audit[]
   items  ActionItem[]
+  corrections AuditCorrection[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
   /// diverger deux historiques qui devraient n'en faire qu'un.
@@ -1370,6 +1372,42 @@ model ActionItem {
 
   @@unique([siteId, checkId])
   @@index([userId, state])
+}
+
+/// Une correction rédigée par l'IA pour un constat, attachée au site.
+///
+/// Elle est enregistrée et non rendue une fois : elle a coûté des crédits, et un
+/// texte payé qui disparaît au rechargement de la page est un texte volé. C'est
+/// aussi ce qui permet d'y revenir plus tard, quand on a le temps de coller.
+///
+/// Evoliia ne touche jamais au site du client : ce texte est à copier, et le
+/// bouton qui l'appliquerait n'existe pas.
+model AuditCorrection {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// Le contrôle qui a motivé la correction.
+  checkId String
+  /// Page visée, telle que l'audit l'a relevée.
+  path    String
+  url     String @default("")
+  /// title | description | h1 | intro
+  field   String
+  /// Ce qui était en place. Une correction se relit par comparaison.
+  before  String @default("")
+  after   String
+
+  /// Crédits réellement débités pour le lot dont cette ligne fait partie.
+  creditsSpent Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, checkId, path, field])
+  @@index([siteId, checkId])
 }
 
 /// Tentatives de connexion ratées, comptées là où elles survivent au redémarrage.

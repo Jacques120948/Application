@@ -51,6 +51,14 @@ export type CreditedOperation =
   | 'liaInsights'
   /** Une image créée par l'IA sur le compte d'Evoliia, refacturée à son créateur. */
   | 'image'
+  /**
+   * Des corrections rédigées pour un constat d'audit : titres, descriptions, introductions.
+   *
+   * C'est la première dépense réelle du produit de visibilité, et la seule. Explorer un
+   * site, appliquer les contrôles et calculer les deux notes est du calcul : rien n'est
+   * appelé, rien n'est facturé. Les crédits ne partent que lorsqu'un modèle écrit.
+   */
+  | 'visibilityFix'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -105,6 +113,12 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    * un, et c'est le coût réel — lu dans le tarif réglable — qui décide.
    */
   image: 1,
+  /*
+   * Une correction porte sur quelques pages à la fois et rend, pour chacune, une ou deux
+   * phrases. C'est l'ordre de grandeur d'une variation de contenu : le plancher est le même,
+   * et c'est le coût réel des jetons qui décide au-delà.
+   */
+  visibilityFix: 2,
 }
 
 /**

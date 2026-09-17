@@ -25,6 +25,8 @@ import { useState } from 'react'
 
 export type EtatAction = 'todo' | 'doing' | 'done' | 'ignored'
 
+export type Correction = { path: string; url: string; field: string; before: string; after: string }
+
 export type LigneVue = {
   checkId: string
   engine: string
@@ -36,6 +38,10 @@ export type LigneVue = {
   examined: number
   sample: { path: string; url: string; title: string }[]
   state: EtatAction
+  /** L'équipe sait rédiger la correction de ce constat. */
+  corrigeable: boolean
+  /** Ce qui a déjà été rédigé, et déjà payé. Relire ne coûte rien. */
+  corrections: Correction[]
 }
 
 const ETATS: { id: EtatAction; label: string }[] = [
@@ -57,6 +63,44 @@ const GRAVITES: Record<string, { label: string; fond: string; texte: string }> =
 
 const MOTEURS: Record<string, string> = { seo: 'Référencement', geo: 'Moteurs IA' }
 
+const CHAMPS: Record<string, string> = {
+  title: 'Titre de la page (balise title)',
+  description: 'Meta description',
+  h1: 'Titre visible (H1)',
+  intro: 'Premier paragraphe',
+}
+
+/**
+ * Les corrections rédigées, l'ancienne en face de la nouvelle.
+ *
+ * Une correction se relit par comparaison : voir « Accueil » en face de la phrase proposée
+ * est ce qui permet de juger en une seconde. Rien ne s'applique tout seul — Evoliia ne
+ * touche pas au site de la personne, et le bouton qui le ferait n'existe pas.
+ */
+function Corrections({ items }: { items: readonly Correction[] }) {
+  if (items.length === 0) return null
+  return (
+    <div className="mt-4 grid gap-3 rounded-[var(--radius-card)] bg-[var(--color-canvas)] p-4">
+      {items.map((item) => (
+        <div key={`${item.path}-${item.field}`}>
+          <p className="m-0 text-xs font-semibold text-[var(--color-ink-faint)]">
+            {item.path} — {CHAMPS[item.field] ?? item.field}
+          </p>
+          {item.before.trim() === '' ? null : (
+            <p className="m-0 mt-1 text-sm text-[var(--color-ink-faint)] line-through">
+              {item.before}
+            </p>
+          )}
+          <p className="m-0 mt-1 text-sm text-[var(--color-ink)]">{item.after}</p>
+        </div>
+      ))}
+      <p className="m-0 text-xs text-[var(--color-ink-faint)]">
+        À copier dans votre site. Evoliia n’y touche pas.
+      </p>
+    </div>
+  )
+}
+
 /** Une ligne traitée s'efface visuellement sans quitter la liste. */
 const RETIREE: Record<EtatAction, boolean> = {
   todo: false,
@@ -65,12 +109,55 @@ const RETIREE: Record<EtatAction, boolean> = {
   ignored: true,
 }
 
-export function PlanAction({ siteId, lignes }: { siteId: string; lignes: readonly LigneVue[] }) {
+export function PlanAction({
+  siteId,
+  lignes,
+  locale,
+  cout,
+}: {
+  siteId: string
+  lignes: readonly LigneVue[]
+  locale: string
+  /** Fourchette annoncée, lue dans le catalogue administrable. Jamais ce qui sera débité. */
+  cout: { min: number; max: number } | null
+}) {
   const [etats, setEtats] = useState<Record<string, EtatAction>>(
     Object.fromEntries(lignes.map((ligne) => [ligne.checkId, ligne.state])),
   )
   const [erreur, setErreur] = useState<string | null>(null)
   const [enCours, setEnCours] = useState<string | null>(null)
+  const [corrections, setCorrections] = useState<Record<string, Correction[]>>(
+    Object.fromEntries(lignes.map((ligne) => [ligne.checkId, ligne.corrections])),
+  )
+  const [redaction, setRedaction] = useState<string | null>(null)
+
+  /**
+   * Fait rédiger les corrections d'un constat.
+   *
+   * C'est la seule action payante de l'écran, et elle le dit avant d'être lancée. On ne
+   * suppose rien du résultat : contrairement à un changement d'état, rien ne s'affiche tant
+   * que le serveur n'a pas rendu le texte — afficher une correction qui n'existe pas encore
+   * serait montrer quelque chose qu'on a peut-être facturé pour rien.
+   */
+  async function rediger(checkId: string) {
+    setRedaction(checkId)
+    setErreur(null)
+    const response = await fetch(`/api/sites/${siteId}/corrections`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ checkId, locale }),
+    }).catch(() => null)
+    const body = (await response?.json().catch(() => null)) as
+      | { corrections?: Correction[]; message?: string }
+      | null
+    setRedaction(null)
+
+    if (response === null || !response.ok || body?.corrections === undefined) {
+      setErreur(body?.message ?? 'La rédaction n’a pas abouti. Rien ne vous a été débité.')
+      return
+    }
+    setCorrections((actuelles) => ({ ...actuelles, [checkId]: body.corrections ?? [] }))
+  }
 
   async function changer(checkId: string, state: EtatAction) {
     const avant = etats[checkId] ?? 'todo'
@@ -164,6 +251,8 @@ export function PlanAction({ siteId, lignes }: { siteId: string; lignes: readonl
                 </ul>
               )}
 
+              <Corrections items={corrections[ligne.checkId] ?? []} />
+
               <div
                 className="mt-4 inline-flex flex-wrap gap-1 rounded-[var(--radius-pill)] bg-[var(--color-canvas)] p-1"
                 role="group"
@@ -190,6 +279,33 @@ export function PlanAction({ siteId, lignes }: { siteId: string; lignes: readonl
                   )
                 })}
               </div>
+
+              {/*
+                Le prix est annoncé avant, mesuré après : la fourchette vient du catalogue
+                administrable, le débit suivra les jetons réellement consommés. Personne ne
+                découvre le prix après coup, et personne n'est facturé sur une estimation.
+              */}
+              {!ligne.corrigeable ? null : (
+                <button
+                  type="button"
+                  onClick={() => void rediger(ligne.checkId)}
+                  disabled={redaction !== null}
+                  className="mt-4 ml-3 inline-flex items-center gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium transition hover:border-[var(--color-brand)] hover:text-[var(--color-brand-strong)] disabled:opacity-50"
+                >
+                  {redaction === ligne.checkId
+                    ? 'L’équipe rédige…'
+                    : (corrections[ligne.checkId] ?? []).length > 0
+                      ? 'Rédiger à nouveau'
+                      : 'Faire rédiger la correction'}
+                  {cout === null ? null : (
+                    <span className="text-xs text-[var(--color-ink-faint)]">
+                      {cout.min === cout.max
+                        ? `${cout.min} crédit${cout.min > 1 ? 's' : ''}`
+                        : `${cout.min} à ${cout.max} crédits`}
+                    </span>
+                  )}
+                </button>
+              )}
             </li>
           )
         })}

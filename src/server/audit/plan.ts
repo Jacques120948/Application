@@ -2,6 +2,7 @@ import { notFound, validation } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import type { Severity } from './checks/types'
+import { estCorrigeable } from './corrections'
 import { findCheck } from './scoring'
 
 /**
@@ -51,6 +52,15 @@ export type LignePlan = {
   sample: { path: string; url: string; title: string }[]
   state: EtatAction
   note: string
+  /** L'équipe sait rédiger la correction de ce constat. */
+  corrigeable: boolean
+  /**
+   * Ce qui a déjà été rédigé pour ce constat, et déjà payé.
+   *
+   * Relire ne coûte rien, et c'est la moindre des choses : un texte payé une fois ne se
+   * repaie pas parce qu'on a rechargé la page.
+   */
+  corrections: { path: string; url: string; field: string; before: string; after: string }[]
 }
 
 export type Plan = {
@@ -89,7 +99,7 @@ export async function readPlan(userId: string, siteId: string): Promise<Plan | n
   const audit = await dernierAudit(userId, siteId)
   if (audit === null) return null
 
-  const [constats, etats] = await Promise.all([
+  const [constats, etats, redigees] = await Promise.all([
     withUserScope(userId, (tx) =>
       tx.auditFinding.findMany({
         where: { auditId: audit.id, audit: { userId } },
@@ -97,7 +107,20 @@ export async function readPlan(userId: string, siteId: string): Promise<Plan | n
       }),
     ),
     withUserScope(userId, (tx) => tx.actionItem.findMany({ where: { siteId, userId } })),
+    withUserScope(userId, (tx) =>
+      tx.auditCorrection.findMany({
+        where: { siteId, userId },
+        orderBy: { path: 'asc' },
+        select: { checkId: true, path: true, url: true, field: true, before: true, after: true },
+      }),
+    ),
   ])
+
+  const corrections = new Map<string, LignePlan['corrections']>()
+  for (const ligne of redigees) {
+    const { checkId, ...reste } = ligne
+    corrections.set(checkId, [...(corrections.get(checkId) ?? []), reste])
+  }
 
   const parCheck = new Map(etats.map((item) => [item.checkId, item]))
   const presents = new Set<string>()
@@ -122,6 +145,8 @@ export async function readPlan(userId: string, siteId: string): Promise<Plan | n
       sample: (constat.sample as unknown as LignePlan['sample']) ?? [],
       state: item !== undefined && estUnEtat(item.state) ? item.state : 'todo',
       note: item?.note ?? '',
+      corrigeable: estCorrigeable(constat.checkId),
+      corrections: corrections.get(constat.checkId) ?? [],
     })
   }
 

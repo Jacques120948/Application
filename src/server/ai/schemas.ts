@@ -495,3 +495,41 @@ export const liaInsightsSchema = z
   .strict()
 
 export type LiaInsights = z.infer<typeof liaInsightsSchema>
+
+/**
+ * Les corrections rédigées pour un constat d'audit.
+ *
+ * Une entrée par page, et rien de plus qu'un texte à coller. Deux partis pris tiennent dans
+ * la forme du schéma.
+ *
+ * **Le champ corrigé est nommé.** Sans lui, l'écran ne saurait pas où coller la phrase, et
+ * la personne devrait deviner — ce qui est exactement le travail qu'on lui épargne.
+ *
+ * **L'ancien texte revient avec le nouveau.** Une correction se relit par comparaison : voir
+ * « Accueil » en face de « Bougies artisanales coulées à la main en Gruyère » est ce qui
+ * permet de juger en une seconde, et d'écarter la proposition quand elle est à côté.
+ */
+export const CORRECTION_FIELDS = ['title', 'description', 'h1', 'intro'] as const
+
+export const correctionsSchema = z
+  .object({
+    items: z
+      .array(
+        z
+          .object({
+            /** Chemin de la page, repris tel qu'il a été fourni. */
+            path: z.string().min(1).max(300),
+            field: z.enum(CORRECTION_FIELDS),
+            /** Ce qui est en place aujourd'hui. Vide quand rien n'y est. */
+            before: z.string().max(400),
+            /** Le texte à coller. */
+            after: z.string().min(1).max(400),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+  })
+  .strict()
+
+export type Corrections = z.infer<typeof correctionsSchema>

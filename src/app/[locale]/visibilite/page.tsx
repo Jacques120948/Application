@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
+import { estimerCorrection } from '@/server/audit/corrections'
 import { readPlan } from '@/server/audit/plan'
 import { listSites, readDashboard } from '@/server/audit/service'
 import { parseTargetUrl } from '@/server/audit/net'
@@ -67,7 +68,10 @@ export default async function VisibilitePage({
    * rend trente lignes se referme, et « par quoi je commence » est la seule question que se
    * pose quelqu'un devant cet écran. L'historique montre le reste.
    */
-  const plan = tableau === null ? null : await readPlan(user.id, tableau.site.id)
+  const [plan, cout] = await Promise.all([
+    tableau === null ? null : readPlan(user.id, tableau.site.id),
+    estimerCorrection(),
+  ])
   const lignes = (plan?.lignes ?? []).slice(0, PRIORITES_MAX)
 
   return (
@@ -91,6 +95,7 @@ export default async function VisibilitePage({
               autresSites={tableau.autresSites}
               lignes={lignes}
               reglees={plan?.reglees ?? []}
+              cout={cout}
             />
           </div>
         )}
