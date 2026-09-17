@@ -59,6 +59,19 @@ export type Signaux = {
   tables: number
   /** Éléments de liste, toutes listes confondues. */
   listItems: number
+  /** Listes de définitions. Un assistant en reprend volontiers le couple terme–sens. */
+  definitions: number
+  /** Paragraphes qui disent quelque chose. Ceux d'un mot ne comptent pas. */
+  paragraphs: number
+  /** Le plus long, en mots. Au-delà d'un certain point, plus rien n'est citable. */
+  longestParagraphWords: number
+  /**
+   * Le premier paragraphe substantiel.
+   *
+   * C'est ce qu'un assistant lit pour savoir si la page répond à la question posée. Une page
+   * qui commence par une mise en bouche sans information se fait écarter avant d'être lue.
+   */
+  intro: string
   hasViewport: boolean
   /** Date de publication ou de modification déclarée, brute. */
   publishedTime: string
@@ -230,6 +243,16 @@ export function extractSignals(html: string, pageUrl: string): Signaux {
   const text = racine.text.replace(/\s+/g, ' ').trim()
   const wordCount = text === '' ? 0 : text.split(' ').length
 
+  /*
+   * Les paragraphes, mesurés après le retrait des scripts : sans quoi le code d'un site
+   * moderne compterait pour du texte, et le « plus long paragraphe » serait toujours lui.
+   */
+  const paragraphes = racine
+    .querySelectorAll('p')
+    .map((element) => texteDe(element))
+    .filter((texte) => texte.split(' ').length >= 5)
+  const longueurs = paragraphes.map((texte) => texte.split(' ').length)
+
   const meta = (nom: string): string =>
     attribut(racine.querySelector(`meta[name="${nom}"]`), 'content')
   const metaPropriete = (nom: string): string =>
@@ -254,6 +277,10 @@ export function extractSignals(html: string, pageUrl: string): Signaux {
     lists: racine.querySelectorAll('ul, ol').length,
     tables: racine.querySelectorAll('table').length,
     listItems: racine.querySelectorAll('li').length,
+    definitions: racine.querySelectorAll('dl').length,
+    paragraphs: paragraphes.length,
+    longestParagraphWords: longueurs.length === 0 ? 0 : Math.max(...longueurs),
+    intro: (paragraphes.find((texte) => texte.length >= 40) ?? '').slice(0, 400),
     hasViewport: racine.querySelector('meta[name="viewport"]') !== null,
     publishedTime:
       metaPropriete('article:published_time') ||

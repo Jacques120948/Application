@@ -42,6 +42,13 @@ export type SiteVu = {
   robotsBlocksHome: boolean
   /** Une carte du site existe et est lisible. */
   sitemapFound: boolean
+  /**
+   * Les assistants que `robots.txt` écarte nommément, par nom d'usage.
+   *
+   * Absent des audits menés avant que ce relevé n'existe : un contrôle qui s'en sert doit
+   * s'abstenir plutôt que de conclure « rien n'est bloqué » d'une information manquante.
+   */
+  aiBlocked?: readonly string[]
 }
 
 export type Verdict = boolean | null

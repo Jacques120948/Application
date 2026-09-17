@@ -53,6 +53,8 @@ export type Exploration = {
     /** Le fichier nous interdit l'accueil : l'audit n'a alors rien pu voir. */
     blocksHome: boolean
     sitemaps: readonly string[]
+    /** Les assistants que le fichier écarte nommément. */
+    aiBlocked: readonly string[]
   }
   /** Une carte de site a été trouvée et elle est lisible. */
   sitemapFound: boolean
@@ -269,7 +271,12 @@ export async function crawl(
   return {
     pages,
     skipped,
-    robots: { found: robotsFound, blocksHome, sitemaps: robots.sitemaps },
+    robots: {
+      found: robotsFound,
+      blocksHome,
+      sitemaps: robots.sitemaps,
+      aiBlocked: robots.aiBlocked,
+    },
     sitemapFound,
   }
 }

@@ -1,4 +1,5 @@
 import { readSetting } from '@/server/settings/store'
+import { GEO_CHECKS } from './checks/geo'
 import { SEO_CHECKS } from './checks/seo'
 import type { Check, Contexte, PageVue, Severity, SiteVu } from './checks/types'
 
@@ -44,6 +45,19 @@ export type Resultat = {
   /** Sur cent. Cent signifie que tout ce qui s'appliquait est passé. */
   score: number
   constats: Constat[]
+}
+
+/**
+ * Les deux catalogues réunis, pour retrouver un contrôle à partir d'un constat enregistré.
+ *
+ * Les libellés ne sont pas en base : un constat de la semaine dernière emprunte la
+ * formulation d'aujourd'hui, et réécrire une explication ne demande aucune migration.
+ */
+export const ALL_CHECKS: readonly Check[] = [...SEO_CHECKS, ...GEO_CHECKS]
+
+/** Le contrôle derrière un identifiant, ou `undefined` s'il a été retiré du catalogue. */
+export function findCheck(checkId: string): Check | undefined {
+  return ALL_CHECKS.find((check) => check.id === checkId)
 }
 
 /** Clé de réglage : les poids, par identifiant de contrôle, en JSON. */
@@ -166,9 +180,40 @@ export async function evaluate(
   site: SiteVu,
   checks: readonly Check[] = SEO_CHECKS,
 ): Promise<Resultat> {
+  return noter(checks, buildContexte(pages, site), await checkWeights())
+}
+
+/**
+ * Les deux notes d'un même audit, en un seul passage.
+ *
+ * Le référencement et la visibilité dans les assistants répondent à deux questions
+ * distinctes et méritent deux notes : un site peut être irréprochable pour Google et
+ * inexploitable par un assistant, et une note unique masquerait exactement ce qu'on veut
+ * montrer. Le contexte et les poids, eux, ne se calculent qu'une fois : ce sont les mêmes
+ * pages.
+ *
+ * La note GEO mesure une aptitude à être repris, jamais une présence obtenue. Aucun écran ne
+ * doit la présenter comme une garantie d'apparaître dans ChatGPT, Gemini ou Perplexity :
+ * personne ne connaît leurs critères, et ils changent.
+ */
+export async function evaluateAll(
+  pages: readonly PageVue[],
+  site: SiteVu,
+): Promise<{ seo: Resultat; geo: Resultat }> {
   const reglages = await checkWeights()
   const contexte = buildContexte(pages, site)
+  return {
+    seo: noter(SEO_CHECKS, contexte, reglages),
+    geo: noter(GEO_CHECKS, contexte, reglages),
+  }
+}
 
+/** Applique un catalogue à un contexte déjà construit. */
+function noter(
+  checks: readonly Check[],
+  contexte: Contexte,
+  reglages: Map<string, number>,
+): Resultat {
   const constats: Constat[] = []
   let total = 0
   let perdu = 0

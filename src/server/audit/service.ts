@@ -4,8 +4,7 @@ import { getEffectivePlan } from '@/server/billing/plans'
 import { logger } from '@/server/observability/logger'
 import { crawl, normalizeUrl, type PageExploree } from './crawler'
 import { parseTargetUrl } from './net'
-import { evaluate } from './scoring'
-import { SEO_CHECKS } from './checks/seo'
+import { evaluateAll, findCheck } from './scoring'
 import type { PageVue, SiteVu } from './checks/types'
 import type { Signaux } from './extract'
 
@@ -404,7 +403,7 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
 
   // Les contrôles ne tournent qu'une fois, à la fin : ils comparent les pages entre elles,
   // et un verdict rendu sur un site à moitié exploré serait faux plutôt qu'incomplet.
-  const note = fini ? await noterAudit(userId, auditId, audit.site.origin) : null
+  const notes = fini ? await noterAudit(userId, auditId, audit.site.origin) : null
 
   const apres = await withUserScope(userId, (tx) =>
     tx.audit.update({
@@ -413,7 +412,9 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
         status: fini ? 'done' : 'running',
         pagesCrawled: total,
         pagesSkipped: { increment: ecartees },
-        ...(fini ? { finishedAt: new Date(), seoScore: note } : {}),
+        ...(fini
+          ? { finishedAt: new Date(), seoScore: notes?.seo ?? null, geoScore: notes?.geo ?? null }
+          : {}),
       },
       select: { status: true, pagesCrawled: true, pagesSkipped: true, maxPages: true },
     }),
@@ -444,9 +445,15 @@ export async function listFindings(userId: string, auditId: string) {
     }),
   )
   return constats.map((constat) => {
-    const check = SEO_CHECKS.find((candidat) => candidat.id === constat.checkId)
+    const check = findCheck(constat.checkId)
     return {
       checkId: constat.checkId,
+      /*
+       * Le moteur vient du constat enregistré plutôt que du catalogue : c'est lui qui permet
+       * à l'écran de séparer les deux notes, et il doit rester lisible même si un contrôle
+       * disparaît du catalogue entre deux versions.
+       */
+      engine: constat.engine,
       label: check?.label ?? constat.checkId,
       why: check?.why ?? '',
       /*
@@ -507,7 +514,11 @@ export async function readAudit(userId: string, auditId: string) {
  * l'autre : c'est la seule façon de juger un site complet quand son exploration s'est faite
  * en dix appels séparés.
  */
-async function noterAudit(userId: string, auditId: string, origin: string): Promise<number | null> {
+async function noterAudit(
+  userId: string,
+  auditId: string,
+  origin: string,
+): Promise<{ seo: number; geo: number } | null> {
   const audit = await withUserScope(userId, (tx) =>
     tx.audit.findFirst({
       where: { id: auditId, userId },
@@ -553,10 +564,11 @@ async function noterAudit(userId: string, auditId: string, origin: string): Prom
     sitemapFound: true,
   }
 
-  const resultat = await evaluate(pages, site)
+  const { seo, geo } = await evaluateAll(pages, site)
+  const constats = [...seo.constats, ...geo.constats]
 
   await withUserScope(userId, async (tx) => {
-    for (const constat of resultat.constats) {
+    for (const constat of constats) {
       await tx.auditFinding.upsert({
         where: { auditId_checkId: { auditId, checkId: constat.checkId } },
         update: {
@@ -582,6 +594,6 @@ async function noterAudit(userId: string, auditId: string, origin: string): Prom
     }
   })
 
-  logger.info('audit noté', { auditId, score: resultat.score, constats: resultat.constats.length })
-  return resultat.score
+  logger.info('audit noté', { auditId, seo: seo.score, geo: geo.score, constats: constats.length })
+  return { seo: seo.score, geo: geo.score }
 }

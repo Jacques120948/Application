@@ -26,6 +26,15 @@ export type Robots = {
   delayMs: number
   /** Cartes de site déclarées. */
   sitemaps: readonly string[]
+  /**
+   * Les assistants génératifs que ce fichier écarte nommément, par nom d'usage.
+   *
+   * Beaucoup de sites portent ces lignes sans le savoir : un thème, une extension ou un
+   * hébergeur les ajoute par défaut. Elles ne changent rien au référencement classique et
+   * suffisent à retirer le site des réponses de ChatGPT ou de Perplexity — c'est le constat
+   * GEO le plus utile qu'un fichier de trois lignes puisse donner.
+   */
+  aiBlocked: readonly string[]
 }
 
 /** Politesse par défaut : assez lent pour ne gêner personne, assez vif pour finir. */
@@ -39,6 +48,7 @@ export const ROBOTS_OUVERT: Robots = {
   allows: () => true,
   delayMs: DEFAULT_DELAY_MS,
   sitemaps: [],
+  aiBlocked: [],
 }
 
 /** Rien n'est permis. Ce qu'on applique quand le fichier nous exclut. */
@@ -46,6 +56,7 @@ export const ROBOTS_FERME: Robots = {
   allows: () => false,
   delayMs: DEFAULT_DELAY_MS,
   sitemaps: [],
+  aiBlocked: [],
 }
 
 /** Le nom sous lequel notre robot se reconnaît dans un `robots.txt`. */
@@ -74,6 +85,42 @@ function motifCorrespond(motif: string, chemin: string): boolean {
   }
   if (!ancre) return true
   return position === chemin.length
+}
+
+/**
+ * Les robots des assistants, et l'assistant auquel chacun sert.
+ *
+ * On raisonne par nom d'usage plutôt que par robot : dire « ChatGPT » à quelqu'un lui parle,
+ * « OAI-SearchBot » ne lui parle pas. Plusieurs robots peuvent désigner le même assistant, et
+ * en bloquer un seul suffit à se priver d'une partie des réponses.
+ */
+const ROBOTS_IA: Record<string, string> = {
+  gptbot: 'ChatGPT',
+  'oai-searchbot': 'ChatGPT',
+  'chatgpt-user': 'ChatGPT',
+  claudebot: 'Claude',
+  'claude-web': 'Claude',
+  'anthropic-ai': 'Claude',
+  perplexitybot: 'Perplexity',
+  'perplexity-user': 'Perplexity',
+  'google-extended': 'Gemini',
+  'applebot-extended': 'Apple',
+  'meta-externalagent': 'Meta AI',
+  facebookbot: 'Meta AI',
+  bytespider: 'Doubao',
+  ccbot: 'Common Crawl',
+}
+
+/** Vrai si ce groupe de règles ferme la racine du site. */
+function fermeLaRacine(groupe: Groupe): boolean {
+  const meilleurAllow = groupe.allow
+    .filter((motif) => motifCorrespond(motif, '/'))
+    .reduce((max, motif) => Math.max(max, motif.length), -1)
+  const meilleurDisallow = groupe.disallow
+    .filter((motif) => motif !== '' && motifCorrespond(motif, '/'))
+    .reduce((max, motif) => Math.max(max, motif.length), -1)
+  if (meilleurDisallow === -1) return false
+  return meilleurAllow < meilleurDisallow
 }
 
 /**
@@ -120,10 +167,25 @@ export function parseRobots(texte: string): Robots {
     }
   }
 
+  /*
+   * Seuls les groupes qui nomment un robot d'assistant comptent. Un `User-agent: *` fermé
+   * bloquerait aussi notre propre exploration : l'audit s'arrêterait avant d'en arriver là,
+   * et le dire ici en ferait un reproche adressé deux fois.
+   */
+  const bloques = new Set<string>()
+  for (const groupe of groupes) {
+    if (!fermeLaRacine(groupe)) continue
+    for (const agent of groupe.agents) {
+      const assistant = ROBOTS_IA[agent]
+      if (assistant !== undefined) bloques.add(assistant)
+    }
+  }
+  const aiBlocked = [...bloques].sort()
+
   const nous = groupes.filter((groupe) => groupe.agents.includes(NOTRE_NOM))
   const generiques = groupes.filter((groupe) => groupe.agents.includes('*'))
   const retenus = nous.length > 0 ? nous : generiques
-  if (retenus.length === 0) return { ...ROBOTS_OUVERT, sitemaps }
+  if (retenus.length === 0) return { ...ROBOTS_OUVERT, sitemaps, aiBlocked }
 
   const allow = retenus.flatMap((groupe) => groupe.allow).filter((motif) => motif !== '')
   const disallow = retenus.flatMap((groupe) => groupe.disallow).filter((motif) => motif !== '')
@@ -148,5 +210,6 @@ export function parseRobots(texte: string): Robots {
     },
     delayMs,
     sitemaps,
+    aiBlocked,
   }
 }
