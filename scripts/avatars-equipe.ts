@@ -41,52 +41,73 @@ const COTE = 320
  *
  * Il est long, et c'est voulu : tout ce qui n'est pas dit est décidé par le modèle, donc
  * différent d'une image à l'autre. Ce qui doit être identique doit être écrit.
+ *
+ * Aucun studio n'est nommé, et c'est délibéré. Citer une maison de production reviendrait à
+ * demander son identité visuelle ; décrire les traits eux-mêmes — la forme des yeux, le
+ * rendu de la peau, la sculpture des cheveux — donne un meilleur contrôle et ne doit rien
+ * à personne.
+ *
+ * La direction est nettement plus caractérisée que la précédente : cheveux saturés en
+ * dégradé, coupes sculptées, yeux grands et expressifs, rougeur aux joues. Un portrait
+ * d'application se regarde à quarante pixels de côté, et c'est le caractère qui survit à
+ * cette taille, pas la finesse.
  */
 const SOCLE = [
-  'A single original 3D-illustrated character portrait, modern Pixar-like stylisation,',
-  'clean and premium, friendly and reassuring, subtly tech, suited to a professional SaaS interface.',
-  'Head-and-shoulders bust, face centred and facing the viewer, gentle confident smile,',
-  'expressive but restrained, soft studio lighting, smooth polished render, high detail on the face.',
-  'Smooth vertical gradient background, no scenery, no props, no furniture.',
+  'A single original 3D-rendered stylised character portrait for a modern app interface.',
+  'Strongly stylised cartoon proportions: large expressive eyes with clear highlights, soft rounded',
+  'features, smooth matte skin with a warm blush on the cheeks and nose, gentle confident closed-mouth smile.',
+  'Boldly sculpted hair rendered as clean solid strands with a vivid two-tone colour gradient —',
+  'the hair is a defining trait of the character, not a neutral detail.',
+  'Head-and-shoulders bust, face centred and facing the viewer, soft even studio lighting,',
+  'polished render, crisp edges, high detail on the face and hair.',
+  'Smooth vertical gradient background, no scenery, no props, no furniture, no shadow on the background.',
   'Absolutely no text, no letters, no numbers, no logos, no watermark, no brand of any kind.',
-  'Not photorealistic. Not childish. A single character, centred, with even margins on all sides',
-  'so the image can be cropped to a circle without cutting the head.',
+  'Not photorealistic. Adult character, confident and competent, never childish or babyish.',
+  'A single character, centred, with even margins on all sides so the image can be cropped',
+  'to a circle without cutting the hair or the head.',
 ].join(' ')
 
 type Portrait = { agent: VisibilityAgent; fichier: string; prompt: string }
 
-/** Ce qui distingue chacun : son métier, son attitude, la couleur de son fond. */
+/**
+ * Ce qui distingue chacun : son métier, son attitude, ses couleurs.
+ *
+ * Chacun porte un dégradé de cheveux qui lui est propre et qui reprend sa teinte dans
+ * l'interface. C'est ce qui les rend reconnaissables au premier coup d'œil, à la taille où
+ * on les voit vraiment : une pastille de quarante pixels dans une rangée.
+ */
 const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string }> = {
   audit: {
     fichier: 'lea.webp',
     trait:
-      'A woman in her early thirties with a calm, methodical presence: thoughtful attentive eyes,' +
-      ' neat shoulder-length dark hair, fine round glasses, a tidy light blazer over a simple top.' +
-      ' She looks like someone who reads carefully before speaking — reassuring, structured, precise.',
+      'A woman in her early thirties, calm and methodical. Sculpted swept-up hair with a short' +
+      ' undercut on the sides, in a vivid gradient from deep violet at the roots to soft lilac at the tips.' +
+      ' Bold round dark glasses as a defining trait, small hoop earring, a crisp light blazer over a' +
+      ' dark top. Attentive thoughtful eyes. She reads carefully before speaking.',
     fond: 'deep violet fading to soft lilac',
   },
   seo: {
     fichier: 'neo.webp',
     trait:
-      'A man in his early thirties with a quick, analytical energy: bright focused eyes, short' +
-      ' textured dark hair swept up, light stubble, a dark crew-neck under an open casual jacket.' +
-      ' He looks like someone who enjoys finding the lever that moves the numbers — confident, direct.',
+      'A man in his early thirties, quick and analytical. Short textured hair swept up with a clean' +
+      ' undercut, in a vivid gradient from deep indigo to electric blue at the tips. Bright focused eyes,' +
+      ' a dark technical jacket with a raised collar. He enjoys finding the lever that moves the numbers.',
     fond: 'deep indigo fading to dusty violet',
   },
   geo: {
     fichier: 'gia.webp',
     trait:
-      'A young woman with a modern, inventive presence: keen curious eyes, a sharp asymmetric' +
-      ' bob with a pink-tinted strand, small delicate earrings, a clean minimal top.' +
-      ' She looks like someone at ease with what is new — precise, forward-looking, unflustered.',
+      'A young woman, inventive and forward-looking. A sharp asymmetric bob with a bold sculpted sweep,' +
+      ' in a vivid gradient from magenta pink to warm coral at the tips. Keen curious eyes, small' +
+      ' delicate earrings, a clean minimal top. She is at ease with what is new.',
     fond: 'magenta pink fading to warm rose',
   },
   content: {
     fichier: 'milo.webp',
     trait:
-      'A man in his late twenties with a warm, creative presence: kind open eyes, wavy light-brown' +
-      ' hair, a soft knitted jumper with a relaxed collar.' +
-      ' He looks like someone easy to talk to and full of ideas — approachable, inspiring, unpretentious.',
+      'A man in his late twenties, warm and creative. Tousled wavy hair with volume and movement,' +
+      ' in a vivid gradient from warm amber to soft coral at the tips. Kind open eyes, a soft knitted' +
+      ' jumper with a relaxed collar. He is easy to talk to and full of ideas.',
     fond: 'warm amber fading to soft coral',
   },
 }
