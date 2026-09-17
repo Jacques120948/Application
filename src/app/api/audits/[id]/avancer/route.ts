@@ -4,6 +4,15 @@ import { advanceAudit } from '@/server/audit/service'
 import { assertSameOrigin, fail, ok } from '@/server/http/respond'
 
 /**
+ * Le temps que l'hébergeur doit accorder à cet appel.
+ *
+ * Une tranche vise vingt secondes ; sans ce réglage, la plateforme coupe à dix ou quinze par
+ * défaut et la tranche meurt en plein travail. Soixante laisse la marge nécessaire à un site
+ * lent sans permettre à un appel de s'éterniser.
+ */
+export const maxDuration = 60
+
+/**
  * Fait avancer un audit d'une tranche.
  *
  * L'écran appelle en boucle tant que la réponse dit qu'il reste du travail. Chaque appel est

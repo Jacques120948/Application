@@ -2,7 +2,13 @@ import { AppError, notFound, validation } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import { getEffectivePlan } from '@/server/billing/plans'
 import { logger } from '@/server/observability/logger'
-import { crawl, normalizeUrl, type PageExploree } from './crawler'
+import {
+  crawl,
+  EXTENSIONS_IGNOREES,
+  normalizeUrl,
+  visiter,
+  type PageExploree,
+} from './crawler'
 import { parseTargetUrl } from './net'
 import { evaluateAll, findCheck } from './scoring'
 import type { PageVue, SiteVu } from './checks/types'
@@ -34,6 +40,14 @@ export const PAGES_PAR_TRANCHE = 6
 
 /** Temps accordé à une tranche. En dessous de la limite de toutes les plateformes connues. */
 const BUDGET_TRANCHE_MS = 20_000
+
+/**
+ * Marque un audit terminé sur une partie du site seulement.
+ *
+ * Ce n'est pas un échec — l'audit est notable et utilisable — mais l'écran doit pouvoir le
+ * dire plutôt que de présenter un score partiel comme un score complet.
+ */
+export const EXPLORATION_PARTIELLE = 'EXPLORATION_PARTIELLE'
 
 export type SiteResume = {
   id: string
@@ -220,48 +234,85 @@ export type AvancementAudit = {
   encore: boolean
 }
 
-/** Ce qui reste à visiter, déduit de ce qui a déjà été enregistré. */
-function frontiere(
-  pages: readonly { url: string; depth: number; signals: unknown }[],
+/**
+ * Où en est l'exploration : ce qui a été vu, et ce qui reste à voir.
+ *
+ * La file ne se stocke pas, elle se redéduit à chaque tranche des liens relevés dans les
+ * pages connues. Restait à la déduire au bon prix. La première version rapatriait les
+ * signaux complets de toutes les pages connues — texte, liens, images — pour n'en garder
+ * que les adresses. Sur un vrai site cela a donné quatre mégaoctets à transporter et à
+ * analyser pour visiter six pages, une tranche devenue plus lente que le travail qu'elle
+ * faisait, et une exploration arrêtée à deux cent quatre-vingt-sept pages sur mille
+ * autorisées, alors qu'il restait cent soixante et onze adresses à suivre.
+ *
+ * Le tri se fait donc dans la base, qui ne rend que des adresses : quelques dizaines de
+ * kilo-octets, et surtout un poids qui ne dépend plus de la taille des pages lues. La
+ * normalisation reste ici, parce qu'elle est écrite ici et qu'une deuxième copie en SQL
+ * finirait par dire autre chose.
+ */
+async function etatExploration(
+  userId: string,
+  auditId: string,
   origin: string,
   maxDepth: number,
-): { url: string; depth: number }[] {
-  const vues = new Set(pages.map((page) => page.url))
+): Promise<{ vues: Set<string>; suite: { url: string; depth: number }[] }> {
+  const { visitees, liens } = await withUserScope(userId, async (tx) => {
+    const visitees = await tx.auditPage.findMany({ where: { auditId }, select: { url: true } })
+    const liens = await tx.$queryRaw<{ url: string; depth: number }[]>`
+      SELECT lien ->> 'url' AS url, MIN(page.depth)::int AS depth
+      FROM "AuditPage" AS page,
+           LATERAL jsonb_array_elements(
+             CASE
+               WHEN jsonb_typeof(page.signals -> 'links') = 'array' THEN page.signals -> 'links'
+               ELSE '[]'::jsonb
+             END
+           ) AS lien
+      WHERE page."auditId" = ${auditId}::uuid
+        AND page.depth < ${maxDepth}
+        AND lien ->> 'interne' = 'true'
+        AND COALESCE(lien ->> 'url', '') <> ''
+      GROUP BY 1
+      ORDER BY 2, 1
+    `
+    return { visitees, liens }
+  })
+
+  const vues = new Set(visitees.map((page) => page.url))
+  const retenues = new Set(vues)
   const suite: { url: string; depth: number }[] = []
-  for (const page of pages) {
-    if (page.depth >= maxDepth) continue
-    const signaux = page.signals as Signaux | null
-    for (const lien of signaux?.links ?? []) {
-      if (!lien.interne || lien.url === '') continue
-      const normalisee = normalizeUrl(lien.url)
-      if (normalisee === null || vues.has(normalisee)) continue
-      if (!normalisee.startsWith(origin)) continue
-      vues.add(normalisee)
-      suite.push({ url: normalisee, depth: page.depth + 1 })
-    }
+  for (const lien of liens) {
+    const normalisee = normalizeUrl(lien.url)
+    if (normalisee === null || retenues.has(normalisee)) continue
+    if (!normalisee.startsWith(origin)) continue
+    // Un PDF ou une image derrière un lien se reconnaît à son adresse : inutile d'aller le
+    // chercher pour l'écarter ensuite, et surtout inutile qu'il prenne une place dans la
+    // tranche au détriment d'une vraie page.
+    if (EXTENSIONS_IGNOREES.test(new URL(normalisee).pathname)) continue
+    retenues.add(normalisee)
+    suite.push({ url: normalisee, depth: lien.depth + 1 })
   }
   // En largeur : les pages proches de l'accueil d'abord, comme dans l'exploration initiale.
-  return suite.sort((a, b) => a.depth - b.depth)
+  return { vues, suite: suite.sort((a, b) => a.depth - b.depth) }
 }
 
-/**
- * Avance un audit d'une tranche.
- *
- * Appelée en boucle par l'écran jusqu'à ce qu'elle réponde qu'il n'y a plus rien à faire.
- * Chaque appel est indépendant : rien ne se perd si l'un échoue, il suffit de rappeler.
- */
 /**
  * Termine un audit sur ce qui a déjà été exploré, et le note.
  *
  * Sert quand une tranche casse alors que des pages sont en base : mieux vaut un audit de
  * deux cent quatre-vingt-sept pages qu'aucun audit du tout. Le nombre de pages est recompté
  * plutôt que repris du compteur, qui pourrait avoir dérivé d'une tranche perdue.
+ *
+ * `complet` dit si le site avait fini d'être parcouru. Un audit clos parce qu'une tranche a
+ * cassé rend de vrais résultats, mais sur une partie du site seulement : le taire
+ * transformerait une panne bruyante en score silencieusement faux, ce qui est pire. L'écran
+ * a besoin de pouvoir le dire.
  */
 async function cloreAudit(
   userId: string,
   auditId: string,
   origin: string,
   ecartees: number,
+  complet: boolean,
 ): Promise<AvancementAudit> {
   const notes = await noterAudit(userId, auditId, origin)
   const total = await withUserScope(userId, (tx) => tx.auditPage.count({ where: { auditId } }))
@@ -276,8 +327,9 @@ async function cloreAudit(
         finishedAt: new Date(),
         seoScore: notes?.seo ?? null,
         geoScore: notes?.geo ?? null,
-        // L'audit est utilisable : le code d'échec n'a plus lieu d'être affiché.
-        errorCode: null,
+        // L'audit est utilisable : le code d'échec n'a plus lieu d'être affiché. Reste à dire
+        // s'il porte sur tout le site ou sur ce qu'on a eu le temps d'en lire.
+        errorCode: complet ? null : EXPLORATION_PARTIELLE,
       },
       select: { status: true, pagesCrawled: true, pagesSkipped: true, maxPages: true },
     }),
@@ -322,7 +374,7 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
    */
   if (recuperable) {
     logger.info('audit échoué rattrapé sur ses pages', { auditId, pages: audit.pagesCrawled })
-    return cloreAudit(userId, auditId, audit.site.origin, 0)
+    return cloreAudit(userId, auditId, audit.site.origin, 0, false)
   }
   if (audit.status === 'done' || audit.status === 'failed') {
     return {
@@ -335,21 +387,18 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
     }
   }
 
-  const connues = await withUserScope(userId, (tx) =>
-    tx.auditPage.findMany({
-      where: { auditId },
-      select: { url: true, depth: true, signals: true },
-    }),
-  )
-
   const origin = audit.site.origin
+  const { vues, suite } = await etatExploration(userId, auditId, origin, audit.maxDepth)
+
   let signauxDuSite: SiteVu | null = null
   let visitees: PageExploree[] = []
   let ecartees = 0
   let termine = false
+  /** Faux quand on s'arrête alors qu'il restait des adresses à suivre. */
+  let complet = true
 
   try {
-    if (connues.length === 0) {
+    if (vues.size === 0) {
       /*
        * Première tranche : on part de l'accueil, ce qui lit aussi `robots.txt` et la carte
        * du site. Les adresses trouvées là ne sont pas gardées en mémoire — la tranche
@@ -397,25 +446,29 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
         )
       }
     } else {
-      const restantes = frontiere(connues, origin, audit.maxDepth)
-      const place = audit.maxPages - connues.length
-      if (restantes.length === 0 || place <= 0) {
+      const place = audit.maxPages - vues.size
+      if (suite.length === 0 || place <= 0) {
         termine = true
       } else {
-        const fin = Date.now() + BUDGET_TRANCHE_MS
-        for (const cible of restantes.slice(0, Math.min(PAGES_PAR_TRANCHE, place))) {
-          if (Date.now() > fin) break
-          const exploration = await crawl(cible.url, { maxPages: 1, maxDepth: 0, budgetMs: 8_000 })
-          const page = exploration.pages[0]
-          if (page === undefined) {
-            ecartees += 1
-            continue
-          }
-          // La profondeur vient de la page qui a mené ici, pas de l'exploration d'une page
-          // isolée, qui croit toujours être à la racine.
-          visitees.push({ ...page, url: cible.url, depth: cible.depth })
+        const passage = await visiter(origin, suite.slice(0, Math.min(PAGES_PAR_TRANCHE, place)), {
+          budgetMs: BUDGET_TRANCHE_MS,
+        })
+        // Chaque page porte déjà l'adresse et la profondeur demandées : une redirection ne
+        // fait pas croire qu'on a visité autre chose, et une page écartée ne décale rien.
+        visitees = passage.pages
+        ecartees = passage.skipped.length
+        /*
+         * Une tranche qui ne rapporte aucune page arrête l'exploration.
+         *
+         * Ce qui n'a pas pu être lu n'est pas enregistré, et la file se redéduit des liens
+         * enregistrés : les mêmes adresses reviendraient donc à la tranche suivante, et à
+         * celle d'après, indéfiniment. Mieux vaut s'arrêter et le dire. Six adresses
+         * illisibles d'affilée, ce n'est de toute façon plus un incident.
+         */
+        if (visitees.length === 0) {
+          termine = true
+          complet = false
         }
-        if (visitees.length === 0 && ecartees === 0) termine = true
       }
     }
   } catch (error) {
@@ -433,14 +486,14 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
      * qu'on a, et on le note. Seul un site dont rien n'a pu être lu échoue vraiment : là, il
      * n'y a effectivement rien à sauver, et le dire est la seule réponse juste.
      */
-    if (connues.length > 0) {
+    if (vues.size > 0) {
       logger.warn('tranche interrompue : audit clos sur ce qui a été exploré', {
         auditId,
         code,
-        pages: connues.length,
+        pages: vues.size,
         reason: error instanceof Error ? error.message.slice(0, 200) : 'inconnue',
       })
-      return cloreAudit(userId, auditId, origin, ecartees)
+      return cloreAudit(userId, auditId, origin, ecartees, false)
     }
 
     await withUserScope(userId, (tx) =>
@@ -502,7 +555,17 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
         pagesCrawled: total,
         pagesSkipped: { increment: ecartees },
         ...(fini
-          ? { finishedAt: new Date(), seoScore: notes?.seo ?? null, geoScore: notes?.geo ?? null }
+          ? {
+              finishedAt: new Date(),
+              seoScore: notes?.seo ?? null,
+              geoScore: notes?.geo ?? null,
+              /*
+               * Atteindre la limite de pages de l'offre n'est pas une exploration écourtée :
+               * c'est la borne annoncée, et conseiller de relancer n'y changerait rien. Seul
+               * un arrêt subi se signale.
+               */
+              errorCode: complet ? null : EXPLORATION_PARTIELLE,
+            }
           : {}),
       },
       select: { status: true, pagesCrawled: true, pagesSkipped: true, maxPages: true },
@@ -713,6 +776,8 @@ export type TableauVisibilite = {
     pagesSkipped: number
     seoScore: number | null
     geoScore: number | null
+    /** L'exploration s'est arrêtée avant d'avoir fait le tour du site. */
+    partiel: boolean
   }
   /** L'audit terminé juste avant, s'il existe : c'est lui qui donne l'écart. */
   precedent: { finishedAt: Date | null; seoScore: number | null; geoScore: number | null } | null
@@ -763,15 +828,18 @@ export async function readDashboard(
         pagesSkipped: true,
         seoScore: true,
         geoScore: true,
+        errorCode: true,
       },
     }),
   )
   const dernier = audits[0]
   if (dernier === undefined) return null
 
+  const { errorCode, ...mesures } = dernier
+
   return {
     site,
-    audit: dernier,
+    audit: { ...mesures, partiel: errorCode === EXPLORATION_PARTIELLE },
     precedent: audits[1] ?? null,
     historique: audits
       .map(({ finishedAt, seoScore, geoScore }) => ({ finishedAt, seoScore, geoScore }))

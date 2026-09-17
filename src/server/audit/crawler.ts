@@ -1,7 +1,7 @@
 import { logger } from '@/server/observability/logger'
 import { extractSignals, type Signaux } from './extract'
 import { parseRobots, ROBOTS_OUVERT, type Robots } from './robots'
-import { parseTargetUrl, secureFetch, type Reponse } from './net'
+import { parseTargetUrl, secureFetch } from './net'
 
 /**
  * L'exploration d'un site.
@@ -102,7 +102,8 @@ export function normalizeUrl(brut: string): string | null {
 }
 
 /** Ce qui ne sera jamais une page web à auditer, reconnu à son extension. */
-const EXTENSIONS_IGNOREES =
+/** Ce qui se trouve derrière un lien sans être une page, et n'a donc rien à faire dans la file. */
+export const EXTENSIONS_IGNOREES =
   /\.(jpg|jpeg|png|gif|webp|avif|svg|ico|css|js|mjs|json|xml|pdf|zip|rar|gz|mp4|webm|mp3|wav|woff2?|ttf|eot)$/i
 
 async function lireRobots(origin: string): Promise<{ robots: Robots; found: boolean }> {
@@ -137,6 +138,44 @@ function adressesDeSitemap(xml: string, origin: string): string[] {
 
 function attendre(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Ce qu'une adresse a donné : une page relevée, ou la raison de l'avoir écartée. */
+type Releve = { page: PageExploree } | { ecartee: string }
+
+/**
+ * Visite une adresse et en tire ce qu'il y a à en tirer.
+ *
+ * Ne lève que si l'adresse est injoignable ; à l'appelant de décider si cela arrête tout.
+ * Le reste — interdite par robots.txt, fichier qui n'est pas une page, réponse qui n'est pas
+ * du HTML — est une mise de côté ordinaire, pas une erreur.
+ */
+async function relever(url: string, depth: number, robots: Robots): Promise<Releve> {
+  const chemin = new URL(url).pathname
+  if (!robots.allows(chemin)) return { ecartee: 'robots' }
+  if (EXTENSIONS_IGNOREES.test(chemin)) return { ecartee: 'pas_une_page' }
+
+  const avant = Date.now()
+  const reponse = await secureFetch(url)
+  const fetchMs = Date.now() - avant
+
+  if (!/text\/html|application\/xhtml/i.test(reponse.contentType) && reponse.body === '') {
+    return { ecartee: 'pas_du_html' }
+  }
+
+  return {
+    page: {
+      url,
+      path: chemin,
+      depth,
+      statusCode: reponse.status,
+      bytes: reponse.bytes,
+      fetchMs,
+      // La chaîne comprend l'adresse de départ : le nombre de sauts est donc un de moins.
+      redirects: Math.max(0, reponse.chain.length - 1),
+      signals: extractSignals(reponse.body, reponse.url),
+    },
+  }
 }
 
 /**
@@ -204,20 +243,9 @@ export async function crawl(
     if (suivante === undefined) break
     const { url, depth } = suivante
 
-    const chemin = new URL(url).pathname
-    if (!robots.allows(chemin)) {
-      skipped.push({ url, reason: 'robots' })
-      continue
-    }
-    if (EXTENSIONS_IGNOREES.test(chemin)) {
-      skipped.push({ url, reason: 'pas_une_page' })
-      continue
-    }
-
-    let reponse: Reponse
-    const avant = Date.now()
+    let releve: Releve
     try {
-      reponse = await secureFetch(url)
+      releve = await relever(url, depth, robots)
     } catch (error) {
       skipped.push({ url, reason: 'injoignable' })
       if (pages.length === 0 && url === accueil) {
@@ -226,28 +254,16 @@ export async function crawl(
       }
       continue
     }
-    const fetchMs = Date.now() - avant
-
-    if (!/text\/html|application\/xhtml/i.test(reponse.contentType) && reponse.body === '') {
-      skipped.push({ url, reason: 'pas_du_html' })
+    if ('ecartee' in releve) {
+      skipped.push({ url, reason: releve.ecartee })
       continue
     }
 
-    const signals = extractSignals(reponse.body, reponse.url)
-    pages.push({
-      url,
-      path: chemin,
-      depth,
-      statusCode: reponse.status,
-      bytes: reponse.bytes,
-      fetchMs,
-      // La chaîne comprend l'adresse de départ : le nombre de sauts est donc un de moins.
-      redirects: Math.max(0, reponse.chain.length - 1),
-      signals,
-    })
+    const page = releve.page
+    pages.push(page)
 
     if (depth < maxDepth) {
-      for (const lien of signals.links) {
+      for (const lien of page.signals.links) {
         if (!lien.interne || lien.url === '') continue
         const normalisee = normalizeUrl(lien.url)
         if (normalisee === null || vues.has(normalisee)) continue
@@ -279,4 +295,45 @@ export async function crawl(
     },
     sitemapFound,
   }
+}
+
+/**
+ * Visite une liste d'adresses déjà connues d'un même site.
+ *
+ * C'est la reprise d'un audit : la file a été redéduite ailleurs, il ne reste qu'à relever
+ * les pages. `crawl` ferait le travail, mais pas au bon prix — appelée une fois par page,
+ * elle relisait `robots.txt` et la carte du site à chaque adresse, soit six lectures inutiles
+ * par tranche, et perdait au passage le délai de politesse, qu'elle n'applique qu'entre deux
+ * pages d'une même exploration. Un site recevait donc six requêtes coup sur coup. Ici
+ * `robots.txt` est lu une fois, et le délai qu'il demande est tenu.
+ */
+export async function visiter(
+  origin: string,
+  cibles: readonly { url: string; depth: number }[],
+  options: { budgetMs?: number } = {},
+): Promise<{ pages: PageExploree[]; skipped: { url: string; reason: string }[] }> {
+  const finAvant = Date.now() + (options.budgetMs ?? DEFAULT_BUDGET_MS)
+  const { robots } = await lireRobots(origin)
+
+  const pages: PageExploree[] = []
+  const skipped: { url: string; reason: string }[] = []
+
+  for (const [rang, cible] of cibles.entries()) {
+    if (Date.now() > finAvant) {
+      skipped.push({ url: '', reason: 'budget_temps' })
+      break
+    }
+    // La politesse due au serveur d'en face, avant chaque page sauf la première.
+    if (rang > 0) await attendre(robots.delayMs)
+    try {
+      const releve = await relever(cible.url, cible.depth, robots)
+      if ('ecartee' in releve) skipped.push({ url: cible.url, reason: releve.ecartee })
+      else pages.push(releve.page)
+    } catch {
+      skipped.push({ url: cible.url, reason: 'injoignable' })
+    }
+  }
+
+  logger.info('tranche relevée', { pages: pages.length, ecartees: skipped.length })
+  return { pages, skipped }
 }

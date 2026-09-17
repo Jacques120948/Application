@@ -35,6 +35,8 @@ export type TableauProps = {
     pagesCrawled: number
     seoScore: Note
     geoScore: Note
+    /** L'exploration s'est arrêtée avant d'avoir fait le tour du site. */
+    partiel: boolean
   }
   precedent: { finishedAt: Date | null; seoScore: Note; geoScore: Note } | null
   historique: { finishedAt: Date | null; seoScore: Note; geoScore: Note }[]
@@ -373,6 +375,17 @@ export function TableauVisibilite({
               Analysé le {enClair(audit.finishedAt, locale)}.
             </p>
           )}
+          {/*
+            Un audit interrompu rend de vrais résultats, mais sur une partie du site. Le taire
+            reviendrait à présenter un score partiel comme un score complet.
+          */}
+          {audit.partiel ? (
+            <p className="mt-1 mb-0 text-sm text-[var(--color-ink-faint)]">
+              L’exploration s’est arrêtée avant d’avoir fait le tour du site : ces résultats
+              portent sur les pages lues, pas sur l’ensemble. Relancez une analyse pour le
+              site entier.
+            </p>
+          ) : null}
         </div>
         {autresSites.length === 0 ? null : (
           <nav className="flex flex-wrap gap-2">

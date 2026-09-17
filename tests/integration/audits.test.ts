@@ -48,6 +48,9 @@ const PAGES: Record<string, string> = {
 /** Ce que le faux serveur répond pour l'accueil. Modifié par le test des sites illisibles. */
 let statutAccueil = 200
 
+/** Les chemins demandés au faux serveur, dans l'ordre. Sert à compter, pas à vérifier un contenu. */
+const demandes: string[] = []
+
 vi.mock('@/server/audit/net', async () => {
   const reel = await vi.importActual<typeof import('@/server/audit/net')>('@/server/audit/net')
   return {
@@ -55,6 +58,7 @@ vi.mock('@/server/audit/net', async () => {
     secureFetch: async (brut: string) => {
       const url = new URL(brut)
       if (url.hostname !== 'exemple-audit.ch') throw new Error('hors du site')
+      demandes.push(url.pathname)
       if (url.pathname === '/robots.txt' || url.pathname === '/sitemap.xml') {
         return { url: brut, status: 404, contentType: 'text/plain', body: '', bytes: 0, chain: [brut] }
       }
@@ -97,7 +101,7 @@ beforeAll(async () => {
   // L'essai n'accorde qu'un audit : les tests en lancent plusieurs, on ouvre ce qu'il faut.
   await prisma.plan.update({
     where: { id: FREE_PLAN_ID },
-    data: { sitesMax: 1, pagesPerAudit: 9, auditsPerMonth: 8 },
+    data: { sitesMax: 1, pagesPerAudit: 9, auditsPerMonth: 10 },
   })
 
   email = `audit-${Date.now()}@exemple.test`
@@ -239,6 +243,81 @@ describe('l’audit avance par tranches, et finit', () => {
   })
 })
 
+describe('une exploration va jusqu’au bout de ce qu’elle peut atteindre', () => {
+  it('atteint les pages à trois clics de l’accueil, pas seulement les premières tranches', async () => {
+    /*
+     * Le cas s'est produit sur un vrai site : l'exploration s'est arrêtée à deux cent
+     * quatre-vingt-sept pages sur mille autorisées, sans jamais atteindre la profondeur
+     * trois, alors qu'il restait cent soixante et onze adresses à suivre. Chaque tranche
+     * rapatriait les signaux complets de toutes les pages connues — texte compris — pour
+     * n'en tirer que les liens : à deux cent quatre-vingt-sept pages, la tranche devenait
+     * plus lente que le travail qu'elle faisait, et finissait par être coupée.
+     *
+     * Ce test ne mesure pas un temps, qui ne voudrait rien dire ici. Il vérifie ce que le
+     * plafond empêchait : que l'exploration aille jusqu'à la dernière page joignable, y
+     * compris celles qui ne s'atteignent qu'à la troisième tranche.
+     */
+    statutAccueil = 200
+    const { addSite, startAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+
+    const bout = await jusquAuBout(audit.auditId)
+    // Six pages à la première tranche : le reste ne s'obtient qu'en reprenant.
+    expect(bout.tranches).toBeGreaterThan(1)
+
+    const pages = await withUserScope(userId, (tx) =>
+      tx.auditPage.findMany({
+        where: { auditId: audit.auditId },
+        select: { path: true, depth: true },
+      }),
+    )
+    const chemins = new Set(pages.map((page) => page.path))
+    // Les deux pages les plus éloignées : accueil → boutique → bougies → celles-ci.
+    expect(chemins.has('/boutique/savons')).toBe(true)
+    expect(chemins.has('/boutique/coffrets')).toBe(true)
+    expect(pages.some((page) => page.depth === 3)).toBe(true)
+    // Et toutes les autres : rien d'atteignable n'a été laissé de côté.
+    expect(chemins.size).toBe(Object.keys(PAGES).length)
+
+    const fini = await withUserScope(userId, (tx) =>
+      tx.audit.findFirstOrThrow({ where: { id: audit.auditId } }),
+    )
+    // Le site a été fait en entier : rien à signaler à l'écran.
+    expect(fini.status).toBe('done')
+    expect(fini.errorCode).toBeNull()
+  }, 60_000)
+})
+
+describe('la reprise ne refait pas le travail de la première tranche', () => {
+  it('lit robots.txt une fois par tranche, pas une fois par page', async () => {
+    /*
+     * La reprise appelait l'explorateur complet une fois par adresse, avec pour seule borne
+     * « une page ». Chaque page coûtait donc une relecture de robots.txt et de la carte du
+     * site : six allers-retours inutiles par tranche imposés au site analysé, et le délai de
+     * politesse perdu au passage, puisqu'il ne s'applique qu'entre deux pages d'une même
+     * exploration. Un artisan recevait six requêtes coup sur coup.
+     */
+    statutAccueil = 200
+    const { addSite, startAudit, advanceAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+
+    await advanceAudit(userId, audit.auditId)
+
+    // On n'observe que la tranche de reprise : la première a ses propres raisons de lire.
+    demandes.length = 0
+    const reprise = await advanceAudit(userId, audit.auditId)
+    expect(reprise.pagesCrawled).toBeGreaterThan(6)
+
+    const robots = demandes.filter((chemin) => chemin === '/robots.txt')
+    expect(robots).toHaveLength(1)
+    // Et la carte du site, que la reprise n'a aucune raison de relire : elle ne dit rien de
+    // plus que les liens déjà relevés, et elle peut peser.
+    expect(demandes.filter((chemin) => chemin === '/sitemap.xml')).toHaveLength(0)
+  }, 60_000)
+})
+
 describe('une tranche qui casse n’emporte pas ce qui précède', () => {
   it('clôt l’audit sur les pages déjà explorées, et le note', async () => {
     /*
@@ -278,8 +357,12 @@ describe('une tranche qui casse n’emporte pas ce qui précède', () => {
     expect(fini.status).toBe('done')
     expect(fini.seoScore).not.toBeNull()
     expect(fini.geoScore).not.toBeNull()
-    // Le code d'échec disparaît : l'audit est utilisable, l'afficher serait mentir.
-    expect(fini.errorCode).toBeNull()
+    /*
+     * L'audit est utilisable, donc pas « échoué ». Mais il s'est arrêté alors qu'il restait
+     * des adresses à suivre : le dire est le seul moyen de ne pas présenter un score calculé
+     * sur une partie du site comme un score calculé sur le site.
+     */
+    expect(fini.errorCode).toBe('EXPLORATION_PARTIELLE')
   }, 60_000)
 
   it('termine tout de suite un audit échoué qui porte des pages, sans repartir explorer', async () => {
