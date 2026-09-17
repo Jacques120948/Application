@@ -250,6 +250,48 @@ function frontiere(
  * Appelée en boucle par l'écran jusqu'à ce qu'elle réponde qu'il n'y a plus rien à faire.
  * Chaque appel est indépendant : rien ne se perd si l'un échoue, il suffit de rappeler.
  */
+/**
+ * Termine un audit sur ce qui a déjà été exploré, et le note.
+ *
+ * Sert quand une tranche casse alors que des pages sont en base : mieux vaut un audit de
+ * deux cent quatre-vingt-sept pages qu'aucun audit du tout. Le nombre de pages est recompté
+ * plutôt que repris du compteur, qui pourrait avoir dérivé d'une tranche perdue.
+ */
+async function cloreAudit(
+  userId: string,
+  auditId: string,
+  origin: string,
+  ecartees: number,
+): Promise<AvancementAudit> {
+  const notes = await noterAudit(userId, auditId, origin)
+  const total = await withUserScope(userId, (tx) => tx.auditPage.count({ where: { auditId } }))
+
+  const apres = await withUserScope(userId, (tx) =>
+    tx.audit.update({
+      where: { id: auditId },
+      data: {
+        status: 'done',
+        pagesCrawled: total,
+        pagesSkipped: { increment: ecartees },
+        finishedAt: new Date(),
+        seoScore: notes?.seo ?? null,
+        geoScore: notes?.geo ?? null,
+        // L'audit est utilisable : le code d'échec n'a plus lieu d'être affiché.
+        errorCode: null,
+      },
+      select: { status: true, pagesCrawled: true, pagesSkipped: true, maxPages: true },
+    }),
+  )
+  return {
+    auditId,
+    status: apres.status,
+    pagesCrawled: apres.pagesCrawled,
+    pagesSkipped: apres.pagesSkipped,
+    maxPages: apres.maxPages,
+    encore: false,
+  }
+}
+
 export async function advanceAudit(userId: string, auditId: string): Promise<AvancementAudit> {
   const audit = await withUserScope(userId, (tx) =>
     tx.audit.findFirst({
@@ -266,6 +308,22 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
     }),
   )
   if (audit === null) throw notFound('Cet audit est introuvable.')
+  /*
+   * Un audit terminé ne se rouvre pas. Un audit échoué qui porte des pages, si : il a été
+   * clos par une erreur passagère alors que l'essentiel du travail était fait, et il n'y a
+   * aucune raison de le refaire depuis le début. Celui qui n'a rien lu, lui, reste échoué.
+   */
+  const recuperable = audit.status === 'failed' && audit.pagesCrawled > 0
+  /*
+   * Un audit échoué qui porte des pages se termine tout de suite, sur ce qu'il a. Il ne
+   * repart pas explorer : la personne a demandé à le terminer, et l'écran le lui a promis en
+   * ces mots. Reprendre une exploration d'une heure sous un bouton qui dit « terminer »
+   * serait une façon de ne pas tenir parole. Qui veut un audit plus complet en relance un.
+   */
+  if (recuperable) {
+    logger.info('audit échoué rattrapé sur ses pages', { auditId, pages: audit.pagesCrawled })
+    return cloreAudit(userId, auditId, audit.site.origin, 0)
+  }
   if (audit.status === 'done' || audit.status === 'failed') {
     return {
       auditId,
@@ -362,6 +420,29 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
     }
   } catch (error) {
     const code = error instanceof AppError ? error.code : 'CRAWL_FAILED'
+    /*
+     * Une tranche qui casse ne doit pas emporter tout ce qui précède.
+     *
+     * La première version marquait l'audit « échoué » sur n'importe quelle exception. Le cas
+     * s'est produit sur un vrai site : deux cent quatre-vingt-sept pages explorées en une
+     * heure, une erreur à la suivante, et tout était jeté — pas de note, pas de constats,
+     * rien à reprendre. L'erreur était probablement passagère ; le travail, lui, ne l'était
+     * pas.
+     *
+     * Deux cent quatre-vingt-sept pages font un excellent audit. On le termine donc avec ce
+     * qu'on a, et on le note. Seul un site dont rien n'a pu être lu échoue vraiment : là, il
+     * n'y a effectivement rien à sauver, et le dire est la seule réponse juste.
+     */
+    if (connues.length > 0) {
+      logger.warn('tranche interrompue : audit clos sur ce qui a été exploré', {
+        auditId,
+        code,
+        pages: connues.length,
+        reason: error instanceof Error ? error.message.slice(0, 200) : 'inconnue',
+      })
+      return cloreAudit(userId, auditId, origin, ecartees)
+    }
+
     await withUserScope(userId, (tx) =>
       tx.audit.update({
         where: { id: auditId },

@@ -243,7 +243,9 @@ export function SiteBoard({
                   ce qui a l'air de tout recommencer alors que rien n'est perdu.
                 */}
                 {site.dernierAudit !== null &&
-                (site.dernierAudit.status === 'running' || site.dernierAudit.status === 'pending') ? (
+                (site.dernierAudit.status === 'running' ||
+                  site.dernierAudit.status === 'pending' ||
+                  (site.dernierAudit.status === 'failed' && site.dernierAudit.pagesCrawled > 0)) ? (
                   <div className="mt-3">
                     <Button
                       variant="secondary"
@@ -252,10 +254,14 @@ export function SiteBoard({
                     >
                       {reprise === site.dernierAudit.id
                         ? 'Reprise en cours…'
-                        : 'Reprendre l’analyse'}
+                        : site.dernierAudit.status === 'failed'
+                          ? 'Terminer l’analyse'
+                          : 'Reprendre l’analyse'}
                     </Button>
                     <p className="mt-2 mb-0 text-sm text-[var(--color-ink-faint)]">
-                      Elle repartira des {site.dernierAudit.pagesCrawled} pages déjà lues.
+                      {site.dernierAudit.status === 'failed'
+                        ? `Les ${site.dernierAudit.pagesCrawled} pages déjà lues suffisent à vous donner vos deux notes.`
+                        : `Elle repartira des ${site.dernierAudit.pagesCrawled} pages déjà lues.`}
                     </p>
                   </div>
                 ) : null}

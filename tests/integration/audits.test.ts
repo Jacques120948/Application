@@ -239,6 +239,84 @@ describe('l’audit avance par tranches, et finit', () => {
   })
 })
 
+describe('une tranche qui casse n’emporte pas ce qui précède', () => {
+  it('clôt l’audit sur les pages déjà explorées, et le note', async () => {
+    /*
+     * Le cas s'est produit sur un vrai site : deux cent quatre-vingt-sept pages explorées en
+     * une heure, une erreur à la suivante, et tout était jeté — pas de note, pas de constats,
+     * rien à reprendre. L'erreur était passagère ; le travail ne l'était pas.
+     */
+    statutAccueil = 200
+    const { addSite, startAudit, advanceAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+
+    // Une première tranche réussie : des pages sont en base.
+    const premiere = await advanceAudit(userId, audit.auditId)
+    expect(premiere.pagesCrawled).toBeGreaterThan(0)
+
+    // La suivante casse net.
+    statutAccueil = 500
+    const casse = await import('@/server/audit/net')
+    const vrai = casse.secureFetch
+    vi.spyOn(casse, 'secureFetch').mockRejectedValue(new Error('réseau coupé'))
+    try {
+      const apres = await advanceAudit(userId, audit.auditId)
+      // L'audit est terminé et noté, pas échoué : les pages déjà lues font un audit.
+      expect(apres.status).toBe('done')
+      expect(apres.encore).toBe(false)
+      expect(apres.pagesCrawled).toBeGreaterThan(0)
+    } finally {
+      vi.mocked(casse.secureFetch).mockImplementation(vrai)
+      vi.restoreAllMocks()
+      statutAccueil = 200
+    }
+
+    const fini = await withUserScope(userId, (tx) =>
+      tx.audit.findFirstOrThrow({ where: { id: audit.auditId } }),
+    )
+    expect(fini.status).toBe('done')
+    expect(fini.seoScore).not.toBeNull()
+    expect(fini.geoScore).not.toBeNull()
+    // Le code d'échec disparaît : l'audit est utilisable, l'afficher serait mentir.
+    expect(fini.errorCode).toBeNull()
+  }, 60_000)
+
+  it('termine tout de suite un audit échoué qui porte des pages, sans repartir explorer', async () => {
+    /*
+     * L'écran promet « terminer l'analyse » : elle doit se terminer, pas repartir pour une
+     * heure d'exploration. Qui veut un audit plus complet en relance un.
+     */
+    statutAccueil = 200
+    const { addSite, startAudit, advanceAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+    await advanceAudit(userId, audit.auditId)
+
+    const avant = await withUserScope(userId, (tx) =>
+      tx.auditPage.count({ where: { auditId: audit.auditId } }),
+    )
+    expect(avant).toBeGreaterThan(0)
+
+    // On le marque échoué comme l'aurait fait une erreur passagère.
+    await withUserScope(userId, (tx) =>
+      tx.audit.update({
+        where: { id: audit.auditId },
+        data: { status: 'failed', errorCode: 'CRAWL_FAILED', finishedAt: new Date() },
+      }),
+    )
+
+    const rattrape = await advanceAudit(userId, audit.auditId)
+    expect(rattrape.status).toBe('done')
+    expect(rattrape.encore).toBe(false)
+    // Aucune page de plus : on a clos, pas repris l'exploration.
+    const apres = await withUserScope(userId, (tx) =>
+      tx.auditPage.count({ where: { auditId: audit.auditId } }),
+    )
+    expect(apres).toBe(avant)
+  }, 60_000)
+})
+
 describe('un site illisible ne donne pas un audit réussi', () => {
   it('échoue clairement quand l’accueil ne répond pas correctement', async () => {
     statutAccueil = 403
