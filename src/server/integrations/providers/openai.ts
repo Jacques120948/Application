@@ -93,12 +93,28 @@ export async function readImageResponse(
     }
   }
   if (response.status === 400 || response.status === 422) {
-    logger.warn('image refusée par le fournisseur', {
-      provider,
-      status: response.status,
-      // Le corps de l'erreur, borné : c'est le fournisseur qui parle, jamais notre clé.
-      detail: (await response.text().catch(() => '')).slice(0, 600),
-    })
+    // Le corps de l'erreur, borné : c'est le fournisseur qui parle, jamais notre clé.
+    const detail = (await response.text().catch(() => '')).slice(0, 600)
+
+    /*
+     * Un 400 n'est pas forcément un refus de contenu, et les confondre coûte cher.
+     *
+     * Google répond 400 — et non 401 — quand la clé est invalide. Traduire cela par
+     * « reformulez votre description » envoie quelqu'un réécrire un texte parfaitement
+     * correct pendant que le vrai problème est trois lignes plus haut, dans sa clé. C'est
+     * arrivé, quatre fois de suite, et il a fallu lire la réponse brute de Google pour le
+     * voir.
+     */
+    if (/api[_ ]?key[_ ]?(not[_ ]?valid|invalid)/i.test(detail)) {
+      logger.warn('clé refusée par le fournisseur', { provider, status: response.status })
+      return {
+        ok: false,
+        kind: 'key',
+        reason: `${provider} refuse votre clé. Reconnectez le service depuis Connexions.`,
+      }
+    }
+
+    logger.warn('image refusée par le fournisseur', { provider, status: response.status, detail })
     return {
       ok: false,
       kind: 'refused',

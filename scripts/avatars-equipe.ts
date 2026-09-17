@@ -148,6 +148,20 @@ async function main(): Promise<void> {
     process.exitCode = 1
     return
   }
+  /*
+   * Une clé Google AI commence par « AIza ». Vérifier la forme ici évite quatre appels
+   * réseau et surtout quatre messages trompeurs : Google répond « 400 » à une clé invalide,
+   * ce qui se lit comme un refus de la description. On a cherché au mauvais endroit assez
+   * longtemps pour que ce contrôle vaille ses cinq lignes.
+   */
+  if (!cle.trim().startsWith('AIza')) {
+    console.error(
+      'Cette clé ne ressemble pas à une clé Google AI : elles commencent toutes par « AIza ».',
+    )
+    console.error('Récupérez-la sur https://aistudio.google.com/apikey puis relancez.')
+    process.exitCode = 1
+    return
+  }
 
   await mkdir(DOSSIER, { recursive: true })
 
