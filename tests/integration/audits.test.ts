@@ -300,3 +300,49 @@ describe('l’audit rend une note et des constats', () => {
     expect(enCours.seoScore).toBeNull()
   }, 60_000)
 })
+
+describe('le tableau de bord', () => {
+  it('rend les deux notes, l’écart avec l’analyse précédente et l’historique', async () => {
+    statutAccueil = 200
+    const { addSite, startAudit, readDashboard } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+    await jusquAuBout(audit.auditId)
+
+    const tableau = await readDashboard(userId)
+    expect(tableau).not.toBeNull()
+    if (tableau === null) return
+
+    expect(tableau.site.host).toBe('exemple-audit.ch')
+    /*
+     * Deux notes, jamais une seule. Le site factice est pauvre pour les deux moteurs — ni
+     * description, ni données structurées, ni contenu : une note pleine d'un côté ou de
+     * l'autre voudrait dire que les contrôles ne regardent rien.
+     */
+    expect(tableau.audit.seoScore).not.toBeNull()
+    expect(tableau.audit.geoScore).not.toBeNull()
+    expect(tableau.audit.geoScore as number).toBeLessThan(100)
+
+    // Une analyse précédente existe : c'est elle qui permet d'afficher un écart plutôt
+    // qu'un chiffre nu, et c'est la seule chose qui fasse revenir quelqu'un.
+    expect(tableau.precedent).not.toBeNull()
+    expect(tableau.historique.length).toBeGreaterThanOrEqual(2)
+
+    // De la plus ancienne à la plus récente : une courbe qui descend le temps se lit à
+    // l'envers, et personne ne le remarque avant d'avoir conclu que son site s'effondre.
+    const dates = tableau.historique.map((mesure) => mesure.finishedAt?.getTime() ?? 0)
+    expect([...dates].sort((a, b) => a - b)).toEqual(dates)
+    expect(dates[dates.length - 1]).toBe(tableau.audit.finishedAt?.getTime())
+  }, 60_000)
+
+  it('ne montre rien du site d’un autre, ni par défaut ni sur demande', async () => {
+    const { readDashboard } = await import('@/server/audit/service')
+    const mien = await readDashboard(userId)
+    expect(mien).not.toBeNull()
+
+    // Sans site à soi, il n'y a rien à montrer — et surtout pas celui du voisin.
+    expect(await readDashboard(autreId)).toBeNull()
+    // Un identifiant demandé n'ouvre aucune porte : il est cherché parmi ses propres sites.
+    expect(await readDashboard(autreId, mien?.site.id)).toBeNull()
+  })
+})

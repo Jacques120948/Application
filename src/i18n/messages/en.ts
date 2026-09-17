@@ -20,6 +20,7 @@ export const en: Record<keyof typeof fr, string> = {
   'nav.login': 'Sign in',
   'nav.register': 'Create account',
   'nav.admin': 'Administration',
+  'nav.visibility': 'Visibility',
   'nav.radar': 'Radar',
   'nav.team': 'Marketing team',
   'nav.subscription': 'Subscription',

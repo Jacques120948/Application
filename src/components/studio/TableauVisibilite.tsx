@@ -1,0 +1,519 @@
+import { Card, CardBody } from '@/components/ui'
+
+/**
+ * Le tableau de bord de la visibilité.
+ *
+ * C'est l'écran de retour : celui qu'on rouvre une semaine après avoir corrigé deux ou trois
+ * choses, pour savoir si ça a servi. Quatre partis pris décident de sa forme.
+ *
+ * **Deux notes côte à côte, jamais une moyenne.** Un site peut être irréprochable pour un
+ * moteur de recherche et inexploitable par un assistant — c'est même le cas ordinaire. Une
+ * note unique effacerait exactement ce qu'il y a à montrer.
+ *
+ * **L'écart avant le chiffre.** « 69 sur 100 » ne dit pas si le travail de la semaine a
+ * servi ; « +4 depuis le 3 septembre » le dit. C'est la seule chose qui fasse revenir
+ * quelqu'un un mois plus tard, et la première analyse le dit aussi — « première analyse »
+ * plutôt qu'un zéro qui se lirait comme une chute.
+ *
+ * **La note GEO ne promet rien.** Elle mesure une aptitude à être repris, jamais une
+ * présence obtenue. Personne ne connaît les critères de ChatGPT, de Gemini ou de Perplexity,
+ * et ils changent : la phrase sous la jauge le dit, et elle n'est pas négociable.
+ *
+ * **Léa parle, l'écran ne récite pas.** « J'ai lu 34 pages » se comprend avant d'être lu ;
+ * « pagesCrawled : 34 » demande un effort. Ce qu'elle dit est entièrement calculé — aucun
+ * modèle n'intervient dans cet écran.
+ */
+
+export type Note = number | null
+
+export type ConstatVu = {
+  checkId: string
+  engine: string
+  label: string
+  why: string
+  scope: string
+  severity: string
+  affected: number
+  examined: number
+  sample: { path: string; url: string; title: string }[]
+}
+
+export type TableauProps = {
+  locale: string
+  site: { id: string; host: string; label: string }
+  audit: {
+    finishedAt: Date | null
+    pagesCrawled: number
+    seoScore: Note
+    geoScore: Note
+  }
+  precedent: { finishedAt: Date | null; seoScore: Note; geoScore: Note } | null
+  historique: { finishedAt: Date | null; seoScore: Note; geoScore: Note }[]
+  autresSites: { id: string; host: string; label: string }[]
+  constats: readonly ConstatVu[]
+}
+
+/** Une date écrite comme on la dit. */
+function enClair(date: Date | null, locale: string): string {
+  if (date === null) return ''
+  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-CH' : locale, {
+    day: 'numeric',
+    month: 'long',
+  }).format(date)
+}
+
+function pluriel(nombre: number, singulier: string, pluriel_ = `${singulier}s`): string {
+  return nombre > 1 ? pluriel_ : singulier
+}
+
+/**
+ * La jauge d'une note.
+ *
+ * Un anneau plutôt qu'une barre : à deux notes côte à côte, deux barres se comparent mal
+ * parce que l'œil suit leur longueur et non leur remplissage. L'anneau porte le chiffre en
+ * son centre, ce qui évite d'avoir à le répéter à côté.
+ */
+function Anneau({ note, teinte }: { note: number; teinte: string }) {
+  const rayon = 42
+  const tour = 2 * Math.PI * rayon
+  const rempli = (Math.max(0, Math.min(100, note)) / 100) * tour
+  return (
+    <svg viewBox="0 0 100 100" className="h-24 w-24 shrink-0" role="presentation" aria-hidden="true">
+      <circle cx="50" cy="50" r={rayon} fill="none" stroke="var(--color-line)" strokeWidth="8" />
+      <circle
+        cx="50"
+        cy="50"
+        r={rayon}
+        fill="none"
+        stroke={teinte}
+        strokeWidth="8"
+        strokeLinecap="round"
+        strokeDasharray={`${rempli} ${tour}`}
+        transform="rotate(-90 50 50)"
+      />
+      <text
+        x="50"
+        y="50"
+        textAnchor="middle"
+        dominantBaseline="central"
+        className="fill-[var(--color-ink)] text-[26px] font-semibold"
+      >
+        {note}
+      </text>
+    </svg>
+  )
+}
+
+/** L'écart depuis l'analyse précédente, dit plutôt que signé. */
+function Ecart({
+  note,
+  avant,
+  quand,
+  locale,
+}: {
+  note: number
+  avant: Note
+  quand: Date | null
+  locale: string
+}) {
+  if (avant === null) {
+    return <span className="text-sm text-[var(--color-ink-faint)]">Première analyse</span>
+  }
+  const delta = note - avant
+  const date = enClair(quand, locale)
+  if (delta === 0) {
+    return (
+      <span className="text-sm text-[var(--color-ink-faint)]">
+        Inchangé{date === '' ? '' : ` depuis le ${date}`}
+      </span>
+    )
+  }
+  const monte = delta > 0
+  return (
+    <span
+      className="text-sm font-medium"
+      style={{ color: monte ? 'var(--color-brand-strong)' : 'var(--color-critical)' }}
+    >
+      {monte ? '+' : '−'}
+      {Math.abs(delta)} point{Math.abs(delta) > 1 ? 's' : ''}
+      {date === '' ? '' : ` depuis le ${date}`}
+    </span>
+  )
+}
+
+function CarteNote({
+  titre,
+  sousTitre,
+  note,
+  avant,
+  quand,
+  teinte,
+  locale,
+  reserve,
+}: {
+  titre: string
+  sousTitre: string
+  note: Note
+  avant: Note
+  quand: Date | null
+  teinte: string
+  locale: string
+  /** La phrase qui empêche la note d'être lue comme une promesse. */
+  reserve?: string
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <div className="flex items-center gap-5">
+          {note === null ? (
+            <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-8 border-[var(--color-line)] text-sm text-[var(--color-ink-faint)]">
+              —
+            </div>
+          ) : (
+            <Anneau note={note} teinte={teinte} />
+          )}
+          <div className="min-w-0">
+            <h3 className="m-0 text-base font-semibold">{titre}</h3>
+            <p className="mt-1 mb-2 text-sm text-[var(--color-ink-soft)]">{sousTitre}</p>
+            {note === null ? (
+              <span className="text-sm text-[var(--color-ink-faint)]">Pas encore calculée</span>
+            ) : (
+              <Ecart note={note} avant={avant} quand={quand} locale={locale} />
+            )}
+          </div>
+        </div>
+        {reserve === undefined ? null : (
+          <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+            {reserve}
+          </p>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * La progression, en deux courbes.
+ *
+ * Tracée à la main en SVG plutôt qu'avec une bibliothèque : deux séries de douze points ne
+ * justifient pas trois cents kilo-octets de graphiques, et une courbe qu'on dessine soi-même
+ * garde les couleurs de la maison.
+ *
+ * L'échelle va de zéro à cent, toujours. Un cadrage resserré sur les valeurs réelles ferait
+ * de trois points gagnés une envolée et de trois points perdus un effondrement : c'est le
+ * moyen le plus courant de mentir avec un graphique, et il est d'autant plus efficace que
+ * personne ne regarde l'axe. Les repères sont donc écrits, et les valeurs de départ et
+ * d'arrivée avec eux — une courbe se lit de travers, deux chiffres ne se lisent pas de
+ * travers.
+ */
+function Courbes({
+  historique,
+  locale,
+}: {
+  historique: TableauProps['historique']
+  locale: string
+}) {
+  const points = historique.filter(
+    (mesure) => mesure.seoScore !== null || mesure.geoScore !== null,
+  )
+  // Une seule mesure ne fait pas une courbe : on ne trace rien plutôt qu'un point isolé.
+  if (points.length < 2) return null
+
+  const largeur = 640
+  const hauteur = 190
+  const hautBas = 14
+  // De la place à gauche pour les repères de l'échelle, qui ne doivent chevaucher personne.
+  const gauche = 34
+  const droite = 12
+  const x = (index: number) =>
+    gauche + (index * (largeur - gauche - droite)) / Math.max(1, points.length - 1)
+  const y = (note: number) => hauteur - hautBas - (note / 100) * (hauteur - 2 * hautBas)
+
+  const series = [
+    { cle: 'seo' as const, nom: 'Référencement', teinte: 'var(--color-brand)' },
+    { cle: 'geo' as const, nom: 'Moteurs IA', teinte: 'var(--color-accent)' },
+  ]
+  const lire = (mesure: (typeof points)[number], cle: 'seo' | 'geo'): Note =>
+    cle === 'seo' ? mesure.seoScore : mesure.geoScore
+
+  const premier = points[0]
+  const dernier = points[points.length - 1]
+
+  return (
+    <Card>
+      <CardBody>
+        <h3 className="m-0 text-base font-semibold">Votre progression</h3>
+        <p className="mt-1 mb-4 text-sm text-[var(--color-ink-soft)]">
+          {points.length} analyse{points.length > 1 ? 's' : ''} depuis le{' '}
+          {enClair(premier?.finishedAt ?? null, locale)}.
+        </p>
+        <svg
+          viewBox={`0 0 ${largeur} ${hauteur}`}
+          className="h-48 w-full"
+          role="img"
+          aria-label={`Évolution des notes entre le ${enClair(premier?.finishedAt ?? null, locale)} et le ${enClair(dernier?.finishedAt ?? null, locale)}`}
+        >
+          {[0, 50, 100].map((niveau) => (
+            <g key={niveau}>
+              <line
+                x1={gauche}
+                x2={largeur - droite}
+                y1={y(niveau)}
+                y2={y(niveau)}
+                stroke="var(--color-line)"
+                strokeWidth="1"
+              />
+              <text
+                x={gauche - 8}
+                y={y(niveau)}
+                textAnchor="end"
+                dominantBaseline="central"
+                className="fill-[var(--color-ink-faint)] text-[12px]"
+              >
+                {niveau}
+              </text>
+            </g>
+          ))}
+          {series.map((serie) => {
+            const chemin = points
+              .map((mesure, index) => {
+                const note = lire(mesure, serie.cle)
+                return note === null ? null : `${index === 0 ? 'M' : 'L'}${x(index)} ${y(note)}`
+              })
+              .filter((morceau) => morceau !== null)
+              .join(' ')
+            return (
+              <g key={serie.cle}>
+                <path
+                  d={chemin}
+                  fill="none"
+                  stroke={serie.teinte}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                {/* Un point par analyse : sans eux, quatre mesures et quarante se ressemblent. */}
+                {points.map((mesure, index) => {
+                  const note = lire(mesure, serie.cle)
+                  if (note === null) return null
+                  return (
+                    <circle
+                      key={`${serie.cle}-${index}`}
+                      cx={x(index)}
+                      cy={y(note)}
+                      r="3.5"
+                      fill="var(--color-surface)"
+                      stroke={serie.teinte}
+                      strokeWidth="2.5"
+                    />
+                  )
+                })}
+              </g>
+            )
+          })}
+        </svg>
+        <ul className="m-0 mt-3 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-sm text-[var(--color-ink-soft)]">
+          {series.map((serie) => {
+            const depart = lire(premier as (typeof points)[number], serie.cle)
+            const arrivee = lire(dernier as (typeof points)[number], serie.cle)
+            return (
+              <li key={serie.cle} className="flex items-center gap-2">
+                <span
+                  className="inline-block h-2.5 w-2.5 rounded-full"
+                  style={{ background: serie.teinte }}
+                />
+                {serie.nom}
+                {depart === null || arrivee === null ? null : (
+                  <span className="text-[var(--color-ink-faint)]">
+                    {depart} → {arrivee}
+                  </span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      </CardBody>
+    </Card>
+  )
+}
+
+const GRAVITES: Record<string, { label: string; fond: string; texte: string }> = {
+  critical: {
+    label: 'Critique',
+    fond: 'var(--color-critical-soft)',
+    texte: 'var(--color-critical)',
+  },
+  important: {
+    label: 'Important',
+    fond: 'var(--color-accent-soft)',
+    texte: 'var(--color-accent)',
+  },
+  improvement: {
+    label: 'Amélioration',
+    fond: 'var(--color-brand-soft)',
+    texte: 'var(--color-brand-strong)',
+  },
+}
+
+const MOTEURS: Record<string, string> = { seo: 'Référencement', geo: 'Moteurs IA' }
+
+function Priorites({ constats }: { constats: readonly ConstatVu[] }) {
+  if (constats.length === 0) {
+    return (
+      <Card>
+        <CardBody>
+          <h3 className="m-0 text-base font-semibold">Rien à corriger pour l’instant</h3>
+          <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">
+            Tous les contrôles applicables à ce site sont passés. Relancez une analyse après
+            votre prochaine mise à jour.
+          </p>
+        </CardBody>
+      </Card>
+    )
+  }
+  return (
+    <ol className="m-0 grid list-none gap-3 p-0">
+      {constats.map((constat, rang) => {
+        const gravite = GRAVITES[constat.severity] ?? GRAVITES['improvement']
+        return (
+          <li
+            key={constat.checkId}
+            className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5"
+          >
+            <div className="flex flex-wrap items-baseline gap-3">
+              <span className="text-sm font-semibold text-[var(--color-ink-faint)]">
+                {rang + 1}.
+              </span>
+              <h3 className="m-0 text-base font-semibold">{constat.label}</h3>
+              <span
+                className="rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-semibold"
+                style={{ background: gravite?.fond, color: gravite?.texte }}
+              >
+                {gravite?.label}
+              </span>
+              <span className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2.5 py-0.5 text-xs text-[var(--color-ink-soft)]">
+                {MOTEURS[constat.engine] ?? constat.engine}
+              </span>
+              {constat.scope === 'site' ? null : (
+                <span className="text-sm text-[var(--color-ink-faint)]">
+                  {constat.affected} page{constat.affected > 1 ? 's' : ''} sur {constat.examined}
+                </span>
+              )}
+            </div>
+            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {constat.why}
+            </p>
+            {constat.sample.length === 0 ? null : (
+              <ul className="m-0 mt-3 flex list-none flex-wrap gap-2 p-0">
+                {constat.sample.map((exemple) => (
+                  <li
+                    key={exemple.url}
+                    className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-3 py-1 text-xs text-[var(--color-ink-soft)]"
+                  >
+                    {exemple.path}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
+export function TableauVisibilite({
+  locale,
+  site,
+  audit,
+  precedent,
+  historique,
+  autresSites,
+  constats,
+}: TableauProps) {
+  const aCorriger = constats.length
+  const critiques = constats.filter((constat) => constat.severity === 'critical').length
+
+  return (
+    <div className="grid gap-6">
+      {/*
+        Léa ouvre l'écran. Ce qu'elle dit est entièrement calculé — nombre de pages, nombre
+        de constats, date — et c'est justement ce qui permet de le dire sans précaution : il
+        n'y a rien là-dedans qu'un modèle aurait pu inventer.
+      */}
+      <div className="flex flex-wrap items-center gap-4 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+        <img
+          src="/equipe/lea.webp"
+          alt=""
+          width={56}
+          height={56}
+          className="h-14 w-14 shrink-0 rounded-full object-cover"
+        />
+        <div className="min-w-0 flex-1">
+          <p className="m-0 text-base leading-relaxed">
+            <strong>Léa</strong> a terminé l’analyse de <strong>{site.host}</strong> : {' '}
+            {audit.pagesCrawled} {pluriel(audit.pagesCrawled, 'page')} {' '}
+            {pluriel(audit.pagesCrawled, 'lue')}, {aCorriger} {pluriel(aCorriger, 'point')} à
+            corriger
+            {critiques === 0 ? '' : `, dont ${critiques} ${pluriel(critiques, 'critique')}`}.
+          </p>
+          {audit.finishedAt === null ? null : (
+            <p className="mt-1 mb-0 text-sm text-[var(--color-ink-faint)]">
+              Analysé le {enClair(audit.finishedAt, locale)}.
+            </p>
+          )}
+        </div>
+        {autresSites.length === 0 ? null : (
+          <nav className="flex flex-wrap gap-2">
+            {autresSites.map((autre) => (
+              <a
+                key={autre.id}
+                href={`/${locale}/visibilite?siteId=${autre.id}`}
+                className="rounded-[var(--radius-pill)] border border-[var(--color-line)] px-3 py-1 text-sm text-[var(--color-ink-soft)] no-underline hover:border-[var(--color-brand)]"
+              >
+                {autre.host}
+              </a>
+            ))}
+          </nav>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <CarteNote
+          titre="Référencement"
+          sousTitre="Ce qu’un moteur de recherche regarde sur vos pages."
+          note={audit.seoScore}
+          avant={precedent?.seoScore ?? null}
+          quand={precedent?.finishedAt ?? null}
+          teinte="var(--color-brand)"
+          locale={locale}
+        />
+        <CarteNote
+          titre="Moteurs IA"
+          sousTitre="Ce qu’un assistant peut comprendre et reprendre de vos pages."
+          note={audit.geoScore}
+          avant={precedent?.geoScore ?? null}
+          quand={precedent?.finishedAt ?? null}
+          teinte="var(--color-accent)"
+          locale={locale}
+          reserve="Cette note mesure l’aptitude de vos pages à être reprises par un assistant. Elle ne garantit pas une apparition dans ChatGPT, Gemini ou Perplexity : personne n’en connaît les critères, et ils changent."
+        />
+      </div>
+
+      <Courbes historique={historique} locale={locale} />
+
+      <section>
+        <h2 className="m-0 mb-4 text-lg font-semibold">Par quoi commencer</h2>
+        <Priorites constats={constats} />
+        {/*
+          Les corrections rédigées viendront de l'équipe ; tant qu'elles n'existent pas, on ne
+          met pas de bouton qui ne ferait rien.
+        */}
+        <p className="mt-4 mb-0 text-sm text-[var(--color-ink-faint)]">
+          Les corrections rédigées par l’équipe arrivent dans une prochaine version. Evoliia ne
+          modifie jamais votre site : vous gardez la main sur ce que vous appliquez.
+        </p>
+      </section>
+    </div>
+  )
+}

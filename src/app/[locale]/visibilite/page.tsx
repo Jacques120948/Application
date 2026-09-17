@@ -2,24 +2,35 @@ import { redirect } from 'next/navigation'
 import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
-import { listFindings, listSites } from '@/server/audit/service'
+import { listFindings, listSites, readDashboard } from '@/server/audit/service'
 import { parseTargetUrl } from '@/server/audit/net'
 import { Shell } from '@/components/studio/Shell'
 import { SiteBoard } from '@/components/studio/SiteBoard'
+import { TableauVisibilite } from '@/components/studio/TableauVisibilite'
 
 /**
- * Le premier écran du produit : ajouter son site et le faire analyser.
+ * L'écran de la visibilité : le tableau de bord, puis l'ajout d'un site.
  *
- * C'est là qu'arrive quelqu'un qui vient de s'inscrire depuis la page d'accueil, et l'adresse
- * qu'il y avait saisie l'accompagne jusqu'ici. La retaper serait la première chose qu'on lui
- * demande, juste après lui avoir promis qu'on ne lui demanderait rien.
+ * Il sert deux visites qui n'ont rien à voir, et l'ordre des blocs le dit. Quelqu'un qui
+ * arrive de la page d'accueil n'a rien à regarder : il veut coller son adresse, et celle
+ * qu'il avait déjà saisie l'accompagne jusqu'ici — la retaper serait la première chose qu'on
+ * lui demande, juste après lui avoir promis qu'on ne lui demanderait rien. Quelqu'un qui
+ * revient une semaine plus tard veut savoir si ce qu'il a corrigé a servi : il trouve ses
+ * deux notes et leur écart en haut, et le formulaire attend plus bas.
+ *
+ * Les priorités sont limitées à huit. Un audit qui rend trente remarques se referme, et
+ * « par quoi je commence » est la seule question que se pose quelqu'un devant cet écran.
  */
+
+/** Au-delà, ce n'est plus un plan d'action, c'est une liste. */
+const PRIORITES_MAX = 8
+
 export default async function VisibilitePage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ site?: string }>
+  searchParams: Promise<{ site?: string; siteId?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -39,77 +50,46 @@ export default async function VisibilitePage({
     }
   })()
 
-  const [sites, credits] = await Promise.all([listSites(user.id), availableCredits(user.id)])
-
   /*
-   * Les constats du dernier audit terminé, s'il y en a un. On n'en montre que les cinq plus
-   * coûteux : un audit qui rend trente remarques se referme, et « par quoi je commence » est
-   * la seule question que se pose quelqu'un devant cet écran.
+   * L'identifiant de site demandé n'ouvre aucun droit : `readDashboard` ne le cherche que
+   * parmi les sites déjà filtrés par la portée de l'utilisateur, et retombe sur le plus
+   * récent quand il n'y correspond rien.
    */
-  const dernier = sites.find((site) => site.dernierAudit?.status === 'done')?.dernierAudit ?? null
-  const constats = dernier === null ? [] : (await listFindings(user.id, dernier.id)).filter((c) => c.affected > 0).slice(0, 5)
+  const [sites, credits, tableau] = await Promise.all([
+    listSites(user.id),
+    availableCredits(user.id),
+    readDashboard(user.id, demande.siteId),
+  ])
+
+  const constats =
+    tableau === null
+      ? []
+      : (await listFindings(user.id, tableau.audit.id))
+          .filter((constat) => constat.affected > 0)
+          .slice(0, PRIORITES_MAX)
 
   return (
     <Shell locale={locale} userName={user.name} credits={credits} screen="visibilite">
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <h1 className="m-0 text-2xl font-semibold tracking-tight">Votre visibilité</h1>
         <p className="mt-2 mb-8 text-sm text-[var(--color-ink-soft)]">
-          Ajoutez un site, lancez son analyse, et suivez ce qu’il faut corriger.
+          {tableau === null
+            ? 'Ajoutez un site, lancez son analyse, et suivez ce qu’il faut corriger.'
+            : 'Deux notes, ce qu’il faut corriger en premier, et ce que ça a donné depuis la dernière fois.'}
         </p>
-        {constats.length === 0 ? null : (
-          <section className="mb-8">
-            <div className="flex flex-wrap items-baseline gap-4">
-              <h2 className="m-0 text-lg font-semibold">Par quoi commencer</h2>
-              {dernier?.seoScore === null || dernier === null ? null : (
-                <span className="text-sm text-[var(--color-ink-soft)]">
-                  Note de référencement : <strong>{dernier.seoScore}/100</strong>
-                </span>
-              )}
-            </div>
-            <ol className="m-0 mt-4 grid list-none gap-3 p-0">
-              {constats.map((constat, rang) => (
-                <li
-                  key={constat.checkId}
-                  className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5"
-                >
-                  <div className="flex flex-wrap items-baseline gap-3">
-                    <span className="rounded-[var(--radius-pill)] bg-[var(--color-critical-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-critical)]">
-                      Priorité {rang + 1}
-                    </span>
-                    <h3 className="m-0 text-base font-semibold">{constat.label}</h3>
-                    {constat.scope === 'site' ? null : (
-                      <span className="text-sm text-[var(--color-ink-faint)]">
-                        {constat.affected} page{constat.affected > 1 ? 's' : ''} sur{' '}
-                        {constat.examined}
-                      </span>
-                    )}
-                  </div>
-                  <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                    {constat.why}
-                  </p>
-                  {constat.sample.length === 0 ? null : (
-                    <ul className="m-0 mt-3 flex list-none flex-wrap gap-2 p-0">
-                      {constat.sample.map((exemple) => (
-                        <li
-                          key={exemple.url}
-                          className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-3 py-1 text-xs text-[var(--color-ink-soft)]"
-                        >
-                          {exemple.path}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ol>
-            {/*
-              Les corrections rédigées viendront de l'équipe ; tant qu'elles n'existent pas,
-              on ne met pas de bouton qui ne ferait rien.
-            */}
-            <p className="mt-4 mb-0 text-sm text-[var(--color-ink-faint)]">
-              Les corrections rédigées par l’équipe arrivent dans une prochaine version.
-            </p>
-          </section>
+
+        {tableau === null ? null : (
+          <div className="mb-10">
+            <TableauVisibilite
+              locale={locale}
+              site={tableau.site}
+              audit={tableau.audit}
+              precedent={tableau.precedent}
+              historique={tableau.historique}
+              autresSites={tableau.autresSites}
+              constats={constats}
+            />
+          </div>
         )}
 
         <SiteBoard

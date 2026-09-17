@@ -35,6 +35,13 @@ export function Shell({
             <Logo id="mark-shell" size={28} wordmark={t('common.appName')} />
           </a>
           <nav className="flex items-center gap-4 text-sm">
+            {/*
+              La visibilité ouvre la barre : c'est l'écran de retour du produit, celui qu'on
+              rouvre une semaine plus tard pour savoir si ce qu'on a corrigé a servi.
+            */}
+            <a href={`/${locale}/visibilite`} className="text-[var(--color-ink-soft)] no-underline">
+              {t('nav.visibility')}
+            </a>
             <a href={`/${locale}/dashboard`} className="text-[var(--color-ink-soft)] no-underline">
               {t('nav.dashboard')}
             </a>

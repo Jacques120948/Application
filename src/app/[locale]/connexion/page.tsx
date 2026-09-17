@@ -7,7 +7,7 @@ import { AuthForm } from '@/components/studio/AuthForm'
 
 export default async function LoginPage({ params }: { params: Promise<{ locale: string }> }) {
   const locale = resolveLocale((await params).locale)
-  if ((await getCurrentUser()) !== null) redirect(`/${locale}/dashboard`)
+  if ((await getCurrentUser()) !== null) redirect(`/${locale}/visibilite`)
   const t = getTranslator(locale)
 
   return (

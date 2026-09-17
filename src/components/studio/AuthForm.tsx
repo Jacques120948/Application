@@ -56,10 +56,14 @@ export function AuthForm({
       setBusy(false)
       return
     }
-    // Par défaut, le parcours commence par l'objectif, jamais par une idée. Une personne
-    // qui arrive en disant qu'elle a déjà son idée peut être conduite ailleurs.
+    /*
+     * Une inscription suit le chemin choisi par la page qui l'a ouverte ; une connexion
+     * revient à la visibilité. C'est l'écran de retour du produit — on se reconnecte pour
+     * savoir si ce qu'on a corrigé a servi —, et il accueille aussi bien quelqu'un qui n'a
+     * encore aucun site : il lui montre alors le formulaire, pas une page vide.
+     */
     const afterRegister = nextPath ?? `/${locale}/objectif`
-    router.push(mode === 'register' ? afterRegister : `/${locale}/dashboard`)
+    router.push(mode === 'register' ? afterRegister : `/${locale}/visibilite`)
     router.refresh()
   }
 

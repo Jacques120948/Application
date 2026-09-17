@@ -597,3 +597,98 @@ async function noterAudit(
   logger.info('audit noté', { auditId, seo: seo.score, geo: geo.score, constats: constats.length })
   return { seo: seo.score, geo: geo.score }
 }
+
+/**
+ * Tout ce que le tableau de bord montre, en une lecture.
+ *
+ * Trois partis pris, et chacun répond à une façon de rendre un tableau de bord inutile.
+ *
+ * **Deux notes, jamais une moyenne.** Le référencement et la visibilité dans les assistants
+ * répondent à deux questions différentes, et un site est très souvent bon pour l'une et
+ * mauvais pour l'autre. Les additionner effacerait exactement ce qu'il y a à voir.
+ *
+ * **L'écart plutôt que le chiffre seul.** « 69 sur 100 » ne dit pas si le travail de la
+ * semaine a servi. « 69, soit quatre de plus que le 3 septembre » le dit, et c'est la seule
+ * chose qui fasse revenir quelqu'un un mois plus tard.
+ *
+ * **Une seule requête par objet.** Le dernier audit, celui d'avant et l'historique se lisent
+ * d'une même liste d'audits terminés : trois allers-retours pour trois chiffres coûteraient
+ * plus que tout le reste de l'écran.
+ */
+export type TableauVisibilite = {
+  site: { id: string; host: string; label: string; origin: string }
+  audit: {
+    id: string
+    finishedAt: Date | null
+    pagesCrawled: number
+    pagesSkipped: number
+    seoScore: number | null
+    geoScore: number | null
+  }
+  /** L'audit terminé juste avant, s'il existe : c'est lui qui donne l'écart. */
+  precedent: { finishedAt: Date | null; seoScore: number | null; geoScore: number | null } | null
+  /** Les analyses terminées, de la plus ancienne à la plus récente. */
+  historique: { finishedAt: Date | null; seoScore: number | null; geoScore: number | null }[]
+  /** Les autres sites suivis, pour passer de l'un à l'autre. */
+  autresSites: { id: string; host: string; label: string }[]
+}
+
+/** Au-delà, la courbe devient illisible et ne dit rien de plus qu'une tendance. */
+const HISTORIQUE_MAX = 12
+
+/**
+ * Le tableau de bord d'un site, ou `null` si aucun site n'a encore été analysé jusqu'au bout.
+ *
+ * Sans `siteId`, on prend le site modifié le plus récemment : c'est celui qu'on vient
+ * d'analyser, et donc celui qu'on est venu regarder.
+ */
+export async function readDashboard(
+  userId: string,
+  siteId?: string,
+): Promise<TableauVisibilite | null> {
+  const sites = await withUserScope(userId, (tx) =>
+    tx.site.findMany({
+      where: { userId, deletedAt: null },
+      orderBy: { updatedAt: 'desc' },
+      select: { id: true, host: true, label: true, origin: true },
+    }),
+  )
+  if (sites.length === 0) return null
+
+  /*
+   * Un identifiant venu de l'adresse est une demande, pas un droit : on le cherche parmi les
+   * sites déjà filtrés par la portée. Ce qui n'y figure pas est simplement ignoré.
+   */
+  const site = (siteId === undefined ? undefined : sites.find((s) => s.id === siteId)) ?? sites[0]
+  if (site === undefined) return null
+
+  const audits = await withUserScope(userId, (tx) =>
+    tx.audit.findMany({
+      where: { siteId: site.id, userId, status: 'done' },
+      orderBy: { finishedAt: 'desc' },
+      take: HISTORIQUE_MAX,
+      select: {
+        id: true,
+        finishedAt: true,
+        pagesCrawled: true,
+        pagesSkipped: true,
+        seoScore: true,
+        geoScore: true,
+      },
+    }),
+  )
+  const dernier = audits[0]
+  if (dernier === undefined) return null
+
+  return {
+    site,
+    audit: dernier,
+    precedent: audits[1] ?? null,
+    historique: audits
+      .map(({ finishedAt, seoScore, geoScore }) => ({ finishedAt, seoScore, geoScore }))
+      .reverse(),
+    autresSites: sites
+      .filter((autre) => autre.id !== site.id)
+      .map(({ id, host, label }) => ({ id, host, label })),
+  }
+}

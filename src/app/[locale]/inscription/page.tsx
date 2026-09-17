@@ -36,7 +36,7 @@ export default async function RegisterPage({
   const demande = await searchParams
   const suite = demande.suite ?? ''
   const destination = AFTER_REGISTER[suite] ?? DEFAULT_AFTER_REGISTER
-  if ((await getCurrentUser()) !== null) redirect(`/${locale}/dashboard`)
+  if ((await getCurrentUser()) !== null) redirect(`/${locale}/visibilite`)
   const t = getTranslator(locale)
 
   /*

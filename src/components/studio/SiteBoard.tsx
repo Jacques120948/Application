@@ -205,13 +205,28 @@ export function SiteBoard({
                     : `Analyse ${ETATS[site.dernierAudit.status] ?? site.dernierAudit.status} — ${site.dernierAudit.pagesCrawled} page${site.dernierAudit.pagesCrawled > 1 ? 's' : ''} relevée${site.dernierAudit.pagesCrawled > 1 ? 's' : ''}.`}
                 </p>
                 {/*
-                  Les notes ne sont pas encore calculées : les contrôles arrivent. On le dit
-                  plutôt que d'afficher un zéro, qui se lirait comme un résultat.
+                  Les deux notes ensemble, jamais l'une sans l'autre : c'est leur écart qui
+                  dit quelque chose. Une note absente s'affiche comme absente, pas comme un
+                  zéro, qui se lirait comme un résultat.
                 */}
-                {site.dernierAudit?.status === 'done' && site.dernierAudit.seoScore !== null ? (
-                  <p className="mt-3 mb-0 text-sm">
-                    Note de référencement :{' '}
-                    <strong>{site.dernierAudit.seoScore}/100</strong>
+                {site.dernierAudit?.status === 'done' ? (
+                  <p className="mt-3 mb-0 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                    <span>
+                      Référencement :{' '}
+                      <strong>
+                        {site.dernierAudit.seoScore === null
+                          ? '—'
+                          : `${site.dernierAudit.seoScore}/100`}
+                      </strong>
+                    </span>
+                    <span>
+                      Moteurs IA :{' '}
+                      <strong>
+                        {site.dernierAudit.geoScore === null
+                          ? '—'
+                          : `${site.dernierAudit.geoScore}/100`}
+                      </strong>
+                    </span>
                   </p>
                 ) : null}
               </CardBody>

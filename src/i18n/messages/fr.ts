@@ -20,6 +20,7 @@ export const fr = {
   'nav.login': 'Se connecter',
   'nav.register': 'Créer un compte',
   'nav.admin': 'Administration',
+  'nav.visibility': 'Visibilité',
   'nav.radar': 'Radar',
   'nav.team': 'Équipe marketing',
   'nav.subscription': 'Abonnement',
