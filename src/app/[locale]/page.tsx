@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { VISIBILITY_AGENTS } from '@/server/agents/visibility'
 import { creditPacks } from '@/server/billing/packs'
 import { DEFAULT_ACTION_COSTS, FREE_ACTIONS } from '@/server/billing/action-costs'
+import { auditsLabel } from '@/server/billing/plan-details'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { formatAmount } from '@/server/business/economics'
@@ -232,7 +233,7 @@ export default async function LandingPage({
         ? t('vis.plansSites', { count: plan.sitesMax })
         : t('vis.plansSitesMany', { count: plan.sitesMax }),
       t('vis.plansPages', { count: plan.pagesPerAudit }),
-      t('vis.plansAudits', { count: plan.auditsPerMonth }),
+      auditsLabel(plan, locale),
       t('vis.plansCredits', { count: plan.monthlyCredits }),
       t('vis.plansTeam'),
       t('vis.plansHistory'),

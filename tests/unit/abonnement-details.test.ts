@@ -46,13 +46,43 @@ function plan(overrides: Partial<Plan>): Plan {
 }
 
 describe('détail des offres', () => {
-  it('décrit une offre sans construction comme s’arrêtant avant', () => {
-    const groups = planDetails(plan({ allowBuild: false, monthlyCredits: 30 }), 'fr')
+  it('met la visibilité en tête et ne parle pas du constructeur quand il est fermé', () => {
+    const groups = planDetails(
+      plan({ allowBuild: false, monthlyCredits: 30, sitesMax: 3, pagesPerAudit: 250, auditsPerMonth: 12 }),
+      'fr',
+    )
+    // Ce qui se vend d'abord s'affiche d'abord.
+    expect(groups[0]?.title).toBe('Visibilité')
+    expect(groups[0]?.items).toEqual([
+      '3 sites suivis',
+      'jusqu’à 250 pages analysées par audit',
+      '12 audits par mois',
+    ])
+
     const flat = groups.flatMap((group) => group.items)
     expect(flat).toContain('30 crédits par mois')
-    expect(flat.some((item) => item.startsWith('S’arrête avant la construction'))).toBe(true)
+    /*
+     * Rien du constructeur, pas même pour dire qu'il est absent : annoncer « s'arrête avant
+     * la construction » à quelqu'un venu faire analyser son site, c'est lui parler d'un
+     * produit qu'il n'a pas demandé.
+     */
+    expect(groups.map((group) => group.title)).not.toContain('Créer et mettre en ligne')
     expect(flat).not.toContain('Construction et mise en ligne')
     expect(groups.map((group) => group.title)).not.toContain('Équipe marketing')
+  })
+
+  it('accorde le nombre de sites et d’audits', () => {
+    /*
+     * « 1 audits par mois » sur l'offre d'essai est la première chose qu'on lit du produit.
+     * Une faute d'accord à cet endroit coûte plus cher qu'elle n'en a l'air.
+     */
+    const seul = planDetails(plan({ sitesMax: 1, auditsPerMonth: 1 }), 'fr')[0]?.items
+    expect(seul?.[0]).toBe('1 site suivi')
+    expect(seul?.[2]).toBe('1 audit par mois')
+
+    const plusieurs = planDetails(plan({ sitesMax: 3, auditsPerMonth: 12 }), 'fr')[0]?.items
+    expect(plusieurs?.[0]).toBe('3 sites suivis')
+    expect(plusieurs?.[2]).toBe('12 audits par mois')
   })
 
   it('liste les fonctions ouvertes par leur nom de catalogue, groupées par thème', () => {
@@ -70,14 +100,19 @@ describe('détail des offres', () => {
       'fr',
     )
     const byTitle = Object.fromEntries(groups.map((group) => [group.title, group.items]))
+    expect(byTitle['Visibilité']).toEqual([
+      '1 site suivi',
+      'jusqu’à 50 pages analysées par audit',
+      '4 audits par mois',
+      'Export des rapports',
+    ])
     expect(byTitle['Créer et mettre en ligne']).toEqual([
       'Jusqu’à 3 application(s)',
       'Construction et mise en ligne',
       'Installable sur l’écran d’accueil des téléphones',
       '250 Mo d’images à vous',
-      '3 connexion(s) à des services externes',
-      'Export du site complet',
     ])
+    expect(byTitle['Connexions']).toEqual(['3 connexion(s) à des services externes'])
     expect(byTitle['Lancement et réseaux sociaux']).toEqual(['Kit de lancement'])
     expect(byTitle['Équipe marketing']).toEqual(['Tom — Social Media Manager'])
     expect(byTitle['Radar d’opportunités']).toEqual(['Radar d’opportunités : 3 recherche(s) par mois'])
@@ -107,9 +142,18 @@ describe('détail des offres', () => {
     const rows = Object.fromEntries(
       comparison.sections.flatMap((section) => section.rows.map((row) => [row.label, row.values])),
     )
+    expect(rows['Sites suivis']).toEqual(['1', '1'])
     expect(rows['Applications']).toEqual([false, '3'])
     expect(rows['Construction et mise en ligne']).toEqual([false, true])
     expect(rows['Tom — Social Media Manager']).toEqual([false, true])
+
+    // Aucune offre ne construit : la section entière disparaît plutôt que de barrer
+    // quatre lignes, ce qui n'informe de rien et fait douter du reste.
+    const sansAtelier = comparePlans([plan({ name: 'A', allowBuild: false })], 'fr')
+    expect(sansAtelier.sections.map((section) => section.title)).not.toContain(
+      'Créer et mettre en ligne',
+    )
+    expect(sansAtelier.sections[0]?.title).toBe('Visibilité')
   })
 
   it('arrondit l’espace d’images en toutes lettres', () => {
