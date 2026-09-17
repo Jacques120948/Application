@@ -1,0 +1,45 @@
+[
+  {
+    "id": "free", "name": "Découverte",
+    "description": "Définissez votre objectif, recevez des idées adaptées à votre profil et faites analyser celle qui vous plaît.",
+    "priceCents": 0, "currency": "EUR", "interval": "month",
+    "maxProjects": 0, "monthlyCredits": 30, "maxConnections": 0,
+    "features": ["radar"], "storageBytes": 0,
+    "radarRunsPerMonth": 1, "liaAnswersPerMonth": 0, "liaConversationsPerMonth": 0,
+    "alertsPerMonth": 0, "imagesPerMonth": 0,
+    "sitesMax": 0, "pagesPerAudit": 0, "auditsPerMonth": 0,
+    "allowBuild": false, "allowExport": false, "allowCustomDomain": false, "allowMobilePrep": false,
+    "isActive": false, "isRecommended": false, "sortOrder": 0,
+    "stripeProductId": null, "stripePriceId": null, "stripePriceFingerprint": null
+  },
+  {
+    "id": "launch", "name": "Launch",
+    "description": "Pour lancer votre première application et la mettre en ligne.",
+    "priceCents": 2900, "currency": "EUR", "interval": "month",
+    "maxProjects": 1, "monthlyCredits": 100, "maxConnections": 1,
+    "features": ["social_launch_basic", "social_angles", "social_week", "radar", "lia_support"],
+    "storageBytes": 52428800,
+    "radarRunsPerMonth": 3, "liaAnswersPerMonth": 100, "liaConversationsPerMonth": 50,
+    "alertsPerMonth": 0, "imagesPerMonth": 5,
+    "sitesMax": 0, "pagesPerAudit": 0, "auditsPerMonth": 0,
+    "allowBuild": true, "allowExport": false, "allowCustomDomain": false, "allowMobilePrep": false,
+    "isActive": false, "isRecommended": false, "sortOrder": 1,
+    "stripeProductId": "prod_VGYDaHBH5qdwbS",
+    "stripePriceId": "price_1UG16wEe6oaxbWskyMovfC8c",
+    "stripePriceFingerprint": "live:2900:eur:month"
+  },
+  {
+    "id": "business", "name": "Business",
+    "description": "Pour exploiter plusieurs applications et aller plus loin dans l'acquisition.",
+    "priceCents": 9900, "currency": "EUR", "interval": "month",
+    "maxProjects": 20, "monthlyCredits": 800, "maxConnections": 10,
+    "features": ["social_launch_basic", "social_angles", "social_week", "social_calendar", "social_content_generation", "social_agent", "social_analytics_basic", "marketing_team", "seo_agent", "radar", "lia_support", "analytics_agent"],
+    "storageBytes": 1073741824,
+    "radarRunsPerMonth": 12, "liaAnswersPerMonth": 2000, "liaConversationsPerMonth": 1000,
+    "alertsPerMonth": 0, "imagesPerMonth": 40,
+    "sitesMax": 0, "pagesPerAudit": 0, "auditsPerMonth": 0,
+    "allowBuild": true, "allowExport": true, "allowCustomDomain": false, "allowMobilePrep": true,
+    "isActive": false, "isRecommended": false, "sortOrder": 3,
+    "stripeProductId": null, "stripePriceId": null, "stripePriceFingerprint": null
+  }
+]

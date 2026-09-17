@@ -1,6 +1,7 @@
 import { resolveLocale } from '@/i18n'
 import { requireUser } from '@/server/auth/session'
 import { askVisibility, askVisibilityInput, getVisibilityDesk } from '@/server/agents/visibility-service'
+import { availableCredits } from '@/server/billing/credits'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -34,7 +35,6 @@ export async function POST(request: Request, context: { params: Promise<{ siteId
     const input = askVisibilityInput.parse({ ...brut, siteId })
 
     const note = await askVisibility(user.id, input, resolveLocale(String(brut['locale'] ?? 'fr')))
-    const { availableCredits } = await import('@/server/billing/credits')
     return ok({ note, balance: await availableCredits(user.id) })
   } catch (error) {
     return fail(error)

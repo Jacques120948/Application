@@ -1276,6 +1276,10 @@ model Audit {
 
   @@index([siteId, startedAt])
   @@index([userId, startedAt])
+  /// Le tableau de bord, le plan d'action, l'historique et chaque question posée à l'équipe
+  /// commencent par « la dernière analyse terminée de ce site ». Sans cet index, c'est un
+  /// balayage complet à chaque écran — invisible à dix audits, ruineux à quarante mille.
+  @@index([siteId, status, finishedAt])
 }
 
 /// Une page visitée, et les signaux qu'on en a extraits.
