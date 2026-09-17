@@ -416,13 +416,22 @@ export function TableauVisibilite({
       <section>
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="m-0 text-lg font-semibold">Votre plan d’action</h2>
-          <LinkButton
-            href={`/${locale}/visibilite/historique?siteId=${site.id}`}
-            variant="secondary"
-            size="medium"
-          >
-            Voir l’historique
-          </LinkButton>
+          <div className="flex flex-wrap gap-2">
+            <LinkButton
+              href={`/${locale}/visibilite/equipe?siteId=${site.id}`}
+              variant="secondary"
+              size="medium"
+            >
+              Parler à l’équipe
+            </LinkButton>
+            <LinkButton
+              href={`/${locale}/visibilite/historique?siteId=${site.id}`}
+              variant="secondary"
+              size="medium"
+            >
+              Voir l’historique
+            </LinkButton>
+          </div>
         </div>
 
         {lignes.length === 0 ? (

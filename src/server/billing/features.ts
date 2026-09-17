@@ -139,14 +139,14 @@ export const FEATURES: readonly Feature[] = [
     label: 'Léa — Audit de visibilité',
     summary:
       'L’analyse de votre site page par page : ce qui cloche, classé par ordre d’importance.',
-    status: 'prevu',
+    status: 'live',
   },
   {
     id: 'visibility_seo_agent',
     group: 'equipe',
     label: 'Néo — Référencement',
     summary: 'Les titres, les descriptions, la structure et les liens entre vos pages.',
-    status: 'prevu',
+    status: 'live',
   },
   {
     id: 'visibility_geo_agent',
@@ -154,14 +154,14 @@ export const FEATURES: readonly Feature[] = [
     label: 'Gia — Moteurs IA',
     summary:
       'Ce qu’une intelligence artificielle comprend de vos pages, et ce qui l’en empêche.',
-    status: 'prevu',
+    status: 'live',
   },
   {
     id: 'visibility_content_agent',
     group: 'equipe',
     label: 'Milo — Contenu',
     summary: 'L’écriture et la réécriture : descriptions, pages, questions fréquentes, articles.',
-    status: 'prevu',
+    status: 'live',
   },
 ]
 

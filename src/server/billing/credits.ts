@@ -59,6 +59,8 @@ export type CreditedOperation =
    * appelé, rien n'est facturé. Les crédits ne partent que lorsqu'un modèle écrit.
    */
   | 'visibilityFix'
+  /** Une question posée à l'un des quatre spécialistes de la visibilité. */
+  | 'visibilityAsk'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -119,6 +121,12 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    * et c'est le coût réel des jetons qui décide au-delà.
    */
   visibilityFix: 2,
+  /*
+   * Une question à un spécialiste : le contexte est un extrait de faits mesurés, la réponse
+   * fait six phrases. Même ordre de grandeur qu'un spécialiste marketing, dont elle reprend
+   * la forme.
+   */
+  visibilityAsk: 2,
 }
 
 /**

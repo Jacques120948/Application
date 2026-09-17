@@ -92,6 +92,7 @@ model User {
   audits               Audit[]
   actionItems          ActionItem[]
   auditCorrections     AuditCorrection[]
+  visibilityNotes      VisibilityNote[]
 
   @@index([createdAt])
 }
@@ -1225,6 +1226,7 @@ model Site {
   audits Audit[]
   items  ActionItem[]
   corrections AuditCorrection[]
+  notes       VisibilityNote[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
   /// diverger deux historiques qui devraient n'en faire qu'un.
@@ -1408,6 +1410,34 @@ model AuditCorrection {
 
   @@unique([siteId, checkId, path, field])
   @@index([siteId, checkId])
+}
+
+/// Un échange avec un spécialiste de la visibilité, attaché au site.
+///
+/// Séparé d'`AgentNote`, qui pend à un projet du constructeur : ce ne sont ni
+/// les mêmes interlocuteurs, ni le même objet, ni le même périmètre de lecture.
+/// Les fondre aurait demandé un identifiant de projet facultatif, c'est-à-dire
+/// une colonne vide dans la moitié des lignes et une jointure qui ment.
+model VisibilityNote {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// audit | seo | geo | content
+  agent    String
+  question String
+  answer   String
+  /// Ce que ce spécialiste retient pour ses collègues, en une phrase.
+  takeaway String?
+
+  creditsSpent Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt])
+  @@index([siteId, agent, createdAt])
 }
 
 /// Tentatives de connexion ratées, comptées là où elles survivent au redémarrage.

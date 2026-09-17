@@ -96,6 +96,12 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
    * et en tire ce qui distingue la page.
    */
   visibilityFix: { model: MODELS.fast, maxTokens: 4_000, effort: 'medium' },
+  /*
+   * Un spécialiste raisonne sur des faits chiffrés et doit savoir dire « ces constats ne
+   * permettent pas de conclure ». Le modèle économique s'en tire mal : il conclut quand
+   * même. Le modèle rapide est le bon compromis pour une réponse de six phrases.
+   */
+  visibilityAsk: { model: MODELS.fast, maxTokens: 1_400, effort: 'medium' },
 }
 
 export type TokenUsage = {

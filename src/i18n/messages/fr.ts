@@ -916,7 +916,7 @@ export const fr = {
   'vis.teamSoon': 'En construction',
   'vis.teamAtWork': 'Au travail',
   'vis.teamSoonNote':
-    'Léa analyse, Néo et Gia rédigent déjà des corrections que vous copiez dans votre site. Ce qui manque encore, c’est la conversation : leur écrire et leur répondre. Chaque spécialiste sera ouvert le jour où il fonctionnera, pas avant.',
+    'Chaque spécialiste ne répond que sur ce qu’il a mesuré sur votre site, et chacun ne voit que son domaine — c’est ce qui fait la différence entre quatre spécialistes et un assistant affublé de quatre prénoms. Aucun ne modifie votre site : ce qu’il écrit est à copier.',
 
   'vis.checksTitle': 'Ce qui est compté, et ce qui est écrit.',
   'vis.checksBody':

@@ -77,7 +77,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle lit votre site page par page, relève ce qui cloche et dit par quoi commencer. Elle constate : elle ne touche à rien.',
     handles: ['Analyse du site', 'Problèmes détectés', 'Priorités', 'Progression'],
     feature: 'visibility_audit_agent',
-    atWork: 'Elle analyse déjà : les deux notes, les priorités et la progression viennent d’elle.',
+    atWork: 'Elle analyse, elle priorise, et vous pouvez lui écrire.',
     avatar: '/equipe/lea.webp',
     tint: 'brand',
     starters: [
@@ -94,7 +94,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Il travaille ce qu’un moteur de recherche regarde : les titres, les descriptions, la structure et les liens entre vos pages.',
     handles: ['Titles', 'Meta descriptions', 'H1 et H2', 'Structure', 'Maillage interne'],
     feature: 'visibility_seo_agent',
-    atWork: 'Il rédige déjà vos titres, vos descriptions et vos H1 : le texte est à copier.',
+    atWork: 'Il rédige vos titres, vos descriptions et vos H1, et il répond à vos questions.',
     avatar: '/equipe/neo.webp',
     tint: 'night',
     starters: [
@@ -111,7 +111,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle rend vos pages compréhensibles par les assistants : des réponses directes, des faits nets, une entreprise clairement identifiée.',
     handles: ['Réponses directes', 'FAQ', 'Données structurées', 'Identité de la marque'],
     feature: 'visibility_geo_agent',
-    atWork: 'Elle rédige déjà vos introductions et vos titres illisibles hors contexte.',
+    atWork: 'Elle rédige vos introductions, et elle explique ce qu’une IA comprend de vos pages.',
     avatar: '/equipe/gia.webp',
     tint: 'accent',
     starters: [
@@ -128,7 +128,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Il écrit et réécrit : descriptions, pages, questions fréquentes, articles. Toujours à partir de votre site, jamais à partir d’un modèle générique.',
     handles: ['Descriptions', 'Pages', 'FAQ', 'Articles', 'Introductions'],
     feature: 'visibility_content_agent',
-    atWork: null,
+    atWork: 'Il écrit à partir de vos pages, sur demande, dans la conversation.',
     avatar: '/equipe/milo.webp',
     tint: 'warm',
     starters: [
