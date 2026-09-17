@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import sharp from 'sharp'
-import { generateGeminiImage } from '@/server/integrations/providers/gemini'
+import { generateGeminiImage, ressembleAUneCle } from '@/server/integrations/providers/gemini'
 import { VISIBILITY_AGENTS, type VisibilityAgent } from '@/server/agents/visibility'
 
 /**
@@ -193,16 +193,14 @@ async function main(): Promise<void> {
     return
   }
   /*
-   * Une clé Google AI commence par « AIza ». Vérifier la forme ici évite quatre appels
-   * réseau et surtout quatre messages trompeurs : Google répond « 400 » à une clé invalide,
-   * ce qui se lit comme un refus de la description. On a cherché au mauvais endroit assez
-   * longtemps pour que ce contrôle vaille ses cinq lignes.
+   * Le contrôle est volontairement grossier : il n'attrape qu'un texte d'exemple recollé tel
+   * quel. Une version précédente exigeait le préfixe « AIza » et refusait les clés en
+   * « AQ. », que Google délivre désormais — un contrôle de forme codé en dur finit toujours
+   * par refuser une clé valide.
    */
-  if (!cle.startsWith('AIza')) {
-    console.error(
-      `Cette clé ne ressemble pas à une clé Google AI : elles commencent toutes par « AIza », celle-ci par « ${cle.slice(0, 4)} ».`,
-    )
-    console.error('Récupérez-la sur https://aistudio.google.com/apikey puis relancez.')
+  if (!ressembleAUneCle(cle)) {
+    console.error('Cela ne ressemble pas à une clé : vérifiez ce que vous avez collé, sans espace.')
+    console.error('Vous en créez une sur https://aistudio.google.com/apikey.')
     process.exitCode = 1
     return
   }

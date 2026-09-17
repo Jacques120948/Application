@@ -13,9 +13,31 @@ const API = 'https://generativelanguage.googleapis.com/v1beta'
 export const GEMINI_IMAGE_MODEL = 'gemini-2.5-flash-image'
 const TIMEOUT_MS = 90_000
 
+/**
+ * Ce qui ne peut pas être une clé, quel que soit le format du moment.
+ *
+ * On ne vérifie plus le préfixe, et c'est une leçon payée : le contrôle exigeait « AIza »,
+ * et Google a commencé à délivrer des clés en « AQ. ». Un contrôle de forme codé en dur
+ * finit toujours par refuser une clé parfaitement valide, et personne ne comprend pourquoi —
+ * surtout pas la personne qui vient de la créer.
+ *
+ * Ne reste ici que ce qui ne peut être vrai d'aucune clé : vide, trop courte, ou contenant
+ * une espace. C'est ce qui attrape un texte d'exemple recollé tel quel, et rien d'autre.
+ * Pour le reste, c'est Google qui décide — et sa réponse est maintenant traduite fidèlement.
+ */
+const LONGUEUR_MINIMALE = 20
+
+export function ressembleAUneCle(valeur: string): boolean {
+  const propre = valeur.trim()
+  return propre.length >= LONGUEUR_MINIMALE && !/\s/.test(propre)
+}
+
 export const verifyGeminiKey: KeyVerifier = async (apiKey) => {
-  if (!apiKey.startsWith('AIza')) {
-    return { ok: false, reason: 'Une clé Google AI commence par « AIza ». Vérifiez ce que vous avez collé.' }
+  if (!ressembleAUneCle(apiKey)) {
+    return {
+      ok: false,
+      reason: 'Cela ne ressemble pas à une clé : vérifiez ce que vous avez collé, sans espace.',
+    }
   }
   try {
     const response = await fetch(`${API}/models?pageSize=1`, {

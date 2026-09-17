@@ -24,6 +24,11 @@ function stubFetch(status: number, body: unknown) {
   )
 }
 
+/** Combien de fois le réseau a été appelé : un refus de forme ne doit rien appeler. */
+function fetchAppels(): number {
+  return (globalThis.fetch as unknown as { mock?: { calls: unknown[] } }).mock?.calls.length ?? 0
+}
+
 describe('description envoyée au fournisseur', () => {
   it('ajoute le style de l’application et interdit texte, logo et personne réelle', () => {
     const prompt = buildImagePrompt('  Un atelier de menuiserie  ', spec)
@@ -67,9 +72,25 @@ describe('vérification des clés', () => {
     if (!verdict.ok) expect(verdict.reason).toContain('refuse')
   })
 
-  it('accepte une clé que le fournisseur reconnaît', async () => {
+  it('accepte les deux formats de clé Google, sans coder le préfixe en dur', async () => {
+    /*
+     * Le contrôle exigeait « AIza », et Google a commencé à délivrer des clés en « AQ. » :
+     * des clés parfaitement valides étaient refusées avant d'atteindre le réseau. On ne
+     * vérifie donc plus que ce qui ne peut être vrai d'aucune clé, et c'est le fournisseur
+     * qui tranche.
+     */
     stubFetch(200, { data: [] })
-    expect(await verifyGeminiKey('AIzaTest0123456789')).toMatchObject({ ok: true })
+    expect(await verifyGeminiKey('AIzaSyTest0123456789abcdefghij')).toMatchObject({ ok: true })
+    stubFetch(200, { data: [] })
+    expect(await verifyGeminiKey('AQ.Ab8RN6JTest0123456789abcdefghij')).toMatchObject({ ok: true })
+  })
+
+  it('refuse un texte d’exemple recollé tel quel, sans appeler le fournisseur', async () => {
+    const avant = fetchAppels()
+    for (const faux of ['', '   ', 'TA_VRAIE_CLE', 'votre clé ici']) {
+      expect(await verifyGeminiKey(faux), faux).toMatchObject({ ok: false })
+    }
+    expect(fetchAppels()).toBe(avant)
   })
 })
 
