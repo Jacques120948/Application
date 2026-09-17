@@ -162,4 +162,18 @@ CREATE POLICY auditfinding_owner ON "AuditFinding" FOR ALL
   ));
 
 -- Le rôle applicatif n'a que ce qu'il lui faut, et il est soumis aux politiques ci-dessus.
-GRANT SELECT, INSERT, UPDATE, DELETE ON "Site", "Audit", "AuditPage", "AuditFinding", "ActionItem" TO appforge_app;
+--
+-- L'octroi est conditionnel, comme dans toutes les migrations qui l'ont précédé, et pour une
+-- raison apprise ici : le rôle existe sur une installation montée avec scripts/setup-db.sql,
+-- et pas sur une base gérée où l'application se connecte autrement. Un GRANT inconditionnel
+-- échoue alors — et une migration en échec bloque toutes les suivantes, donc tous les
+-- déploiements, jusqu'à ce que quelqu'un aille la débloquer à la main.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'appforge_app') THEN
+    GRANT SELECT, INSERT, UPDATE, DELETE
+      ON "Site", "Audit", "AuditPage", "AuditFinding", "ActionItem" TO appforge_app;
+  ELSE
+    RAISE NOTICE 'Role appforge_app absent : octrois ignores. Voir scripts/setup-db.sql.';
+  END IF;
+END $$;
