@@ -16,8 +16,14 @@ import { parseTargetUrl } from '@/server/audit/net'
  */
 const AFTER_REGISTER: Record<string, string> = { idee: 'creer', objectif: 'objectif' }
 
-/** Sans indication, on laisse la personne choisir son chemin plutôt que de le décider. */
-const DEFAULT_AFTER_REGISTER = 'demarrer'
+/**
+ * Où l'on arrive après s'être inscrit.
+ *
+ * L'écran de visibilité, et pas un menu de départ : quelqu'un qui vient de cliquer
+ * « Analyser mon site » a déjà dit ce qu'il voulait. Lui proposer de choisir serait lui
+ * reposer une question à laquelle il a répondu.
+ */
+const DEFAULT_AFTER_REGISTER = 'visibilite'
 
 export default async function RegisterPage({
   params,
@@ -29,7 +35,7 @@ export default async function RegisterPage({
   const locale = resolveLocale((await params).locale)
   const demande = await searchParams
   const suite = demande.suite ?? ''
-  const nextPath = `/${locale}/${AFTER_REGISTER[suite] ?? DEFAULT_AFTER_REGISTER}`
+  const destination = AFTER_REGISTER[suite] ?? DEFAULT_AFTER_REGISTER
   if ((await getCurrentUser()) !== null) redirect(`/${locale}/dashboard`)
   const t = getTranslator(locale)
 
@@ -49,6 +55,15 @@ export default async function RegisterPage({
       return null
     }
   })()
+
+  /*
+   * L'adresse validée est recollée à la destination : celui qui l'a saisie sur la page
+   * d'accueil la retrouve remplie, et n'a rien à retaper.
+   */
+  const nextPath =
+    site === null
+      ? `/${locale}/${destination}`
+      : `/${locale}/${destination}?site=${encodeURIComponent(`https://${site}`)}`
 
   return (
     <div className="mx-auto w-full max-w-md px-5 py-16">

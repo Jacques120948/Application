@@ -34,6 +34,17 @@ export const RULES = {
    * s'en trouve occupé.
    */
   appPhoto: { limit: 10, windowMs: 5 * 60_000, blockMs: 10 * 60_000 },
+  /**
+   * Audits lancés par un créateur.
+   *
+   * Un audit n'est pas une écriture ordinaire : c'est une charge sur le serveur de quelqu'un
+   * d'autre, plusieurs dizaines de requêtes. Le quota mensuel de l'offre le borne déjà sur
+   * la durée ; ceci le borne sur l'instant, pour qu'un bouton cliqué dix fois ne se traduise
+   * pas par dix explorations simultanées du même site.
+   */
+  auditStart: { limit: 5, windowMs: 10 * 60_000, blockMs: 10 * 60_000 },
+  /** Avancement d'un audit : appelé en boucle par l'écran, donc large mais borné. */
+  auditStep: { limit: 120, windowMs: 5 * 60_000 },
   /** Questions à l'assistant d'une application, par visiteur. */
   appAssistant: { limit: 10, windowMs: 5 * 60_000, blockMs: 10 * 60_000 },
   /** Messages à Lia, par visiteur et par application. */
