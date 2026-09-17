@@ -1,0 +1,4 @@
+# Les originaux téléchargés restent locaux : le dépôt n'a besoin que des portraits
+# redimensionnés que scripts/portraits-ranger.ts produit à côté.
+*
+!.gitignore
