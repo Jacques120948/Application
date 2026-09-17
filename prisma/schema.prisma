@@ -1256,6 +1256,10 @@ model Audit {
   seoScore Int?
   geoScore Int?
 
+  /// Ce qui s'observe une fois pour le site entier — robots.txt, plan de site, protocole —
+  /// et non page par page. Relevé à la première tranche, quand l'accueil est visité, et
+  /// figé là : les contrôles de fin d'audit en ont besoin longtemps après.
+  siteSignals Json?
   /// Code d'échec, jamais le message brut du serveur distant.
   errorCode  String?
   startedAt  DateTime  @default(now())
@@ -1287,6 +1291,9 @@ model AuditPage {
   bytes      Int    @default(0)
   /// Durée de la requête, en millisecondes.
   fetchMs    Int    @default(0)
+  /// Redirections traversées pour arriver ici. Chacune coûte un aller-retour au visiteur,
+  /// et une chaîne de plusieurs sauts est un constat en soi.
+  redirects  Int    @default(0)
 
   /// Titre et description relevés, pour les afficher sans relire le JSON.
   title       String @default("")

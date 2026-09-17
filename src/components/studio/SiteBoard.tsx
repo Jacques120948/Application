@@ -208,10 +208,10 @@ export function SiteBoard({
                   Les notes ne sont pas encore calculées : les contrôles arrivent. On le dit
                   plutôt que d'afficher un zéro, qui se lirait comme un résultat.
                 */}
-                {site.dernierAudit?.status === 'done' && site.dernierAudit.seoScore === null ? (
-                  <p className="mt-3 mb-0 text-sm text-[var(--color-ink-faint)]">
-                    Les pages sont relevées. Les notes et les priorités arrivent dans une
-                    prochaine version.
+                {site.dernierAudit?.status === 'done' && site.dernierAudit.seoScore !== null ? (
+                  <p className="mt-3 mb-0 text-sm">
+                    Note de référencement :{' '}
+                    <strong>{site.dernierAudit.seoScore}/100</strong>
                   </p>
                 ) : null}
               </CardBody>

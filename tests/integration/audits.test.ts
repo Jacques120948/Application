@@ -244,3 +244,59 @@ describe('cloisonnement', () => {
     await expect(advanceAudit(autreId, audit.id)).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 })
+
+describe('l’audit rend une note et des constats', () => {
+  it('note le site, enregistre les constats, et met les plus coûteux en tête', async () => {
+    statutAccueil = 200
+    const { addSite, startAudit, readAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+    await jusquAuBout(audit.auditId)
+
+    const fini = await readAudit(userId, audit.auditId)
+    /*
+     * Le site factice est volontairement pauvre — aucune description, aucune donnée
+     * structurée, presque pas de texte. Une note parfaite signifierait que les contrôles ne
+     * regardent rien.
+     */
+    expect(fini.seoScore).not.toBeNull()
+    expect(fini.seoScore as number).toBeLessThan(100)
+    expect(fini.seoScore as number).toBeGreaterThanOrEqual(0)
+
+    const constats = await withUserScope(userId, (tx) =>
+      tx.auditFinding.findMany({ where: { auditId: audit.auditId }, orderBy: { lost: 'desc' } }),
+    )
+    expect(constats.length).toBeGreaterThan(10)
+
+    // Les descriptions manquent sur toutes les pages : le constat doit exister et porter
+    // quelques exemples, jamais la liste entière.
+    const description = constats.find((constat) => constat.checkId === 'seo.description_missing')
+    expect(description?.affected).toBeGreaterThan(0)
+    expect((description?.sample as unknown[]).length).toBeGreaterThan(0)
+    expect((description?.sample as unknown[]).length).toBeLessThanOrEqual(5)
+
+    // Le plus coûteux en premier : c'est la réponse à « par quoi je commence ».
+    const premier = constats[0]
+    expect(premier?.lost).toBeGreaterThanOrEqual(constats[1]?.lost ?? 0)
+  }, 60_000)
+
+  it('ne note pas un audit tant qu’il n’est pas terminé', async () => {
+    statutAccueil = 200
+    const { addSite, startAudit, advanceAudit } = await import('@/server/audit/service')
+    const site = await addSite(userId, { url: SITE })
+    const audit = await startAudit(userId, site.siteId)
+
+    const premiere = await advanceAudit(userId, audit.auditId)
+    expect(premiere.encore).toBe(true)
+
+    /*
+     * Une note rendue sur un site à moitié exploré serait fausse plutôt qu'incomplète : les
+     * doublons et les pages orphelines se jugent par comparaison avec ce qui n'a pas encore
+     * été visité.
+     */
+    const enCours = await withUserScope(userId, (tx) =>
+      tx.audit.findFirstOrThrow({ where: { id: audit.auditId } }),
+    )
+    expect(enCours.seoScore).toBeNull()
+  }, 60_000)
+})

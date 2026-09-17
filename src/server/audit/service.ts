@@ -4,6 +4,9 @@ import { getEffectivePlan } from '@/server/billing/plans'
 import { logger } from '@/server/observability/logger'
 import { crawl, normalizeUrl, type PageExploree } from './crawler'
 import { parseTargetUrl } from './net'
+import { evaluate } from './scoring'
+import { SEO_CHECKS } from './checks/seo'
+import type { PageVue, SiteVu } from './checks/types'
 import type { Signaux } from './extract'
 
 /**
@@ -275,6 +278,7 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
   )
 
   const origin = audit.site.origin
+  let signauxDuSite: SiteVu | null = null
   let visitees: PageExploree[] = []
   let ecartees = 0
   let termine = false
@@ -294,6 +298,17 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
       })
       visitees = exploration.pages
       ecartees = exploration.skipped.length
+      /*
+       * Ce qui ne s'observe qu'ici : robots.txt et carte du site ne sont lus qu'à la
+       * première tranche, et les contrôles tournent à la dernière. Sans cette mise de côté,
+       * l'information serait perdue entre les deux.
+       */
+      signauxDuSite = {
+        origin,
+        robotsFound: exploration.robots.found,
+        robotsBlocksHome: exploration.robots.blocksHome,
+        sitemapFound: exploration.sitemapFound,
+      }
 
       /*
        * L'accueil doit répondre correctement, sinon il n'y a pas d'audit.
@@ -365,6 +380,7 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
           statusCode: page.statusCode,
           bytes: page.bytes,
           fetchMs: page.fetchMs,
+          redirects: page.redirects,
           title: page.signals.title.slice(0, 300),
           description: page.signals.description.slice(0, 500),
           wordCount: page.signals.wordCount,
@@ -376,6 +392,20 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
 
   const total = await withUserScope(userId, (tx) => tx.auditPage.count({ where: { auditId } }))
   const fini = termine || total >= audit.maxPages
+
+  if (signauxDuSite !== null) {
+    await withUserScope(userId, (tx) =>
+      tx.audit.update({
+        where: { id: auditId },
+        data: { siteSignals: signauxDuSite as unknown as object },
+      }),
+    )
+  }
+
+  // Les contrôles ne tournent qu'une fois, à la fin : ils comparent les pages entre elles,
+  // et un verdict rendu sur un site à moitié exploré serait faux plutôt qu'incomplet.
+  const note = fini ? await noterAudit(userId, auditId, audit.site.origin) : null
+
   const apres = await withUserScope(userId, (tx) =>
     tx.audit.update({
       where: { id: auditId },
@@ -383,7 +413,7 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
         status: fini ? 'done' : 'running',
         pagesCrawled: total,
         pagesSkipped: { increment: ecartees },
-        ...(fini ? { finishedAt: new Date() } : {}),
+        ...(fini ? { finishedAt: new Date(), seoScore: note } : {}),
       },
       select: { status: true, pagesCrawled: true, pagesSkipped: true, maxPages: true },
     }),
@@ -397,6 +427,41 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
     maxPages: apres.maxPages,
     encore: !fini,
   }
+}
+
+/**
+ * Les constats d'un audit, du plus coûteux au moins.
+ *
+ * Le libellé et l'explication ne sont pas en base : ils vivent dans le catalogue des
+ * contrôles, et c'est voulu. Les réécrire ne doit pas demander de migrer des milliers de
+ * lignes, ni laisser d'anciens audits porter d'anciennes formulations.
+ */
+export async function listFindings(userId: string, auditId: string) {
+  const constats = await withUserScope(userId, (tx) =>
+    tx.auditFinding.findMany({
+      where: { auditId, audit: { userId } },
+      orderBy: [{ lost: 'desc' }, { weight: 'desc' }],
+    }),
+  )
+  return constats.map((constat) => {
+    const check = SEO_CHECKS.find((candidat) => candidat.id === constat.checkId)
+    return {
+      checkId: constat.checkId,
+      label: check?.label ?? constat.checkId,
+      why: check?.why ?? '',
+      /*
+       * La portée accompagne le constat : « une page sur une » n'a aucun sens pour un
+       * contrôle qui porte sur le site entier — le plan de site, le protocole — et l'écran
+       * doit pouvoir se taire plutôt que d'inventer un dénominateur.
+       */
+      scope: check?.scope ?? 'page',
+      severity: constat.severity,
+      affected: constat.affected,
+      examined: constat.examined,
+      lost: constat.lost,
+      sample: (constat.sample as unknown as { path: string; url: string; title: string }[]) ?? [],
+    }
+  })
 }
 
 /** Le détail d'un audit, pour l'écran qui le montre. */
@@ -433,4 +498,90 @@ export async function readAudit(userId: string, auditId: string) {
   )
   if (audit === null) throw notFound('Cet audit est introuvable.')
   return audit
+}
+
+/**
+ * Applique les contrôles à un audit terminé, enregistre les constats, rend la note.
+ *
+ * Elle relit les pages depuis la base plutôt que de garder tout en mémoire d'une tranche à
+ * l'autre : c'est la seule façon de juger un site complet quand son exploration s'est faite
+ * en dix appels séparés.
+ */
+async function noterAudit(userId: string, auditId: string, origin: string): Promise<number | null> {
+  const audit = await withUserScope(userId, (tx) =>
+    tx.audit.findFirst({
+      where: { id: auditId, userId },
+      select: {
+        siteSignals: true,
+        pages: {
+          select: {
+            url: true,
+            path: true,
+            depth: true,
+            statusCode: true,
+            bytes: true,
+            fetchMs: true,
+            redirects: true,
+            signals: true,
+          },
+        },
+      },
+    }),
+  )
+  if (audit === null || audit.pages.length === 0) return null
+
+  const pages: PageVue[] = audit.pages.map((page) => ({
+    url: page.url,
+    path: page.path,
+    depth: page.depth,
+    statusCode: page.statusCode,
+    bytes: page.bytes,
+    fetchMs: page.fetchMs,
+    redirects: page.redirects,
+    signals: page.signals as unknown as Signaux,
+  }))
+
+  /*
+   * Sans signaux de site enregistrés — un audit d'une version antérieure, ou une première
+   * tranche qui a échoué — on suppose ce qu'on ne peut pas vérifier plutôt que d'accuser :
+   * un robots.txt absent serait un reproche que rien n'étaye.
+   */
+  const site = (audit.siteSignals as unknown as SiteVu | null) ?? {
+    origin,
+    robotsFound: true,
+    robotsBlocksHome: false,
+    sitemapFound: true,
+  }
+
+  const resultat = await evaluate(pages, site)
+
+  await withUserScope(userId, async (tx) => {
+    for (const constat of resultat.constats) {
+      await tx.auditFinding.upsert({
+        where: { auditId_checkId: { auditId, checkId: constat.checkId } },
+        update: {
+          severity: constat.severity,
+          affected: constat.affected,
+          examined: constat.examined,
+          weight: constat.weight,
+          lost: constat.lost,
+          sample: constat.sample as unknown as object,
+        },
+        create: {
+          auditId,
+          checkId: constat.checkId,
+          engine: constat.engine,
+          severity: constat.severity,
+          affected: constat.affected,
+          examined: constat.examined,
+          weight: constat.weight,
+          lost: constat.lost,
+          sample: constat.sample as unknown as object,
+        },
+      })
+    }
+  })
+
+  logger.info('audit noté', { auditId, score: resultat.score, constats: resultat.constats.length })
+  return resultat.score
 }

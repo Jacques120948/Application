@@ -38,6 +38,8 @@ export type PageExploree = {
   statusCode: number
   bytes: number
   fetchMs: number
+  /** Sauts traversés pour arriver ici. Chacun coûte un aller-retour au visiteur. */
+  redirects: number
   signals: Signaux
 }
 
@@ -237,6 +239,8 @@ export async function crawl(
       statusCode: reponse.status,
       bytes: reponse.bytes,
       fetchMs,
+      // La chaîne comprend l'adresse de départ : le nombre de sauts est donc un de moins.
+      redirects: Math.max(0, reponse.chain.length - 1),
       signals,
     })
 
