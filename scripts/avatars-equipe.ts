@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { createInterface } from 'node:readline'
 import sharp from 'sharp'
 import { generateGeminiImage } from '@/server/integrations/providers/gemini'
 import { VISIBILITY_AGENTS, type VisibilityAgent } from '@/server/agents/visibility'
@@ -12,8 +13,15 @@ import { VISIBILITY_AGENTS, type VisibilityAgent } from '@/server/agents/visibil
  * elle ne doit traverser ni un chat, ni un journal, ni un fichier versionné. Le script la
  * lit là où elle est déjà — nulle part ailleurs.
  *
- *   GEMINI_API_KEY=... npx tsx scripts/avatars-equipe.ts
- *   GEMINI_API_KEY=... npx tsx scripts/avatars-equipe.ts gia milo
+ *   npx tsx scripts/avatars-equipe.ts
+ *   npx tsx scripts/avatars-equipe.ts gia milo
+ *
+ * Il demande la clé au lancement si elle n'est pas déjà dans l'environnement. C'est
+ * délibéré : une consigne de la forme `GEMINI_API_KEY=votre_clé npx tsx …` se recolle telle
+ * quelle, avec le texte d'exemple à la place de la clé, et Google répond alors « clé
+ * invalide » — un message qu'on met un moment à relier à un copier-coller. Une invite ne
+ * laisse rien à remplacer. La saisie n'est pas affichée et ne passe pas dans l'historique du
+ * terminal.
  *
  * Sans argument, il refait les quatre. Avec des prénoms, il ne refait que ceux-là — et
  * c'est la bonne façon d'en reprendre un seul. **Ne supprimez jamais les fichiers avant de
@@ -40,6 +48,39 @@ import { VISIBILITY_AGENTS, type VisibilityAgent } from '@/server/agents/visibil
  */
 
 const DOSSIER = 'public/equipe'
+
+/**
+ * Demande la clé, sans l'afficher.
+ *
+ * Le masquage passe par `_writeToOutput`, le seul point où `readline` laisse décider ce qui
+ * s'affiche pendant la frappe : on écrit l'invite, puis plus rien — comme une invite de mot
+ * de passe. Une première version renvoyait chaque frappe vers la sortie qu'elle venait de
+ * remplacer, et s'appelait elle-même jusqu'à la pile pleine.
+ *
+ * Hors terminal — dans un tube, dans un script — il n'y a rien à masquer et la ligne se lit
+ * telle quelle. C'est aussi ce qui rend cette fonction essayable.
+ */
+async function demanderLaCle(): Promise<string> {
+  const invite = 'Clé Google AI (elle ne s’affichera pas) : '
+  const lecteur = createInterface({ input: process.stdin, output: process.stdout })
+
+  if (process.stdin.isTTY === true) {
+    let inviteEcrite = false
+    ;(lecteur as unknown as { _writeToOutput: (texte: string) => void })._writeToOutput = () => {
+      if (inviteEcrite) return
+      inviteEcrite = true
+      process.stdout.write(invite)
+    }
+  }
+
+  return new Promise<string>((resolve) => {
+    lecteur.question(invite, (reponse) => {
+      process.stdout.write('\n')
+      lecteur.close()
+      resolve(reponse.trim())
+    })
+  })
+}
 
 /** Côté du fichier écrit. Deux fois la plus grande taille affichée, pour les écrans fins. */
 const COTE = 320
@@ -140,11 +181,14 @@ function construire(): Portrait[] {
 }
 
 async function main(): Promise<void> {
-  const cle = process.env.GEMINI_API_KEY
-  if (cle === undefined || cle.trim() === '') {
-    console.error(
-      'GEMINI_API_KEY absente. Lancez : GEMINI_API_KEY=... npx tsx scripts/avatars-equipe.ts',
-    )
+  /*
+   * Depuis l'environnement si elle y est, sinon on la demande. Rien à remplacer dans une
+   * ligne de commande, donc rien à recoller de travers.
+   */
+  const depuisEnv = process.env.GEMINI_API_KEY?.trim() ?? ''
+  const cle = depuisEnv === '' ? await demanderLaCle() : depuisEnv
+  if (cle === '') {
+    console.error('Aucune clé saisie. Récupérez-la sur https://aistudio.google.com/apikey.')
     process.exitCode = 1
     return
   }
@@ -154,9 +198,9 @@ async function main(): Promise<void> {
    * ce qui se lit comme un refus de la description. On a cherché au mauvais endroit assez
    * longtemps pour que ce contrôle vaille ses cinq lignes.
    */
-  if (!cle.trim().startsWith('AIza')) {
+  if (!cle.startsWith('AIza')) {
     console.error(
-      'Cette clé ne ressemble pas à une clé Google AI : elles commencent toutes par « AIza ».',
+      `Cette clé ne ressemble pas à une clé Google AI : elles commencent toutes par « AIza », celle-ci par « ${cle.slice(0, 4)} ».`,
     )
     console.error('Récupérez-la sur https://aistudio.google.com/apikey puis relancez.')
     process.exitCode = 1
@@ -169,15 +213,24 @@ async function main(): Promise<void> {
    * Les prénoms passés en argument, s'il y en a. Reprendre un seul portrait est le cas le
    * plus fréquent : trois plaisent, un non.
    */
-  const demandes = process.argv.slice(2).map((nom) => nom.toLowerCase())
+  /*
+   * Les accents sont retirés des deux côtés : personne ne tape « Léa » dans un terminal, et
+   * un script qui répond « aucun spécialiste ne correspond » à `lea` a tort.
+   */
+  const sansAccent = (nom: string): string =>
+    nom
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+  const demandes = process.argv.slice(2).map(sansAccent)
   const tous = construire()
   const portraits =
     demandes.length === 0
       ? tous
       : tous.filter(
           (portrait) =>
-            demandes.includes(portrait.agent.name.toLowerCase()) ||
-            demandes.includes(portrait.agent.id.toLowerCase()),
+            demandes.includes(sansAccent(portrait.agent.name)) ||
+            demandes.includes(sansAccent(portrait.agent.id)),
         )
 
   if (portraits.length === 0) {
@@ -189,12 +242,18 @@ async function main(): Promise<void> {
   }
 
   let produits = 0
+  let cleRefusee = false
 
   for (const portrait of portraits) {
     process.stdout.write(`${portrait.agent.name} … `)
     const image = await generateGeminiImage(cle, portrait.prompt, '1:1')
     if (!image.ok) {
       console.log(`échec (${image.kind}) : ${image.reason}`)
+      // Inutile d'insister trois fois avec une clé que Google vient de refuser.
+      if (image.kind === 'key') {
+        cleRefusee = true
+        break
+      }
       continue
     }
     /*
@@ -222,7 +281,15 @@ async function main(): Promise<void> {
   console.log(
     `\n${produits} portrait(s) sur ${portraits.length}. Les autres gardent leur version précédente — rien n'a été perdu.`,
   )
-  console.log('Relancez en nommant ceux qui manquent, par exemple : npx tsx scripts/avatars-equipe.ts gia')
+  /*
+   * Le conseil suit la cause. « Relancez en nommant ceux qui manquent » à quelqu'un dont la
+   * clé est refusée, c'est l'envoyer refaire dix fois ce qui échouera dix fois.
+   */
+  console.log(
+    cleRefusee
+      ? 'Google refuse cette clé. Vérifiez-la sur https://aistudio.google.com/apikey, puis relancez.'
+      : 'Relancez en nommant ceux qui manquent, par exemple : npx tsx scripts/avatars-equipe.ts gia',
+  )
   process.exitCode = 1
 }
 
