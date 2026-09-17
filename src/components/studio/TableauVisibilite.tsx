@@ -1,4 +1,5 @@
-import { Card, CardBody } from '@/components/ui'
+import { Card, CardBody, LinkButton } from '@/components/ui'
+import { PlanAction, type LigneVue } from './PlanAction'
 
 /**
  * Le tableau de bord de la visibilité.
@@ -26,18 +27,6 @@ import { Card, CardBody } from '@/components/ui'
 
 export type Note = number | null
 
-export type ConstatVu = {
-  checkId: string
-  engine: string
-  label: string
-  why: string
-  scope: string
-  severity: string
-  affected: number
-  examined: number
-  sample: { path: string; url: string; title: string }[]
-}
-
 export type TableauProps = {
   locale: string
   site: { id: string; host: string; label: string }
@@ -50,7 +39,10 @@ export type TableauProps = {
   precedent: { finishedAt: Date | null; seoScore: Note; geoScore: Note } | null
   historique: { finishedAt: Date | null; seoScore: Note; geoScore: Note }[]
   autresSites: { id: string; host: string; label: string }[]
-  constats: readonly ConstatVu[]
+  /** Les lignes du plan, avec leur état. Le composant qui les rend est interactif. */
+  lignes: readonly LigneVue[]
+  /** Ce qui a été traité et ne figure plus dans la dernière analyse. */
+  reglees: readonly { checkId: string; label: string; engine: string; state: string }[]
 }
 
 /** Une date écrite comme on la dit. */
@@ -337,91 +329,6 @@ function Courbes({
   )
 }
 
-const GRAVITES: Record<string, { label: string; fond: string; texte: string }> = {
-  critical: {
-    label: 'Critique',
-    fond: 'var(--color-critical-soft)',
-    texte: 'var(--color-critical)',
-  },
-  important: {
-    label: 'Important',
-    fond: 'var(--color-accent-soft)',
-    texte: 'var(--color-accent)',
-  },
-  improvement: {
-    label: 'Amélioration',
-    fond: 'var(--color-brand-soft)',
-    texte: 'var(--color-brand-strong)',
-  },
-}
-
-const MOTEURS: Record<string, string> = { seo: 'Référencement', geo: 'Moteurs IA' }
-
-function Priorites({ constats }: { constats: readonly ConstatVu[] }) {
-  if (constats.length === 0) {
-    return (
-      <Card>
-        <CardBody>
-          <h3 className="m-0 text-base font-semibold">Rien à corriger pour l’instant</h3>
-          <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">
-            Tous les contrôles applicables à ce site sont passés. Relancez une analyse après
-            votre prochaine mise à jour.
-          </p>
-        </CardBody>
-      </Card>
-    )
-  }
-  return (
-    <ol className="m-0 grid list-none gap-3 p-0">
-      {constats.map((constat, rang) => {
-        const gravite = GRAVITES[constat.severity] ?? GRAVITES['improvement']
-        return (
-          <li
-            key={constat.checkId}
-            className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5"
-          >
-            <div className="flex flex-wrap items-baseline gap-3">
-              <span className="text-sm font-semibold text-[var(--color-ink-faint)]">
-                {rang + 1}.
-              </span>
-              <h3 className="m-0 text-base font-semibold">{constat.label}</h3>
-              <span
-                className="rounded-[var(--radius-pill)] px-2.5 py-0.5 text-xs font-semibold"
-                style={{ background: gravite?.fond, color: gravite?.texte }}
-              >
-                {gravite?.label}
-              </span>
-              <span className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2.5 py-0.5 text-xs text-[var(--color-ink-soft)]">
-                {MOTEURS[constat.engine] ?? constat.engine}
-              </span>
-              {constat.scope === 'site' ? null : (
-                <span className="text-sm text-[var(--color-ink-faint)]">
-                  {constat.affected} page{constat.affected > 1 ? 's' : ''} sur {constat.examined}
-                </span>
-              )}
-            </div>
-            <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {constat.why}
-            </p>
-            {constat.sample.length === 0 ? null : (
-              <ul className="m-0 mt-3 flex list-none flex-wrap gap-2 p-0">
-                {constat.sample.map((exemple) => (
-                  <li
-                    key={exemple.url}
-                    className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-3 py-1 text-xs text-[var(--color-ink-soft)]"
-                  >
-                    {exemple.path}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        )
-      })}
-    </ol>
-  )
-}
-
 export function TableauVisibilite({
   locale,
   site,
@@ -429,10 +336,11 @@ export function TableauVisibilite({
   precedent,
   historique,
   autresSites,
-  constats,
+  lignes,
+  reglees,
 }: TableauProps) {
-  const aCorriger = constats.length
-  const critiques = constats.filter((constat) => constat.severity === 'critical').length
+  const aCorriger = lignes.length
+  const critiques = lignes.filter((ligne) => ligne.severity === 'critical').length
 
   return (
     <div className="grid gap-6">
@@ -503,12 +411,56 @@ export function TableauVisibilite({
       <Courbes historique={historique} locale={locale} />
 
       <section>
-        <h2 className="m-0 mb-4 text-lg font-semibold">Par quoi commencer</h2>
-        <Priorites constats={constats} />
+        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="m-0 text-lg font-semibold">Votre plan d’action</h2>
+          <LinkButton
+            href={`/${locale}/visibilite/historique?siteId=${site.id}`}
+            variant="secondary"
+            size="medium"
+          >
+            Voir l’historique
+          </LinkButton>
+        </div>
+
+        {lignes.length === 0 ? (
+          <Card>
+            <CardBody>
+              <h3 className="m-0 text-base font-semibold">Rien à corriger pour l’instant</h3>
+              <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">
+                Tous les contrôles applicables à ce site sont passés. Relancez une analyse après
+                votre prochaine mise à jour.
+              </p>
+            </CardBody>
+          </Card>
+        ) : (
+          <PlanAction siteId={site.id} lignes={lignes} />
+        )}
+
         {/*
-          Les corrections rédigées viendront de l'équipe ; tant qu'elles n'existent pas, on ne
-          met pas de bouton qui ne ferait rien.
+          Ce qui a disparu depuis qu'on l'a marqué traité. C'est le seul endroit du produit
+          où quelqu'un voit que son travail a porté, et c'est vérifié par l'analyse suivante
+          plutôt que déclaré : le constat n'est plus là.
         */}
+        {reglees.length === 0 ? null : (
+          <div className="mt-6 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+            <h3 className="m-0 text-base font-semibold">Réglé depuis</h3>
+            <p className="mt-1 mb-3 text-sm text-[var(--color-ink-soft)]">
+              Ces points ne remontent plus dans la dernière analyse.
+            </p>
+            <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+              {reglees.map((reglee) => (
+                <li
+                  key={reglee.checkId}
+                  className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-3 py-1 text-sm text-[var(--color-ink-soft)]"
+                >
+                  {reglee.state === 'ignored' ? '— ' : '✓ '}
+                  {reglee.label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <p className="mt-4 mb-0 text-sm text-[var(--color-ink-faint)]">
           Les corrections rédigées par l’équipe arrivent dans une prochaine version. Evoliia ne
           modifie jamais votre site : vous gardez la main sur ce que vous appliquez.

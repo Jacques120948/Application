@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
-import { listFindings, listSites, readDashboard } from '@/server/audit/service'
+import { readPlan } from '@/server/audit/plan'
+import { listSites, readDashboard } from '@/server/audit/service'
 import { parseTargetUrl } from '@/server/audit/net'
 import { Shell } from '@/components/studio/Shell'
 import { SiteBoard } from '@/components/studio/SiteBoard'
@@ -61,12 +62,13 @@ export default async function VisibilitePage({
     readDashboard(user.id, demande.siteId),
   ])
 
-  const constats =
-    tableau === null
-      ? []
-      : (await listFindings(user.id, tableau.audit.id))
-          .filter((constat) => constat.affected > 0)
-          .slice(0, PRIORITES_MAX)
+  /*
+   * Le plan reprend les constats du dernier audit avec leur état. Il est borné : un audit qui
+   * rend trente lignes se referme, et « par quoi je commence » est la seule question que se
+   * pose quelqu'un devant cet écran. L'historique montre le reste.
+   */
+  const plan = tableau === null ? null : await readPlan(user.id, tableau.site.id)
+  const lignes = (plan?.lignes ?? []).slice(0, PRIORITES_MAX)
 
   return (
     <Shell locale={locale} userName={user.name} credits={credits} screen="visibilite">
@@ -87,7 +89,8 @@ export default async function VisibilitePage({
               precedent={tableau.precedent}
               historique={tableau.historique}
               autresSites={tableau.autresSites}
-              constats={constats}
+              lignes={lignes}
+              reglees={plan?.reglees ?? []}
             />
           </div>
         )}

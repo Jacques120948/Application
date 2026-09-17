@@ -346,3 +346,148 @@ describe('le tableau de bord', () => {
     expect(await readDashboard(autreId, mien?.site.id)).toBeNull()
   })
 })
+
+describe('le plan d’action', () => {
+  it('garde l’état d’un constat d’une analyse à l’autre', async () => {
+    /*
+     * C'est toute la raison d'être du plan. Un état attaché à l'audit repartirait de zéro
+     * chaque mois, et le tri serait à refaire à chaque fois : ce ne serait plus un plan,
+     * juste un rapport avec des cases.
+     */
+    statutAccueil = 200
+    const { addSite, startAudit } = await import('@/server/audit/service')
+    const { readPlan, setActionState } = await import('@/server/audit/plan')
+
+    const site = await addSite(userId, { url: SITE })
+    const premier = await readPlan(userId, site.siteId)
+    expect(premier).not.toBeNull()
+    const cible = premier?.lignes[0]
+    expect(cible?.state).toBe('todo')
+    if (cible === undefined) return
+
+    await setActionState(userId, site.siteId, cible.checkId, 'doing', 'commencé sur l’accueil')
+    const apresMarquage = await readPlan(userId, site.siteId)
+    const marquee = apresMarquage?.lignes.find((ligne) => ligne.checkId === cible.checkId)
+    expect(marquee?.state).toBe('doing')
+    expect(marquee?.note).toBe('commencé sur l’accueil')
+
+    // Une nouvelle analyse du même site : l'état doit avoir survécu.
+    const audit = await startAudit(userId, site.siteId)
+    await jusquAuBout(audit.auditId)
+    const apresAudit = await readPlan(userId, site.siteId)
+    expect(apresAudit?.auditId).toBe(audit.auditId)
+    const survivante = apresAudit?.lignes.find((ligne) => ligne.checkId === cible.checkId)
+    expect(survivante?.state).toBe('doing')
+  }, 60_000)
+
+  it('refuse un contrôle inventé et le site d’un autre', async () => {
+    const { setActionState, readPlan } = await import('@/server/audit/plan')
+    const site = await withUserScope(userId, (tx) =>
+      tx.site.findFirstOrThrow({ where: { userId } }),
+    )
+    // Un identifiant inventé ferait une ligne fantôme, visible nulle part et inretirable.
+    await expect(
+      setActionState(userId, site.id, 'seo.inexistant', 'done'),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+    // Et le site d'un autre reste celui d'un autre, même avec son identifiant en main.
+    await expect(
+      setActionState(autreId, site.id, 'seo.title_missing', 'done'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(await readPlan(autreId, site.id)).toBeNull()
+  })
+})
+
+describe('l’historique', () => {
+  it('rend les analyses de la plus récente à la plus ancienne, avec leur écart', async () => {
+    const { listAudits } = await import('@/server/audit/plan')
+    const site = await withUserScope(userId, (tx) =>
+      tx.site.findFirstOrThrow({ where: { userId } }),
+    )
+    const analyses = await listAudits(userId, site.id)
+    expect(analyses.length).toBeGreaterThanOrEqual(2)
+
+    const dates = analyses.map((analyse) => analyse.finishedAt?.getTime() ?? 0)
+    expect([...dates].sort((a, b) => b - a)).toEqual(dates)
+
+    // La plus ancienne de la liste n'a rien derrière elle : pas d'écart inventé.
+    expect(analyses[analyses.length - 1]?.seoDelta).toBeNull()
+    // Les autres comparent bien à la ligne suivante, qui est l'analyse précédente.
+    const avant = analyses[1]
+    const apres = analyses[0]
+    if (avant?.seoScore !== null && avant !== undefined && apres?.seoScore !== null && apres !== undefined) {
+      expect(apres.seoDelta).toBe((apres.seoScore ?? 0) - (avant.seoScore ?? 0))
+    }
+  })
+
+  it('ne nomme que ce qui a bougé entre deux analyses', async () => {
+    const { compareAudits, listAudits } = await import('@/server/audit/plan')
+    const site = await withUserScope(userId, (tx) =>
+      tx.site.findFirstOrThrow({ where: { userId } }),
+    )
+    const analyses = await listAudits(userId, site.id)
+    const avant = analyses[1]
+    const apres = analyses[0]
+    if (avant === undefined || apres === undefined) throw new Error('deux analyses attendues')
+
+    const comparaison = await compareAudits(userId, avant.id, apres.id)
+    /*
+     * Un contrôle identique des deux côtés ne figure pas : une comparaison qui liste trente
+     * lignes dont vingt-huit identiques cache les deux qui comptent.
+     */
+    for (const mouvement of comparaison.mouvements) {
+      expect(mouvement.avant, mouvement.checkId).not.toBe(mouvement.apres)
+    }
+    expect(comparaison.mesurable).toBe(true)
+
+    // Comparée à elle-même, une analyse n'a rien bougé du tout.
+    const immobile = await compareAudits(userId, apres.id, apres.id)
+    expect(immobile.mouvements).toEqual([])
+    expect(immobile.mesurable).toBe(true)
+  })
+
+  it('refuse de comparer avec une analyse qui n’a jamais été notée', async () => {
+    /*
+     * Les audits menés avant que les contrôles n'existent ont été explorés et enregistrés,
+     * mais jamais notés. Les confronter à un audit récent ferait passer chaque constat pour
+     * une apparition : un site stable se lirait comme un site qui vient de s'effondrer.
+     */
+    const { compareAudits, listAudits } = await import('@/server/audit/plan')
+    const site = await withUserScope(userId, (tx) =>
+      tx.site.findFirstOrThrow({ where: { userId } }),
+    )
+    const recent = (await listAudits(userId, site.id))[0]
+    if (recent === undefined) throw new Error('une analyse attendue')
+
+    const muet = await withUserScope(userId, (tx) =>
+      tx.audit.create({
+        data: {
+          siteId: site.id,
+          userId,
+          status: 'done',
+          pagesCrawled: 4,
+          finishedAt: new Date(Date.now() - 90 * 86_400_000),
+        },
+      }),
+    )
+
+    const comparaison = await compareAudits(userId, muet.id, recent.id)
+    expect(comparaison.mesurable).toBe(false)
+    expect(comparaison.mouvements).toEqual([])
+
+    await withUserScope(userId, (tx) => tx.audit.delete({ where: { id: muet.id } }))
+  })
+
+  it('ne compare pas les analyses d’un autre', async () => {
+    const { compareAudits, listAudits } = await import('@/server/audit/plan')
+    const site = await withUserScope(userId, (tx) =>
+      tx.site.findFirstOrThrow({ where: { userId } }),
+    )
+    const analyses = await listAudits(userId, site.id)
+    const [apres, avant] = analyses
+    if (avant === undefined || apres === undefined) throw new Error('deux analyses attendues')
+    await expect(compareAudits(autreId, avant.id, apres.id)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+    expect(await listAudits(autreId, site.id)).toEqual([])
+  })
+})
