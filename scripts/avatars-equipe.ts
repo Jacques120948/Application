@@ -13,6 +13,14 @@ import { VISIBILITY_AGENTS, type VisibilityAgent } from '@/server/agents/visibil
  * lit là où elle est déjà — nulle part ailleurs.
  *
  *   GEMINI_API_KEY=... npx tsx scripts/avatars-equipe.ts
+ *   GEMINI_API_KEY=... npx tsx scripts/avatars-equipe.ts gia milo
+ *
+ * Sans argument, il refait les quatre. Avec des prénoms, il ne refait que ceux-là — et
+ * c'est la bonne façon d'en reprendre un seul. **Ne supprimez jamais les fichiers avant de
+ * lancer** : chacun n'est réécrit qu'après une génération réussie, si bien qu'un refus de
+ * Google laisse l'ancien portrait en place. Les supprimer d'avance retire ce filet, et une
+ * page d'accueil avec quatre images cassées coûte plus cher qu'un portrait qu'on trouve
+ * tiède.
  *
  * Il écrit dans `public/equipe/`. Rien n'est envoyé nulle part, rien n'est enregistré en
  * base : ce sont des fichiers de marque, ils se versionnent comme le logo.
@@ -62,7 +70,14 @@ const SOCLE = [
   'polished render, crisp edges, high detail on the face and hair.',
   'Smooth vertical gradient background, no scenery, no props, no furniture, no shadow on the background.',
   'Absolutely no text, no letters, no numbers, no logos, no watermark, no brand of any kind.',
-  'Not photorealistic. Adult character, confident and competent, never childish or babyish.',
+  /*
+   * Ce qu'on veut, dit en positif. La version précédente écrivait « never childish or
+   * babyish » : Google a refusé les quatre portraits d'affilée, et c'était la seule
+   * différence avec la version qui passait. Les classifieurs de sécurité lisent ce
+   * vocabulaire sans lire la négation qui le précède — dire ce qu'on veut coûte le même
+   * nombre de mots et ne se fait pas refuser.
+   */
+  'Not photorealistic. A mature, confident, competent professional in their late twenties or thirties.',
   'A single character, centred, with even margins on all sides so the image can be cropped',
   'to a circle without cutting the hair or the head.',
 ].join(' ')
@@ -80,7 +95,7 @@ const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string 
   audit: {
     fichier: 'lea.webp',
     trait:
-      'A woman in her early thirties, calm and methodical. Sculpted swept-up hair with a short' +
+      'A professional woman in her early thirties, calm and methodical. Sculpted swept-up hair with a short' +
       ' undercut on the sides, in a vivid gradient from deep violet at the roots to soft lilac at the tips.' +
       ' Bold round dark glasses as a defining trait, small hoop earring, a crisp light blazer over a' +
       ' dark top. Attentive thoughtful eyes. She reads carefully before speaking.',
@@ -89,7 +104,7 @@ const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string 
   seo: {
     fichier: 'neo.webp',
     trait:
-      'A man in his early thirties, quick and analytical. Short textured hair swept up with a clean' +
+      'A professional man in his early thirties, quick and analytical. Short textured hair swept up with a clean' +
       ' undercut, in a vivid gradient from deep indigo to electric blue at the tips. Bright focused eyes,' +
       ' a dark technical jacket with a raised collar. He enjoys finding the lever that moves the numbers.',
     fond: 'deep indigo fading to dusty violet',
@@ -97,7 +112,7 @@ const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string 
   geo: {
     fichier: 'gia.webp',
     trait:
-      'A young woman, inventive and forward-looking. A sharp asymmetric bob with a bold sculpted sweep,' +
+      'A professional woman in her thirties, inventive and forward-looking. A sharp asymmetric bob with a bold sculpted sweep,' +
       ' in a vivid gradient from magenta pink to warm coral at the tips. Keen curious eyes, small' +
       ' delicate earrings, a clean minimal top. She is at ease with what is new.',
     fond: 'magenta pink fading to warm rose',
@@ -105,7 +120,7 @@ const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string 
   content: {
     fichier: 'milo.webp',
     trait:
-      'A man in his late twenties, warm and creative. Tousled wavy hair with volume and movement,' +
+      'A professional man in his late twenties, warm and creative. Tousled wavy hair with volume and movement,' +
       ' in a vivid gradient from warm amber to soft coral at the tips. Kind open eyes, a soft knitted' +
       ' jumper with a relaxed collar. He is easy to talk to and full of ideas.',
     fond: 'warm amber fading to soft coral',
@@ -135,7 +150,30 @@ async function main(): Promise<void> {
   }
 
   await mkdir(DOSSIER, { recursive: true })
-  const portraits = construire()
+
+  /*
+   * Les prénoms passés en argument, s'il y en a. Reprendre un seul portrait est le cas le
+   * plus fréquent : trois plaisent, un non.
+   */
+  const demandes = process.argv.slice(2).map((nom) => nom.toLowerCase())
+  const tous = construire()
+  const portraits =
+    demandes.length === 0
+      ? tous
+      : tous.filter(
+          (portrait) =>
+            demandes.includes(portrait.agent.name.toLowerCase()) ||
+            demandes.includes(portrait.agent.id.toLowerCase()),
+        )
+
+  if (portraits.length === 0) {
+    console.error(
+      `Aucun spécialiste ne correspond. Prénoms possibles : ${tous.map((p) => p.agent.name).join(', ')}.`,
+    )
+    process.exitCode = 1
+    return
+  }
+
   let produits = 0
 
   for (const portrait of portraits) {
@@ -159,11 +197,19 @@ async function main(): Promise<void> {
     console.log(`${portrait.fichier} (${Math.round(carre.length / 1024)} Ko)`)
   }
 
+  if (produits === portraits.length) {
+    console.log(`\n${produits} portrait(s) écrit(s) dans ${DOSSIER}. Relancez l'application pour les voir.`)
+    return
+  }
+  /*
+   * Un échec ne laisse pas de trou : le fichier précédent est toujours là, puisqu'on
+   * n'écrit qu'après une génération réussie. On le dit, sinon on croit avoir tout perdu.
+   */
   console.log(
-    produits === portraits.length
-      ? `\n${produits} portraits écrits dans ${DOSSIER}. Relancez l'application pour les voir.`
-      : `\n${produits} portraits sur ${portraits.length}. Relancez le script pour les manquants.`,
+    `\n${produits} portrait(s) sur ${portraits.length}. Les autres gardent leur version précédente — rien n'a été perdu.`,
   )
+  console.log('Relancez en nommant ceux qui manquent, par exemple : npx tsx scripts/avatars-equipe.ts gia')
+  process.exitCode = 1
 }
 
 await main()

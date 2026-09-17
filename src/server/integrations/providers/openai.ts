@@ -1,4 +1,5 @@
 import type { KeyVerifier } from '../verify'
+import { logger } from '@/server/observability/logger'
 
 /**
  * Connecteur « clé OpenAI du créateur », pour générer des images.
@@ -66,7 +67,16 @@ export async function generateOpenAiImage(apiKey: string, prompt: string): Promi
   })
 }
 
-/** Lecture commune des réponses d'un fournisseur d'images : les refus sont traduits, pas devinés. */
+/**
+ * Lecture commune des réponses d'un fournisseur d'images : les refus sont traduits, pas devinés.
+ *
+ * Le motif exact du fournisseur est journalisé côté serveur et ne remonte jamais à
+ * l'utilisateur : il cite parfois la description envoyée, il change de formulation d'une
+ * semaine à l'autre, et il est en anglais. Mais sans lui, « le fournisseur a refusé cette
+ * description » est inexploitable pour l'exploitant — on ne sait ni quoi reformuler, ni si
+ * la faute est dans le texte ou dans la requête. La leçon a été payée une fois : quatre
+ * portraits refusés d'affilée, et rien pour dire pourquoi.
+ */
 export async function readImageResponse(
   response: Response,
   provider: string,
@@ -83,6 +93,12 @@ export async function readImageResponse(
     }
   }
   if (response.status === 400 || response.status === 422) {
+    logger.warn('image refusée par le fournisseur', {
+      provider,
+      status: response.status,
+      // Le corps de l'erreur, borné : c'est le fournisseur qui parle, jamais notre clé.
+      detail: (await response.text().catch(() => '')).slice(0, 600),
+    })
     return {
       ok: false,
       kind: 'refused',
