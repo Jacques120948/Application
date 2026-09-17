@@ -914,8 +914,9 @@ export const fr = {
   'vis.teamHandles': 'S’occupe de',
   'vis.teamAsk': 'On peut lui demander',
   'vis.teamSoon': 'En construction',
+  'vis.teamAtWork': 'Au travail',
   'vis.teamSoonNote':
-    'L’équipe est en cours de construction. Cette page décrit ce qu’elle fera ; chaque spécialiste sera ouvert le jour où il fonctionnera, pas avant.',
+    'Léa analyse, Néo et Gia rédigent déjà des corrections que vous copiez dans votre site. Ce qui manque encore, c’est la conversation : leur écrire et leur répondre. Chaque spécialiste sera ouvert le jour où il fonctionnera, pas avant.',
 
   'vis.checksTitle': 'Ce qui est compté, et ce qui est écrit.',
   'vis.checksBody':
@@ -1013,6 +1014,15 @@ export const fr = {
   'vis.dashBody':
     'Deux notes, le nombre de pages analysées, les priorités du moment. Et surtout leur évolution : la seule façon de savoir si ce que vous faites sert à quelque chose.',
   'vis.dashFollow': 'Suivez vos progrès, audit après audit.',
+  'vis.dashPlanTitle': 'Une liste de travail, pas un rapport.',
+  'vis.dashPlanBody':
+    'Chaque point porte un état — à faire, en cours, corrigée, ignorée — et cet état survit à l’analyse suivante. Ce que vous marquez corrigé aujourd’hui l’est encore le mois prochain : votre tri ne repart jamais de zéro.',
+  'vis.dashProofTitle': 'Ce que vous avez corrigé se vérifie tout seul.',
+  'vis.dashProofBody':
+    'Marquer « corrigée » est une déclaration ; l’analyse suivante est la preuve. Quand le point a disparu, Evoliia vous le montre. Quand il est toujours là, elle vous le dit aussi — c’est plus utile encore.',
+  'vis.dashHistoryTitle': 'Toutes vos analyses, et ce qui a bougé entre deux.',
+  'vis.dashHistoryBody':
+    '« +4 points » ne se corrige pas. « Trois pages ont retrouvé une description, une page est apparue sans titre » se corrige. Les contrôles inchangés ne figurent pas dans la comparaison.',
 
   'vis.seoSectionTitle': 'Améliorez votre référencement Google.',
   'vis.seoSectionBody':

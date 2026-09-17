@@ -18,7 +18,7 @@ export default async function ForgotPasswordPage({
   params: Promise<{ locale: string }>
 }) {
   const locale = resolveLocale((await params).locale)
-  if ((await getCurrentUser()) !== null) redirect(`/${locale}/dashboard`)
+  if ((await getCurrentUser()) !== null) redirect(`/${locale}/visibilite`)
 
   return (
     <div className="mx-auto w-full max-w-md px-5 py-16">

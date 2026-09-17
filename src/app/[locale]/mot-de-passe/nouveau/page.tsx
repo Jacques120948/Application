@@ -20,7 +20,7 @@ export default async function NewPasswordPage({
   searchParams: Promise<{ jeton?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
-  if ((await getCurrentUser()) !== null) redirect(`/${locale}/dashboard`)
+  if ((await getCurrentUser()) !== null) redirect(`/${locale}/visibilite`)
   const token = (await searchParams).jeton ?? ''
 
   return (

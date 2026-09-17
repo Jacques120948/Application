@@ -54,6 +54,16 @@ export type VisibilityAgent = {
   avatar?: string
   /** Jeton de couleur de sa pastille. Fond tendre, lettre sombre : lisible partout. */
   tint: 'brand' | 'accent' | 'warm' | 'night'
+  /**
+   * Ce que ce spécialiste fait déjà, aujourd'hui, dans le produit livré.
+   *
+   * À ne pas confondre avec `feature`, qui ouvre la **conversation** avec lui — et qui reste
+   * à construire pour les quatre. Léa analyse déjà, Néo et Gia rédigent déjà des corrections
+   * qu'on peut copier ; mais on ne leur écrit pas encore. Décrire une équipe au présent avant
+   * qu'elle existe est la façon la plus sûre de décevoir quelqu'un qui s'inscrit, et se
+   * taire sur ce qui marche déjà est la façon la plus sûre de ne pas le convaincre.
+   */
+  atWork: string | null
   /** Exemples de questions, affichés tant que la conversation est vide. */
   starters: readonly string[]
 }
@@ -67,6 +77,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle lit votre site page par page, relève ce qui cloche et dit par quoi commencer. Elle constate : elle ne touche à rien.',
     handles: ['Analyse du site', 'Problèmes détectés', 'Priorités', 'Progression'],
     feature: 'visibility_audit_agent',
+    atWork: 'Elle analyse déjà : les deux notes, les priorités et la progression viennent d’elle.',
     avatar: '/equipe/lea.webp',
     tint: 'brand',
     starters: [
@@ -83,6 +94,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Il travaille ce qu’un moteur de recherche regarde : les titres, les descriptions, la structure et les liens entre vos pages.',
     handles: ['Titles', 'Meta descriptions', 'H1 et H2', 'Structure', 'Maillage interne'],
     feature: 'visibility_seo_agent',
+    atWork: 'Il rédige déjà vos titres, vos descriptions et vos H1 : le texte est à copier.',
     avatar: '/equipe/neo.webp',
     tint: 'night',
     starters: [
@@ -99,6 +111,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle rend vos pages compréhensibles par les assistants : des réponses directes, des faits nets, une entreprise clairement identifiée.',
     handles: ['Réponses directes', 'FAQ', 'Données structurées', 'Identité de la marque'],
     feature: 'visibility_geo_agent',
+    atWork: 'Elle rédige déjà vos introductions et vos titres illisibles hors contexte.',
     avatar: '/equipe/gia.webp',
     tint: 'accent',
     starters: [
@@ -115,6 +128,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Il écrit et réécrit : descriptions, pages, questions fréquentes, articles. Toujours à partir de votre site, jamais à partir d’un modèle générique.',
     handles: ['Descriptions', 'Pages', 'FAQ', 'Articles', 'Introductions'],
     feature: 'visibility_content_agent',
+    atWork: null,
     avatar: '/equipe/milo.webp',
     tint: 'warm',
     starters: [

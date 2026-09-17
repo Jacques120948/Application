@@ -28,31 +28,23 @@ export function Shell({
       <header className="border-b border-[var(--color-line)] bg-[var(--color-surface)]">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-4 px-5 py-3.5">
           <a
-            href={`/${locale}/dashboard`}
+            href={`/${locale}/visibilite`}
             className="text-[var(--color-ink)] no-underline"
             aria-label={t('common.appName')}
           >
             <Logo id="mark-shell" size={28} wordmark={t('common.appName')} />
           </a>
+          {/*
+            Trois entrées, et c'est tout ce que le produit fait : analyser un site, brancher
+            ce qu'on y relie, payer ce qu'on utilise. Les écrans du constructeur — idées,
+            radar, équipe marketing, atelier — ont quitté ce menu quand Evoliia a cessé de
+            vendre des applications. Ils existent toujours à leur adresse, pour les projets
+            qui tournent encore ; un menu qui mène à un produit qu'on ne vend plus fait
+            douter de celui qu'on vend.
+          */}
           <nav className="flex items-center gap-4 text-sm">
-            {/*
-              La visibilité ouvre la barre : c'est l'écran de retour du produit, celui qu'on
-              rouvre une semaine plus tard pour savoir si ce qu'on a corrigé a servi.
-            */}
             <a href={`/${locale}/visibilite`} className="text-[var(--color-ink-soft)] no-underline">
               {t('nav.visibility')}
-            </a>
-            <a href={`/${locale}/dashboard`} className="text-[var(--color-ink-soft)] no-underline">
-              {t('nav.dashboard')}
-            </a>
-            <a href={`/${locale}/idees`} className="text-[var(--color-ink-soft)] no-underline">
-              {t('nav.ideas')}
-            </a>
-            <a href={`/${locale}/radar`} className="text-[var(--color-ink-soft)] no-underline">
-              {t('nav.radar')}
-            </a>
-            <a href={`/${locale}/equipe`} className="text-[var(--color-ink-soft)] no-underline">
-              {t('nav.team')}
             </a>
             <a href={`/${locale}/connexions`} className="text-[var(--color-ink-soft)] no-underline">
               Connexions

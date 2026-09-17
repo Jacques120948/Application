@@ -96,11 +96,13 @@ export function AgentCard({
   handlesLabel,
   askLabel,
   soonLabel,
+  atWorkLabel,
 }: {
   agent: VisibilityAgent
   handlesLabel: string
   askLabel: string
   soonLabel: string
+  atWorkLabel: string
 }) {
   return (
     <div className="flex flex-col rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
@@ -111,17 +113,35 @@ export function AgentCard({
           <p className="m-0 text-sm text-[var(--color-ink-faint)]">{agent.role}</p>
         </div>
         {/*
-          L'étiquette est affichée parce que c'est vrai. Décrire une équipe au présent avant
-          qu'elle existe est la façon la plus sûre de décevoir quelqu'un qui s'inscrit.
+          L'étiquette dit ce qui est vrai de ce spécialiste-là, et pas de l'équipe en bloc.
+          Décrire une équipe au présent avant qu'elle existe est la façon la plus sûre de
+          décevoir quelqu'un qui s'inscrit ; se taire sur ce qui marche déjà est la façon la
+          plus sûre de ne pas le convaincre.
         */}
-        <span className="ml-auto self-start rounded-[var(--radius-pill)] border border-[var(--color-line)] px-2.5 py-1 text-xs text-[var(--color-ink-faint)]">
-          {soonLabel}
+        <span
+          className="ml-auto self-start rounded-[var(--radius-pill)] border px-2.5 py-1 text-xs"
+          style={
+            agent.atWork === null
+              ? { borderColor: 'var(--color-line)', color: 'var(--color-ink-faint)' }
+              : {
+                  borderColor: 'var(--color-brand)',
+                  color: 'var(--color-brand-strong)',
+                  background: 'var(--color-brand-soft)',
+                }
+          }
+        >
+          {agent.atWork === null ? soonLabel : atWorkLabel}
         </span>
       </div>
 
       <p className="mt-4 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
         {agent.summary}
       </p>
+      {agent.atWork === null ? null : (
+        <p className="mt-3 mb-0 text-sm leading-relaxed font-medium text-[var(--color-brand-strong)]">
+          {agent.atWork}
+        </p>
+      )}
 
       <p className="mt-5 mb-2 text-xs font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">
         {handlesLabel}

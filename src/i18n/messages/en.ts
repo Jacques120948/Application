@@ -870,6 +870,7 @@ export const en: Record<keyof typeof fr, string> = {
   'vis.teamHandles': 'Handles',
   'vis.teamAsk': 'You can ask',
   'vis.teamSoon': 'In progress',
+  'vis.teamAtWork': 'At work',
   'vis.teamSoonNote':
     'The team is being built. This page describes what it will do; each specialist will open on the day it works, not before.',
 
@@ -968,6 +969,15 @@ export const en: Record<keyof typeof fr, string> = {
   'vis.dashBody':
     'Two scores, the number of pages analysed, the priorities of the moment. And above all how they move: the only way to know whether what you are doing is working.',
   'vis.dashFollow': 'Track your progress, audit after audit.',
+  'vis.dashPlanTitle': 'A work list, not a report.',
+  'vis.dashPlanBody':
+    'Each item carries a state — to do, in progress, fixed, ignored — and that state survives the next analysis. What you mark fixed today is still marked next month: your triage never starts over.',
+  'vis.dashProofTitle': 'What you fixed checks itself.',
+  'vis.dashProofBody':
+    'Marking something fixed is a claim; the next analysis is the proof. When the issue is gone, Evoliia shows you. When it is still there, it tells you that too — which is more useful still.',
+  'vis.dashHistoryTitle': 'Every analysis, and what moved between two of them.',
+  'vis.dashHistoryBody':
+    '“+4 points” cannot be acted on. “Three pages regained a description, one page appeared without a title” can. Unchanged checks are left out of the comparison.',
 
   'vis.seoSectionTitle': 'Improve your Google ranking.',
   'vis.seoSectionBody':

@@ -116,7 +116,7 @@ export default async function MarketingPage({
                   : `Disponible avec l'offre ${locked.availableWith}.`}
               </Notice>
               <div>
-                <LinkButton href={`/${locale}/dashboard`} variant="secondary">
+                <LinkButton href={`/${locale}/atelier`} variant="secondary">
                   Retour au tableau de bord
                 </LinkButton>
               </div>

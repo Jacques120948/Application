@@ -136,7 +136,7 @@ export default async function LandingPage({
 
   // Qui est déjà connecté n'a rien à faire sur une page de vente.
   const user = await getCurrentUser()
-  if (user !== null) redirect(`/${locale}/dashboard`)
+  if (user !== null) redirect(`/${locale}/visibilite`)
 
   const [plans, packs] = await Promise.all([listPublicPlans(), creditPacks()])
   // Les trois offres payantes forment la grille ; la gratuite a sa propre section, parce
@@ -380,6 +380,7 @@ export default async function LandingPage({
               handlesLabel={t('vis.teamHandles')}
               askLabel={t('vis.teamAsk')}
               soonLabel={t('vis.teamSoon')}
+              atWorkLabel={t('vis.teamAtWork')}
             />
           ))}
         </div>
@@ -403,6 +404,25 @@ export default async function LandingPage({
               {t('vis.dashBody')}
             </p>
             <p className="mt-6 mb-0 text-base font-medium text-white">{t('vis.dashFollow')}</p>
+
+            {/*
+              Trois choses que le tableau de bord fait vraiment, et qu'une capture ne montre
+              pas : un état qui survit à l'analyse suivante, une correction qui se vérifie
+              toute seule, et une comparaison qui nomme ce qui a bougé. C'est ce qui sépare
+              un outil qu'on rouvre d'un rapport qu'on referme.
+            */}
+            <dl className="m-0 mt-8 grid gap-6">
+              {[
+                { t: t('vis.dashPlanTitle'), b: t('vis.dashPlanBody') },
+                { t: t('vis.dashProofTitle'), b: t('vis.dashProofBody') },
+                { t: t('vis.dashHistoryTitle'), b: t('vis.dashHistoryBody') },
+              ].map((bloc) => (
+                <div key={bloc.t}>
+                  <dt className="m-0 text-base font-semibold text-white">{bloc.t}</dt>
+                  <dd className="m-0 mt-1.5 text-sm leading-relaxed text-white/70">{bloc.b}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
           <DashboardMockup
             labels={{
