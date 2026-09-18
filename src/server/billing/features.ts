@@ -199,11 +199,20 @@ export function liveFeatures(): Feature[] {
  * pas, et une fonction prévue n'entre jamais dans les droits accordés : les nommer ici ne
  * les ouvre donc pas avant l'heure.
  *
- * L'essai n'ouvre rien : il montre l'audit et ses notes, et s'arrête là où il faudrait
- * dépenser pour Evoliia.
+ * L'essai les ouvre aussi, et c'est ce qui rend la règle ci-dessus vraie partout. Il ne les
+ * ouvrait pas : on pouvait donc y dépenser vingt crédits en n'ayant le droit de parler à
+ * personne, puisque toutes les actions payantes passent par l'équipe. C'était la seule
+ * offre où la porte était fermée plutôt que la bourse courte. Vingt crédits bornent
+ * l'essai bien mieux qu'une porte : de quoi poser quelques questions, pas de quoi faire
+ * rédiger un article.
  */
 export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
-  'vis-essai': [],
+  'vis-essai': [
+    'visibility_audit_agent',
+    'visibility_seo_agent',
+    'visibility_geo_agent',
+    'visibility_content_agent',
+  ],
   'vis-starter': [
     'visibility_audit_agent',
     'visibility_seo_agent',
