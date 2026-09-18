@@ -41,10 +41,14 @@ export type KeyVerdict =
   | { ok: false; reason: string }
 
 /**
- * `account` désigne le compte distant, pour les services où une clé seule ne dit pas où
- * l'employer. Le catalogue déclare s'il est attendu, par `accountHelp`.
+ * `champs` porte ce que le catalogue a demandé en plus de la clé, par `extraFields`. Les
+ * clés sont les `name` déclarés, et rien d'autre : le gestionnaire écarte le reste avant
+ * d'appeler, pour qu'un champ inventé par le navigateur n'atteigne jamais un fournisseur.
  */
-export type KeyVerifier = (apiKey: string, account?: string) => Promise<KeyVerdict>
+export type KeyVerifier = (
+  apiKey: string,
+  champs?: Readonly<Record<string, string>>,
+) => Promise<KeyVerdict>
 
 const VERIFIERS: Record<string, KeyVerifier> = {
   anthropic: verifyAnthropicKey,

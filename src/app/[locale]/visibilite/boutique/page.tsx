@@ -9,7 +9,7 @@ import { BoutiqueBoard } from '@/components/studio/BoutiqueBoard'
 /**
  * L'écran de la boutique.
  *
- * Il ne tombe jamais : une boutique injoignable, un jeton révoqué ou une connexion absente
+ * Il ne tombe jamais : une boutique injoignable, des identifiants révoqués ou une connexion absente
  * sont des états ordinaires, pas des pannes. Chacun a sa phrase et son geste suivant, parce
  * qu'un écran vide sans explication devant une connexion qu'on vient de payer est la
  * meilleure façon de faire douter de tout le reste.

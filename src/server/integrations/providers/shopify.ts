@@ -4,34 +4,41 @@ import type { KeyVerifier } from '../verify'
 /**
  * Accès à une boutique Shopify, en lecture seule.
  *
- * Quatre décisions portent ce fichier, et chacune vient d'une contrainte réelle.
+ * Cinq décisions portent ce fichier, et chacune vient d'une contrainte réelle.
  *
- * **Par jeton, pas par OAuth.** Shopify propose les deux. L'autorisation en un clic suppose
- * une application publique, donc une revue de Shopify et des webhooks de conformité — des
- * semaines avant qu'un seul marchand puisse s'en servir, et une validation qui ne dépend pas
- * d'Evoliia. Le jeton d'application personnalisée marche le jour même.
+ * **Par identifiants d'application, et non par jeton collé.** Shopify a retiré en cours de
+ * route la création d'applications personnalisées depuis l'administrateur de la boutique :
+ * le jeton permanent qu'on collait une fois n'existe plus pour les nouvelles installations.
+ * Son remplaçant, pour une boutique qu'on possède, est l'échange d'un identifiant et d'un
+ * secret contre un jeton d'accès valable vingt-quatre heures. C'est plus de travail ici, et
+ * c'est plus sûr : aucun jeton durable ne dort en base.
  *
- * **Le secret conservé est une paire.** Un jeton Shopify n'est valable que pour une boutique,
- * et rien dans le jeton ne dit laquelle. L'adresse fait donc partie de l'accès, et se
- * conserve chiffrée avec lui plutôt que devinée ou reconstituée depuis un libellé.
+ * **Le jeton se frappe à la demande, il ne se conserve pas.** Vingt-quatre heures est une
+ * durée assez courte pour qu'une conservation demande une expiration, une invalidation et un
+ * renouvellement — trois occasions de servir un jeton périmé, et trois fois plus de code que
+ * l'échange lui-même. Un échange coûte un aller-retour ; on le paie à chaque lecture, et on
+ * ne garde rien.
+ *
+ * **Le secret conservé est un triplet.** Des identifiants Shopify ne disent pas à quelle
+ * boutique ils s'appliquent. L'adresse fait donc partie de l'accès, et se conserve chiffrée
+ * avec lui plutôt que devinée ou reconstituée depuis un libellé.
  *
  * **La version d'API se résout, elle ne se fige pas.** Shopify publie une version par
  * trimestre et retire les anciennes au bout d'un an. Une constante écrite ici cesserait de
  * marcher un jour, chez tout le monde en même temps, avec un message que personne ne peut
  * interpréter. On part d'une version connue ; si elle est refusée, on demande à Shopify la
- * liste de ce qu'il accepte et on prend la plus récente. La version retenue voyage avec
- * l'accès.
+ * liste de ce qu'il accepte et on prend la plus récente.
  *
- * **Rien ici n'écrit.** Aucune mutation n'est formulée, et les autorisations demandées à
- * l'installation ne portent que la lecture. Un jeton accorde exactement ce qui a été coché :
- * celui-ci ne peut pas acquérir l'écriture après coup.
+ * **Rien ici n'écrit.** Aucune mutation n'est formulée, et les portées déclarées à la
+ * création de l'application ne portent que la lecture. Un jeton frappé n'accorde que ce que
+ * l'application déclare : celui-ci ne peut pas acquérir l'écriture de lui-même.
  */
 
 /**
  * La version d'API dont on part.
  *
- * Elle n'est pas une garantie : elle sera retirée un jour, et la résolution ci-dessous est
- * là pour ça. La tenir à jour évite simplement un aller-retour à chaque connexion.
+ * Elle n'est pas une garantie : elle sera retirée un jour, et la résolution plus bas est là
+ * pour ça. La tenir à jour évite simplement un aller-retour à chaque connexion.
  */
 const VERSION_CONNUE = '2026-07'
 
@@ -47,7 +54,9 @@ export const PIECES_MAX = 250
 export type AccesShopify = {
   /** Adresse en .myshopify.com. Ce n'est pas celle que voient les clients. */
   boutique: string
-  jeton: string
+  /** Identifiant public de l'application. Pas un secret, mais conservé avec le reste. */
+  clientId: string
+  clientSecret: string
   version: string
 }
 
@@ -73,28 +82,31 @@ export function normaliserBoutique(brut: string): string | null {
 }
 
 /**
- * Le jeton ressemble-t-il à un jeton ?
+ * La valeur ressemble-t-elle à un identifiant d'application ?
  *
- * Volontairement large. Les jetons d'application personnalisée commencent aujourd'hui par
- * `shpat_`, mais rejeter sur un préfixe est une erreur déjà commise ici avec une autre clé :
- * le fournisseur change ses formats, et le contrôle refuse alors des clés parfaitement
- * valides. Seul ce qui ne peut être aucun jeton est écarté ; Shopify tranche le reste.
+ * Volontairement large. Les identifiants de Shopify ont aujourd'hui une forme hexadécimale
+ * de trente-deux signes, mais rejeter sur un format est une erreur déjà commise dans ce
+ * dépôt, avec une clé Google : le fournisseur avait changé de format, et le contrôle
+ * refusait des clés parfaitement valides en affirmant qu'elles n'en étaient pas. Seul ce qui
+ * ne peut être aucun identifiant est écarté ; Shopify tranche le reste.
  */
-export function ressembleAUnJeton(valeur: string): boolean {
+export function ressembleAUnIdentifiant(valeur: string): boolean {
   const propre = valeur.trim()
-  return propre.length >= 20 && !/\s/u.test(propre)
+  return propre.length >= 16 && !/\s/u.test(propre)
 }
 
-/** L'accès conservé, relu. `null` quand la connexion date d'avant ce format ou est abîmée. */
+/** L'accès conservé, relu. `null` quand la connexion est abîmée ou d'un format révolu. */
 export function lireAcces(secret: string): AccesShopify | null {
   try {
     const brut = JSON.parse(secret) as Partial<AccesShopify>
-    if (typeof brut.boutique !== 'string' || typeof brut.jeton !== 'string') return null
+    if (typeof brut.boutique !== 'string') return null
+    if (typeof brut.clientId !== 'string' || typeof brut.clientSecret !== 'string') return null
     const boutique = normaliserBoutique(brut.boutique)
     if (boutique === null) return null
     return {
       boutique,
-      jeton: brut.jeton,
+      clientId: brut.clientId,
+      clientSecret: brut.clientSecret,
       version: typeof brut.version === 'string' ? brut.version : VERSION_CONNUE,
     }
   } catch {
@@ -106,8 +118,78 @@ type Reponse = {
   status: number
   /** Les données, ou `null` quand la réponse n'en portait pas. */
   data: Record<string, unknown> | null
-  /** Les messages d'erreur de GraphQL, qui répond souvent 200 en refusant. */
+  /** Les messages d'erreur, qui arrivent sous plusieurs formes selon la couche qui refuse. */
   erreurs: string[]
+}
+
+/**
+ * Les erreurs d'une réponse, quelle que soit la forme qu'elles ont prise.
+ *
+ * GraphQL rend une liste d'objets à `message`. Mais un refus d'authentification, qui est de
+ * loin le cas le plus fréquent, ne passe pas par GraphQL : la couche d'administration répond
+ * avant, et `errors` est alors une simple chaîne. Supposer la liste faisait échouer la
+ * lecture et annonçait « Shopify injoignable » — le mauvais diagnostic sur la panne la plus
+ * courante, et celui qui empêche la personne de corriger ce qu'elle peut corriger.
+ */
+function messages(brut: unknown): string[] {
+  if (typeof brut === 'string') return brut.trim() === '' ? [] : [brut]
+  if (!Array.isArray(brut)) return []
+  return brut
+    .map((erreur) => {
+      if (typeof erreur === 'string') return erreur
+      if (typeof erreur === 'object' && erreur !== null) {
+        const message = (erreur as { message?: unknown }).message
+        return typeof message === 'string' ? message : ''
+      }
+      return ''
+    })
+    .filter((message) => message !== '')
+}
+
+/**
+ * Frappe un jeton d'accès à partir des identifiants de l'application.
+ *
+ * C'est l'échange dit « client credentials » : une intégration qui agit sur ses propres
+ * boutiques demande son jeton directement, sans qu'un marchand ait à autoriser quoi que ce
+ * soit. Le jeton vaut vingt-quatre heures ; on ne le conserve pas.
+ *
+ * Ni l'identifiant ni le secret n'entrent dans le journal. Un journal se relit, se copie et
+ * s'exporte, et ce couple ouvre une boutique entière aussi longtemps qu'il n'est pas révoqué.
+ */
+export async function frapperJeton(acces: AccesShopify): Promise<
+  { ok: true; jeton: string } | { ok: false; status: number; raison: string }
+> {
+  const controle = new AbortController()
+  const minuteur = setTimeout(() => controle.abort(), DELAI_MS)
+
+  let reponse: Response
+  try {
+    reponse = await fetch(`https://${acces.boutique}/admin/oauth/access_token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        client_id: acces.clientId,
+        client_secret: acces.clientSecret,
+        grant_type: 'client_credentials',
+      }),
+      signal: controle.signal,
+    })
+  } finally {
+    clearTimeout(minuteur)
+  }
+
+  const charge = (await reponse.json().catch(() => null)) as {
+    access_token?: unknown
+    error?: unknown
+    error_description?: unknown
+  } | null
+
+  if (reponse.status !== 200 || typeof charge?.access_token !== 'string') {
+    logger.warn('identifiants Shopify refusés', { status: reponse.status })
+    return { ok: false, status: reponse.status, raison: refus(reponse.status, messages(charge?.error_description ?? charge?.error)) }
+  }
+
+  return { ok: true, jeton: charge.access_token }
 }
 
 /**
@@ -115,9 +197,6 @@ type Reponse = {
  *
  * GraphQL, parce que l'API REST est officiellement héritée depuis octobre 2024 et que les
  * champs qui nous intéressent n'y sont plus tous exposés.
- *
- * Aucun jeton n'entre dans le journal, jamais : ni en entier, ni en fragment. Un journal se
- * relit, se copie et s'exporte, et un jeton Shopify ouvre une boutique entière.
  */
 async function appeler(
   boutique: string,
@@ -156,30 +235,6 @@ async function appeler(
   }
 }
 
-/**
- * Les erreurs d'une réponse, quelle que soit la forme qu'elles ont prise.
- *
- * GraphQL rend une liste d'objets à `message`. Mais un refus d'authentification, qui est de
- * loin le cas le plus fréquent, ne passe pas par GraphQL : la couche d'administration répond
- * avant, et `errors` est alors une simple chaîne. Supposer la liste faisait échouer la
- * lecture et annonçait « Shopify injoignable » — le mauvais diagnostic sur la panne la plus
- * courante, et celui qui empêche la personne de corriger ce qu'elle peut corriger.
- */
-function messages(brut: unknown): string[] {
-  if (typeof brut === 'string') return brut.trim() === '' ? [] : [brut]
-  if (!Array.isArray(brut)) return []
-  return brut
-    .map((erreur) => {
-      if (typeof erreur === 'string') return erreur
-      if (typeof erreur === 'object' && erreur !== null) {
-        const message = (erreur as { message?: unknown }).message
-        return typeof message === 'string' ? message : ''
-      }
-      return ''
-    })
-    .filter((message) => message !== '')
-}
-
 const REQUETE_BOUTIQUE = `{
   shop { name myshopifyDomain primaryDomain { host } }
 }`
@@ -199,7 +254,10 @@ async function versionUtilisable(boutique: string, jeton: string): Promise<strin
   const reponse = await appeler(boutique, jeton, 'unstable', REQUETE_VERSIONS).catch(() => null)
   if (reponse === null || reponse.data === null) return null
 
-  const versions = (reponse.data.publicApiVersions ?? []) as { handle?: string; supported?: boolean }[]
+  const versions = (reponse.data.publicApiVersions ?? []) as {
+    handle?: string
+    supported?: boolean
+  }[]
   const stables = versions
     .filter((version) => version.supported === true && /^\d{4}-\d{2}$/u.test(version.handle ?? ''))
     .map((version) => version.handle as string)
@@ -211,7 +269,7 @@ async function versionUtilisable(boutique: string, jeton: string): Promise<strin
 /** Ce que Shopify a refusé, dit à la personne qui peut y faire quelque chose. */
 function refus(status: number, erreurs: readonly string[]): string {
   if (status === 401 || status === 403) {
-    return 'Shopify refuse ce jeton. Vérifiez que vous l’avez copié en entier, et que l’application est bien installée sur cette boutique.'
+    return 'Shopify refuse ces identifiants. Vérifiez que vous les avez copiés en entier, et que l’application est bien installée sur cette boutique.'
   }
   if (status === 404) {
     return 'Cette boutique est introuvable chez Shopify. Vérifiez son adresse en .myshopify.com.'
@@ -221,19 +279,20 @@ function refus(status: number, erreurs: readonly string[]): string {
   }
   const detail = erreurs[0]
   return detail === undefined
-    ? 'Shopify n’a pas accepté cette connexion. Réessayez, ou recréez un jeton.'
+    ? 'Shopify n’a pas accepté cette connexion. Vérifiez que l’application a bien été publiée et installée.'
     : `Shopify répond : ${detail.slice(0, 150)}`
 }
 
 /**
  * Vérifie un accès avant de l'enregistrer.
  *
- * L'appel sert deux fois : il prouve que le jeton ouvre bien cette boutique, et il rapporte
- * son nom, que la personne reconnaîtra dans la liste de ses connexions. Un accès fautif
- * rejeté tout de suite vaut mieux qu'une connexion verte qui échoue au premier usage.
+ * L'appel sert trois fois : il prouve que les identifiants frappent bien un jeton, que ce
+ * jeton ouvre bien cette boutique, et il rapporte son nom, que la personne reconnaîtra dans
+ * la liste de ses connexions. Un accès fautif rejeté tout de suite vaut mieux qu'une
+ * connexion verte qui échoue au premier usage.
  */
-export const verifyShopifyToken: KeyVerifier = async (jeton, compte) => {
-  const boutique = normaliserBoutique(compte ?? '')
+export const verifyShopifyToken: KeyVerifier = async (clientSecret, champs) => {
+  const boutique = normaliserBoutique(champs?.boutique ?? '')
   if (boutique === null) {
     return {
       ok: false,
@@ -241,14 +300,28 @@ export const verifyShopifyToken: KeyVerifier = async (jeton, compte) => {
         'Cette adresse de boutique n’est pas reconnue. Elle ressemble à « ma-boutique.myshopify.com ».',
     }
   }
-  if (!ressembleAUnJeton(jeton)) {
-    return { ok: false, reason: 'Ce jeton est trop court pour être un jeton Shopify.' }
+
+  const clientId = (champs?.clientId ?? '').trim()
+  if (!ressembleAUnIdentifiant(clientId)) {
+    return { ok: false, reason: 'Cet identifiant client est trop court pour en être un.' }
+  }
+  if (!ressembleAUnIdentifiant(clientSecret)) {
+    return { ok: false, reason: 'Ce secret client est trop court pour en être un.' }
   }
 
-  let version = VERSION_CONNUE
+  const acces: AccesShopify = { boutique, clientId, clientSecret, version: VERSION_CONNUE }
+
+  let frappe: Awaited<ReturnType<typeof frapperJeton>>
+  try {
+    frappe = await frapperJeton(acces)
+  } catch {
+    return { ok: false, reason: 'Shopify est momentanément injoignable. Réessayez.' }
+  }
+  if (!frappe.ok) return { ok: false, reason: frappe.raison }
+
   let reponse: Reponse
   try {
-    reponse = await appeler(boutique, jeton, version, REQUETE_BOUTIQUE)
+    reponse = await appeler(boutique, frappe.jeton, acces.version, REQUETE_BOUTIQUE)
   } catch {
     return { ok: false, reason: 'Shopify est momentanément injoignable. Réessayez.' }
   }
@@ -259,11 +332,13 @@ export const verifyShopifyToken: KeyVerifier = async (jeton, compte) => {
    * de son côté.
    */
   if (reponse.status === 404 || reponse.status === 400) {
-    const autre = await versionUtilisable(boutique, jeton)
-    if (autre !== null && autre !== version) {
+    const autre = await versionUtilisable(boutique, frappe.jeton)
+    if (autre !== null && autre !== acces.version) {
       logger.info('version d’API Shopify renégociée', { version: autre })
-      version = autre
-      reponse = await appeler(boutique, jeton, version, REQUETE_BOUTIQUE).catch(() => reponse)
+      acces.version = autre
+      reponse = await appeler(boutique, frappe.jeton, acces.version, REQUETE_BOUTIQUE).catch(
+        () => reponse,
+      )
     }
   }
 
@@ -272,7 +347,7 @@ export const verifyShopifyToken: KeyVerifier = async (jeton, compte) => {
     | undefined
 
   if (reponse.status !== 200 || shop?.name === undefined) {
-    // Ni le jeton ni un fragment de jeton n'entrent dans le journal.
+    // Aucun identifiant ni fragment d'identifiant n'entre dans le journal.
     logger.warn('connexion Shopify refusée', { status: reponse.status })
     return { ok: false, reason: refus(reponse.status, reponse.erreurs) }
   }
@@ -281,9 +356,13 @@ export const verifyShopifyToken: KeyVerifier = async (jeton, compte) => {
   return {
     ok: true,
     label: vitrine === undefined ? shop.name : `${shop.name} · ${vitrine}`,
-    secret: JSON.stringify({ boutique, jeton, version } satisfies AccesShopify),
-    // L'indice porte sur le jeton : c'est lui que la personne a collé et reconnaîtra.
-    hint: jeton,
+    secret: JSON.stringify(acces satisfies AccesShopify),
+    /*
+     * L'indice porte sur le secret client : c'est lui que la personne a collé et
+     * reconnaîtra. Tiré de l'accès entier, il finirait par « "} » — quatre signes qui ne
+     * diraient rien à personne.
+     */
+    hint: clientSecret,
   }
 }
 
@@ -350,6 +429,7 @@ type Page<T> = { nodes: T[]; pageInfo?: { hasNextPage?: boolean; endCursor?: str
  */
 async function parcourir<Brut, Vu>(
   acces: AccesShopify,
+  jeton: string,
   requete: string,
   racine: string,
   convertir: (brut: Brut) => Vu,
@@ -359,7 +439,7 @@ async function parcourir<Brut, Vu>(
   let apres: string | null = null
 
   while (pieces.length < max) {
-    const reponse: Reponse = await appeler(acces.boutique, acces.jeton, acces.version, requete, {
+    const reponse: Reponse = await appeler(acces.boutique, jeton, acces.version, requete, {
       n: Math.min(PAR_PAGE, max - pieces.length),
       apres,
     })
@@ -388,6 +468,7 @@ function valeur(champ: unknown): string {
 
 export async function lireProduits(
   acces: AccesShopify,
+  jeton: string,
   max = PIECES_MAX,
 ): Promise<{ pieces: ProduitShopify[]; tronque: boolean }> {
   type Brut = {
@@ -402,6 +483,7 @@ export async function lireProduits(
 
   return parcourir<Brut, ProduitShopify>(
     acces,
+    jeton,
     REQUETE_PRODUITS,
     'products',
     (brut) => ({
@@ -420,6 +502,7 @@ export async function lireProduits(
 
 export async function lireArticles(
   acces: AccesShopify,
+  jeton: string,
   max = PIECES_MAX,
 ): Promise<{ pieces: ArticleShopify[]; tronque: boolean }> {
   type Brut = {
@@ -434,6 +517,7 @@ export async function lireArticles(
 
   return parcourir<Brut, ArticleShopify>(
     acces,
+    jeton,
     REQUETE_ARTICLES,
     'articles',
     (brut) => ({

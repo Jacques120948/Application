@@ -1,6 +1,7 @@
 import { AppError } from '@/lib/errors'
 import { BORNES_BALISES } from '@/server/audit/checks/seo'
 import {
+  frapperJeton,
   lireAcces,
   lireArticles,
   lireProduits,
@@ -141,7 +142,22 @@ export async function readBoutique(userId: string): Promise<BoutiqueVue | null> 
   }
 
   try {
-    const [produits, articles] = await Promise.all([lireProduits(acces), lireArticles(acces)])
+    /*
+     * Le jeton se frappe ici, pour cette lecture, et disparaît avec elle. Il vaut
+     * vingt-quatre heures ; le conserver demanderait une expiration, une invalidation et un
+     * renouvellement, soit trois occasions de servir un jeton périmé pour économiser un
+     * aller-retour.
+     */
+    const frappe = await frapperJeton(acces)
+    if (!frappe.ok) {
+      await markConnectionError(userId, connexion.connectionId, frappe.raison)
+      throw new AppError('VALIDATION', frappe.raison)
+    }
+
+    const [produits, articles] = await Promise.all([
+      lireProduits(acces, frappe.jeton),
+      lireArticles(acces, frappe.jeton),
+    ])
 
     logger.info('boutique lue', {
       produits: produits.pieces.length,
@@ -156,10 +172,12 @@ export async function readBoutique(userId: string): Promise<BoutiqueVue | null> 
       plafond: PIECES_MAX,
     }
   } catch (error) {
+    // Un refus déjà traduit et déjà noté ne se note pas deux fois.
+    if (error instanceof AppError) throw error
     /*
      * Un refus de Shopify se note sur la connexion : la personne le verra dans « Connexions »
      * plutôt que de retrouver un écran vide sans savoir pourquoi. Le message vient du
-     * connecteur, qui l'a déjà écrit pour elle et sans aucun fragment de jeton.
+     * connecteur, qui l'a déjà écrit pour elle et sans aucun fragment d'identifiant.
      */
     const raison = error instanceof Error ? error.message : 'Shopify n’a pas répondu.'
     await markConnectionError(userId, connexion.connectionId, raison)

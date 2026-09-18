@@ -24,13 +24,12 @@ export type ProviderCard = {
   /** Où le créateur va chercher sa clé, quand le service s'en remet à une clé. */
   keyHelp: { label: string; hint: string } | null
   /**
-   * Le compte à désigner, quand une clé seule ne suffit pas à savoir où l'employer.
+   * Les champs à demander en plus de la clé, quand celle-ci ne suffit pas.
    *
-   * Un jeton Shopify n'est valable que pour une boutique, et rien dans le jeton ne dit
-   * laquelle. Ce champ n'est pas un secret : il s'affiche en clair, et c'est voulu — une
-   * adresse tapée de travers derrière des points se corrige mal.
+   * Aucun n'est un secret : ils s'affichent en clair, et c'est voulu — une adresse ou un
+   * identifiant tapés de travers derrière des points se corrigent mal.
    */
-  accountHelp: { label: string; hint: string; placeholder: string } | null
+  extraFields: readonly { name: string; label: string; hint: string; placeholder: string }[] | null
   /** Le mode d'emploi pas à pas, affiché à la demande. */
   guide: { url: string; urlLabel: string; steps: readonly string[]; caution?: string } | null
   connection: {
@@ -74,7 +73,7 @@ export function ConnectionsBoard({
   /** Fournisseur dont le formulaire de clé est ouvert, et ce qui y est saisi. */
   const [opened, setOpened] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
-  const [account, setAccount] = useState('')
+  const [account, setAccount] = useState<Record<string, string>>({})
 
   const active = rows.filter((row) => row.connection?.status === 'CONNECTED').length
 
@@ -109,7 +108,7 @@ export function ConnectionsBoard({
     const connection = body.connection
     // La clé quitte la mémoire du navigateur dès qu'elle est enregistrée.
     setApiKey('')
-    setAccount('')
+    setAccount({})
     setOpened(null)
     setRows((current) =>
       current.map((row) => (row.id === providerId ? { ...row, connection } : row)),
@@ -310,23 +309,25 @@ export function ConnectionsBoard({
                               void link(row.id)
                             }}
                           >
-                            {row.accountHelp === null ? null : (
-                              <Field
-                                label={row.accountHelp.label}
-                                hint={row.accountHelp.hint}
-                              >
+                            {(row.extraFields ?? []).map((champ) => (
+                              <Field key={champ.name} label={champ.label} hint={champ.hint}>
                                 <Input
                                   type="text"
-                                  name="account"
+                                  name={champ.name}
                                   autoComplete="off"
                                   spellCheck={false}
                                   required
-                                  value={account}
-                                  placeholder={row.accountHelp.placeholder}
-                                  onChange={(event) => setAccount(event.target.value)}
+                                  value={account[champ.name] ?? ''}
+                                  placeholder={champ.placeholder}
+                                  onChange={(event) =>
+                                    setAccount((actuels) => ({
+                                      ...actuels,
+                                      [champ.name]: event.target.value,
+                                    }))
+                                  }
                                 />
                               </Field>
-                            )}
+                            ))}
                             <Field label={row.keyHelp.label} hint={row.keyHelp.hint}>
                               <Input
                                 type="password"
@@ -349,7 +350,7 @@ export function ConnectionsBoard({
                                 variant="secondary"
                                 onClick={() => {
                                   setApiKey('')
-                                  setAccount('')
+                                  setAccount({})
                                   setOpened(null)
                                 }}
                               >
@@ -361,7 +362,7 @@ export function ConnectionsBoard({
                           <Button
                             onClick={() => {
                               setApiKey('')
-                              setAccount('')
+                              setAccount({})
                               setError(null)
                               setOpened(row.id)
                             }}

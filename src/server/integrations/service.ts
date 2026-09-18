@@ -74,12 +74,13 @@ export const connectInput = z.object({
   /** Secret fourni par le créateur, pour les fournisseurs sans OAuth. */
   apiKey: z.string().trim().min(8).max(400),
   /**
-   * Le compte distant, quand le catalogue le réclame par `accountHelp`.
+   * Les champs réclamés par le catalogue en plus de la clé, par `extraFields`.
    *
-   * Un jeton Shopify n'est valable que pour une boutique, et rien dans le jeton ne dit
-   * laquelle : sans cette adresse, il n'y a nulle part où l'employer.
+   * Les identifiants Shopify ne disent pas à quelle boutique ils s'appliquent : l'adresse
+   * fait donc partie de ce qu'il faut demander. Ce qui arrive ici est filtré sur les noms
+   * déclarés avant d'atteindre un fournisseur.
    */
-  account: z.string().trim().max(200).optional(),
+  account: z.record(z.string(), z.string().trim().max(200)).optional(),
 })
 
 export const disconnectInput = z.object({
@@ -195,13 +196,20 @@ export async function connectWithApiKey(
    * rejetée tout de suite vaut mieux qu'une connexion verte qui échoue le jour où un
    * visiteur pose sa première question.
    */
-  const compte = input.account ?? ''
-  if (provider.accountHelp !== undefined && compte === '') {
-    throw validation(`Indiquez également ${provider.accountHelp.label.toLowerCase()}.`)
+  /*
+   * Le navigateur propose, le catalogue dispose : seuls les champs déclarés traversent. Un
+   * champ inventé côté client n'atteint jamais un fournisseur, et un champ déclaré mais
+   * laissé vide arrête la connexion ici plutôt qu'à la première lecture.
+   */
+  const champs: Record<string, string> = {}
+  for (const attendu of provider.extraFields ?? []) {
+    const valeur = (input.account ?? {})[attendu.name]?.trim() ?? ''
+    if (valeur === '') throw validation(`Indiquez également ${attendu.label.toLowerCase()}.`)
+    champs[attendu.name] = valeur
   }
 
   const verifier = findVerifier(provider.id)
-  const verdict = verifier === undefined ? null : await verifier(input.apiKey, compte)
+  const verdict = verifier === undefined ? null : await verifier(input.apiKey, champs)
   if (verdict !== null && !verdict.ok) throw validation(verdict.reason)
   const accountLabel = verdict === null ? null : verdict.label
 
