@@ -23,6 +23,14 @@ export type ProviderCard = {
   costLabel: string
   /** Où le créateur va chercher sa clé, quand le service s'en remet à une clé. */
   keyHelp: { label: string; hint: string } | null
+  /**
+   * Le compte à désigner, quand une clé seule ne suffit pas à savoir où l'employer.
+   *
+   * Un jeton Shopify n'est valable que pour une boutique, et rien dans le jeton ne dit
+   * laquelle. Ce champ n'est pas un secret : il s'affiche en clair, et c'est voulu — une
+   * adresse tapée de travers derrière des points se corrige mal.
+   */
+  accountHelp: { label: string; hint: string; placeholder: string } | null
   /** Le mode d'emploi pas à pas, affiché à la demande. */
   guide: { url: string; urlLabel: string; steps: readonly string[]; caution?: string } | null
   connection: {
@@ -66,6 +74,7 @@ export function ConnectionsBoard({
   /** Fournisseur dont le formulaire de clé est ouvert, et ce qui y est saisi. */
   const [opened, setOpened] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
+  const [account, setAccount] = useState('')
 
   const active = rows.filter((row) => row.connection?.status === 'CONNECTED').length
 
@@ -86,7 +95,7 @@ export function ConnectionsBoard({
     const response = await fetch('/api/connexions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ providerId, apiKey }),
+      body: JSON.stringify({ providerId, apiKey, account }),
     })
     const body = (await response.json()) as {
       message?: string
@@ -100,6 +109,7 @@ export function ConnectionsBoard({
     const connection = body.connection
     // La clé quitte la mémoire du navigateur dès qu'elle est enregistrée.
     setApiKey('')
+    setAccount('')
     setOpened(null)
     setRows((current) =>
       current.map((row) => (row.id === providerId ? { ...row, connection } : row)),
@@ -300,6 +310,23 @@ export function ConnectionsBoard({
                               void link(row.id)
                             }}
                           >
+                            {row.accountHelp === null ? null : (
+                              <Field
+                                label={row.accountHelp.label}
+                                hint={row.accountHelp.hint}
+                              >
+                                <Input
+                                  type="text"
+                                  name="account"
+                                  autoComplete="off"
+                                  spellCheck={false}
+                                  required
+                                  value={account}
+                                  placeholder={row.accountHelp.placeholder}
+                                  onChange={(event) => setAccount(event.target.value)}
+                                />
+                              </Field>
+                            )}
                             <Field label={row.keyHelp.label} hint={row.keyHelp.hint}>
                               <Input
                                 type="password"
@@ -309,7 +336,7 @@ export function ConnectionsBoard({
                                 required
                                 minLength={8}
                                 value={apiKey}
-                                placeholder="sk-ant-…"
+                                placeholder={row.id === 'anthropic' ? 'sk-ant-…' : '••••••••'}
                                 onChange={(event) => setApiKey(event.target.value)}
                               />
                             </Field>
@@ -322,6 +349,7 @@ export function ConnectionsBoard({
                                 variant="secondary"
                                 onClick={() => {
                                   setApiKey('')
+                                  setAccount('')
                                   setOpened(null)
                                 }}
                               >
@@ -333,6 +361,7 @@ export function ConnectionsBoard({
                           <Button
                             onClick={() => {
                               setApiKey('')
+                              setAccount('')
                               setError(null)
                               setOpened(row.id)
                             }}

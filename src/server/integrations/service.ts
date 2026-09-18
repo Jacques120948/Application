@@ -73,6 +73,13 @@ export const connectInput = z.object({
   providerId: z.string().trim().min(1).max(60),
   /** Secret fourni par le créateur, pour les fournisseurs sans OAuth. */
   apiKey: z.string().trim().min(8).max(400),
+  /**
+   * Le compte distant, quand le catalogue le réclame par `accountHelp`.
+   *
+   * Un jeton Shopify n'est valable que pour une boutique, et rien dans le jeton ne dit
+   * laquelle : sans cette adresse, il n'y a nulle part où l'employer.
+   */
+  account: z.string().trim().max(200).optional(),
 })
 
 export const disconnectInput = z.object({
@@ -188,8 +195,13 @@ export async function connectWithApiKey(
    * rejetée tout de suite vaut mieux qu'une connexion verte qui échoue le jour où un
    * visiteur pose sa première question.
    */
+  const compte = input.account ?? ''
+  if (provider.accountHelp !== undefined && compte === '') {
+    throw validation(`Indiquez également ${provider.accountHelp.label.toLowerCase()}.`)
+  }
+
   const verifier = findVerifier(provider.id)
-  const verdict = verifier === undefined ? null : await verifier(input.apiKey)
+  const verdict = verifier === undefined ? null : await verifier(input.apiKey, compte)
   if (verdict !== null && !verdict.ok) throw validation(verdict.reason)
   const accountLabel = verdict === null ? null : verdict.label
 
@@ -206,6 +218,9 @@ export async function connectWithApiKey(
     kind: 'API_KEY',
     secret,
     accountLabel,
+    ...(verdict !== null && verdict.ok && verdict.hint !== undefined
+      ? { hintSource: verdict.hint }
+      : {}),
   })
 }
 
@@ -252,12 +267,21 @@ export async function storeConnection(
     status?: 'CONNECTED' | 'ERROR'
     lastError?: string | null
     expiresAt?: Date | null
+    /**
+     * Ce dont l'indice est tiré, quand il diffère du secret conservé.
+     *
+     * L'indice sert à ce que la personne reconnaisse ce qu'elle a collé. Quand le secret
+     * conservé est composé — une boutique et un jeton, par exemple — ses quatre derniers
+     * signes ne diraient rien ; ceux du jeton, si.
+     */
+    hintSource?: string
   },
 ): Promise<ConnectionView> {
   const target = provider.connectionTarget
   const status = params.status ?? 'CONNECTED'
   const lastError = status === 'CONNECTED' ? null : (params.lastError ?? null)
   const expiresAt = params.expiresAt ?? null
+  const indice = secretHint(params.hintSource ?? params.secret)
 
   const created = await withUserScope(userId, async (tx) => {
     const previous = await tx.integrationConnection.findFirst({
@@ -301,13 +325,13 @@ export async function storeConnection(
         kind: params.kind,
         secret: encryptSecret(params.secret),
         refreshSecret: null,
-        hint: secretHint(params.secret),
+        hint: indice,
       },
       create: {
         connectionId: connection.id,
         kind: params.kind,
         secret: encryptSecret(params.secret),
-        hint: secretHint(params.secret),
+        hint: indice,
       },
     })
 
@@ -328,7 +352,7 @@ export async function storeConnection(
     lastUsedAt: null,
     expiresAt: expiresAt?.toISOString() ?? null,
     lastError,
-    hint: secretHint(params.secret),
+    hint: indice,
   }
 }
 

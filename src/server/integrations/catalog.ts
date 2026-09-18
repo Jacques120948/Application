@@ -68,6 +68,14 @@ export type IntegrationProvider = {
   /** Comment le créateur obtient sa clé. Absent pour les fournisseurs en OAuth. */
   keyHelp?: { label: string; hint: string }
   /**
+   * Le compte à désigner, quand une clé seule ne suffit pas à savoir où l'employer.
+   *
+   * Un jeton Shopify n'est valable que pour une boutique, et rien dans le jeton ne dit
+   * laquelle : l'adresse de la boutique fait donc partie de ce qu'il faut demander. Le
+   * champ est facultatif — la plupart des services n'en ont pas besoin.
+   */
+  accountHelp?: { label: string; hint: string; placeholder: string }
+  /**
    * Le mode d'emploi, pas à pas, pour quelqu'un qui n'a jamais ouvert le site du
    * fournisseur. Écrit ici plutôt que dans l'écran : c'est du contenu, il se relit et se
    * corrige comme une fiche.
@@ -352,6 +360,68 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
         'Evoliia dépose vos publications en brouillon dans Postelya. Rien ne part sur un réseau social sans que vous l’ayez validé là-bas.',
     },
     reviewedOn: '2026-09-12',
+  },
+  {
+    id: 'shopify',
+    name: 'Shopify',
+    category: 'commerce',
+    summary: 'Votre boutique Shopify : fiches produits, pages et articles de blog.',
+    usage:
+      'Lire vos fiches produits et vos articles pour voir ce qui leur manque côté référencement, sans passer par l’analyse du site public.',
+    status: 'available',
+    /*
+     * Par jeton, et non par OAuth, et ce n'est pas un raccourci technique.
+     *
+     * Shopify propose les deux. L'autorisation en un clic suppose une application publique,
+     * donc une revue de Shopify, des webhooks de conformité obligatoires et une adresse
+     * publique déclarée — des semaines avant qu'un seul marchand puisse s'en servir, et une
+     * validation qui ne dépend pas d'Evoliia. Le jeton d'application personnalisée marche le
+     * jour même : chaque marchand crée la sienne dans son propre administrateur, coche les
+     * autorisations qu'il accorde, et colle le jeton ici. Un peu plus de friction à
+     * l'inscription, aucune dépendance à une validation extérieure.
+     */
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    /*
+     * En lecture seule, et la liste est littérale : ce sont les cases à cocher dans
+     * l'administrateur Shopify. Rien ici ne permet d'écrire dans la boutique.
+     */
+    scopes: ['read_products', 'read_content'],
+    costToEvoliia: 'aucun',
+    costToCreator: 'gratuit',
+    costNotice:
+      'L’interface de gestion de Shopify est comprise dans votre abonnement Shopify. Evoliia ne paie rien, et vous non plus en plus de ce que vous payez déjà.',
+    freeQuota:
+      'Sans supplément, quelle que soit votre offre Shopify. Le débit est limité par Shopify, ce qui ralentit une lecture massive mais ne la facture pas.',
+    webhooks: false,
+    providerReview:
+      'Aucune validation à obtenir : une application personnalisée se crée dans votre propre administrateur. Une application publique, nécessaire pour figurer sur la place de marché Shopify, demanderait en revanche une revue de Shopify.',
+    risk:
+      'Connexion en lecture seule : Evoliia lit vos fiches et vos articles, elle ne peut rien y écrire. Les autorisations d’écriture ne sont pas demandées, et un jeton qui ne les porte pas ne peut pas les acquérir.',
+    accountHelp: {
+      label: 'L’adresse de votre boutique',
+      hint: 'Celle en .myshopify.com, visible dans Paramètres puis « Domaines ». Ce n’est pas l’adresse que voient vos clients.',
+      placeholder: 'ma-boutique.myshopify.com',
+    },
+    keyHelp: {
+      label: 'Le jeton d’accès de votre application',
+      hint: 'Il s’affiche une seule fois, à l’installation de l’application. Si vous l’avez perdu, créez-en un nouveau.',
+    },
+    guide: {
+      url: 'https://admin.shopify.com',
+      urlLabel: 'Ouvrir mon administrateur Shopify',
+      steps: [
+        'Dans Shopify, ouvrez « Paramètres », puis « Applications et canaux de vente ».',
+        'Cliquez « Développer des applications », puis « Créer une application ». Nommez-la Evoliia.',
+        'Ouvrez « Configurer les cadres d’API Admin » et cochez uniquement read_products et read_content.',
+        'Enregistrez, puis cliquez « Installer l’application ».',
+        'Révélez le jeton d’accès Admin API et copiez-le : il ne s’affichera plus ensuite.',
+        'Revenez ici, collez l’adresse de votre boutique et ce jeton.',
+      ],
+      caution:
+        'Ne cochez aucune autorisation en écriture : Evoliia n’en a pas besoin pour lire, et un jeton accorde exactement ce que vous avez coché.',
+    },
+    reviewedOn: '2026-09-18',
   },
   {
     id: 'notion',

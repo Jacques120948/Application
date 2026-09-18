@@ -21,6 +21,21 @@ const TITRE_MIN = 25
 const DESCRIPTION_MAX = 160
 const DESCRIPTION_MIN = 70
 
+/**
+ * Les bornes des balises, exposées.
+ *
+ * Elles servent ailleurs qu'à l'analyse du site public : une fiche produit lue directement
+ * chez un marchand se juge sur les mêmes longueurs. Exposées plutôt que recopiées — deux
+ * jeux de chiffres qui divergent, ce serait un produit qui dit deux choses du même texte
+ * selon l'écran où on le regarde.
+ */
+export const BORNES_BALISES = {
+  titreMin: TITRE_MIN,
+  titreMax: TITRE_MAX,
+  descriptionMin: DESCRIPTION_MIN,
+  descriptionMax: DESCRIPTION_MAX,
+} as const
+
 /** En deçà, la page n'a rien à répondre à personne. */
 const MOTS_MIN = 150
 

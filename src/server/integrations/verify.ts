@@ -2,6 +2,7 @@ import { verifyAnthropicKey } from './providers/anthropic'
 import { verifyPostelyaCode } from './providers/postelya'
 import { verifyOpenAiKey } from './providers/openai'
 import { verifyGeminiKey } from './providers/gemini'
+import { verifyShopifyToken } from './providers/shopify'
 
 /**
  * Vérification d'un secret avant enregistrement.
@@ -27,16 +28,30 @@ export type KeyVerdict =
        * en l'échangeant. Absent, c'est la saisie du créateur qui est conservée.
        */
       secret?: string
+      /**
+       * Ce dont l'indice doit être tiré, quand le secret conservé n'est pas ce que la
+       * personne reconnaîtrait.
+       *
+       * Un accès Shopify est une paire — la boutique et le jeton — et c'est la paire qui est
+       * conservée. Les quatre derniers signes de cette paire ne diraient rien à personne ;
+       * ceux du jeton, si. Absent, l'indice porte sur le secret conservé.
+       */
+      hint?: string
     }
   | { ok: false; reason: string }
 
-export type KeyVerifier = (apiKey: string) => Promise<KeyVerdict>
+/**
+ * `account` désigne le compte distant, pour les services où une clé seule ne dit pas où
+ * l'employer. Le catalogue déclare s'il est attendu, par `accountHelp`.
+ */
+export type KeyVerifier = (apiKey: string, account?: string) => Promise<KeyVerdict>
 
 const VERIFIERS: Record<string, KeyVerifier> = {
   anthropic: verifyAnthropicKey,
   postelya: verifyPostelyaCode,
   openai: verifyOpenAiKey,
   'google-gemini': verifyGeminiKey,
+  shopify: verifyShopifyToken,
 }
 
 export function findVerifier(providerId: string): KeyVerifier | undefined {
