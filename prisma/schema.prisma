@@ -93,6 +93,7 @@ model User {
   actionItems          ActionItem[]
   auditCorrections     AuditCorrection[]
   visibilityNotes      VisibilityNote[]
+  siteArticles         SiteArticle[]
 
   @@index([createdAt])
 }
@@ -1222,11 +1223,12 @@ model Site {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  audits Audit[]
-  items  ActionItem[]
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audits      Audit[]
+  items       ActionItem[]
   corrections AuditCorrection[]
   notes       VisibilityNote[]
+  articles    SiteArticle[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
   /// diverger deux historiques qui devraient n'en faire qu'un.
@@ -1265,9 +1267,9 @@ model Audit {
   /// figé là : les contrôles de fin d'audit en ont besoin longtemps après.
   siteSignals Json?
   /// Code d'échec, jamais le message brut du serveur distant.
-  errorCode  String?
-  startedAt  DateTime  @default(now())
-  finishedAt DateTime?
+  errorCode   String?
+  startedAt   DateTime  @default(now())
+  finishedAt  DateTime?
 
   site     Site           @relation(fields: [siteId], references: [id], onDelete: Cascade)
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1388,6 +1390,49 @@ model ActionItem {
 ///
 /// Evoliia ne touche jamais au site du client : ce texte est à copier, et le
 /// bouton qui l'appliquerait n'existe pas.
+/// Un article rédigé par l'équipe, à partir de ce que l'analyse reproche au site.
+///
+/// Le corps est du Markdown : c'est ce qu'un modèle écrit le plus proprement, ce qui se
+/// relit sans balise, et ce qui se convertit ensuite vers n'importe quel site. Les questions
+/// sont à part parce qu'elles se déclarent en FAQ — ce que les contrôles GEO attendent.
+model SiteArticle {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// Le sujet retenu, tel qu'il sera relu.
+  sujet     String
+  /// Ce que la personne a demandé, quand elle a demandé quelque chose. Vide sinon.
+  demande   String   @default("")
+  /// Pourquoi ce sujet : ce que l'analyse reprochait au site, dit par l'équipe.
+  fondement String   @default("")
+  /// Les contrôles que cet article vise à combler. Sert à les afficher, pas à promettre.
+  checkIds  String[] @default([])
+
+  titre String
+  /// Le premier paragraphe, celui qui doit répondre avant qu'on fasse défiler.
+  chapo String @default("")
+  corps String
+
+  /// [{ question, reponse }]. Séparées du corps : elles se déclarent, elles ne se racontent pas.
+  questions Json?
+
+  metaTitle       String @default("")
+  metaDescription String @default("")
+
+  wordCount    Int @default(0)
+  /// Crédits réellement débités pour cet article.
+  creditsSpent Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, createdAt])
+}
+
 model AuditCorrection {
   id     String @id @default(uuid()) @db.Uuid
   siteId String @db.Uuid

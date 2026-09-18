@@ -102,6 +102,14 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
    * même. Le modèle rapide est le bon compromis pour une réponse de six phrases.
    */
   visibilityAsk: { model: MODELS.fast, maxTokens: 1_400, effort: 'medium' },
+  /*
+   * Un article de fond : sept cents mots au minimum, des sections titrées, des
+   * questions-réponses et les balises qui vont avec. C'est de loin le plus gros texte que le
+   * produit fabrique, d'où le plafond de jetons. Le modèle rapide plutôt que le modèle de
+   * raisonnement : la difficulté est d'écrire juste à partir de ce qu'on donne, pas de
+   * résoudre quoi que ce soit — et un article coûte assez cher comme ça.
+   */
+  visibilityArticle: { model: MODELS.fast, maxTokens: 16_000, effort: 'medium' },
 }
 
 export type TokenUsage = {

@@ -61,6 +61,7 @@ export type CreditedOperation =
   | 'visibilityFix'
   /** Une question posée à l'un des quatre spécialistes de la visibilité. */
   | 'visibilityAsk'
+  | 'visibilityArticle'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -127,6 +128,12 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    * la forme.
    */
   visibilityAsk: 2,
+  /*
+   * Un article est la plus grosse opération du produit, et la grille annonce quinze à trente
+   * crédits. Le plancher n'a pas à refaire ce calcul : il empêche seulement qu'un article
+   * rendu court soit facturé comme une phrase. Le coût réel des jetons décide au-delà.
+   */
+  visibilityArticle: 8,
 }
 
 /**

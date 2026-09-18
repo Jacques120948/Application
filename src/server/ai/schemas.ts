@@ -533,3 +533,65 @@ export const correctionsSchema = z
   .strict()
 
 export type Corrections = z.infer<typeof correctionsSchema>
+
+/**
+ * Un article rédigé par l'équipe.
+ *
+ * La forme du schéma est le cœur de la fonctionnalité, et elle n'est pas une question de
+ * goût : **elle reprend les contrôles que le produit mesure lui-même.** Un article rendu en
+ * un seul bloc de texte serait noté médiocrement par l'analyse d'Evoliia — pavé sans
+ * intertitres, aucune question posée, pas d'introduction qui réponde. Vendre un texte qu'on
+ * noterait mal soi-même serait la contradiction la plus coûteuse du produit.
+ *
+ * D'où quatre champs séparés plutôt qu'un seul.
+ *
+ * **Le chapô est à part.** C'est ce qu'un assistant reprend quand il cite une page : il doit
+ * répondre avant qu'on fasse défiler, pas accueillir.
+ *
+ * **Les sections sont titrées.** Un intertitre est ce qui transforme un pavé en quelque
+ * chose de parcourable, pour un humain comme pour une machine.
+ *
+ * **Les questions sont hors du corps.** Elles se déclarent en FAQ ; noyées dans le texte,
+ * elles ne comptent pour personne.
+ *
+ * **Le titre de résultat et la description sont demandés d'emblée.** Sans eux, l'article
+ * créerait le défaut suivant le jour de sa publication.
+ */
+export const articleSchema = z
+  .object({
+    /** Le sujet retenu, en une ligne. */
+    sujet: z.string().min(3).max(200),
+    /** Pourquoi ce sujet, tiré des constats fournis. Deux phrases au plus. */
+    fondement: z.string().min(1).max(600),
+    titre: z.string().min(5).max(160),
+    /** Le premier paragraphe : il répond, il n'annonce pas. */
+    chapo: z.string().min(80).max(800),
+    sections: z
+      .array(
+        z
+          .object({
+            titre: z.string().min(3).max(160),
+            /** Le corps de la section, en Markdown simple : paragraphes et listes. */
+            corps: z.string().min(1).max(4000),
+          })
+          .strict(),
+      )
+      .min(2)
+      .max(10),
+    questions: z
+      .array(
+        z
+          .object({
+            question: z.string().min(5).max(300),
+            reponse: z.string().min(1).max(1200),
+          })
+          .strict(),
+      )
+      .min(2)
+      .max(8),
+    metaTitle: z.string().min(5).max(70),
+    metaDescription: z.string().min(40).max(170),
+  })
+  .strict()
+
+export type ArticleRedige = z.infer<typeof articleSchema>

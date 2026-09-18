@@ -41,6 +41,7 @@ import {
   SPECSHEET_SYSTEM,
   VALIDATION_SYSTEM,
   CORRECTIONS_SYSTEM,
+  ARTICLE_SYSTEM,
   LEA_SYSTEM,
   NEO_SYSTEM,
   GIA_SYSTEM,
@@ -66,6 +67,8 @@ import {
   liaInsightsSchema,
   correctionsSchema,
   type Corrections,
+  articleSchema,
+  type ArticleRedige,
   type LiaAnswer,
   type LiaFaq,
   type LiaInsights,
@@ -1388,6 +1391,75 @@ export async function writeCorrections(params: {
       asUserData('consigne', params.consigne),
       asUserData('pages_concernees', JSON.stringify(params.pages, null, 2)),
       'Rédige la correction de chaque page concernée.',
+    ].join('\n\n'),
+  })
+}
+
+/** Une page du site, telle qu'on la donne au rédacteur pour qu'il ne la refasse pas. */
+export type PageDuSite = {
+  path: string
+  title: string
+  intro: string
+}
+
+/** Un constat de l'analyse, dit comme la personne le lit dans son plan d'action. */
+export type ConstatPourArticle = {
+  label: string
+  why: string
+  affected: number
+}
+
+/**
+ * Fait écrire un article de fond.
+ *
+ * Tout ce qui vient du site ou de la personne voyage dans une balise de données : le contenu
+ * d'un site est écrit par n'importe qui — un fournisseur, un client, un ancien prestataire —
+ * et une consigne glissée dans une page ne doit pas devenir une instruction.
+ */
+export async function writeArticle(params: {
+  userId: string
+  /** Ce que la personne a demandé, ou une chaîne vide : au modèle de choisir alors. */
+  demande: string
+  /** Ce que la personne dit de son activité, quand elle l'a écrit. */
+  about: string
+  /** L'hôte du site, pour situer sans avoir à le deviner. */
+  host: string
+  pages: readonly PageDuSite[]
+  constats: readonly ConstatPourArticle[]
+  seuils: {
+    motsMinimum: number
+    motsParParagrapheMax: number
+    introSignesMinimum: number
+    questionsMinimum: number
+    chiffresMinimum: number
+  }
+  locale: string
+}): Promise<RunResult<ArticleRedige>> {
+  const consignes = [
+    `Langue par défaut : ${params.locale}. Si le site est écrit dans une autre langue, suis la sienne.`,
+    `Longueur visée : au moins ${params.seuils.motsMinimum} mots au total.`,
+    `Aucun paragraphe au-delà de ${params.seuils.motsParParagrapheMax} mots.`,
+    `Le chapô fait au moins ${params.seuils.introSignesMinimum} signes et répond dès la première phrase.`,
+    `Au moins ${params.seuils.questionsMinimum} questions-réponses.`,
+    `Au moins ${params.seuils.chiffresMinimum} faits chiffrés vérifiables dans le corps.`,
+  ].join('\n')
+
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'visibilityArticle' },
+    system: ARTICLE_SYSTEM,
+    schema: articleSchema,
+    userContent: [
+      `Site concerné : ${params.host}`,
+      consignes,
+      params.about.trim() === ''
+        ? "La personne n'a rien écrit sur son activité : n'en déduis rien, tiens-t'en au contenu de ses pages."
+        : asUserData('activite_de_la_personne', params.about),
+      params.demande.trim() === ''
+        ? "Aucun sujet n'est demandé : choisis-le à partir des constats et de ce que le site ne couvre pas."
+        : asUserData('sujet_demande', params.demande),
+      asUserData('pages_deja_en_ligne', JSON.stringify(params.pages, null, 2)),
+      asUserData('constats_de_l_analyse', JSON.stringify(params.constats, null, 2)),
+      "Écris l'article.",
     ].join('\n\n'),
   })
 }

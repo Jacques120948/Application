@@ -44,6 +44,20 @@ const QUESTIONS_POUR_FAQ = 2
 /** En deçà, la page n'avance aucun fait vérifiable — un numéro de téléphone ne compte pas. */
 const CHIFFRES_MIN = 3
 
+/**
+ * Les seuils que doit tenir un texte écrit par l'équipe.
+ *
+ * Exposés plutôt que recopiés dans la consigne de rédaction : deux jeux de chiffres qui
+ * divergent, ce serait un produit qui vend un article et le note mal ensuite.
+ */
+export const SEUILS_REDACTION = {
+  motsMinimum: ARTICLE_MIN,
+  motsParParagrapheMax: PARAGRAPHE_MAX_MOTS,
+  introSignesMinimum: INTRO_MIN_SIGNES,
+  questionsMinimum: QUESTIONS_POUR_FAQ,
+  chiffresMinimum: CHIFFRES_MIN,
+} as const
+
 /** Ce qu'un titre ne dit pas. Hors de son site, aucun de ces mots n'apprend quoi que ce soit. */
 const TITRES_MUETS = new Set([
   'accueil',
