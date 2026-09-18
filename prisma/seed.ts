@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client'
 import { DEFAULT_PLANS, PLANNED_PLAN_CAPABILITIES } from '../src/server/billing/plans'
 import { DEFAULT_MODEL_PRICING } from '../src/server/billing/ai-pricing'
 import { activerRadarEtLiaUneFois } from '../src/server/billing/activation'
-import { seedDemoApps } from './seed-demos'
 
 /**
  * Initialisation d'une installation.
@@ -79,7 +78,17 @@ async function main(): Promise<void> {
   else for (const ligne of ouverture) console.log(`Radar et Lia ouverts — ${ligne}`)
 
   await seedTarifsIa()
-  await seedDemoApps(prisma)
+  /*
+   * Les démonstrations ne sont plus semées.
+   *
+   * Six applications — DevisFlow, FitPilot, Cooksy, ImmoTrack, StudyFlow, Bookizy — étaient
+   * republiées à chaque déploiement pour montrer sur la page d'accueil ce que le
+   * constructeur savait faire. La page d'accueil ne présente plus d'applications, et le
+   * constructeur n'est plus vendu : elles ne montraient donc plus rien à personne, tout en
+   * se recréant chaque jour. Le semis reste écrit dans `prisma/seed-demos.ts`, pour le cas
+   * où l'atelier reprendrait du service : c'est un appel à remettre, pas un fichier à
+   * réécrire.
+   */
   await promoteAdmin()
 }
 

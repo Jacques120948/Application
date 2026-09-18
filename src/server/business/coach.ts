@@ -16,18 +16,7 @@ import { getCreatorOverview } from './overview'
  */
 
 /** Écrans d'où la question peut venir. Sert à situer la personne, rien de plus. */
-const SCREENS = [
-  'visibilite',
-  'demarrer',
-  'objectif',
-  'idees',
-  'idee',
-  'creer',
-  'projet',
-  'dashboard',
-  'atelier',
-  'autre',
-] as const
+const SCREENS = ['visibilite', 'dashboard', 'autre'] as const
 
 export const coachInput = z.object({
   question: z.string().trim().min(3).max(600),
@@ -47,16 +36,8 @@ export type CoachInput = z.infer<typeof coachInput>
 
 const SCREEN_LABEL: Record<(typeof SCREENS)[number], string> = {
   visibilite: 'tableau de bord de la visibilité : les deux notes et le plan d’action',
-  demarrer: 'écran du choix de départ',
-  objectif: "formulaire de l'objectif",
-  idees: 'liste des idées proposées',
-  idee: "fiche d'étude d'une idée",
-  creer: "description directe d'une idée",
-  projet: "éditeur d'une application",
   dashboard: 'tableau de bord',
-  atelier: "atelier du constructeur d'applications",
-  autre: 'autre page',
-}
+  autre: 'une autre page'}
 
 export async function helpCreator(
   userId: string,

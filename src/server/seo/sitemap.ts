@@ -22,16 +22,16 @@ import type { AppSpec } from '@/server/spec/schema'
  * Aucun secret ici, aucune donnée de visiteur : uniquement des adresses déjà publiques.
  */
 
-/** Les chemins de l'atelier : utiles à qui est connecté, inutiles à un index. */
+/**
+ * Les chemins réservés : utiles à qui est connecté, inutiles à un index.
+ *
+ * `visibilite` y manquait, et c'est l'écran principal du produit : un robot y trouvait un
+ * formulaire de connexion et n'avait aucune raison de l'indexer autrement. Les chemins de
+ * l'ancien atelier en sortent, leurs écrans n'existant plus.
+ */
 export const PRIVATE_PATHS = [
+  'visibilite',
   'dashboard',
-  'projets',
-  'creer',
-  'objectif',
-  'demarrer',
-  'idees',
-  'radar',
-  'equipe',
   'connexions',
   'abonnement',
   'administration',

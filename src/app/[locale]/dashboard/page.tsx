@@ -8,8 +8,9 @@ import { resolveLocale } from '@/i18n'
  * l'écran de visibilité. Cette adresse reste parce qu'elle vit dans des favoris, dans des
  * courriels et dans le lien du logo ; la faire disparaître aurait cassé tout cela pour rien.
  *
- * L'atelier du constructeur n'est pas supprimé pour autant : il vit à `/atelier`, hors du
- * menu, pour ceux dont les projets tournent encore.
+ * Les écrans du constructeur ont été retirés : plus aucune offre vendable ne l'ouvrait, et
+ * ils ne servaient plus qu'à promener des liens entre eux. Le moteur, lui, reste en place —
+ * les applications déjà publiées continuent de répondre à leur adresse.
  */
 export default async function DashboardPage({ params }: { params: Promise<{ locale: string }> }) {
   const locale = resolveLocale((await params).locale)
