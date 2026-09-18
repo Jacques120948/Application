@@ -76,7 +76,7 @@ export const en: Record<keyof typeof fr, string> = {
   'subscription.groupConnections': 'Connections',
   'subscription.groupCreate': 'Create and go live',
   'subscription.groupLaunch': 'Launch and social networks',
-  'subscription.groupTeam': 'Marketing team',
+  'subscription.groupTeam': 'Your team',
   'subscription.groupRadar': 'Opportunity Radar',
   'subscription.groupSupport': 'Lia, customer support',
   'subscription.detailsTitle': 'What each plan contains',
@@ -90,7 +90,8 @@ export const en: Record<keyof typeof fr, string> = {
   'subscription.rowProjects': 'Applications',
   'subscription.rowImages': 'Image storage',
   'subscription.rowConnections': 'External connections',
-  'subscription.connectionsHint': 'Stripe, Postelya, OpenAI, Gemini… with your own accounts and your own keys.',
+  'subscription.connectionsHint':
+    'Shopify, Stripe, Postelya, OpenAI, Gemini… with your own accounts and your own keys.',
   'subscription.rowRadar': 'Radar searches per month',
   'subscription.rowLia': 'Lia answers per month',
   'subscription.rowLiaConversations': 'Lia conversations per month',

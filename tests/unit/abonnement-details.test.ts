@@ -68,7 +68,7 @@ describe('détail des offres', () => {
      */
     expect(groups.map((group) => group.title)).not.toContain('Créer et mettre en ligne')
     expect(flat).not.toContain('Construction et mise en ligne')
-    expect(groups.map((group) => group.title)).not.toContain('Équipe marketing')
+    expect(groups.map((group) => group.title)).not.toContain('Votre équipe')
   })
 
   it('accorde le nombre de sites et d’audits', () => {
@@ -114,7 +114,7 @@ describe('détail des offres', () => {
     ])
     expect(byTitle['Connexions']).toEqual(['3 connexion(s) à des services externes'])
     expect(byTitle['Lancement et réseaux sociaux']).toEqual(['Kit de lancement'])
-    expect(byTitle['Équipe marketing']).toEqual(['Tom — Social Media Manager'])
+    expect(byTitle['Votre équipe']).toEqual(['Tom — Social Media Manager'])
     expect(byTitle['Radar d’opportunités']).toEqual(['Radar d’opportunités : 3 recherche(s) par mois'])
     expect(byTitle['Lia, support client']).toEqual([
       'Lia, support client dans vos applications : 200 réponses par mois',
@@ -154,6 +154,31 @@ describe('détail des offres', () => {
       'Créer et mettre en ligne',
     )
     expect(sansAtelier.sections[0]?.title).toBe('Visibilité')
+  })
+
+  it('retire une ligne qu’aucune offre n’accorde, et la section qui n’en garde aucune', () => {
+    /*
+     * Le cas s'est produit en production. Le produit a changé de métier : les fonctions de
+     * l'ancien sont restées au catalogue, plus aucune offre ne les ouvrait, et la grille
+     * affichait onze rangées entièrement barrées — sous des titres qui parlaient encore de
+     * réseaux sociaux et d'équipe marketing. Quatre tirets n'apprennent rien à personne et
+     * donnent au produit l'air plus pauvre qu'il n'est.
+     */
+    const aucune = comparePlans([plan({ name: 'A' }), plan({ name: 'B' })], 'fr')
+    const lignes = aucune.sections.flatMap((section) => section.rows)
+
+    expect(lignes.map((ligne) => ligne.label)).not.toContain('Tom — Social Media Manager')
+    expect(aucune.sections.map((section) => section.title)).not.toContain('Votre équipe')
+    // Aucune ligne subsistante n'est entièrement barrée.
+    expect(lignes.filter((ligne) => ligne.values.every((valeur) => valeur === false))).toEqual([])
+
+    // Mais une ligne qu'une seule offre accorde reste : c'est précisément ce qui distingue.
+    const une = comparePlans(
+      [plan({ name: 'A' }), plan({ name: 'B', features: ['social_agent'] })],
+      'fr',
+    )
+    const gardees = une.sections.flatMap((section) => section.rows.map((ligne) => ligne.label))
+    expect(gardees).toContain('Tom — Social Media Manager')
   })
 
   it('arrondit l’espace d’images en toutes lettres', () => {

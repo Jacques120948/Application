@@ -16,6 +16,15 @@ import { IMPLEMENTED_PLAN_CAPABILITIES } from '@/server/billing/plans'
  * l'ouvre réellement ; annoncer « s'arrête avant la construction » à quelqu'un venu faire
  * analyser son site, c'est lui parler d'un produit qu'il n'a pas demandé.
  *
+ * **Une ligne que personne n'obtient n'est pas une ligne.** Le tableau ne montre que ce qui
+ * distingue une offre d'une autre : une rangée entièrement barrée n'informe de rien, occupe
+ * l'écran, et fait douter de ce qui l'entoure. C'est ce qui arrive mécaniquement quand le
+ * produit change de métier : les fonctions de l'ancien restent au catalogue, plus aucune
+ * offre ne les ouvre, et la grille se remplit de tirets. La règle est donc appliquée
+ * partout, et non à une section choisie — ainsi elle se corrige d'elle-même le jour où
+ * l'exploitant rouvre ou referme une fonction depuis le back-office, sans qu'aucune liste
+ * n'ait à être tenue à jour ici.
+ *
  * Deux formes pour la même vérité :
  *   - `planDetails` : ce que l'offre contient, groupé par thème, pour une carte ;
  *   - `comparePlans` : toutes les lignes pour toutes les offres, pour un tableau où l'on
@@ -149,6 +158,13 @@ export function comparePlans(plans: readonly Plan[], locale: Locale): PlanCompar
     values: plans.map(value),
   })
 
+  /**
+   * Une ligne qu'aucune offre comparée n'accorde. Quatre tirets n'apprennent rien à
+   * personne, et donnent au produit l'air plus pauvre qu'il n'est.
+   */
+  const vide = (ligne: ComparisonRow): boolean =>
+    ligne.values.every((valeur) => valeur === false)
+
   const sections: ComparisonSection[] = [
     {
       title: t('subscription.groupVisibility'),
@@ -221,5 +237,14 @@ export function comparePlans(plans: readonly Plan[], locale: Locale): PlanCompar
     if (rows.length > 0) sections.push({ title: t(GROUP_TITLES[group]), rows })
   }
 
-  return { planNames: plans.map((plan) => plan.name), sections }
+  /*
+   * Le tri final plutôt qu'un filtre à chaque construction : les sections sont bâties par
+   * des chemins différents, et une règle appliquée une fois à la fin ne peut pas en oublier
+   * un. Une section qui perd toutes ses lignes disparaît avec elles.
+   */
+  const retenues = sections
+    .map((section) => ({ ...section, rows: section.rows.filter((ligne) => !vide(ligne)) }))
+    .filter((section) => section.rows.length > 0)
+
+  return { planNames: plans.map((plan) => plan.name), sections: retenues }
 }

@@ -78,7 +78,7 @@ export const fr = {
   'subscription.groupConnections': 'Connexions',
   'subscription.groupCreate': 'Créer et mettre en ligne',
   'subscription.groupLaunch': 'Lancement et réseaux sociaux',
-  'subscription.groupTeam': 'Équipe marketing',
+  'subscription.groupTeam': 'Votre équipe',
   'subscription.groupRadar': 'Radar d’opportunités',
   'subscription.groupSupport': 'Lia, support client',
   'subscription.detailsTitle': 'Le détail de chaque offre',
@@ -92,7 +92,8 @@ export const fr = {
   'subscription.rowProjects': 'Applications',
   'subscription.rowImages': 'Espace d’images',
   'subscription.rowConnections': 'Connexions externes',
-  'subscription.connectionsHint': 'Stripe, Postelya, OpenAI, Gemini… avec vos propres comptes et vos propres clés.',
+  'subscription.connectionsHint':
+    'Shopify, Stripe, Postelya, OpenAI, Gemini… avec vos propres comptes et vos propres clés.',
   'subscription.rowRadar': 'Recherches Radar par mois',
   'subscription.rowLia': 'Réponses de Lia par mois',
   'subscription.rowLiaConversations': 'Conversations Lia par mois',
