@@ -21,6 +21,8 @@ export type NotificationKind =
   | 'app_record'
   /** Un créateur signale un problème qu'il n'a pas pu résoudre. Adressée à l'exploitant. */
   | 'creator_report'
+  /** La surveillance a repéré qu'un site suivi a cessé de fonctionner ou d'être indexable. */
+  | 'site_watch'
 
 export type NotificationView = {
   id: string

@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { estimerCorrection } from '@/server/audit/corrections'
 import { readPlan } from '@/server/audit/plan'
+import { listWatches } from '@/server/audit/surveillance'
 import { listSites, readDashboard } from '@/server/audit/service'
 import { parseTargetUrl } from '@/server/audit/net'
 import { Shell } from '@/components/studio/Shell'
@@ -68,9 +69,10 @@ export default async function VisibilitePage({
    * rend trente lignes se referme, et « par quoi je commence » est la seule question que se
    * pose quelqu'un devant cet écran. L'historique montre le reste.
    */
-  const [plan, cout] = await Promise.all([
+  const [plan, cout, alertes] = await Promise.all([
     tableau === null ? null : readPlan(user.id, tableau.site.id),
     estimerCorrection(),
+    tableau === null ? [] : listWatches(user.id, tableau.site.id),
   ])
   const lignes = (plan?.lignes ?? []).slice(0, PRIORITES_MAX)
 
@@ -96,6 +98,7 @@ export default async function VisibilitePage({
               lignes={lignes}
               reglees={plan?.reglees ?? []}
               cout={cout}
+              alertes={alertes}
             />
           </div>
         )}

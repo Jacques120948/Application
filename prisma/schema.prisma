@@ -94,6 +94,7 @@ model User {
   auditCorrections     AuditCorrection[]
   visibilityNotes      VisibilityNote[]
   siteArticles         SiteArticle[]
+  siteWatches          SiteWatch[]
 
   @@index([createdAt])
 }
@@ -1222,6 +1223,8 @@ model Site {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
+  /// Dernier passage de la surveillance. Vide tant qu'elle n'a jamais tourné sur ce site.
+  watchedAt DateTime?
 
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   audits      Audit[]
@@ -1229,6 +1232,7 @@ model Site {
   corrections AuditCorrection[]
   notes       VisibilityNote[]
   articles    SiteArticle[]
+  watches     SiteWatch[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
   /// diverger deux historiques qui devraient n'en faire qu'un.
@@ -1395,6 +1399,34 @@ model ActionItem {
 /// Le corps est du Markdown : c'est ce qu'un modèle écrit le plus proprement, ce qui se
 /// relit sans balise, et ce qui se convertit ensuite vers n'importe quel site. Les questions
 /// sont à part parce qu'elles se déclarent en FAQ — ce que les contrôles GEO attendent.
+/// Un défaut repéré par la surveillance, ouvert tant qu'il dure.
+///
+/// Un constat s'ouvre quand le défaut apparaît et se ferme quand il a disparu, plutôt que
+/// de créer une ligne par passage : un site en panne six semaines produirait sinon six
+/// lignes identiques, et l'écran dirait « six problèmes » là où il y en a un depuis six
+/// semaines.
+model SiteWatch {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// Identifiant stable du contrôle : watch.unreachable, watch.noindex…
+  checkId String
+  /// L'adresse concernée, quand le constat porte sur une page précise.
+  url     String @default("")
+  /// Ce qui a été constaté, dit comme la personne le lira.
+  detail  String @default("")
+
+  openedAt DateTime  @default(now())
+  /// Rempli au premier contrôle où le défaut a disparu.
+  closedAt DateTime?
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([siteId, closedAt])
+}
+
 model SiteArticle {
   id     String @id @default(uuid()) @db.Uuid
   siteId String @db.Uuid

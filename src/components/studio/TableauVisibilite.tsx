@@ -47,6 +47,8 @@ export type TableauProps = {
   reglees: readonly { checkId: string; label: string; engine: string; state: string }[]
   /** Fourchette annoncée pour une rédaction, lue dans le catalogue administrable. */
   cout: { min: number; max: number } | null
+  /** Ce que la surveillance a repéré de cassé, et qui ne l'est pas encore redevenu. */
+  alertes: readonly { checkId: string; label: string; why: string; detail: string }[]
 }
 
 /** Une date écrite comme on la dit. */
@@ -343,12 +345,51 @@ export function TableauVisibilite({
   lignes,
   reglees,
   cout,
+  alertes,
 }: TableauProps) {
   const aCorriger = lignes.length
   const critiques = lignes.filter((ligne) => ligne.severity === 'critical').length
 
   return (
     <div className="grid gap-6">
+      {/*
+        Ce qui est cassé passe avant les notes, et même avant Léa.
+        
+        Une note de soixante-neuf sur cent ne veut plus rien dire si le site ne répond plus
+        ou vient de demander sa désindexation : ce sont des pannes qui effacent tout le
+        reste, et elles ne se voient pas depuis le site, qui continue de s'afficher pour son
+        propriétaire. Les reléguer sous les jauges reviendrait à les faire découvrir en
+        dernier.
+      */}
+      {alertes.length === 0 ? null : (
+        <section
+          className="rounded-[var(--radius-card)] border p-5"
+          style={{
+            borderColor: 'var(--color-critical)',
+            background: 'var(--color-critical-soft, var(--color-surface))',
+          }}
+        >
+          <h2 className="m-0 text-base font-semibold" style={{ color: 'var(--color-critical)' }}>
+            {alertes.length === 1
+              ? 'Un problème repéré depuis votre dernière analyse'
+              : `${alertes.length} problèmes repérés depuis votre dernière analyse`}
+          </h2>
+          <ul className="m-0 mt-3 grid list-none gap-3 p-0">
+            {alertes.map((alerte) => (
+              <li key={`${alerte.checkId}-${alerte.detail}`}>
+                <p className="m-0 text-sm font-medium">{alerte.label}</p>
+                <p className="m-0 mt-0.5 text-sm text-[var(--color-ink-soft)]">{alerte.why}</p>
+                {alerte.detail === '' ? null : (
+                  <p className="m-0 mt-0.5 text-xs text-[var(--color-ink-faint)]">
+                    {alerte.detail}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/*
         Léa ouvre l'écran. Ce qu'elle dit est entièrement calculé — nombre de pages, nombre
         de constats, date — et c'est justement ce qui permet de le dire sans précaution : il

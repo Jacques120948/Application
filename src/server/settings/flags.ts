@@ -34,6 +34,20 @@ export const FLAGS = {
    * que leurs sources extérieures et leurs analyses périodiques ne sont pas branchées.
    * Chacun se coupe d'un clic sans retirer une ligne de code.
    */
+  /**
+   * La surveillance hebdomadaire des sites suivis.
+   *
+   * Éteinte par défaut, et pas seulement par prudence de principe : c'est la seule fonction
+   * du produit qui consomme du réseau à la charge d'Evoliia sans qu'une personne l'ait
+   * demandé à cet instant. Bornée — six requêtes par site et par semaine — mais l'allumer
+   * reste une décision d'exploitant, pas un réglage par défaut.
+   */
+  surveillance: {
+    key: 'flag.surveillance',
+    label: 'Surveillance hebdomadaire',
+    help: "Contrôle chaque semaine que les sites suivis répondent toujours et n'ont pas cessé d'être indexables. Six requêtes par site, aucun crédit consommé. Demande un planificateur qui appelle la route prévue.",
+    fallback: false,
+  },
   radar: {
     key: 'flag.radar',
     label: 'Radar d’opportunités',
