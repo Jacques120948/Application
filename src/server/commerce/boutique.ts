@@ -1,5 +1,7 @@
 import { AppError } from '@/lib/errors'
 import { BORNES_BALISES } from '@/server/audit/checks/seo'
+import { getEntitlements } from '@/server/billing/entitlements'
+import { requireFeature } from '@/server/billing/features'
 import {
   frapperJeton,
   lireAcces,
@@ -130,9 +132,22 @@ function vueArticle(article: ArticleShopify): PieceVue {
  * `null` n'est pas une erreur : ne pas avoir connecté Shopify est l'état ordinaire de la
  * plupart des gens. C'est à l'écran de proposer la connexion, pas à ce module de lever.
  */
+export const SHOPIFY_FEATURE = 'shopify_read'
+
 export async function readBoutique(userId: string): Promise<BoutiqueVue | null> {
   const connexion = await useCredential(userId, 'shopify')
   if (connexion === null) return null
+
+  /*
+   * Le droit se vérifie ici, après l'absence de connexion et avant le premier appel.
+   *
+   * Après, parce que ne pas avoir connecté Shopify n'est pas un refus : c'est l'état
+   * ordinaire, et l'écran propose alors la connexion plutôt que de parler d'offre. Avant,
+   * parce qu'une grille tarifaire qui annonce une fonction sans que rien ne l'applique est
+   * une ligne décorative : le jour où l'exploitant la retire d'une offre, le tableau
+   * dirait « non » et le produit continuerait de dire « oui ».
+   */
+  requireFeature(await getEntitlements(userId), SHOPIFY_FEATURE)
 
   const acces = lireAcces(connexion.secret)
   if (acces === null) {

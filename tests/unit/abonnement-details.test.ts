@@ -181,6 +181,27 @@ describe('détail des offres', () => {
     expect(gardees).toContain('Tom — Social Media Manager')
   })
 
+  it('n’annonce la boutique que là où elle peut réellement se brancher', () => {
+    /*
+     * Deux conditions, pas une : la fonction accordée, et une place de connexion. L'offre
+     * d'essai a les quatre spécialistes mais aucune connexion extérieure ; lui promettre sa
+     * boutique reviendrait à afficher une coche devant une porte qui ne s'ouvre pas.
+     */
+    const grille = comparePlans(
+      [
+        plan({ name: 'Essai', maxConnections: 0, features: ['shopify_read'] }),
+        plan({ name: 'Starter', maxConnections: 1, features: ['shopify_read'] }),
+        plan({ name: 'Sans', maxConnections: 3, features: [] }),
+      ],
+      'fr',
+    )
+    const ligne = grille.sections
+      .flatMap((section) => section.rows)
+      .find((row) => row.label === 'Votre boutique Shopify')
+
+    expect(ligne?.values).toEqual([false, true, false])
+  })
+
   it('arrondit l’espace d’images en toutes lettres', () => {
     expect(storageLabel(250 * 1024 * 1024)).toBe('250 Mo')
     expect(storageLabel(2 * 1024 * 1024 * 1024)).toBe('2 Go')

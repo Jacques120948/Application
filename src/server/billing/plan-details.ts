@@ -60,9 +60,17 @@ export function storageLabel(bytes: number): string {
   return megabytes >= 1024 ? `${Math.round(megabytes / 1024)} Go` : `${megabytes} Mo`
 }
 
-const GROUP_TITLES: Record<FeatureGroup, 'subscription.groupLaunch' | 'subscription.groupTeam' | 'subscription.groupRadar' | 'subscription.groupSupport'> = {
+const GROUP_TITLES: Record<
+  FeatureGroup,
+  | 'subscription.groupLaunch'
+  | 'subscription.groupTeam'
+  | 'subscription.groupShop'
+  | 'subscription.groupRadar'
+  | 'subscription.groupSupport'
+> = {
   social: 'subscription.groupLaunch',
   equipe: 'subscription.groupTeam',
+  boutique: 'subscription.groupShop',
   radar: 'subscription.groupRadar',
   support: 'subscription.groupSupport',
 }
@@ -80,6 +88,30 @@ function radarOpen(plan: Plan): boolean {
 
 function liaOpen(plan: Plan): boolean {
   return has(plan, 'lia_support') && plan.liaAnswersPerMonth > 0
+}
+
+/**
+ * La boutique demande deux choses à la fois : la fonction, et une place de connexion.
+ *
+ * Sans cette conjonction, une offre à qui l'exploitant accorderait la fonction sans accorder
+ * de connexion afficherait une coche devant une porte qui ne s'ouvre pas. C'est la même
+ * prudence que pour le Radar et pour Lia, dont les quotas peuvent être nuls.
+ */
+function boutiqueOpen(plan: Plan): boolean {
+  return has(plan, 'shopify_read') && plan.maxConnections > 0
+}
+
+/**
+ * Cette fonction est-elle réellement ouverte à cette offre ?
+ *
+ * Écrite une fois, employée par la carte d'une offre comme par le tableau comparatif. Les
+ * deux disaient la même chose par deux chemins ; il a suffi d'en modifier un pour qu'ils se
+ * contredisent, et c'est arrivé dès la première fonction dont l'ouverture dépendait d'autre
+ * chose que d'une case cochée.
+ */
+function ouverte(plan: Plan, featureId: string): boolean {
+  if (featureId === 'shopify_read') return boutiqueOpen(plan)
+  return has(plan, featureId)
 }
 
 /** Ce que l'offre contient, groupé par thème. Les groupes vides sont omis. */
@@ -131,7 +163,7 @@ export function planDetails(plan: Plan, locale: Locale): PlanDetailGroup[] {
     })
   }
 
-  for (const group of ['social', 'equipe', 'radar', 'support'] as const) {
+  for (const group of ['social', 'equipe', 'boutique', 'radar', 'support'] as const) {
     const items: string[] = []
     if (group === 'radar' && radarOpen(plan)) items.push(t('subscription.radar', { count: plan.radarRunsPerMonth }))
     if (group === 'support' && liaOpen(plan)) {
@@ -142,7 +174,7 @@ export function planDetails(plan: Plan, locale: Locale): PlanDetailGroup[] {
     }
     for (const feature of LIVE_FEATURES) {
       if (feature.group !== group || feature.id === 'radar' || feature.id === 'lia_support') continue
-      if (has(plan, feature.id)) items.push(feature.label)
+      if (ouverte(plan, feature.id)) items.push(feature.label)
     }
     if (items.length > 0) groups.push({ title: t(GROUP_TITLES[group]), items })
   }
@@ -215,7 +247,7 @@ export function comparePlans(plans: readonly Plan[], locale: Locale): PlanCompar
     })
   }
 
-  for (const group of ['social', 'equipe', 'radar', 'support'] as const) {
+  for (const group of ['social', 'equipe', 'boutique', 'radar', 'support'] as const) {
     const rows: ComparisonRow[] = []
     if (group === 'radar') {
       rows.push(
@@ -232,7 +264,7 @@ export function comparePlans(plans: readonly Plan[], locale: Locale): PlanCompar
     }
     for (const feature of LIVE_FEATURES) {
       if (feature.group !== group || feature.id === 'radar' || feature.id === 'lia_support') continue
-      rows.push(row(feature.label, feature.summary, (plan) => has(plan, feature.id)))
+      rows.push(row(feature.label, feature.summary, (plan) => ouverte(plan, feature.id)))
     }
     if (rows.length > 0) sections.push({ title: t(GROUP_TITLES[group]), rows })
   }

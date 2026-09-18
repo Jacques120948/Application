@@ -19,7 +19,7 @@ import { AppError } from '@/lib/errors'
 
 export type FeatureStatus = 'live' | 'prevu'
 
-export type FeatureGroup = 'social' | 'equipe' | 'radar' | 'support'
+export type FeatureGroup = 'social' | 'equipe' | 'boutique' | 'radar' | 'support'
 
 export type Feature = {
   id: string
@@ -156,6 +156,19 @@ export const FEATURES: readonly Feature[] = [
       'Ce qu’une intelligence artificielle comprend de vos pages, et ce qui l’en empêche.',
     status: 'live',
   },
+  /*
+   * La boutique. Son propre groupe plutôt qu'une ligne de plus chez les spécialistes : ce
+   * n'est pas quelqu'un à qui l'on parle, c'est une source que l'on branche, et l'écrire
+   * ailleurs obligerait à relire deux fois pour comprendre de quoi il s'agit.
+   */
+  {
+    id: 'shopify_read',
+    group: 'boutique',
+    label: 'Votre boutique Shopify',
+    summary:
+      'Vos fiches produits et vos articles lus directement chez Shopify, tels que vous les avez saisis : Evoliia voit ce qui manque là où l’analyse de votre site public ne le peut pas. En lecture seule.',
+    status: 'live',
+  },
   {
     id: 'visibility_content_agent',
     group: 'equipe',
@@ -205,6 +218,10 @@ export function liveFeatures(): Feature[] {
  * offre où la porte était fermée plutôt que la bourse courte. Vingt crédits bornent
  * l'essai bien mieux qu'une porte : de quoi poser quelques questions, pas de quoi faire
  * rédiger un article.
+ *
+ * La boutique, elle, n'y figure pas — non par avarice, mais parce que l'essai n'accorde
+ * aucune connexion extérieure : la promettre serait afficher une coche devant une porte
+ * qui ne s'ouvre pas. La ligne se calcule d'ailleurs sur les deux à la fois.
  */
 export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
   'vis-essai': [
@@ -218,18 +235,21 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'shopify_read',
   ],
   'vis-pro': [
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'shopify_read',
   ],
   'vis-business': [
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'shopify_read',
   ],
 }
 
