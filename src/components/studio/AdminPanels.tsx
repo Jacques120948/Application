@@ -639,7 +639,7 @@ function usdPerMTok(cents: number): string {
  * Tarifs et conversion.
  *
  * Deux choses différentes sur le même écran, et il faut les distinguer : le tarif dit ce
- * qu'Evoliia paie à Anthropic, la conversion dit ce que le créateur paie à Evoliia. Le
+ * qu'Evoliia paie à Anthropic, la conversion dit ce que le client paie à Evoliia. Le
  * premier se recopie depuis la page de tarifs d'Anthropic ; le second est une décision
  * commerciale.
  */
@@ -719,7 +719,7 @@ function ConversionCard({
           <h3 className="m-0 text-base font-semibold">Conversion en crédits</h3>
           <p className="m-0 text-sm text-[var(--color-ink-soft)]">
             Le coût réel d’un appel est multiplié par la marge, puis converti en crédits.
-            À 1, le créateur paie exactement ce qu’Evoliia dépense.
+            À 1, le client paie exactement ce qu’Evoliia dépense.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Marge" hint="1 · 1,5 · 2 · 2,5 · 3">
@@ -767,7 +767,7 @@ function ConversionCard({
           ) : (
             <Notice tone="caution" title="Aucune clé d’images">
               La variable d’environnement GEMINI_API_KEY n’est pas lue par ce déploiement.
-              Tant qu’elle manque, les créateurs voient « votre offre ne comprend pas
+              Tant qu’elle manque, les clients voient « votre offre ne comprend pas
               d’images », quel que soit le quota réglé. Ajoutez-la chez l’hébergeur, puis
               redéployez — une variable ajoutée ne s’applique qu’aux déploiements suivants.
             </Notice>
@@ -957,7 +957,7 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
           <h3 className="m-0 text-base font-semibold">Ce qu’une demande peut consommer</h3>
           <p className="m-0 text-sm text-[var(--color-ink-soft)]">
             Les quatre bornes sont indépendantes : la première atteinte arrête l’agent, qui
-            l’explique alors au créateur. Élargissez-les sur mesures, pas sur impression.
+            l’explique alors au client. Élargissez-les sur mesures, pas sur impression.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Étapes" hint="Un aller-retour avec le modèle. 2 à 24.">
@@ -982,7 +982,7 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
                 }
               />
             </Field>
-            <Field label="Crédits" hint="Ce qu’une seule demande peut coûter au créateur.">
+            <Field label="Crédits" hint="Ce qu’une seule demande peut coûter au client.">
               <Input
                 type="number"
                 min={5}
@@ -1034,7 +1034,7 @@ export function AgentLimitsEditor({ limits }: { limits: AdminAgentLimits }) {
   )
 }
 
-// ──────────────────── Ce que les créateurs n'ont pas pu résoudre ─────────────
+// ───────────────────── Ce que les clients n'ont pas pu résoudre ──────────────
 
 export type AdminReport = {
   id: string
@@ -1047,7 +1047,7 @@ export type AdminReport = {
 }
 
 /**
- * Les signalements des créateurs.
+ * Les signalements des clients.
  *
  * C'est le seul écran qui apprend qu'une personne est bloquée. Le contexte s'affiche sous
  * le message, jamais derrière un lien : aller chercher l'offre, le solde et les erreurs
@@ -1124,7 +1124,7 @@ export type AdminUnmet = {
 }
 
 /**
- * Ce que les créateurs demandent et qu'Evoliia ne sait pas faire.
+ * Ce que les clients demandent et qu'Evoliia ne sait pas faire.
  *
  * La feuille de route écrite par les clients plutôt que devinée. Les demandes explicitement
  * hors périmètre d'abord : ce sont des fonctions qui manquent. Le reste — les demandes

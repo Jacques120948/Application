@@ -4,11 +4,11 @@ import { z } from 'zod'
 import { FEATURE_IDS } from '@/server/billing/features'
 import { FLAGS, readFlags, setFlag, type FlagName } from '@/server/settings/flags'
 import { prisma } from '@/server/db/client'
+import { debutDuMois } from '@/server/audit/service'
 import { notFound } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
 import { logger } from '@/server/observability/logger'
 import { FREE_PLAN_ID, PLANNED_PLAN_CAPABILITIES } from '@/server/billing/plans'
-import { countPublishedApps } from '@/server/runtime/published'
 import {
   DEFAULT_MODEL_PRICING,
   forgetPricingCache,
@@ -219,15 +219,24 @@ export async function setUserPlan(userId: string, planId: string | null) {
 
 // ──────────────────────────────── Chiffres ───────────────────────────────────
 
+/**
+ * Les quatre chiffres de tête.
+ *
+ * Ils ont suivi le produit. « Applications en ligne » comptait ce que le constructeur avait
+ * publié : un chiffre juste, qui ne disait plus rien de ce qu'Evoliia vend. Les sites suivis
+ * et les analyses du mois, eux, disent les deux choses qu'un exploitant a besoin de savoir
+ * d'un coup d'œil — l'usage réel, et le travail de fond qui tourne, lequel coûte du réseau
+ * à Evoliia même quand il ne coûte aucun crédit à personne.
+ */
 export async function getAdminOverview() {
   await requireAdmin()
-  const [users, subscriptions, publishedApps, activePlans] = await Promise.all([
+  const [users, subscriptions, sites, audits] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.count({ where: { status: 'ACTIVE' } }),
-    countPublishedApps(),
-    prisma.plan.count({ where: { isActive: true } }),
+    prisma.site.count({ where: { deletedAt: null } }),
+    prisma.audit.count({ where: { startedAt: { gte: debutDuMois() } } }),
   ])
-  return { users, subscriptions, publishedApps, activePlans }
+  return { users, subscriptions, sites, audits }
 }
 
 // ──────────────────────────── Identité légale ────────────────────────────────

@@ -155,7 +155,7 @@ export async function listSites(userId: string): Promise<SiteResume[]> {
 }
 
 /** Le mois en cours, celui du renouvellement des crédits, comme partout ailleurs. */
-function debutDuMois(): Date {
+export function debutDuMois(): Date {
   const maintenant = new Date()
   return new Date(Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth(), 1))
 }
