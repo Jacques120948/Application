@@ -79,8 +79,8 @@ export default async function AdminPage({
   const figures = [
     { label: "Comptes créés", value: overview.users },
     { label: "Abonnements actifs", value: overview.subscriptions },
-    { label: "Sites suivis", value: overview.sites },
-    { label: "Analyses ce mois", value: overview.audits },
+    { label: "Appels IA ce mois", value: overview.calls },
+    { label: "Échecs ce mois", value: overview.failures },
   ];
 
   return (

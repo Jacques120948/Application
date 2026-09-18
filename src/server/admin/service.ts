@@ -4,7 +4,6 @@ import { z } from 'zod'
 import { FEATURE_IDS } from '@/server/billing/features'
 import { FLAGS, readFlags, setFlag, type FlagName } from '@/server/settings/flags'
 import { prisma } from '@/server/db/client'
-import { debutDuMois } from '@/server/audit/service'
 import { notFound } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
 import { logger } from '@/server/observability/logger'
@@ -222,21 +221,39 @@ export async function setUserPlan(userId: string, planId: string | null) {
 /**
  * Les quatre chiffres de tête.
  *
- * Ils ont suivi le produit. « Applications en ligne » comptait ce que le constructeur avait
- * publié : un chiffre juste, qui ne disait plus rien de ce qu'Evoliia vend. Les sites suivis
- * et les analyses du mois, eux, disent les deux choses qu'un exploitant a besoin de savoir
- * d'un coup d'œil — l'usage réel, et le travail de fond qui tourne, lequel coûte du réseau
- * à Evoliia même quand il ne coûte aucun crédit à personne.
+ * Ils ne comptent que ce que l'exploitant a le droit de lire à l'échelle de l'installation,
+ * et cette contrainte n'est pas un pis-aller : c'est la garantie du produit vue de l'autre
+ * côté. `Site` et `Audit` sont sous cloisonnement forcé, et leur règle exige une identité.
+ * Une administration ne parle au nom de personne : un comptage ordinaire y rend zéro — un
+ * chiffre faux et d'apparence normale, ce qui est la pire espèce.
+ *
+ * « Sites suivis » et « Analyses ce mois » ont été essayés, et retirés. Les obtenir demande
+ * soit un contournement accordé au rôle applicatif — la lecture de toutes les lignes de tout
+ * le monde, ouverte à tout le code, pour afficher deux entiers — soit une branche
+ * « administrateur » dans les règles elles-mêmes. Une fonction à droits du propriétaire ne
+ * suffit pas : `FORCE ROW LEVEL SECURITY` soumet le propriétaire à ses propres règles, et
+ * c'est exactement ce qu'on lui demande de faire. Aucune de ces deux portes ne s'ouvre pour
+ * un chiffre d'écran.
+ *
+ * `AiUsage` se lit en revanche sans détour, et pour la raison écrite auprès des tables
+ * protégées : elle n'existe que pour être lue par l'exploitant, aucun écran de client ne la
+ * relit. Elle dit d'ailleurs la chose la plus utile des quatre — ce qu'Evoliia dépense
+ * réellement chez son fournisseur, et ce qui échoue.
  */
 export async function getAdminOverview() {
   await requireAdmin()
-  const [users, subscriptions, sites, audits] = await Promise.all([
+  const maintenant = new Date()
+  const debutDuMois = new Date(
+    Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth(), 1),
+  )
+
+  const [users, subscriptions, calls, failures] = await Promise.all([
     prisma.user.count(),
     prisma.subscription.count({ where: { status: 'ACTIVE' } }),
-    prisma.site.count({ where: { deletedAt: null } }),
-    prisma.audit.count({ where: { startedAt: { gte: debutDuMois() } } }),
+    prisma.aiUsage.count({ where: { createdAt: { gte: debutDuMois } } }),
+    prisma.aiUsage.count({ where: { createdAt: { gte: debutDuMois }, success: false } }),
   ])
-  return { users, subscriptions, sites, audits }
+  return { users, subscriptions, calls, failures }
 }
 
 // ──────────────────────────── Identité légale ────────────────────────────────
