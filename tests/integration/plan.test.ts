@@ -14,7 +14,7 @@ import {
 import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import type { PatchOperation } from '@/server/spec/patch'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * Le mode plan, de bout en bout.
@@ -82,8 +82,8 @@ beforeAll(async () => {
   userId = created.userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
-    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    create: { userId, planId: testPlanId(), status: 'ACTIVE' },
+    update: { planId: testPlanId(), status: 'ACTIVE' },
   })
   const idea = 'Un annuaire des artisans de ma ville'
   const project = await createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) })

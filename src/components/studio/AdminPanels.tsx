@@ -1126,12 +1126,25 @@ export type AdminUnmet = {
 /**
  * Ce que les clients demandent et qu'Evoliia ne sait pas faire.
  *
- * La feuille de route écrite par les clients plutôt que devinée. Les demandes explicitement
- * hors périmètre d'abord : ce sont des fonctions qui manquent. Le reste — les demandes
- * auxquelles rien n'a changé — mêle des questions, des réponses suffisantes et des échecs ;
- * utile, mais à lire avec plus de recul.
+ * La feuille de route écrite par les clients plutôt que devinée — mais seulement pour la
+ * moitié des lignes, et c'est tout l'enjeu de cet écran.
+ *
+ * Le modèle distingue déjà les deux cas, avec la bonne raison écrite à côté : « les mêler
+ * ferait passer des conversations ordinaires pour des manques ». L'écran, lui, les mêlait.
+ * Six échanges ordinaires — des questions sur où déposer une photo, auxquelles l'assistant
+ * avait répondu — occupaient toute la page sous un titre annonçant des fonctions
+ * manquantes. On y lisait surtout que le produit ne savait rien faire.
+ *
+ * Les demandes explicitement hors périmètre s'affichent donc seules. Le reste se compte et
+ * s'ouvre d'un geste : il n'est ni caché ni jeté, il n'est simplement pas présenté comme
+ * une feuille de route.
  */
 export function UnmetBoard({ rows }: { rows: AdminUnmet[] }) {
+  const [toutMontrer, setToutMontrer] = useState(false)
+  const manques = rows.filter((row) => row.explicit)
+  const ordinaires = rows.filter((row) => !row.explicit)
+  const montrees = toutMontrer ? rows : manques
+
   if (rows.length === 0) {
     return (
       <Notice tone="neutral">
@@ -1139,9 +1152,16 @@ export function UnmetBoard({ rows }: { rows: AdminUnmet[] }) {
       </Notice>
     )
   }
+
   return (
     <div className="grid gap-2">
-      {rows.map((row) => (
+      {manques.length === 0 && !toutMontrer ? (
+        <Notice tone="neutral">
+          Aucune demande hors périmètre : rien ne manque qu’un client ait réclamé.
+        </Notice>
+      ) : null}
+
+      {montrees.map((row) => (
         <Card key={row.id}>
           <CardBody className="grid gap-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -1157,6 +1177,18 @@ export function UnmetBoard({ rows }: { rows: AdminUnmet[] }) {
           </CardBody>
         </Card>
       ))}
+
+      {ordinaires.length === 0 ? null : (
+        <button
+          type="button"
+          onClick={() => setToutMontrer((actuel) => !actuel)}
+          className="cursor-pointer justify-self-start rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-3 py-1.5 text-xs text-[var(--color-ink-soft)]"
+        >
+          {toutMontrer
+            ? 'Ne montrer que ce qui manque'
+            : `Voir aussi ${ordinaires.length} échange${ordinaires.length > 1 ? 's' : ''} sans changement`}
+        </button>
+      )}
     </div>
   )
 }

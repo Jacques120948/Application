@@ -11,7 +11,7 @@ import { DEFAULT_AGENT_LIMITS } from '@/server/agent/limits'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import { getWallet } from '@/server/billing/credits'
 import { availableCredits } from '@/server/billing/credits'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * La boucle de l'agent, sur une vraie base, avec un modèle qui répond selon un script.
@@ -91,8 +91,8 @@ beforeAll(async () => {
   userId = created.userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
-    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    create: { userId, planId: testPlanId(), status: 'ACTIVE' },
+    update: { planId: testPlanId(), status: 'ACTIVE' },
   })
   const idea = 'Un carnet de recettes de cuisine partagé'
   const project = await createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) })

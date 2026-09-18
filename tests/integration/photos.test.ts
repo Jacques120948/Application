@@ -12,7 +12,7 @@ import { addVisitorPhoto, listMedias, sweepOrphanPhotos } from '@/server/media/s
 import { parseAppSpec } from '@/server/spec/validate'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import type { AppSpec } from '@/server/spec/schema'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * Photos envoyées par les visiteurs.
@@ -115,8 +115,8 @@ beforeAll(async () => {
   ).userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
-    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    create: { userId, planId: testPlanId(), status: 'ACTIVE' },
+    update: { planId: testPlanId(), status: 'ACTIVE' },
   })
 
   const idea = 'Un annuaire d’artisans avec photos de chantier'

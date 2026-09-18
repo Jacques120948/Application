@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { expect } from 'vitest'
 import { prisma } from '@/server/db/client'
 import { FEATURE_IDS } from '@/server/billing/features'
 
@@ -12,16 +14,41 @@ import { FEATURE_IDS } from '@/server/billing/features'
  * Celle-ci n'est donc jamais vendue : elle n'est pas dans le catalogue par défaut, elle est
  * inactive, et elle ouvre tout. Ce qu'un test veut vérifier, c'est un comportement quand la
  * porte est ouverte ; les portes elles-mêmes se vérifient ailleurs, là où c'est le sujet.
+ *
+ * **Une offre par fichier de test**, et c'est une seconde leçon payée. Elle était unique et
+ * partagée ; neuf fichiers la modifient — quota d'alertes à zéro, images fermées, audits
+ * bornés — et les fichiers tournent en parallèle. Pire : la fonction ci-dessous réécrit
+ * tous les champs, si bien qu'un fichier qui réclamait simplement l'offre remettait à zéro
+ * le réglage qu'un autre venait de poser. Un test sur trois cents échouait alors, au hasard,
+ * sur une assertion parfaitement juste — et un échec intermittent finit toujours par être
+ * classé « aléa », ce qui use la confiance dans les sept cent quatre-vingt-cinq autres.
+ *
+ * Chaque fichier obtient donc sa copie, nommée d'après son chemin. `TEST_PLAN_ID` reste
+ * exporté pour ce qui n'est pas un test ; dans un test, c'est `testPlanId()` qu'il faut.
  */
 
 export const TEST_PLAN_ID = 'test-complet'
+
+/**
+ * L'offre propre au fichier de test en cours.
+ *
+ * Le chemin du fichier vient de Vitest. Hors d'un test — un appel depuis un script, par
+ * exemple — on retombe sur l'offre commune, qui reste valable tant que personne ne la
+ * modifie.
+ */
+export function testPlanId(): string {
+  const chemin = expect.getState().testPath
+  if (typeof chemin !== 'string' || chemin === '') return TEST_PLAN_ID
+  const empreinte = createHash('sha1').update(chemin).digest('hex').slice(0, 10)
+  return `${TEST_PLAN_ID}-${empreinte}`
+}
 
 /** Réserve mensuelle de l'offre de test. Large : aucun test ne doit échouer faute de crédits. */
 export const TEST_PLAN_CREDITS = 5_000
 
 const MEGABYTE = 1024 * 1024
 
-export async function ensureTestPlan(): Promise<string> {
+export async function ensureTestPlan(planId = testPlanId()): Promise<string> {
   const valeurs = {
     name: 'Offre de test',
     description: 'Ouvre tout. Jamais vendue, jamais affichée.',
@@ -51,19 +78,19 @@ export async function ensureTestPlan(): Promise<string> {
     sortOrder: 999,
   }
   await prisma.plan.upsert({
-    where: { id: TEST_PLAN_ID },
+    where: { id: planId },
     update: valeurs,
-    create: { id: TEST_PLAN_ID, ...valeurs },
+    create: { id: planId, ...valeurs },
   })
-  return TEST_PLAN_ID
+  return planId
 }
 
 /** Abonne quelqu'un à l'offre de test. Le geste que font presque tous les tests d'atelier. */
 export async function subscribeToTestPlan(userId: string): Promise<void> {
-  await ensureTestPlan()
+  const planId = await ensureTestPlan()
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
-    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    create: { userId, planId, status: 'ACTIVE' },
+    update: { planId, status: 'ACTIVE' },
   })
 }

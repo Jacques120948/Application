@@ -17,7 +17,7 @@ import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { AppError } from '@/lib/errors'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import { publicAppUrl } from '@/lib/apps-domain'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * Isolation multi-tenant (exigence 18).
@@ -42,7 +42,7 @@ async function makeUser(): Promise<string> {
  * L'offre de découverte s'arrête volontairement avant : sans cet abonnement, créer un
  * projet est refusé, ce qui est le comportement voulu du produit.
  */
-async function subscribeToBuildPlan(userId: string, planId = TEST_PLAN_ID): Promise<void> {
+async function subscribeToBuildPlan(userId: string, planId = testPlanId()): Promise<void> {
   await prisma.subscription.upsert({
     where: { userId },
     create: { userId, planId, status: 'ACTIVE' },

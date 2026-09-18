@@ -10,7 +10,7 @@ import { computePageMetrics } from '@/server/runtime/metrics'
 import { withRuntimeScope } from '@/server/db/scope'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import type { AppSpec, DataField } from '@/server/spec/schema'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * Les chiffres d'un tableau de bord.
@@ -137,8 +137,8 @@ beforeAll(async () => {
   userId = created.userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
-    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    create: { userId, planId: testPlanId(), status: 'ACTIVE' },
+    update: { planId: testPlanId(), status: 'ACTIVE' },
   })
   const idea = 'Un suivi des devis pour un artisan'
   const project = await createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) })

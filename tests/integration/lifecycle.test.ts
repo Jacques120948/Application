@@ -20,7 +20,7 @@ import { createRecord, listRecords, updateRecord } from '@/server/runtime/record
 import { withRuntimeScope } from '@/server/db/scope'
 import { AppError } from '@/lib/errors'
 import type { DataField } from '@/server/spec/schema'
-import { ensureTestPlan, TEST_PLAN_CREDITS, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, TEST_PLAN_CREDITS, testPlanId } from '../helpers/plan'
 
 /** Parcours complet du MVP : créer, modifier, versionner, tester, publier, utiliser. */
 
@@ -64,7 +64,7 @@ let projectId: string
  * L'offre de découverte s'arrête volontairement avant : sans cet abonnement, créer un
  * projet est refusé, ce qui est le comportement voulu du produit.
  */
-async function subscribeToBuildPlan(userId: string, planId = TEST_PLAN_ID): Promise<void> {
+async function subscribeToBuildPlan(userId: string, planId = testPlanId()): Promise<void> {
   await prisma.subscription.upsert({
     where: { userId },
     create: { userId, planId, status: 'ACTIVE' },

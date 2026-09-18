@@ -9,7 +9,7 @@ import { heuristicBlueprint } from '@/server/projects/blueprints'
 import { withRuntimeScope } from '@/server/db/scope'
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import { AppError } from '@/lib/errors'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * Le courrier est intercepté, pas envoyé : le jeton en clair n'existe que dans le message,
@@ -114,7 +114,7 @@ describe('mot de passe oublié dans une application créée', () => {
 
   beforeAll(async () => {
     clearAll()
-    const planId = TEST_PLAN_ID
+    const planId = testPlanId()
     for (const plan of DEFAULT_PLANS) {
       await prisma.plan.upsert({
         where: { id: plan.id },

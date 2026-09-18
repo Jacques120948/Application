@@ -226,7 +226,26 @@ export default async function LandingPage({
     { q: t('vis.faq5Q'), a: t('vis.faq5A') },
   ]
 
-  /** Ce qu'une offre comprend, entièrement tiré de la base. Aucun chiffre écrit ici. */
+  /**
+   * La boutique est-elle ouverte à cette offre ?
+   *
+   * Deux conditions, comme dans la grille du compte : la fonction accordée, et une place de
+   * connexion. Annoncer la boutique à une offre qui n'accorde aucune connexion afficherait
+   * une promesse devant une porte qui ne s'ouvre pas.
+   */
+  function boutiqueOuverte(plan: (typeof plans)[number]): boolean {
+    return plan.features.includes('shopify_read') && plan.maxConnections > 0
+  }
+
+  /**
+   * Ce qu'une offre comprend, entièrement tiré de la base. Aucun chiffre écrit ici, et plus
+   * aucune promesse écrite en dur non plus.
+   *
+   * Le connecteur Postelya y figurait, pour toutes les offres : il n'est ni construit ni
+   * accepté par Meta. Une page de tarifs qui promet ce qui n'existe pas est la seule faute
+   * dont un client se souvient. La boutique, elle, existe — mais pas partout : elle se lit
+   * donc sur l'offre, comme les sites et les pages.
+   */
   function lignes(plan: (typeof plans)[number]): string[] {
     return [
       plan.sitesMax === 1
@@ -237,7 +256,7 @@ export default async function LandingPage({
       t('vis.plansCredits', { count: plan.monthlyCredits }),
       t('vis.plansTeam'),
       t('vis.plansHistory'),
-      t('vis.plansPostelya'),
+      ...(boutiqueOuverte(plan) ? [t('vis.plansShop')] : []),
       ...(plan.allowExport ? [t('vis.plansExport')] : []),
     ]
   }
@@ -250,7 +269,11 @@ export default async function LandingPage({
     { label: t('vis.compareTeam'), valeur: () => t('vis.compareYes') },
     { label: t('vis.compareHistory'), valeur: () => t('vis.compareYes') },
     { label: t('vis.compareContent'), valeur: () => t('vis.compareYes') },
-    { label: t('vis.comparePostelya'), valeur: () => t('vis.compareYes') },
+    {
+      label: t('vis.compareShop'),
+      valeur: (p: (typeof plans)[number]) =>
+        boutiqueOuverte(p) ? t('vis.compareYes') : t('vis.compareNo'),
+    },
     {
       label: t('vis.compareExports'),
       valeur: (p: (typeof plans)[number]) => (p.allowExport ? t('vis.compareYes') : t('vis.compareNo')),

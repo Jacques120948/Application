@@ -9,7 +9,7 @@ import { alertOwnerOfNewRecord, alertQuota, DEFAULT_DAILY_CAP } from '@/server/r
 import { DEFAULT_PLANS } from '@/server/billing/plans'
 import { withUserScope } from '@/server/db/scope'
 import type { DataModel } from '@/server/spec/schema'
-import { ensureTestPlan, TEST_PLAN_ID } from '../helpers/plan'
+import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
  * Les alertes au créateur.
@@ -70,8 +70,8 @@ beforeAll(async () => {
   userId = created.userId
   await prisma.subscription.upsert({
     where: { userId },
-    create: { userId, planId: TEST_PLAN_ID, status: 'ACTIVE' },
-    update: { planId: TEST_PLAN_ID, status: 'ACTIVE' },
+    create: { userId, planId: testPlanId(), status: 'ACTIVE' },
+    update: { planId: testPlanId(), status: 'ACTIVE' },
   })
   const idea = 'Un annuaire des artisans de ma ville'
   const project = await createProject(userId, { idea, locale: 'fr', blueprint: heuristicBlueprint(idea) })
@@ -83,11 +83,11 @@ beforeEach(async () => {
   courriels.length = 0
   await prisma.ownerAlert.deleteMany({ where: { userId } })
   await withUserScope(userId, (tx) => tx.notification.deleteMany({ where: { userId } }))
-  await prisma.plan.update({ where: { id: TEST_PLAN_ID }, data: { alertsPerMonth: 3 } })
+  await prisma.plan.update({ where: { id: testPlanId() }, data: { alertsPerMonth: 3 } })
 })
 
 afterAll(async () => {
-  await prisma.plan.update({ where: { id: TEST_PLAN_ID }, data: { alertsPerMonth: 0 } })
+  await prisma.plan.update({ where: { id: testPlanId() }, data: { alertsPerMonth: 0 } })
   await prisma.user.deleteMany({ where: { email } })
   await prisma.$disconnect()
 })
@@ -133,7 +133,7 @@ describe('ce qui arrête les envois', () => {
   })
 
   it('n’envoie rien quand l’offre n’ouvre pas la fonction', async () => {
-    await prisma.plan.update({ where: { id: TEST_PLAN_ID }, data: { alertsPerMonth: 0 } })
+    await prisma.plan.update({ where: { id: testPlanId() }, data: { alertsPerMonth: 0 } })
     await alerter()
     expect(courriels).toHaveLength(0)
     const retenue = await prisma.ownerAlert.findFirst({ where: { userId, sent: false } })
@@ -141,7 +141,7 @@ describe('ce qui arrête les envois', () => {
   })
 
   it('arrête une application qui s’emballe, même si le quota du mois reste ouvert', async () => {
-    await prisma.plan.update({ where: { id: TEST_PLAN_ID }, data: { alertsPerMonth: 100_000 } })
+    await prisma.plan.update({ where: { id: testPlanId() }, data: { alertsPerMonth: 100_000 } })
     // On simule une journée déjà chargée : le plafond journalier porte sur l'application.
     await prisma.ownerAlert.createMany({
       data: Array.from({ length: DEFAULT_DAILY_CAP }, () => ({
