@@ -48,8 +48,18 @@ const DELAI_MS = 20_000
 /** Par page. Shopify limite le débit ; des pages plus grosses le font tomber plus vite. */
 const PAR_PAGE = 50
 
-/** Ce qu'on rapatrie au plus, par type. Au-delà, l'écran ne se lit plus de toute façon. */
-export const PIECES_MAX = 250
+/**
+ * Ce qu'on rapatrie au plus, par type.
+ *
+ * Mille tient une boutique ordinaire en entier — celle sur laquelle ce connecteur a été
+ * mis au point en compte six cent soixante-douze. Ce plafond n'est tenable que parce que
+ * chaque fiche est légère : on ne rapatrie ni le descriptif ni le HTML, seulement les
+ * balises et de quoi savoir si le descriptif existe. Le même écran, s'il tirait le contenu
+ * complet, ferait plusieurs mégaoctets et ne répondrait plus — c'est exactement ce qui est
+ * arrivé à l'exploration de sites, arrêtée à deux cent quatre-vingt-sept pages par le poids
+ * de ce qu'elle relisait à chaque tranche.
+ */
+export const PIECES_MAX = 1_000
 
 export type AccesShopify = {
   /** Adresse en .myshopify.com. Ce n'est pas celle que voient les clients. */
@@ -375,8 +385,8 @@ export type ProduitShopify = {
   url: string | null
   metaTitle: string
   metaDescription: string
-  /** Longueur du descriptif, en signes. Sert à repérer une fiche vide sans la rapatrier. */
-  descriptionLongueur: number
+  /** La fiche n'a aucun descriptif. Su sans rapatrier le descriptif lui-même. */
+  descriptionVide: boolean
 }
 
 export type ArticleShopify = {
@@ -392,8 +402,11 @@ export type ArticleShopify = {
 const REQUETE_PRODUITS = `query($n: Int!, $apres: String) {
   products(first: $n, after: $apres) {
     nodes {
-      id title handle status onlineStoreUrl descriptionHtml
+      id title handle status onlineStoreUrl
       seo { title description }
+      # Borné : on ne veut pas le descriptif, on veut savoir s'il existe. Tiré en entier sur
+      # mille fiches, il ferait plusieurs mégaoctets pour répondre à une question booléenne.
+      apercu: description(truncateAt: 40)
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -459,11 +472,80 @@ async function parcourir<Brut, Vu>(
   return { pieces, tronque: true }
 }
 
+/**
+ * Les entités HTML les plus courantes, et rien de plus.
+ *
+ * La table est volontairement courte : elle couvre ce qu'un marchand écrit réellement dans
+ * une balise — des esperluettes, des guillemets, des accents échappés par un éditeur. Une
+ * table complète ferait deux mille lignes pour traiter des cas qu'aucune fiche produit ne
+ * contient. Ce qui n'y figure pas est laissé tel quel plutôt que déformé.
+ */
+const ENTITES = new Map<string, string>([
+  ['amp', '&'],
+  ['lt', '<'],
+  ['gt', '>'],
+  ['quot', '"'],
+  ['apos', "'"],
+  ['nbsp', '\u00a0'],
+  ['laquo', '«'],
+  ['raquo', '»'],
+  ['hellip', '…'],
+  ['rsquo', '’'],
+  ['lsquo', '‘'],
+  ['ldquo', '“'],
+  ['rdquo', '”'],
+  ['ndash', '–'],
+  ['mdash', '—'],
+  ['eacute', 'é'],
+  ['egrave', 'è'],
+  ['ecirc', 'ê'],
+  ['agrave', 'à'],
+  ['acirc', 'â'],
+  ['ccedil', 'ç'],
+  ['ocirc', 'ô'],
+  ['ugrave', 'ù'],
+  ['ucirc', 'û'],
+  ['icirc', 'î'],
+  ['iuml', 'ï'],
+  ['euml', 'ë'],
+  ['deg', '°'],
+  ['euro', '€'],
+])
+
+/**
+ * Le texte d'une balise, tel qu'un moteur le lira.
+ *
+ * Shopify conserve les balises telles qu'elles ont été saisies, entités comprises : une
+ * description peut contenir `&amp;` là où le visiteur verra `&`. Sans décodage, deux choses
+ * seraient fausses — l'écran afficherait `&amp;` en toutes lettres, ce qui fait douter de
+ * tout le reste, et surtout le compte de signes serait gonflé de quatre par esperluette. Une
+ * description à cent soixante-deux signes affichés peut en faire cent cinquante-huit une fois
+ * décodée : de part et d'autre de la borne, donc de part et d'autre du verdict.
+ *
+ * Un seul passage, jamais récursif : `&amp;amp;` doit rendre `&amp;`, qui est ce que le
+ * visiteur verra, et non `&`.
+ */
+export function decoderEntites(texte: string): string {
+  return texte.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+\d*);/gi, (entier, corps: string) => {
+    if (!corps.startsWith('#')) return ENTITES.get(corps.toLowerCase()) ?? entier
+
+    const point =
+      corps[1]?.toLowerCase() === 'x'
+        ? Number.parseInt(corps.slice(2), 16)
+        : Number.parseInt(corps.slice(1), 10)
+
+    // Hors plage ou moitié de paire de substitution : on laisse tel quel plutôt que de lever.
+    if (!Number.isFinite(point) || point <= 0 || point > 0x10ffff) return entier
+    if (point >= 0xd800 && point <= 0xdfff) return entier
+    return String.fromCodePoint(point)
+  })
+}
+
 /** Le texte d'un métachamp, ou une chaîne vide. Un métachamp absent rend `null`. */
 function valeur(champ: unknown): string {
   if (typeof champ !== 'object' || champ === null) return ''
   const lu = (champ as { value?: unknown }).value
-  return typeof lu === 'string' ? lu : ''
+  return typeof lu === 'string' ? decoderEntites(lu) : ''
 }
 
 export async function lireProduits(
@@ -477,7 +559,7 @@ export async function lireProduits(
     handle: string
     status: string
     onlineStoreUrl: string | null
-    descriptionHtml: string | null
+    apercu: string | null
     seo: { title: string | null; description: string | null } | null
   }
 
@@ -492,9 +574,9 @@ export async function lireProduits(
       handle: brut.handle,
       statut: brut.status,
       url: brut.onlineStoreUrl,
-      metaTitle: brut.seo?.title ?? '',
-      metaDescription: brut.seo?.description ?? '',
-      descriptionLongueur: (brut.descriptionHtml ?? '').replace(/<[^>]*>/gu, '').trim().length,
+      metaTitle: decoderEntites(brut.seo?.title ?? ''),
+      metaDescription: decoderEntites(brut.seo?.description ?? ''),
+      descriptionVide: (brut.apercu ?? '').trim() === '',
     }),
     max,
   )

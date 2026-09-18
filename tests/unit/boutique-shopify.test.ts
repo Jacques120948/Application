@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   frapperJeton,
   lireAcces,
+  decoderEntites,
   lireProduits,
   normaliserBoutique,
   ressembleAUnIdentifiant,
@@ -260,7 +261,7 @@ describe('la lecture des fiches', () => {
               handle: `produit-${rang}`,
               status: 'ACTIVE',
               onlineStoreUrl: null,
-              descriptionHtml: '<p>Un descriptif.</p>',
+              apercu: rang === 0 ? '' : 'Un descriptif\u2026',
               seo: { title: null, description: null },
             })),
             pageInfo: { hasNextPage: encore, endCursor: 'suite' },
@@ -280,13 +281,43 @@ describe('la lecture des fiches', () => {
     const lu = await lireProduits(acces, 'shpat_frappe', 4)
     expect(lu.pieces).toHaveLength(4)
     expect(lu.tronque).toBe(false)
-    // Le descriptif n'est pas recopié : seule sa longueur, balises retirées, est gardée.
-    expect(lu.pieces[0]?.descriptionLongueur).toBe('Un descriptif.'.length)
+    /*
+     * Le descriptif n'est pas rapatrié : on ne garde que la réponse à la seule question
+     * qu'on lui pose. Tiré en entier sur mille fiches, il ferait plusieurs mégaoctets —
+     * l'erreur qui a arrêté l'exploration de sites à deux cent quatre-vingt-sept pages.
+     */
+    expect(lu.pieces[0]?.descriptionVide).toBe(true)
+    expect(lu.pieces[1]?.descriptionVide).toBe(false)
 
     stubFetch([page(2, true)])
     const borne = await lireProduits(acces, 'shpat_frappe', 2)
     expect(borne.pieces).toHaveLength(2)
     expect(borne.tronque).toBe(true)
+  })
+})
+
+describe('les entités des balises', () => {
+  it('rend le texte tel qu’un moteur le lira', () => {
+    /*
+     * Vu en production : une description contenant « Pirate &amp; Coccinelle » s'affichait
+     * telle quelle à l'écran, ce qui fait douter de tout le reste — et surtout comptait
+     * quatre signes de trop par esperluette. À cent soixante-deux signes affichés contre
+     * cent cinquante-huit réels, on est de part et d'autre de la borne, donc de part et
+     * d'autre du verdict.
+     */
+    expect(decoderEntites('Pirate &amp; Coccinelle')).toBe('Pirate & Coccinelle')
+    expect(decoderEntites('L&#39;atelier')).toBe('L\u2019atelier'.replace('\u2019', "'"))
+    expect(decoderEntites('30&#x20ac; la pièce')).toBe('30\u20ac la pièce')
+    expect(decoderEntites('caf&eacute;')).toBe('café')
+  })
+
+  it('ne décode qu’une fois, et laisse tel quel ce qu’il ne connaît pas', () => {
+    // `&amp;amp;` rend `&amp;` : c'est ce que le visiteur verra, et non `&`.
+    expect(decoderEntites('&amp;amp;')).toBe('&amp;')
+    expect(decoderEntites('&pasuneentite; reste')).toBe('&pasuneentite; reste')
+    // Une moitié de paire de substitution ferait lever `fromCodePoint` : on la laisse.
+    expect(decoderEntites('&#xD800;')).toBe('&#xD800;')
+    expect(decoderEntites('&#0;')).toBe('&#0;')
   })
 })
 

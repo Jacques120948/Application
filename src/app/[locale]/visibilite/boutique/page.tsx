@@ -14,6 +14,15 @@ import { BoutiqueBoard } from '@/components/studio/BoutiqueBoard'
  * qu'un écran vide sans explication devant une connexion qu'on vient de payer est la
  * meilleure façon de faire douter de tout le reste.
  */
+/**
+ * Le temps que l'hébergeur doit accorder à cet écran.
+ *
+ * Une boutique de mille fiches demande une vingtaine d'allers-retours à Shopify, qui limite
+ * son débit. Sans ce réglage, la plateforme coupe à dix ou quinze secondes par défaut et
+ * l'écran meurt en plein travail, sur un message qui ne dit rien à personne.
+ */
+export const maxDuration = 60
+
 export default async function BoutiquePage({ params }: { params: Promise<{ locale: string }> }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()

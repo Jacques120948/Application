@@ -105,8 +105,7 @@ function vueProduit(produit: ProduitShopify): PieceVue {
     id: produit.id,
     titre: produit.titre,
     url: produit.url,
-    contexte:
-      produit.descriptionLongueur === 0 ? `${etat} · sans descriptif` : etat,
+    contexte: produit.descriptionVide ? `${etat} · sans descriptif` : etat,
     metaTitle: produit.metaTitle,
     metaDescription: produit.metaDescription,
     ...juger(produit.metaTitle, produit.metaDescription),
