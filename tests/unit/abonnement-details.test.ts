@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Plan } from '@prisma/client'
 import { comparePlans, planDetails, storageLabel } from '@/server/billing/plan-details'
-import { FEATURES } from '@/server/billing/features'
+import { FEATURES, liveFeatures } from '@/server/billing/features'
 
 /**
  * Le détail d'une offre est lu dans ses réglages, jamais dans son nom : une offre
@@ -200,6 +200,50 @@ describe('détail des offres', () => {
       .find((row) => row.label === 'Votre boutique Shopify')
 
     expect(ligne?.values).toEqual([false, true, false])
+  })
+
+  it('applique la même règle aux chiffres de recherche', () => {
+    // Même conjonction que la boutique : Search Console est une connexion, pas une mesure
+    // qu'Evoliia ferait toute seule. Sans place de connexion, la ligne serait décorative.
+    const grille = comparePlans(
+      [
+        plan({ name: 'Essai', maxConnections: 0, features: ['search_console'] }),
+        plan({ name: 'Starter', maxConnections: 1, features: ['search_console'] }),
+        plan({ name: 'Sans', maxConnections: 3, features: [] }),
+      ],
+      'fr',
+    )
+    const ligne = grille.sections
+      .flatMap((section) => section.rows)
+      .find((row) => row.label === 'Vos chiffres de recherche Google')
+
+    expect(ligne?.values).toEqual([false, true, false])
+  })
+
+  it('n’oublie aucun groupe du catalogue dans le tableau comparatif', () => {
+    /*
+     * La garde qui a manqué. L'ordre des groupes était recopié à la main dans deux boucles :
+     * un groupe ajouté au catalogue et oublié là ne produit aucune erreur, il disparaît
+     * simplement des deux écrans. Le produit accorde alors une fonction que rien n'annonce.
+     */
+    const tout = plan({
+      name: 'Tout',
+      maxConnections: 3,
+      features: liveFeatures().map((feature) => feature.id),
+      radarRunsPerMonth: 5,
+      liaAnswersPerMonth: 5,
+    })
+    const grille = comparePlans([tout], 'fr')
+    const lignes = grille.sections.flatMap((section) => section.rows.map((row) => row.label))
+
+    /*
+     * Le Radar et Lia sont les deux exceptions assumées du code : ils ont leur propre ligne
+     * de quota, intitulée autrement que la fonction. Toutes les autres se comptent ici.
+     */
+    for (const feature of liveFeatures()) {
+      if (feature.id === 'radar' || feature.id === 'lia_support') continue
+      expect(lignes).toContain(feature.label)
+    }
   })
 
   it('arrondit l’espace d’images en toutes lettres', () => {

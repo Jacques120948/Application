@@ -55,3 +55,47 @@ export async function activerRadarEtLiaUneFois(prisma: PrismaClient): Promise<st
   })
   return lignes
 }
+
+/**
+ * Ouverture des chiffres de recherche dans les offres existantes.
+ *
+ * Même geste, même raison, et il faut le refaire à chaque fonction : le démarrage ne
+ * réécrit jamais la colonne `features` d'une offre déjà en base, parce qu'elle appartient à
+ * l'exploitant et qu'il la règle depuis le back-office. Sans cette ouverture, une fonction
+ * ajoutée au catalogue n'atteindrait jamais une installation en service — elle ne servirait
+ * qu'aux offres créées après elle.
+ *
+ * On ajoute, on ne retire rien, et on suit la répartition par défaut : les offres qui ne
+ * l'accordent pas par défaut ne la reçoivent pas. Relançable sans effet de bord.
+ */
+export const SEARCH_CONSOLE_KEY = 'offres.search-console.ouverte'
+
+export async function ouvrirSearchConsole(prisma: PrismaClient): Promise<string[]> {
+  const lignes: string[] = []
+  for (const defaults of DEFAULT_PLANS) {
+    const plan = await prisma.plan.findUnique({ where: { id: defaults.id } })
+    if (plan === null) continue
+    if (!defaults.features.includes('search_console')) continue
+    if (plan.features.includes('search_console')) continue
+
+    await prisma.plan.update({
+      where: { id: plan.id },
+      data: { features: [...plan.features, 'search_console'] },
+    })
+    lignes.push(`${plan.name} : chiffres de recherche ouverts`)
+  }
+  return lignes
+}
+
+/** Fait l'ouverture si elle n'a jamais été faite sur cette installation. */
+export async function ouvrirSearchConsoleUneFois(prisma: PrismaClient): Promise<string[] | null> {
+  const done = await prisma.siteSetting.findUnique({ where: { key: SEARCH_CONSOLE_KEY } })
+  if (done !== null) return null
+  const lignes = await ouvrirSearchConsole(prisma)
+  await prisma.siteSetting.upsert({
+    where: { key: SEARCH_CONSOLE_KEY },
+    update: { value: new Date().toISOString() },
+    create: { key: SEARCH_CONSOLE_KEY, value: new Date().toISOString() },
+  })
+  return lignes
+}

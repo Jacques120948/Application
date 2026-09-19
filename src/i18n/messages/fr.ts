@@ -77,6 +77,7 @@ export const fr = {
   'subscription.groupVisibility': 'Visibilité',
   'subscription.groupConnections': 'Connexions',
   'subscription.groupShop': 'Votre boutique',
+  'subscription.groupMeasure': 'Vos chiffres de recherche',
   'subscription.groupCreate': 'Créer et mettre en ligne',
   'subscription.groupLaunch': 'Lancement et réseaux sociaux',
   'subscription.groupTeam': 'Votre équipe',

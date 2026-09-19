@@ -75,6 +75,7 @@ export const en: Record<keyof typeof fr, string> = {
   'subscription.groupVisibility': 'Visibility',
   'subscription.groupConnections': 'Connections',
   'subscription.groupShop': 'Your store',
+  'subscription.groupMeasure': 'Your search figures',
   'subscription.groupCreate': 'Create and go live',
   'subscription.groupLaunch': 'Launch and social networks',
   'subscription.groupTeam': 'Your team',

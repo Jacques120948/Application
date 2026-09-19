@@ -1,4 +1,7 @@
+import { AppError } from '@/lib/errors'
 import { logger } from '@/server/observability/logger'
+import { getEntitlements } from '@/server/billing/entitlements'
+import { requireFeature } from '@/server/billing/features'
 import { useOAuthAccess } from '@/server/integrations/service'
 import {
   rafraichir,
@@ -38,6 +41,9 @@ import {
  * **Aucun crédit n'est débité.** Rien ici n'appelle un modèle : on lit une API gratuite,
  * avec le compte Google de la personne. Ce qui ne coûte rien ne se facture pas.
  */
+
+/** Le droit qui ouvre cet écran. Nommé ici, vérifié ici : un seul endroit à relire. */
+export const SEARCH_CONSOLE_FEATURE = 'search_console'
 
 /** La période lue. Assez pour lisser une semaine creuse, assez court pour rester actuel. */
 export const JOURS_LUS = 28
@@ -152,6 +158,26 @@ export async function lireRecherches(
     return acces.raison === "Ce service n'est pas connecté."
       ? { ok: false, etat: 'non-connecte' }
       : { ok: false, etat: 'refus', raison: acces.raison }
+  }
+
+  /*
+   * Le droit se vérifie après l'absence de connexion et avant le premier appel, comme pour
+   * la boutique. Après, parce que ne rien avoir connecté est l'état ordinaire et appelle une
+   * invitation, pas un discours sur les offres. Avant, parce qu'une grille tarifaire qui
+   * annonce une fonction sans que rien ne l'applique est une ligne décorative : le jour où
+   * l'exploitant la retire d'une offre, le tableau dirait « non » et le produit « oui ».
+   */
+  try {
+    requireFeature(await getEntitlements(userId), SEARCH_CONSOLE_FEATURE)
+  } catch (error) {
+    return {
+      ok: false,
+      etat: 'refus',
+      raison:
+        error instanceof AppError
+          ? error.message
+          : "Votre offre n'ouvre pas les chiffres de recherche.",
+    }
   }
 
   const proprietes = await listerProprietes(acces.accessToken)

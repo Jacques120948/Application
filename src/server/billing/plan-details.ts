@@ -65,15 +65,28 @@ const GROUP_TITLES: Record<
   | 'subscription.groupLaunch'
   | 'subscription.groupTeam'
   | 'subscription.groupShop'
+  | 'subscription.groupMeasure'
   | 'subscription.groupRadar'
   | 'subscription.groupSupport'
 > = {
   social: 'subscription.groupLaunch',
   equipe: 'subscription.groupTeam',
   boutique: 'subscription.groupShop',
+  mesure: 'subscription.groupMeasure',
   radar: 'subscription.groupRadar',
   support: 'subscription.groupSupport',
 }
+
+/**
+ * L'ordre des groupes, tiré du tableau des titres plutôt que recopié.
+ *
+ * Les deux écrans — la carte d'une offre et le tableau comparatif — parcouraient chacun
+ * leur propre liste écrite à la main. Ajouter un groupe au catalogue demandait donc de
+ * penser à trois endroits, et le troisième oublié ne produit aucune erreur : la fonction
+ * existe, elle est accordée, et elle n'apparaît nulle part. Un tableau typé sur
+ * `FeatureGroup` ne peut pas, lui, oublier un groupe : il ne compilerait pas.
+ */
+const GROUP_ORDER = Object.keys(GROUP_TITLES) as FeatureGroup[]
 
 /** Les fonctions vendables, dans l'ordre du catalogue : construites, jamais seulement prévues. */
 const LIVE_FEATURES = FEATURES.filter((feature) => feature.status === 'live')
@@ -101,6 +114,11 @@ function boutiqueOpen(plan: Plan): boolean {
   return has(plan, 'shopify_read') && plan.maxConnections > 0
 }
 
+/** Search Console est une connexion, exactement comme la boutique : même conjonction. */
+function rechercheOpen(plan: Plan): boolean {
+  return has(plan, 'search_console') && plan.maxConnections > 0
+}
+
 /**
  * Cette fonction est-elle réellement ouverte à cette offre ?
  *
@@ -111,6 +129,7 @@ function boutiqueOpen(plan: Plan): boolean {
  */
 function ouverte(plan: Plan, featureId: string): boolean {
   if (featureId === 'shopify_read') return boutiqueOpen(plan)
+  if (featureId === 'search_console') return rechercheOpen(plan)
   return has(plan, featureId)
 }
 
@@ -163,7 +182,7 @@ export function planDetails(plan: Plan, locale: Locale): PlanDetailGroup[] {
     })
   }
 
-  for (const group of ['social', 'equipe', 'boutique', 'radar', 'support'] as const) {
+  for (const group of GROUP_ORDER) {
     const items: string[] = []
     if (group === 'radar' && radarOpen(plan)) items.push(t('subscription.radar', { count: plan.radarRunsPerMonth }))
     if (group === 'support' && liaOpen(plan)) {
@@ -247,7 +266,7 @@ export function comparePlans(plans: readonly Plan[], locale: Locale): PlanCompar
     })
   }
 
-  for (const group of ['social', 'equipe', 'boutique', 'radar', 'support'] as const) {
+  for (const group of GROUP_ORDER) {
     const rows: ComparisonRow[] = []
     if (group === 'radar') {
       rows.push(

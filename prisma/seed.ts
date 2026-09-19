@@ -1,7 +1,10 @@
 import { PrismaClient } from '@prisma/client'
 import { DEFAULT_PLANS, PLANNED_PLAN_CAPABILITIES } from '../src/server/billing/plans'
 import { DEFAULT_MODEL_PRICING } from '../src/server/billing/ai-pricing'
-import { activerRadarEtLiaUneFois } from '../src/server/billing/activation'
+import {
+  activerRadarEtLiaUneFois,
+  ouvrirSearchConsoleUneFois,
+} from '../src/server/billing/activation'
 
 /**
  * Initialisation d'une installation.
@@ -76,6 +79,14 @@ async function main(): Promise<void> {
   const ouverture = await activerRadarEtLiaUneFois(prisma)
   if (ouverture === null) console.log('Radar et Lia : ouverture déjà faite, offres laissées telles quelles.')
   else for (const ligne of ouverture) console.log(`Radar et Lia ouverts — ${ligne}`)
+
+  // Même geste pour les chiffres de recherche, et pour la même raison : la colonne
+  // `features` d'une offre en service appartient à l'exploitant, le démarrage ne la réécrit
+  // pas. Sans cette ouverture, la fonction n'atteindrait que les offres créées après elle.
+  const recherches = await ouvrirSearchConsoleUneFois(prisma)
+  if (recherches === null) {
+    console.log('Chiffres de recherche : ouverture déjà faite, offres laissées telles quelles.')
+  } else for (const ligne of recherches) console.log(`Chiffres de recherche — ${ligne}`)
 
   await seedTarifsIa()
   /*

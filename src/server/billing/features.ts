@@ -19,7 +19,7 @@ import { AppError } from '@/lib/errors'
 
 export type FeatureStatus = 'live' | 'prevu'
 
-export type FeatureGroup = 'social' | 'equipe' | 'boutique' | 'radar' | 'support'
+export type FeatureGroup = 'social' | 'equipe' | 'boutique' | 'mesure' | 'radar' | 'support'
 
 export type Feature = {
   id: string
@@ -169,6 +169,20 @@ export const FEATURES: readonly Feature[] = [
       'Vos fiches produits et vos articles lus directement chez Shopify, tels que vous les avez saisis : Evoliia voit ce qui manque là où l’analyse de votre site public ne le peut pas. En lecture seule.',
     status: 'live',
   },
+  /*
+   * Les chiffres de recherche. Leur propre groupe, pour la même raison que la boutique :
+   * ce n'est ni quelqu'un à qui l'on parle, ni une mesure faite par Evoliia. C'est une
+   * source extérieure que l'on branche, et la ranger chez les spécialistes laisserait
+   * croire qu'un agent la devine.
+   */
+  {
+    id: 'search_console',
+    group: 'mesure',
+    label: 'Vos chiffres de recherche Google',
+    summary:
+      'Ce que les gens tapent avant d’arriver chez vous, les pages qui sortent et à quelle place — les chiffres de Google sur vos propres pages, pas une estimation. En lecture seule.',
+    status: 'live',
+  },
   {
     id: 'visibility_content_agent',
     group: 'equipe',
@@ -219,9 +233,10 @@ export function liveFeatures(): Feature[] {
  * l'essai bien mieux qu'une porte : de quoi poser quelques questions, pas de quoi faire
  * rédiger un article.
  *
- * La boutique, elle, n'y figure pas — non par avarice, mais parce que l'essai n'accorde
- * aucune connexion extérieure : la promettre serait afficher une coche devant une porte
- * qui ne s'ouvre pas. La ligne se calcule d'ailleurs sur les deux à la fois.
+ * La boutique et les chiffres de recherche n'y figurent pas — non par avarice, mais parce
+ * que l'essai n'accorde aucune connexion extérieure : les promettre serait afficher une
+ * coche devant une porte qui ne s'ouvre pas. Leurs lignes se calculent d'ailleurs sur les
+ * deux conditions à la fois.
  */
 export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
   'vis-essai': [
@@ -236,6 +251,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_geo_agent',
     'visibility_content_agent',
     'shopify_read',
+    'search_console',
   ],
   'vis-pro': [
     'visibility_audit_agent',
@@ -243,6 +259,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_geo_agent',
     'visibility_content_agent',
     'shopify_read',
+    'search_console',
   ],
   'vis-business': [
     'visibility_audit_agent',
@@ -250,6 +267,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_geo_agent',
     'visibility_content_agent',
     'shopify_read',
+    'search_console',
   ],
 }
 
