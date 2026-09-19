@@ -134,7 +134,7 @@ export function ConnectionsBoard({
       setError(
         body.message ??
           (response.status === 404
-            ? "Le paiement en ligne n'est pas activé sur cette installation."
+            ? "Ce service n'est pas activé sur cette installation."
             : "L'autorisation n'a pas pu commencer."),
       )
       return

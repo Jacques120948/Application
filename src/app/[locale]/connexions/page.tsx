@@ -23,15 +23,46 @@ const STRIPE_NOTICES: Record<string, { tone: 'positive' | 'caution' | 'critical'
   erreur: { tone: 'critical', text: "Le retour de Stripe n'a pas pu être vérifié. Réessayez." },
 }
 
+/**
+ * Ce que dit le retour de Google.
+ *
+ * Un refus de la personne n'est pas une panne, et une propriété absente n'en est pas une non
+ * plus : ce sont deux phrases différentes qui appellent deux gestes différents. Les
+ * confondre dans « une erreur est survenue » ferait recommencer une autorisation qui
+ * n'aurait aucune raison de mieux se passer la deuxième fois.
+ */
+const GOOGLE_NOTICES: Record<string, { tone: 'positive' | 'caution' | 'critical'; text: string }> = {
+  ok: {
+    tone: 'positive',
+    text: 'Search Console est relié. Vos chiffres de recherche apparaissent dans Visibilité.',
+  },
+  refuse: {
+    tone: 'caution',
+    text: "Vous avez refusé l'autorisation chez Google. Rien n'a été enregistré.",
+  },
+  'sans-propriete': {
+    tone: 'caution',
+    text: "Ce compte Google ne suit aucun site dans Search Console. Déclarez-y votre site, puis recommencez.",
+  },
+  etat: {
+    tone: 'critical',
+    text: "Le retour de Google n'a pas pu être vérifié. Recommencez la connexion depuis cette page.",
+  },
+  echec: {
+    tone: 'critical',
+    text: "Google n'a pas terminé l'autorisation. Réessayez dans un instant.",
+  },
+}
+
 export default async function ConnectionsPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ stripe?: string }>
+  searchParams: Promise<{ stripe?: string; google?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
-  const { stripe } = await searchParams
+  const { stripe, google } = await searchParams
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
 
@@ -88,7 +119,13 @@ export default async function ConnectionsPage({
           categories={categories}
           maxConnections={plan.maxConnections}
           locale={locale}
-          notice={stripe === undefined ? null : (STRIPE_NOTICES[stripe] ?? null)}
+          notice={
+            stripe !== undefined
+              ? (STRIPE_NOTICES[stripe] ?? null)
+              : google !== undefined
+                ? (GOOGLE_NOTICES[google] ?? null)
+                : null
+          }
         />
       </div>
     </Shell>

@@ -8,6 +8,7 @@ import { findProvider, INTEGRATION_PROVIDERS, type IntegrationProvider } from '.
 import { findVerifier } from './verify'
 import { isEnabled } from '@/server/settings/flags'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
+import { estConfigure as estConfigureGoogle } from './providers/google-search-console'
 
 /**
  * Fournisseurs suspendus à un interrupteur d'exploitation.
@@ -22,6 +23,12 @@ export async function isProviderOpen(provider: IntegrationProvider): Promise<boo
   if (provider.status !== 'available') return false
   // Stripe Connect n'existe que si Evoliia a son propre compte de plateforme configuré.
   if (provider.id === 'stripe' && !isStripeAvailable()) return false
+  /*
+   * Même raison pour Google : sans application déclarée chez Google, il n'y a nulle part où
+   * envoyer la personne. Le fournisseur se présente alors comme à venir plutôt que d'offrir
+   * un bouton qui répondrait « introuvable ».
+   */
+  if (provider.id === 'google-search-console' && !estConfigureGoogle()) return false
   const flag = GATED[provider.id]
   return flag === undefined ? true : isEnabled(flag)
 }
@@ -283,6 +290,13 @@ export async function storeConnection(
      * signes ne diraient rien ; ceux du jeton, si.
      */
     hintSource?: string
+    /**
+     * Jeton de rafraîchissement, quand le fournisseur en délivre un.
+     *
+     * Il vaut plus longtemps que le jeton d'accès, et souvent jusqu'à révocation : il est
+     * chiffré comme le reste, et n'est jamais rendu à un écran.
+     */
+    refreshSecret?: string
   },
 ): Promise<ConnectionView> {
   const target = provider.connectionTarget
@@ -332,13 +346,22 @@ export async function storeConnection(
       update: {
         kind: params.kind,
         secret: encryptSecret(params.secret),
-        refreshSecret: null,
+        /*
+         * Absent, le jeton de rafraîchissement est effacé plutôt que conservé : il
+         * appartenait à l'autorisation précédente, et en garder un qui ne correspond plus
+         * au secret enregistré donnerait un renouvellement qui échoue sans raison lisible.
+         */
+        refreshSecret:
+          params.refreshSecret === undefined ? null : encryptSecret(params.refreshSecret),
         hint: indice,
       },
       create: {
         connectionId: connection.id,
         kind: params.kind,
         secret: encryptSecret(params.secret),
+        ...(params.refreshSecret === undefined
+          ? {}
+          : { refreshSecret: encryptSecret(params.refreshSecret) }),
         hint: indice,
       },
     })
@@ -462,6 +485,103 @@ export async function useCredential(
     await markConnectionError(userId, found.id, 'Clé illisible. Reconnectez le service.')
     return null
   }
+}
+
+/**
+ * Un jeton d'accès valable, renouvelé en silence quand il a expiré.
+ *
+ * Les autorisations OAuth ne se comportent pas comme les clés : un jeton d'accès vaut une
+ * heure, parfois moins. Sans renouvellement, la connexion marcherait le jour où on la crée
+ * et serait morte le lendemain — et personne ne comprendrait pourquoi, puisque rien
+ * n'aurait été révoqué.
+ *
+ * Le renouvellement est confié à l'appelant plutôt qu'écrit ici : chaque fournisseur a son
+ * adresse et ses paramètres. Ce qui appartient à cette fonction, c'est le reste — lire le
+ * jeton dans le bon périmètre, le déchiffrer, décider s'il est encore bon, et réécrire le
+ * nouveau chiffré.
+ *
+ * Deux détails coûteux s'ils manquent. Le jeton de rafraîchissement n'est pas toujours
+ * redonné au renouvellement : l'écraser par rien reviendrait à perdre l'autorisation au
+ * renouvellement suivant. Et un renouvellement refusé marque la connexion, parce qu'une
+ * autorisation révoquée chez le fournisseur ne se découvre autrement qu'au moment où un
+ * écran reste vide.
+ */
+export async function useOAuthAccess(
+  userId: string,
+  providerId: string,
+  renouveler: (
+    refreshToken: string,
+  ) => Promise<
+    | { ok: true; jetons: { accessToken: string; refreshToken?: string; expiresAt: Date } }
+    | { ok: false; raison: string }
+  >,
+): Promise<{ ok: true; accessToken: string; connectionId: string } | { ok: false; raison: string }> {
+  const found = await withUserScope(userId, async (tx) => {
+    const connection = await tx.integrationConnection.findFirst({
+      where: { userId, providerId, status: 'CONNECTED', disconnectedAt: null },
+      select: {
+        id: true,
+        expiresAt: true,
+        credential: { select: { secret: true, refreshSecret: true } },
+      },
+    })
+    if (connection === null || connection.credential === null) return null
+
+    await tx.integrationConnection.update({
+      where: { id: connection.id },
+      data: { lastUsedAt: new Date() },
+    })
+    return { id: connection.id, expiresAt: connection.expiresAt, ...connection.credential }
+  })
+
+  if (found === null) return { ok: false, raison: "Ce service n'est pas connecté." }
+
+  let acces: string
+  let rafraichissement: string | null
+  try {
+    acces = decryptSecret(found.secret)
+    rafraichissement = found.refreshSecret === null ? null : decryptSecret(found.refreshSecret)
+  } catch {
+    await markConnectionError(userId, found.id, 'Jeton illisible. Reconnectez le service.')
+    return { ok: false, raison: 'Reconnectez ce service depuis Connexions.' }
+  }
+
+  if (found.expiresAt === null || found.expiresAt.getTime() > Date.now()) {
+    return { ok: true, accessToken: acces, connectionId: found.id }
+  }
+
+  if (rafraichissement === null) {
+    await markConnectionError(userId, found.id, 'Autorisation expirée. Reconnectez le service.')
+    return {
+      ok: false,
+      raison: 'Cette autorisation a expiré. Reconnectez le service depuis Connexions.',
+    }
+  }
+
+  const neuf = await renouveler(rafraichissement)
+  if (!neuf.ok) {
+    await markConnectionError(userId, found.id, 'Autorisation refusée. Reconnectez le service.')
+    return { ok: false, raison: neuf.raison }
+  }
+
+  await withUserScope(userId, async (tx) => {
+    await tx.integrationConnection.update({
+      where: { id: found.id },
+      data: { expiresAt: neuf.jetons.expiresAt, lastError: null },
+    })
+    await tx.integrationCredential.update({
+      where: { connectionId: found.id },
+      data: {
+        secret: encryptSecret(neuf.jetons.accessToken),
+        // Absent, l'ancien reste valable : Google n'en redonne pas à chaque renouvellement.
+        ...(neuf.jetons.refreshToken === undefined
+          ? {}
+          : { refreshSecret: encryptSecret(neuf.jetons.refreshToken) }),
+      },
+    })
+  })
+
+  return { ok: true, accessToken: neuf.jetons.accessToken, connectionId: found.id }
 }
 
 /**

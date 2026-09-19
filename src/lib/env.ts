@@ -104,6 +104,23 @@ export const env = {
     return read('APP_URL') ?? 'http://localhost:3000'
   },
   /**
+   * Identifiants de l'application Google d'Evoliia, pour l'autorisation OAuth.
+   *
+   * Ils appartiennent à Evoliia et ne donnent accès à rien par eux-mêmes : c'est la personne
+   * qui autorise, compte par compte, et le jeton obtenu ne vaut que pour son propre Search
+   * Console. Le secret ne quitte jamais le serveur — il ne sert qu'à l'échange du code
+   * contre un jeton, de serveur à serveur.
+   *
+   * Absents, le connecteur est éteint : la route d'autorisation répond « introuvable »,
+   * comme si elle n'existait pas. Une porte fermée ne s'annonce pas.
+   */
+  get googleClientId(): string | undefined {
+    return read('GOOGLE_OAUTH_CLIENT_ID')
+  },
+  get googleClientSecret(): string | undefined {
+    return read('GOOGLE_OAUTH_CLIENT_SECRET')
+  },
+  /**
    * Clé Google AI d'Evoliia, pour créer des images au nom des créateurs.
    *
    * Elle ne quitte jamais le serveur : aucune route ne la renvoie, aucun composant ne la

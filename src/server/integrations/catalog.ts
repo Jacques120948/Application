@@ -97,6 +97,47 @@ export type ProviderGuide = {
 
 export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
   {
+    id: 'google-search-console',
+    name: 'Google Search Console',
+    category: 'google',
+    summary: 'Ce que les gens tapent sur Google avant d’arriver chez vous — ou de ne pas y arriver.',
+    usage:
+      'Lire vos chiffres de recherche : les mots tapés, les pages qui sortent, la position moyenne. C’est la demande réelle, mesurée par Google sur vos propres pages, et non une estimation.',
+    status: 'available',
+    credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
+    /*
+     * Une seule portée, et elle ne permet aucune écriture : ni soumettre une page, ni
+     * demander une réindexation, ni toucher à un réglage. C'est ce que Google affiche à la
+     * personne sur son écran de consentement, et elle doit pouvoir le croire.
+     */
+    scopes: ['https://www.googleapis.com/auth/webmasters.readonly'],
+    costToEvoliia: 'aucun',
+    costToCreator: 'gratuit',
+    costNotice:
+      'Search Console est gratuit, et c’est votre compte Google qui est interrogé. Evoliia ne paie rien, vous non plus.',
+    freeQuota:
+      'Sans frais. Google borne le nombre d’appels par jour et par propriété ; Evoliia en fait trois par consultation, très loin de la limite.',
+    webhooks: false,
+    providerReview:
+      'L’écran de consentement Google doit être vérifié avant d’ouvrir la connexion à d’autres comptes que ceux déclarés en test. La portée en lecture seule est la plus légère des portées Search Console.',
+    risk:
+      'Evoliia lit vos chiffres, elle ne peut rien changer chez Google. Vous pouvez révoquer l’accès à tout moment depuis votre compte Google, et la connexion s’éteint sans que rien d’autre ne casse.',
+    guide: {
+      url: 'https://search.google.com/search-console',
+      urlLabel: 'Ouvrir Search Console',
+      steps: [
+        'Votre site doit d’abord être déclaré dans Search Console, et la propriété vérifiée. Sans cela, Google n’a aucun chiffre à donner.',
+        'Revenez ici et cliquez « Connecter Google Search Console ».',
+        'Google vous demande d’autoriser la lecture. C’est chez Google que vous vous identifiez : Evoliia ne voit jamais votre mot de passe.',
+        'De retour, vos chiffres de recherche apparaissent dans Visibilité.',
+      ],
+      caution:
+        'Les chiffres de Search Console ont deux à trois jours de retard : c’est le délai de Google, pas celui d’Evoliia.',
+    },
+    reviewedOn: '2026-09-19',
+  },
+  {
     id: 'google-drive',
     name: 'Google Drive',
     category: 'google',
