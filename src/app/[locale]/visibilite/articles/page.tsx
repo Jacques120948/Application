@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { estimerArticle, listArticles, listManquesDeContenu } from '@/server/audit/articles'
 import { readDashboard } from '@/server/audit/service'
+import { hasConnection } from '@/server/integrations/service'
 import { Shell } from '@/components/studio/Shell'
 import { ArticlesRediges } from '@/components/studio/ArticlesRediges'
 
@@ -40,10 +41,15 @@ export default async function ArticlesPage({
 
   if (tableau === null) redirect(`/${locale}/visibilite`)
 
-  const [manques, articles, cout] = await Promise.all([
+  /*
+   * Relié ou non : une question à la base, sans appel à Google. Ce qui est annoncé avant de
+   * payer ne doit pas dépendre d'un service extérieur joignable à cet instant.
+   */
+  const [manques, articles, cout, recherchesBranchees] = await Promise.all([
     listManquesDeContenu(user.id, tableau.site.id),
     listArticles(user.id, tableau.site.id),
     estimerArticle(),
+    hasConnection(user.id, 'google-search-console'),
   ])
 
   return (
@@ -57,7 +63,9 @@ export default async function ArticlesPage({
         </a>
         <h1 className="mt-4 mb-0 text-2xl font-semibold tracking-tight">Articles</h1>
         <p className="mt-2 mb-8 text-sm text-[var(--color-ink-soft)]">
-          Milo écrit un article de fond à partir de ce que l’analyse relève sur votre contenu.
+          {recherchesBranchees
+            ? 'Milo écrit un article de fond à partir de vos chiffres de recherche Google et de ce que l’analyse relève sur votre contenu.'
+            : 'Milo écrit un article de fond à partir de ce que l’analyse relève sur votre contenu.'}
         </p>
 
         <ArticlesRediges
@@ -70,6 +78,7 @@ export default async function ArticlesPage({
             createdAt: article.createdAt.toISOString(),
           }))}
           cout={cout}
+          recherchesBranchees={recherchesBranchees}
         />
       </div>
     </Shell>

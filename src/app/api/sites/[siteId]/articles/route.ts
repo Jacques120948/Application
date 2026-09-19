@@ -20,6 +20,16 @@ import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
  * Le débit accordé est celui des opérations IA : un article coûte quinze à trente crédits, et
  * une rafale doit être coupée avant d'être facturée.
  */
+/**
+ * Le temps que l'hébergeur doit accorder à cette route.
+ *
+ * Écrire un article, c'est un appel à un modèle qui rend plusieurs milliers de signes, et
+ * facultativement une lecture des chiffres de recherche avant lui. Sans ce réglage, la
+ * plateforme coupe à quelques secondes par défaut : les crédits seraient réservés, l'appel
+ * partirait, et la personne verrait une erreur sur un article qu'elle a payé.
+ */
+export const maxDuration = 120
+
 const input = z.object({
   demande: z.string().max(400).optional(),
   locale: z.string().max(10).optional(),

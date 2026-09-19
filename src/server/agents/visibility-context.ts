@@ -1,4 +1,5 @@
 import { listAudits, readPlan } from '@/server/audit/plan'
+import { JOURS_LUS, recherchesPourArticle } from '@/server/audit/recherches'
 import { withUserScope } from '@/server/db/scope'
 import type { VisibilityAgentId } from './visibility'
 
@@ -21,6 +22,13 @@ import type { VisibilityAgentId } from './visibility'
  * **Un contexte plus large coûte plus cher à chaque question, pour une réponse moins nette.**
  * Donner les quatre périmètres à chacun multiplierait la facture par quatre sans rien
  * améliorer.
+ *
+ * Les chiffres de recherche suivent la même règle et ne vont donc qu'à deux d'entre eux.
+ * Néo, parce qu'une position est un fait de référencement et que c'est lui qui réécrit les
+ * balises des pages concernées. Milo, parce que c'est lui qui écrit, et qu'écrire sur ce que
+ * les gens tapent vaut mieux qu'écrire sur ce que le site ne couvre pas. Léa dit par quoi
+ * commencer à partir des constats, Gia regarde ce qu'une machine comprend : ni l'une ni
+ * l'autre n'en ferait quelque chose, et le contexte se paie à chaque question.
  */
 
 /** Au-delà, le contexte coûte plus qu'il n'éclaire. */
@@ -155,6 +163,38 @@ async function pages(
 }
 
 /**
+ * Ce que les gens tapent réellement, quand Search Console est relié.
+ *
+ * Rend une liste vide sans connexion, sans propriété correspondante, ou si Google tarde :
+ * la lecture est bornée dans le temps et ne fait jamais échouer une question. Quand elle
+ * ne rend rien, le spécialiste reçoit une phrase qui le dit — parce qu'un silence se comble
+ * par une estimation, et qu'une estimation est exactement ce que ce produit refuse.
+ */
+async function recherches(userId: string, siteId: string): Promise<string[]> {
+  const site = await withUserScope(userId, (tx) =>
+    tx.site.findFirst({
+      where: { id: siteId, userId, deletedAt: null },
+      select: { origin: true },
+    }),
+  )
+  if (site === null) return []
+
+  const lignes = await recherchesPourArticle(userId, site.origin)
+  if (lignes.length === 0) {
+    return [
+      "Aucune donnée de recherche n'est disponible pour ce site : ne parle ni de volume de recherche, ni de position dans Google, ni de concurrence. Tu ne les connais pas.",
+    ]
+  }
+  return [
+    `Recherches réelles relevées par Google sur les ${JOURS_LUS} derniers jours (les plus proches de la première page d'abord) :`,
+    ...lignes.map(
+      (ligne) =>
+        `- « ${ligne.requete} » | ${ligne.impressions} affichages | ${ligne.clics} clics | position moyenne ${ligne.position}`,
+    ),
+  ]
+}
+
+/**
  * Les faits d'un spécialiste, prêts à être mis dans son contexte.
  *
  * Rien n'est calculé ici : tout vient des contrôles, qui sont du code. Ce module ne fait que
@@ -177,6 +217,7 @@ export async function readSiteFacts(
       ...base,
       ...(await constats(userId, siteId, 'seo')),
       ...(await pages(userId, siteId, 'balises')),
+      ...(await recherches(userId, siteId)),
     ].join('\n')
   }
   if (agent === 'geo') {
@@ -194,6 +235,7 @@ export async function readSiteFacts(
     ...base,
     ...(await constats(userId, siteId, null)),
     ...(await pages(userId, siteId, 'texte')),
+    ...(await recherches(userId, siteId)),
   ].join('\n')
 }
 

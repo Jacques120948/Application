@@ -1,5 +1,6 @@
 import { notFound, validation } from '@/lib/errors'
 import { writeArticle, type ConstatPourArticle, type PageDuSite } from '@/server/ai/operations'
+import { recherchesPourArticle } from './recherches'
 import { actionCost } from '@/server/billing/action-costs'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
@@ -26,10 +27,17 @@ import { findCheck } from './scoring'
  * précisément pour ça : un article qui refait une page existante crée le défaut de contenu
  * dupliqué que l'analyse reprochera à la prochaine.
  *
- * **Evoliia n'a aucune donnée de recherche.** Elle mesure le site, pas la demande : ni
- * volume, ni position, ni requête. Le sujet est donc fondé sur les manques du site, et
- * l'écran le dit dans ces termes. Appeler ça de la recherche de mots-clés serait une
- * promesse que rien ne soutient.
+ * **Le sujet se fonde sur la demande quand elle est connue, sur le site sinon.** Search
+ * Console relié, Milo reçoit ce que les gens ont réellement tapé pour voir ce site — et en
+ * priorité les recherches où il sort en deuxième page, c'est-à-dire là où il figure déjà
+ * sans être vu. Sans cette source, il revient aux manques relevés par l'analyse, qui est
+ * une façon honnête de deviner la demande quand on ne l'a pas. Ce qui ne varie jamais :
+ * aucun chiffre de recherche n'est inventé, et sans source on n'en cite aucun.
+ *
+ * **La source facultative ne fait jamais échouer l'article.** Une connexion absente, une
+ * propriété qui ne correspond pas, Google en panne : la rédaction continue sans elle. Un
+ * article coûte quinze à trente crédits ; le refuser parce qu'une source d'appoint n'a pas
+ * répondu serait indéfendable.
  */
 
 /** Ce qu'on donne du site au rédacteur : assez pour ne pas se répéter, pas plus. */
@@ -81,6 +89,8 @@ export type ArticleComplet = ArticleResume & {
   demande: string
   fondement: string
   checkIds: string[]
+  /** Les recherches réelles sur lesquelles le sujet a été choisi. Vide sinon. */
+  recherches: string[]
   chapo: string
   corps: string
   questions: { question: string; reponse: string }[]
@@ -165,6 +175,7 @@ export async function readArticle(userId: string, articleId: string): Promise<Ar
     demande: article.demande,
     fondement: article.fondement,
     checkIds: article.checkIds,
+    recherches: article.recherches,
     titre: article.titre,
     chapo: article.chapo,
     corps: article.corps,
@@ -204,7 +215,7 @@ export async function redigerArticle(
   const site = await withUserScope(userId, (tx) =>
     tx.site.findFirst({
       where: { id: siteId, userId, deletedAt: null },
-      select: { id: true, host: true, about: true },
+      select: { id: true, host: true, origin: true, about: true },
     }),
   )
   if (site === null) throw notFound('Ce site est introuvable.')
@@ -244,7 +255,14 @@ export async function redigerArticle(
     affected: manque.affected,
   }))
 
-  if (voulu === '' && constats.length === 0) {
+  /*
+   * Ce que les gens tapent, quand on le sait. Lu avant l'appel au modèle et jamais après :
+   * ce qui guide le choix du sujet doit être là au moment où il se choisit. Rend une liste
+   * vide plutôt qu'une erreur — voir l'en-tête de ce module.
+   */
+  const recherches = await recherchesPourArticle(userId, site.origin)
+
+  if (voulu === '' && constats.length === 0 && recherches.length === 0) {
     throw validation(
       'Votre dernière analyse ne relève aucun manque de contenu : dites sur quoi vous voulez un article.',
     )
@@ -257,6 +275,7 @@ export async function redigerArticle(
     host: site.host,
     pages: duSite,
     constats,
+    recherches,
     seuils: SEUILS_REDACTION,
     locale,
   })
@@ -276,6 +295,7 @@ export async function redigerArticle(
         demande: voulu,
         fondement: article.fondement,
         checkIds: manques.map((manque) => manque.checkId),
+        recherches: recherches.map((ligne) => ligne.requete),
         titre: article.titre,
         chapo: article.chapo,
         corps,
@@ -292,6 +312,7 @@ export async function redigerArticle(
   logger.info('article rédigé', {
     siteId,
     mots: wordCount,
+    recherches: recherches.length,
     sections: article.sections.length,
     credits: resultat.creditsSpent,
   })

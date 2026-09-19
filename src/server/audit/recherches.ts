@@ -58,7 +58,8 @@ const IMPRESSIONS_MINIMALES = 10
 export const LIGNES_AFFICHEES = 25
 
 export type Occasion = {
-  url: string
+  /** La requête tapée, ou l'adresse de la page, selon la liste d'où elle sort. */
+  cle: string
   position: number
   impressions: number
   clics: number
@@ -72,6 +73,8 @@ export type VueRecherches = {
   pages: Ligne[]
   /** Les pages de deuxième page, les plus vues d'abord. */
   occasions: Occasion[]
+  /** Les recherches de deuxième page. C'est la demande réelle sur laquelle écrire. */
+  occasionsDeRequetes: Occasion[]
   totaux: { clics: number; impressions: number }
 }
 
@@ -111,15 +114,19 @@ export function choisirPropriete(origin: string, proprietes: Propriete[]): strin
 }
 
 /**
- * Les pages qui sortent en deuxième page de Google.
+ * Ce qui sort en deuxième page de Google.
+ *
+ * S'applique aux pages comme aux recherches, parce que le calcul est le même et que les
+ * deux répondent à la même question sous deux angles : quelles adresses sont à portée, et
+ * sur quels mots. Deux fonctions auraient divergé à la première correction de seuil.
  *
  * Elles se voient mal dans une liste triée par clics : elles en font peu, précisément parce
  * qu'elles sont en deuxième page. Triées par impressions, elles disent l'inverse — « Google
  * vous a montré trois cents fois et personne n'a cliqué », ce qui est une occasion et non
  * un échec.
  */
-export function occasions(pages: Ligne[]): Occasion[] {
-  return pages
+export function occasions(lignes: Ligne[]): Occasion[] {
+  return lignes
     .filter(
       (ligne) =>
         ligne.position > PAGE_DEUX.haut &&
@@ -128,7 +135,7 @@ export function occasions(pages: Ligne[]): Occasion[] {
     )
     .sort((a, b) => b.impressions - a.impressions)
     .map((ligne) => ({
-      url: ligne.cle,
+      cle: ligne.cle,
       position: ligne.position,
       impressions: ligne.impressions,
       clics: ligne.clics,
@@ -223,7 +230,84 @@ export async function lireRecherches(
       requetes: parRequete.lignes.slice(0, LIGNES_AFFICHEES),
       pages: parPage.lignes.slice(0, LIGNES_AFFICHEES),
       occasions: occasions(parPage.lignes).slice(0, LIGNES_AFFICHEES),
+      occasionsDeRequetes: occasions(parRequete.lignes).slice(0, LIGNES_AFFICHEES),
       totaux,
     },
   }
+}
+
+/** Une recherche réelle, telle qu'elle est donnée au rédacteur. */
+export type RequeteReelle = {
+  requete: string
+  impressions: number
+  clics: number
+  position: number
+}
+
+/** Ce qu'on donne au rédacteur. Au-delà, il dilue son sujet au lieu de le choisir. */
+const REQUETES_POUR_ARTICLE = 12
+
+/**
+ * Le temps accordé à cette lecture avant de s'en passer.
+ *
+ * Bien plus court que le délai des appels eux-mêmes, et c'est le but : trois allers-retours
+ * chez Google peuvent prendre une quarantaine de secondes dans le pire des cas, et cette
+ * lecture précède un appel à un modèle qui en prendra autant. Une source d'appoint ne doit
+ * pas décider du temps que met l'action principale — surtout celle qui est payée.
+ */
+const BUDGET_MS = 8_000
+
+/**
+ * Les recherches réelles à donner au rédacteur, ou une liste vide.
+ *
+ * Jusqu'ici, Milo choisissait son sujet à partir des manques du site — ce qui est honnête
+ * quand on n'a rien d'autre, et faible quand on a mieux. Écrire sur ce que le site ne
+ * couvre pas, c'est deviner la demande ; écrire sur ce que les gens tapent déjà pour
+ * tomber en deuxième page, c'est la connaître.
+ *
+ * Deux règles tiennent cette fonction.
+ *
+ * **Elle ne fait jamais échouer un article.** Pas de connexion, propriété absente, Google
+ * en panne, offre qui ne l'ouvre pas : tout rend la même liste vide, et la rédaction
+ * continue sur les manques du site comme avant. Un article coûte quinze à trente crédits ;
+ * le faire échouer parce qu'une source facultative n'a pas répondu serait indéfendable.
+ *
+ * **Les recherches de deuxième page passent devant.** Ce sont celles où le site figure déjà
+ * sans être vu : un article qui les traite a une chance de gagner des places, là où un
+ * article sur une requête où le site n'apparaît nulle part part de zéro. Les plus vues
+ * complètent, jamais l'inverse.
+ */
+export async function recherchesPourArticle(
+  userId: string,
+  origin: string,
+): Promise<RequeteReelle[]> {
+  const lecture = await Promise.race([
+    lireRecherches(userId, origin).catch(() => ({ ok: false }) as const),
+    new Promise<{ ok: false }>((resoudre) => {
+      const minuteur = setTimeout(() => resoudre({ ok: false }), BUDGET_MS)
+      // Sans cela, le minuteur retiendrait le processus jusqu'à son terme après la réponse.
+      minuteur.unref?.()
+    }),
+  ])
+  return !lecture.ok || !('vue' in lecture) ? [] : retenirPourArticle(lecture.vue)
+}
+
+/** Le choix proprement dit, séparé de la lecture pour être vérifiable sans réseau. */
+export function retenirPourArticle(
+  vue: Pick<VueRecherches, 'occasionsDeRequetes' | 'requetes'>,
+): RequeteReelle[] {
+  const retenues: RequeteReelle[] = []
+  const vues = new Set<string>()
+  for (const ligne of [...vue.occasionsDeRequetes, ...vue.requetes]) {
+    if (retenues.length >= REQUETES_POUR_ARTICLE) break
+    if (vues.has(ligne.cle)) continue
+    vues.add(ligne.cle)
+    retenues.push({
+      requete: ligne.cle,
+      impressions: ligne.impressions,
+      clics: ligne.clics,
+      position: ligne.position,
+    })
+  }
+  return retenues
 }

@@ -12,6 +12,10 @@ import { useState } from 'react'
  * posé seul demande à quelqu'un d'inventer un sujet, ce qu'il ne sait pas faire et ce pour
  * quoi il paie. Les manques relevés sont la réponse à « sur quoi ? », et ils sont gratuits.
  *
+ * **L'écran dit sur quoi le sujet sera choisi, avant de payer.** Search Console relié, Milo
+ * part de ce que les gens tapent réellement ; sinon, des manques du site. Ce n'est pas la
+ * même chose, et découvrir laquelle après avoir dépensé trente crédits serait désagréable.
+ *
  * **Le sujet est facultatif.** Qui a une idée l'écrit ; qui n'en a pas laisse Milo choisir et
  * lira pourquoi. Un champ obligatoire aurait bloqué exactement les gens qu'on veut aider.
  *
@@ -25,6 +29,7 @@ import { useState } from 'react'
  * garantit ni position, ni apparition dans un assistant, et l'écran ne le laisse pas croire.
  */
 
+/** Ce dont l'écran a besoin pour ne pas promettre une source qui n'est pas là. */
 export type ManqueVu = {
   checkId: string
   label: string
@@ -45,6 +50,7 @@ export type ArticleCompletVu = ArticleResumeVu & {
   demande: string
   fondement: string
   checkIds: string[]
+  recherches: string[]
   chapo: string
   corps: string
   questions: { question: string; reponse: string }[]
@@ -130,12 +136,15 @@ export function ArticlesRediges({
   manques,
   articles: initiaux,
   cout,
+  recherchesBranchees,
 }: {
   siteId: string
   host: string
   locale: string
   manques: readonly ManqueVu[]
   articles: readonly ArticleResumeVu[]
+  /** Search Console est relié : le sujet se choisira sur la demande réelle, pas sur le site. */
+  recherchesBranchees: boolean
   /** La fourchette annoncée, ou `null` quand le catalogue ne la donne pas. */
   cout: { min: number; max: number } | null
 }) {
@@ -214,14 +223,18 @@ export function ArticlesRediges({
           />
           <p className="m-0 flex-1 text-sm leading-relaxed">
             <strong>Milo</strong> écrit un article de fond pour <strong>{host}</strong>, à partir
-            de ce que l’analyse reproche à votre contenu.
+            {recherchesBranchees
+              ? ' de ce que les gens tapent réellement sur Google pour vous trouver, et de ce que l’analyse reproche à votre contenu.'
+              : ' de ce que l’analyse reproche à votre contenu.'}
           </p>
         </div>
 
         {manques.length === 0 ? (
           <p className="mt-4 mb-0 rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3 text-sm text-[var(--color-ink-soft)]">
-            Votre dernière analyse ne relève aucun manque de contenu. Dites alors sur quoi vous
-            voulez un article — sans sujet, Milo n’aurait rien sur quoi s’appuyer.
+            Votre dernière analyse ne relève aucun manque de contenu.{' '}
+            {recherchesBranchees
+              ? 'Milo choisira alors le sujet dans vos recherches Google — ou dites-lui le vôtre.'
+              : 'Dites alors sur quoi vous voulez un article — sans sujet, Milo n’aurait rien sur quoi s’appuyer.'}
           </p>
         ) : (
           <div className="mt-4">
@@ -331,6 +344,26 @@ export function ArticlesRediges({
                     {ouvert.fondement === '' ? null : (
                       <p className="m-0 mb-4 rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3 text-sm text-[var(--color-ink-soft)]">
                         <strong>Pourquoi ce sujet :</strong> {ouvert.fondement}
+                      </p>
+                    )}
+
+                    {/*
+                      Sur quoi le sujet a été choisi. Un article écrit sur une demande mesurée
+                      et un article écrit sur une déduction n'ont pas la même valeur : le dire
+                      permet de relire celui-ci dans un an sans avoir à s'en souvenir.
+                    */}
+                    {ouvert.recherches.length === 0 ? null : (
+                      <p className="m-0 mb-4 text-xs text-[var(--color-ink-soft)]">
+                        Écrit à partir de vos chiffres de recherche Google :{' '}
+                        {ouvert.recherches.slice(0, 6).map((requete, index) => (
+                          <span key={requete}>
+                            {index === 0 ? '' : ', '}
+                            <span className="text-[var(--color-ink)]">« {requete} »</span>
+                          </span>
+                        ))}
+                        {ouvert.recherches.length > 6
+                          ? ` et ${ouvert.recherches.length - 6} autres.`
+                          : '.'}
                       </p>
                     )}
 

@@ -1440,6 +1440,10 @@ model SiteArticle {
   fondement String   @default("")
   /// Les contrôles que cet article vise à combler. Sert à les afficher, pas à promettre.
   checkIds  String[] @default([])
+  /// Les recherches réelles données au rédacteur, quand Search Console était relié.
+  /// Conservées pour qu'on sache, en relisant l'article un an plus tard, sur quelle demande
+  /// il a été écrit — et vide quand il n'a été fondé que sur les manques du site.
+  recherches String[] @default([])
 
   titre String
   /// Le premier paragraphe, celui qui doit répondre avant qu'on fasse défiler.

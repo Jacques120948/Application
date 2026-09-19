@@ -106,10 +106,10 @@ function Occasions({ occasions }: { occasions: Occasion[] }) {
         <ul className="m-0 grid list-none gap-3 p-0">
           {occasions.map((occasion) => (
             <li
-              key={occasion.url}
+              key={occasion.cle}
               className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4"
             >
-              <p className="m-0 text-sm break-all">{occasion.url}</p>
+              <p className="m-0 text-sm break-all">{occasion.cle}</p>
               <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
                 {nombre(occasion.impressions)} vues pour {nombre(occasion.clics)}{' '}
                 {occasion.clics > 1 ? 'clics' : 'clic'} · place {occasion.position.toFixed(1)}

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { creerEtat, lireEtat } from '@/server/integrations/oauth'
-import { choisirPropriete, occasions } from '@/server/audit/recherches'
+import { choisirPropriete, occasions, retenirPourArticle } from '@/server/audit/recherches'
 import type { Ligne, Propriete } from '@/server/integrations/providers/google-search-console'
 
 /**
@@ -118,7 +118,7 @@ describe('les pages à portée de la première page', () => {
       ligne('https://exemple.ch/page-deux', 12.4, 300),
       ligne('https://exemple.ch/loin', 34.1, 800),
     ])
-    expect(retenues.map((occasion) => occasion.url)).toEqual(['https://exemple.ch/page-deux'])
+    expect(retenues.map((occasion) => occasion.cle)).toEqual(['https://exemple.ch/page-deux'])
   })
 
   it('écarte ce qui est trop peu vu pour vouloir dire quelque chose', () => {
@@ -130,7 +130,7 @@ describe('les pages à portée de la première page', () => {
       ligne('https://exemple.ch/a', 11.2, 100, 9),
       ligne('https://exemple.ch/b', 19.8, 900, 1),
     ])
-    expect(retenues.map((occasion) => occasion.url)).toEqual([
+    expect(retenues.map((occasion) => occasion.cle)).toEqual([
       'https://exemple.ch/b',
       'https://exemple.ch/a',
     ])
@@ -138,5 +138,52 @@ describe('les pages à portée de la première page', () => {
 
   it('laisse la dixième place tranquille : elle est en première page', () => {
     expect(occasions([ligne('https://exemple.ch/dixieme', 10.4, 400)])).toEqual([])
+  })
+})
+
+describe('ce que le rédacteur reçoit', () => {
+  const ligne = (cle: string, position: number, impressions: number, clics = 0) => ({
+    cle,
+    position,
+    impressions,
+    clics,
+  })
+
+  it('met la deuxième page devant les plus cliquées', () => {
+    /*
+     * Une recherche où le site sort en page 2 vaut mieux qu'une où il est premier : sur la
+     * première, un article peut gagner des places ; sur la seconde, il n'y a rien à gagner.
+     */
+    const retenues = retenirPourArticle({
+      occasionsDeRequetes: [ligne('bougie pierre', 13.1, 400)],
+      requetes: [ligne('cap nature', 1.2, 900, 700)],
+    })
+    expect(retenues.map((r) => r.requete)).toEqual(['bougie pierre', 'cap nature'])
+  })
+
+  it('ne donne pas deux fois la même recherche', () => {
+    // Une requête de page 2 figure aussi dans la liste générale : elle ne compte qu'une fois.
+    const retenues = retenirPourArticle({
+      occasionsDeRequetes: [ligne('bougie pierre', 13.1, 400)],
+      requetes: [ligne('bougie pierre', 13.1, 400), ligne('autre', 2, 10)],
+    })
+    expect(retenues.map((r) => r.requete)).toEqual(['bougie pierre', 'autre'])
+  })
+
+  it('reprend les chiffres tels quels, sans en fabriquer', () => {
+    const [premiere] = retenirPourArticle({
+      occasionsDeRequetes: [ligne('bougie pierre', 13.1, 400, 7)],
+      requetes: [],
+    })
+    expect(premiere).toEqual({ requete: 'bougie pierre', position: 13.1, impressions: 400, clics: 7 })
+  })
+
+  it('borne ce qui part chez le rédacteur', () => {
+    const beaucoup = Array.from({ length: 40 }, (_, rang) => ligne(`requete ${rang}`, 12, 100))
+    expect(retenirPourArticle({ occasionsDeRequetes: beaucoup, requetes: beaucoup })).toHaveLength(12)
+  })
+
+  it('ne rend rien quand il n’y a rien : l’article s’écrira sans', () => {
+    expect(retenirPourArticle({ occasionsDeRequetes: [], requetes: [] })).toEqual([])
   })
 })

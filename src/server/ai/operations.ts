@@ -1410,6 +1410,20 @@ export type ConstatPourArticle = {
 }
 
 /**
+ * Une recherche réelle, telle que Google la rapporte.
+ *
+ * Déclarée ici plutôt qu'importée du module qui la lit : ce fichier est le contrat de ce
+ * qu'on donne à un modèle, et il ne doit pas dépendre de l'endroit d'où vient la donnée.
+ * Demain elle viendra peut-être d'ailleurs ; la forme, elle, ne changera pas.
+ */
+export type RequeteReelle = {
+  requete: string
+  impressions: number
+  clics: number
+  position: number
+}
+
+/**
  * Fait écrire un article de fond.
  *
  * Tout ce qui vient du site ou de la personne voyage dans une balise de données : le contenu
@@ -1426,6 +1440,13 @@ export async function writeArticle(params: {
   host: string
   pages: readonly PageDuSite[]
   constats: readonly ConstatPourArticle[]
+  /**
+   * Ce que les gens ont réellement tapé, quand Search Console est relié.
+   *
+   * Vide autrement, et l'instruction change avec : mieux vaut un sujet fondé sur les manques
+   * du site qu'un sujet fondé sur des chiffres que le modèle aurait comblés lui-même.
+   */
+  recherches: readonly RequeteReelle[]
   seuils: {
     motsMinimum: number
     motsParParagrapheMax: number
@@ -1459,6 +1480,9 @@ export async function writeArticle(params: {
         : asUserData('sujet_demande', params.demande),
       asUserData('pages_deja_en_ligne', JSON.stringify(params.pages, null, 2)),
       asUserData('constats_de_l_analyse', JSON.stringify(params.constats, null, 2)),
+      params.recherches.length === 0
+        ? "Aucune donnée de recherche n'est disponible pour ce site : fonde ton sujet sur les constats et ne parle ni de volume de recherche, ni de position, ni de concurrence."
+        : asUserData('recherches_reelles', JSON.stringify(params.recherches, null, 2)),
       "Écris l'article.",
     ].join('\n\n'),
   })
