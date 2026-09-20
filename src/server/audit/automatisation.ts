@@ -9,7 +9,7 @@ import { redigerArticle } from './articles'
 import { lireCalendrier } from './calendrier'
 import { inspecter, lireIndexation } from './indexation'
 import { lireRecherches } from './recherches'
-import { releverVisibilite, soldeCouvre } from './visibilite-ia'
+import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -433,7 +433,14 @@ export async function tournerQuotidien(
             tx.promptIA.count({ where: { siteId: candidat.siteId, userId: candidat.userId, actif: true } }),
           )
           if (questions > 0 && (await soldeCouvre(candidat.userId, questions))) {
-            const releve = await releverVisibilite(candidat.userId, candidat.siteId)
+            /*
+             * La nuit ouvre le passage et le mène à bout dans la foulée : personne ne
+             * regarde, et rien ne presse. Si la tournée est coupée, le passage reste
+             * ouvert et se reprend — à la nuit suivante, ou dès que la personne ouvre
+             * l'écran.
+             */
+            await ouvrirPassage(candidat.userId, candidat.siteId)
+            const releve = await poursuivrePassage(candidat.userId, candidat.siteId)
             bilan.questionsIa += releve.questions
             fait.assistantsAt = maintenant
           } else if (questions > 0) {

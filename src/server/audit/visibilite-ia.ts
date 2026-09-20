@@ -259,13 +259,133 @@ export type BilanReleve = {
 }
 
 /**
- * Pose toutes les questions actives d'un site, sur toutes les plateformes configurées.
+ * Au-delà, un passage commencé est considéré comme interrompu et se reprend.
  *
- * Le coût est réservé d'abord, au plafond, puis ajusté au nombre de relevés réellement
- * obtenus : une plateforme injoignable ne doit pas être facturée. C'est la même mécanique
- * que le reste du produit — réserver large, débiter juste.
+ * Un serveur peut être coupé au milieu : un déploiement, une fonction qui atteint sa durée,
+ * une panne. Sans cette borne, un passage tué à mi-chemin resterait « en cours » pour
+ * toujours et bloquerait le suivant.
  */
-export async function releverVisibilite(userId: string, siteId: string): Promise<BilanReleve> {
+const PASSAGE_ABANDONNE_MS = 30 * 60 * 1000
+
+/** Ce qu'un passage laisse voir de son avancement. */
+export type EtatPassage = {
+  enCours: boolean
+  attendu: number
+  fait: number
+}
+
+/** Les questions de ce passage qui n'ont pas encore de réponse. */
+async function resteAFaire(
+  userId: string,
+  siteId: string,
+  depuis: Date,
+): Promise<{ id: string; texte: string }[]> {
+  const prompts = await withUserScope(userId, (tx) =>
+    tx.promptIA.findMany({
+      where: { siteId, userId, actif: true },
+      select: { id: true, texte: true },
+      take: PROMPTS_MAX,
+    }),
+  )
+  const faits = await withUserScope(userId, (tx) =>
+    tx.releveIA.findMany({
+      where: { siteId, userId, createdAt: { gte: depuis } },
+      select: { promptId: true },
+      distinct: ['promptId'],
+    }),
+  )
+  const vus = new Set(faits.map((ligne: { promptId: string }) => ligne.promptId))
+  return prompts.filter((prompt: { id: string }) => !vus.has(prompt.id))
+}
+
+/**
+ * Où en est le passage en cours, s'il y en a un.
+ *
+ * L'avancement se compte sur les relevés réellement écrits, jamais sur un compteur tenu à
+ * part : deux nombres qui disent la même chose finissent toujours par se contredire, et
+ * c'est celui qui ment qu'on affiche.
+ */
+export async function etatPassage(userId: string, siteId: string): Promise<EtatPassage> {
+  const reglages = await withUserScope(userId, (tx) =>
+    tx.siteAutomatisation.findFirst({
+      where: { siteId, userId },
+      select: { passageAt: true, passageAttendu: true },
+    }),
+  )
+  if (reglages?.passageAt == null) return { enCours: false, attendu: 0, fait: 0 }
+
+  const faits = await withUserScope(userId, (tx) =>
+    tx.releveIA.findMany({
+      where: { siteId, userId, createdAt: { gte: reglages.passageAt as Date } },
+      select: { promptId: true },
+      distinct: ['promptId'],
+    }),
+  )
+  const abandonne = Date.now() - reglages.passageAt.getTime() > PASSAGE_ABANDONNE_MS
+  return {
+    enCours: !abandonne && faits.length < reglages.passageAttendu,
+    attendu: reglages.passageAttendu,
+    fait: faits.length,
+  }
+}
+
+/**
+ * Ouvre un passage : marque qu'il commence, et dit ce qu'il va couvrir.
+ *
+ * Rien n'est interrogé ici. C'est délibéré : la réponse doit partir tout de suite, pour que
+ * la personne puisse fermer l'onglet. Le travail, lui, continue après — et ce qu'il a fait
+ * est durable, chaque réponse étant écrite dès qu'elle arrive.
+ */
+export async function ouvrirPassage(userId: string, siteId: string): Promise<EtatPassage> {
+  const site = await withUserScope(userId, (tx) =>
+    tx.site.findFirst({ where: { id: siteId, userId, deletedAt: null }, select: { id: true } }),
+  )
+  if (site === null) throw notFound('Ce site est introuvable.')
+
+  const en = await etatPassage(userId, siteId)
+  if (en.enCours) return en
+
+  const [questions, plateformes] = [
+    await withUserScope(userId, (tx) =>
+      tx.promptIA.count({ where: { siteId, userId, actif: true } }),
+    ),
+    plateformesDisponibles(),
+  ]
+  if (questions === 0 || plateformes.length === 0) {
+    return { enCours: false, attendu: 0, fait: 0 }
+  }
+  if (!(await soldeCouvre(userId, questions))) {
+    throw validation(
+      'Votre solde ne couvre pas ce relevé. Éteignez des questions, ou attendez le renouvellement.',
+    )
+  }
+
+  await withUserScope(userId, (tx) =>
+    tx.siteAutomatisation.upsert({
+      where: { siteId },
+      create: { siteId, userId, passageAt: new Date(), passageAttendu: questions },
+      update: { passageAt: new Date(), passageAttendu: questions },
+    }),
+  )
+  return { enCours: true, attendu: questions, fait: 0 }
+}
+
+/**
+ * Pose les questions du passage en cours, dans la limite du temps accordé.
+ *
+ * Reprenable : ce qui reste à faire se déduit des relevés déjà écrits, donc un appel coupé
+ * au milieu ne perd rien et le suivant continue là où il en était. C'est ce qui permet de
+ * fermer l'onglet — et ce qui rend le travail insensible à une fonction qui atteint sa
+ * durée maximale.
+ *
+ * Le coût est réservé au plafond puis ajusté aux questions réellement abouties : une
+ * plateforme injoignable ne doit pas être facturée.
+ */
+export async function poursuivrePassage(
+  userId: string,
+  siteId: string,
+  budgetMs = 240_000,
+): Promise<BilanReleve> {
   const site = await withUserScope(userId, (tx) =>
     tx.site.findFirst({
       where: { id: siteId, userId, deletedAt: null },
@@ -274,15 +394,19 @@ export async function releverVisibilite(userId: string, siteId: string): Promise
   )
   if (site === null) throw notFound('Ce site est introuvable.')
 
-  const prompts = await withUserScope(userId, (tx) =>
-    tx.promptIA.findMany({
-      where: { siteId, userId, actif: true },
-      select: { id: true, texte: true },
-      take: PROMPTS_MAX,
+  const reglages = await withUserScope(userId, (tx) =>
+    tx.siteAutomatisation.findFirst({
+      where: { siteId, userId },
+      select: { passageAt: true },
     }),
   )
   const plateformes = plateformesDisponibles()
-  if (prompts.length === 0 || plateformes.length === 0) {
+  if (reglages?.passageAt == null || plateformes.length === 0) {
+    return { questions: 0, releves: 0, mentions: 0, credits: 0, plateformes }
+  }
+
+  const prompts = await resteAFaire(userId, siteId, reglages.passageAt)
+  if (prompts.length === 0) {
     return { questions: 0, releves: 0, mentions: 0, credits: 0, plateformes }
   }
 
@@ -295,12 +419,18 @@ export async function releverVisibilite(userId: string, siteId: string): Promise
   })
 
   const formes = formesDuNom(site.host, site.label)
+  const limite = Date.now() + budgetMs
   let releves = 0
   let mentions = 0
   const questionsAbouties = new Set<string>()
 
   try {
     for (const prompt of prompts) {
+      /*
+       * On s'arrête sur une question entière, jamais au milieu : une question à moitié
+       * posée serait facturée pour une mesure incomplète. Le reste se reprend.
+       */
+      if (Date.now() >= limite) break
       for (const plateforme of plateformes) {
         for (let tour = 0; tour < REPETITIONS; tour += 1) {
           const reponse = await demander(plateforme, prompt.texte)

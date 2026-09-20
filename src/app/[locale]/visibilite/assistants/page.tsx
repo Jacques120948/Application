@@ -3,7 +3,7 @@ import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
-import { lireFrequences, tableauIA } from '@/server/audit/visibilite-ia'
+import { etatPassage, lireFrequences, tableauIA } from '@/server/audit/visibilite-ia'
 import { actionCosts, type ActionCost } from '@/server/billing/action-costs'
 import { plateformesDisponibles } from '@/server/integrations/providers/assistants'
 import { Shell } from '@/components/studio/Shell'
@@ -45,10 +45,11 @@ export default async function AssistantsPage({
    * et survit au rafraîchissement, comme le filtre par pays et le rythme du calendrier.
    */
   const surLesQuestions = demande.vue === 'questions'
-  const [frequences, couts, bord] = await Promise.all([
+  const [frequences, couts, bord, passage] = await Promise.all([
     lireFrequences(user.id, tableau.site.id, JOURS),
     actionCosts(),
     tableauIA(user.id, tableau.site.id, JOURS),
+    etatPassage(user.id, tableau.site.id),
   ])
   const cout = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia')?.max ?? 3
   const plateformes = plateformesDisponibles()
@@ -117,6 +118,7 @@ export default async function AssistantsPage({
             cout={cout}
             jours={JOURS}
             locale={locale}
+            passage={passage}
           />
         )}
       </div>

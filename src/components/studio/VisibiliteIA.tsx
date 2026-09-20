@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 /**
  * Ce que les assistants répondent quand on leur pose vos questions.
@@ -14,6 +14,8 @@ import { useState } from 'react'
  * Ce que l'écran ne fait pas non plus : promettre. Aucune action ne « fera apparaître »
  * une marque dans un assistant, et rien ici ne le laisse entendre.
  */
+
+export type EtatVu = { enCours: boolean; attendu: number; fait: number }
 
 export type QuestionProposeeVue = {
   question: string
@@ -124,6 +126,7 @@ export function VisibiliteIA({
   cout,
   jours,
   locale,
+  passage,
 }: {
   siteId: string
   host: string
@@ -133,12 +136,23 @@ export function VisibiliteIA({
   plateformes: readonly string[]
   cout: number
   jours: number
+  /** L'état du passage à l'ouverture de la page : il a pu avancer sans nous. */
+  passage: EtatVu
 }) {
   const [liste, setListe] = useState<FrequenceVue[]>([...initiales])
   const [texte, setTexte] = useState('')
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [bilan, setBilan] = useState<string | null>(null)
+  /*
+   * L'avancement du passage en cours.
+   *
+   * Il existe pour une raison simple : interroger trois assistants sur quatorze questions
+   * prend plusieurs minutes, et exiger que la page reste ouverte pendant ce temps est une
+   * contrainte que personne n'accepte. Le travail continue côté serveur ; cet écran ne fait
+   * que regarder où il en est, et le relancer s'il a été coupé.
+   */
+  const [etat, setEtat] = useState<EtatVu>(passage)
   /*
    * Les questions proposées, pas encore suivies. Rien n'est enregistré tant que la personne
    * n'a pas choisi : une question qu'elle n'aurait pas retenue serait une mesure qu'elle
@@ -196,6 +210,23 @@ export function VisibiliteIA({
     setListe((actuelles) => actuelles.filter((ligne) => ligne.prompt.id !== promptId))
   }
 
+  /*
+   * Tant qu'un passage tourne, on demande où il en est toutes les dix secondes. Si le
+   * serveur a été coupé au milieu — déploiement, fonction arrivée à son terme — le même
+   * appel le relance : « reprendre » ne recommence rien, il continue.
+   */
+  useEffect(() => {
+    if (!etat.enCours) return
+    const minuteur = setInterval(() => {
+      void (async () => {
+        const charge = (await appeler({ geste: 'reprendre' })) as { etat?: EtatVu } | null
+        if (charge?.etat !== undefined) setEtat(charge.etat)
+      })()
+    }, 10_000)
+    return () => clearInterval(minuteur)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etat.enCours])
+
   async function proposer() {
     setOccupe(true)
     const charge = (await appeler({ geste: 'proposer', locale })) as {
@@ -226,17 +257,10 @@ export function VisibiliteIA({
   async function relever() {
     setOccupe(true)
     setBilan(null)
-    const charge = (await appeler({ geste: 'relever' })) as {
-      bilan?: { questions: number; releves: number; mentions: number; credits: number }
-    } | null
+    const charge = (await appeler({ geste: 'relever' })) as { etat?: EtatVu } | null
     setOccupe(false)
-    if (charge?.bilan === undefined) return
-    const { questions, releves, mentions, credits } = charge.bilan
-    setBilan(
-      `${questions} question${questions > 1 ? 's' : ''} posée${questions > 1 ? 's' : ''}, ` +
-        `${releves} relevé${releves > 1 ? 's' : ''}, ${mentions} mention${mentions > 1 ? 's' : ''}. ` +
-        `${credits} crédit${credits > 1 ? 's' : ''} débité${credits > 1 ? 's' : ''}. Rechargez pour voir le détail.`,
-    )
+    if (charge?.etat === undefined) return
+    setEtat(charge.etat)
   }
 
   return (
@@ -369,27 +393,46 @@ export function VisibiliteIA({
       )}
 
       <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-        <button
-          type="button"
-          onClick={() => void relever()}
-          disabled={occupe || actives === 0}
-          className="cursor-pointer rounded-[var(--radius-pill)] border-0 bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
-        >
-          {occupe
-            ? 'Evoliia interroge les assistants…'
-            : `Poser les ${actives} question${actives > 1 ? 's' : ''} (${actives * cout} crédits)`}
-        </button>
+        {etat.enCours ? (
+          <div className="rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3">
+            <p className="m-0 text-sm font-medium">
+              Relevé en cours : {etat.fait} question{etat.fait > 1 ? 's' : ''} sur{' '}
+              {etat.attendu}
+            </p>
+            <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              Vous pouvez fermer cette page. Evoliia continue d’interroger les assistants et
+              garde chaque réponse au fur et à mesure — revenez quand vous voulez.
+            </p>
+            <div
+              aria-hidden="true"
+              className="mt-3 h-1.5 w-full rounded-[var(--radius-pill)] bg-[var(--color-line)]"
+            >
+              <div
+                className="h-1.5 rounded-[var(--radius-pill)] bg-[var(--color-brand)]"
+                style={{
+                  width: `${etat.attendu === 0 ? 0 : Math.round((etat.fait / etat.attendu) * 100)}%`,
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void relever()}
+            disabled={occupe || actives === 0}
+            className="cursor-pointer rounded-[var(--radius-pill)] border-0 bg-[var(--color-brand)] px-5 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {occupe
+              ? 'Evoliia démarre…'
+              : `Poser les ${actives} question${actives > 1 ? 's' : ''} (${actives * cout} crédits)`}
+          </button>
+        )}
         <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
           Chaque question est posée plusieurs fois à chaque assistant : leurs réponses ne sont
           pas identiques d’une fois sur l’autre, et une seule lecture ne prouverait rien — ni
           la présence, ni l’absence. Vous n’êtes facturé qu’une fois par question, quel que
           soit le nombre d’interrogations. Un assistant injoignable n’est pas facturé.
         </p>
-        {occupe ? (
-          <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
-            Cela prend une à plusieurs minutes. Laissez cette page ouverte.
-          </p>
-        ) : null}
         {bilan === null ? null : (
           <p className="mt-3 mb-0 text-sm text-[var(--color-ink-soft)]">{bilan}</p>
         )}

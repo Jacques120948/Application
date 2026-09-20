@@ -1468,6 +1468,11 @@ model SiteAutomatisation {
   redigeAt     DateTime?
   assistantsAt DateTime?
 
+  /// Début du passage en cours, ou vide quand aucun ne tourne.
+  passageAt      DateTime?
+  /// Combien de questions ce passage couvre. L'avancement se compte sur les relevés écrits.
+  passageAttendu Int       @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

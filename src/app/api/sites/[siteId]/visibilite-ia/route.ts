@@ -1,11 +1,14 @@
 import { z } from 'zod'
 import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
+import { after } from 'next/server'
 import {
   ajouterPrompt,
   basculerPrompt,
+  etatPassage,
+  ouvrirPassage,
+  poursuivrePassage,
   proposerQuestions,
-  releverVisibilite,
   supprimerPrompt,
 } from '@/server/audit/visibilite-ia'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
@@ -33,6 +36,7 @@ const input = z.discriminatedUnion('geste', [
   z.object({ geste: z.literal('retirer'), promptId: z.string().uuid() }),
   z.object({ geste: z.literal('relever') }),
   z.object({ geste: z.literal('proposer'), locale: z.string().max(5).optional() }),
+  z.object({ geste: z.literal('reprendre') }),
 ])
 
 export async function POST(request: Request, context: { params: Promise<{ siteId: string }> }) {
@@ -44,7 +48,32 @@ export async function POST(request: Request, context: { params: Promise<{ siteId
 
     if (demande.geste === 'relever') {
       consume(`visibilite-ia:${user.id}`, RULES.aiOperation)
-      return ok({ bilan: await releverVisibilite(user.id, siteId) })
+      /*
+       * On ouvre le passage, on répond, puis on travaille.
+       *
+       * `after` laisse la fonction vivre après la réponse : la personne peut fermer
+       * l'onglet, et les réponses continuent d'arriver. Ce qui est écrit reste écrit, donc
+       * une fonction coupée au milieu ne perd rien — le reste se reprend à l'ouverture
+       * suivante de l'écran, ou à la tournée de la nuit.
+       */
+      const etat = await ouvrirPassage(user.id, siteId)
+      if (etat.enCours) {
+        after(async () => {
+          await poursuivrePassage(user.id, siteId).catch(() => null)
+        })
+      }
+      return ok({ etat })
+    }
+
+    if (demande.geste === 'reprendre') {
+      consume(`visibilite-ia:${user.id}`, RULES.aiOperation)
+      const etat = await etatPassage(user.id, siteId)
+      if (etat.enCours) {
+        after(async () => {
+          await poursuivrePassage(user.id, siteId).catch(() => null)
+        })
+      }
+      return ok({ etat })
     }
 
     if (demande.geste === 'proposer') {
