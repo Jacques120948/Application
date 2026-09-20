@@ -1,8 +1,6 @@
-import { timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
-import { env } from '@/lib/env'
-import { AppError } from '@/lib/errors'
 import { runScheduledRadar } from '@/server/radar/scheduled'
+import { refusCron } from '@/server/http/cron'
 import { fail, ok, readJson } from '@/server/http/respond'
 
 export const maxDuration = 300
@@ -18,15 +16,8 @@ const input = z.object({ limit: z.number().int().min(1).max(200).optional() })
  * révèle pas une porte fermée.
  */
 export async function POST(request: Request) {
-  const secret = env.cronSecret
-  if (secret === undefined) return new Response(null, { status: 404 })
-
-  const provided = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '')
-  const a = Buffer.from(provided)
-  const b = Buffer.from(secret)
-  if (a.length !== b.length || !timingSafeEqual(a, b)) {
-    return fail(new AppError('UNAUTHENTICATED', 'Jeton invalide.'))
-  }
+  const refus = refusCron(request)
+  if (refus !== null) return refus
 
   try {
     const body = input.parse(await readJson(request).catch(() => ({})))

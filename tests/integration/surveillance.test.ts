@@ -5,6 +5,10 @@ import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { withUserScope } from '@/server/db/scope'
 import { ensureTestPlan, subscribeToTestPlan } from '../helpers/plan'
+import {
+  GET as cronSurveillanceGet,
+  POST as cronSurveillancePost,
+} from '@/app/api/cron/surveillance/route'
 
 /**
  * La surveillance, de bout en bout.
@@ -135,6 +139,39 @@ describe('ce que la surveillance ne fait pas', () => {
     const autre = await addSite(userId, { url: 'https://jamais-analyse-veille.ch' })
     const passage = await surveillerSite(userId, autre.siteId)
     expect(passage).toEqual({ constats: 0, ouverts: 0, fermes: 0 })
+  })
+
+  it('répond au planificateur en GET comme en POST, et n’existe pas sans jeton', async () => {
+    /*
+     * Le GET n'est pas un confort : les tâches planifiées de Vercel n'appellent qu'ainsi,
+     * sans corps. Déclarée en POST seulement, la route aurait répondu 405 chaque semaine
+     * sans que rien ne le signale — et une surveillance en panne ne se plaint pas, c'est
+     * exactement ce qui la rend dangereuse.
+     */
+    const adresse = 'http://localhost/api/cron/surveillance'
+
+    delete process.env.CRON_SECRET
+    expect((await cronSurveillanceGet(new Request(adresse))).status).toBe(404)
+
+    process.env.CRON_SECRET = 'jeton-du-planificateur-de-plus-de-32-caracteres'
+    const mauvais = await cronSurveillanceGet(
+      new Request(adresse, { headers: { authorization: 'Bearer mauvais' } }),
+    )
+    expect(mauvais.status).toBe(401)
+
+    const entete = { authorization: `Bearer ${process.env.CRON_SECRET}` }
+    const enGet = await cronSurveillanceGet(new Request(adresse, { headers: entete }))
+    const enPost = await cronSurveillancePost(
+      new Request(adresse, {
+        method: 'POST',
+        headers: { ...entete, 'content-type': 'application/json' },
+        body: JSON.stringify({ limit: 1 }),
+      }),
+    )
+    delete process.env.CRON_SECRET
+
+    expect(enGet.status).toBe(200)
+    expect(enPost.status).toBe(200)
   })
 
   it('ne débite aucun crédit', async () => {
