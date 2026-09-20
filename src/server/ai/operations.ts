@@ -18,6 +18,7 @@ import type { AppSpec, Block } from '@/server/spec/schema'
 import type { PatchOperation } from '@/server/spec/patch'
 import { assembleSpec } from '@/server/spec/assemble'
 import type Anthropic from '@anthropic-ai/sdk'
+import { classer } from '@/server/audit/intentions'
 import { getAnthropic, getAnthropicWithKey, isAiAvailable } from './client'
 import { documentBlocks, type AttachedDocument } from './documents'
 import { GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
@@ -1422,6 +1423,14 @@ export type RequeteReelle = {
   impressions: number
   clics: number
   position: number
+  /**
+   * Ce que la personne voulait, déduit des mots employés — pas une donnée de Google.
+   *
+   * Search Console ne rend aucune intention. Elle est calculée avant d'arriver ici, et
+   * jointe à la requête pour que le modèle ne la redevine pas à sa façon à chaque appel :
+   * l'étiquette qu'il lit est celle que la personne voit dans son calendrier.
+   */
+  intention: 'achat' | 'comparaison' | 'local' | 'information'
 }
 
 /**
@@ -1490,7 +1499,10 @@ export async function writeArticle(params: {
         : asUserData('activite_de_la_personne', params.about),
       params.demande.trim() === ''
         ? "Aucun sujet n'est demandé : choisis-le à partir des constats et de ce que le site ne couvre pas."
-        : asUserData('sujet_demande', params.demande),
+        : [
+            asUserData('sujet_demande', params.demande),
+            `Intention déduite de ce sujet : ${classer(params.demande)}. C'est elle qui décide de la forme.`,
+          ].join('\n'),
       asUserData('pages_deja_en_ligne', JSON.stringify(params.pages, null, 2)),
       asUserData('constats_de_l_analyse', JSON.stringify(params.constats, null, 2)),
       params.recherches.length === 0

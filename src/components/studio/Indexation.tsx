@@ -68,27 +68,46 @@ export function Indexation({
   const [etats, setEtats] = useState<EtatPageVu[] | null>(null)
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
+  /** Combien on a demandé, pour dire quand Google n'a pas eu le temps de tout rendre. */
+  const [demandees, setDemandees] = useState(0)
 
   async function verifier() {
     setOccupe(true)
     setErreur(null)
+    const demandees = suspectes.slice(0, maximum).map((page) => page.url)
     const reponse = await fetch(`/api/sites/${siteId}/indexation`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ urls: suspectes.slice(0, maximum).map((page) => page.url) }),
-    })
-    const corps = (await reponse.json().catch(() => ({}))) as {
+      body: JSON.stringify({ urls: demandees }),
+    }).catch(() => null)
+    const corps = (await reponse?.json().catch(() => ({}))) as {
       ok?: boolean
       pages?: EtatPageVu[]
       raison?: string
       message?: string
     }
     setOccupe(false)
+
+    if (reponse === null) {
+      setErreur('La connexion s’est interrompue. Réessayez.')
+      return
+    }
     if (!reponse.ok || corps.ok === false) {
-      setErreur(corps.raison ?? corps.message ?? 'La vérification n’a pas abouti.')
+      /*
+       * Le code de la réponse accompagne le repli. Sans motif, « la vérification n'a pas
+       * abouti » n'apprend rien à personne, ni à celui qui la lit ni à celui qui devra la
+       * comprendre ; avec le code, on sait au moins si Google a refusé ou si c'est
+       * l'appel lui-même qui a été coupé.
+       */
+      setErreur(
+        corps.raison ??
+          corps.message ??
+          `La vérification n’a pas abouti (code ${reponse.status}).`,
+      )
       return
     }
     setEtats(corps.pages ?? [])
+    setDemandees(demandees.length)
   }
 
   if (propriete === null) {
@@ -167,6 +186,17 @@ export function Indexation({
       ) : (
         <section>
           <h2 className="m-0 mb-3 text-base font-semibold">Ce que Google répond</h2>
+          {/*
+            Une réponse partielle se dit. Une inspection prend plusieurs secondes, et
+            Evoliia rend la main avant d'être coupée : mieux vaut quinze pages annoncées
+            comme quinze qu'un écran qui laisse croire qu'il a tout vu.
+          */}
+          {etats.length > 0 && etats.length < demandees ? (
+            <p className="m-0 mb-3 text-sm text-[var(--color-ink-soft)]">
+              {etats.length} pages sur {demandees} ont eu le temps d’être vérifiées.
+              Relancez pour les suivantes.
+            </p>
+          ) : null}
           {etats.length === 0 ? (
             <p className="m-0 text-sm text-[var(--color-ink-faint)]">
               Google n’a rien rendu pour ces pages.

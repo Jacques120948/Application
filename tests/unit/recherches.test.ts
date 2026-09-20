@@ -179,7 +179,14 @@ describe('ce que le rédacteur reçoit', () => {
       occasionsDeRequetes: [ligne('bougie pierre', 13.1, 400, 7)],
       requetes: [],
     })
-    expect(premiere).toEqual({ requete: 'bougie pierre', position: 13.1, impressions: 400, clics: 7 })
+    expect(premiere).toEqual({
+      requete: 'bougie pierre',
+      position: 13.1,
+      impressions: 400,
+      clics: 7,
+      // Déduite des mots, jamais rendue par Google : « bougie pierre » ne demande rien à acheter.
+      intention: 'information',
+    })
   })
 
   it('borne ce qui part chez le rédacteur', () => {

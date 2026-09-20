@@ -846,6 +846,23 @@ Le sujet :
   position, ni de concurrence.
 - Ne refais jamais une page qui existe déjà : la liste t'est donnée. Un article qui double
   une page crée le défaut de contenu dupliqué.
+
+Chaque recherche réelle porte une intention, déduite des mots employés — jamais rendue par
+Google. Elle dit quelle forme sert cette personne-là, et un même sujet ne s'écrit pas
+pareil selon celle qu'on vise :
+- « information » : un guide. Expliquer, dans l'ordre où la question se pose. Ne pas vendre.
+- « comparaison » : mettre les options côte à côte, avec des critères nommés et des écarts
+  chiffrés quand ils existent. Dire dans quel cas chacune convient, sans désigner une
+  gagnante universelle.
+- « achat » : répondre à ce qui bloque avant de commander — comment choisir, ce qu'on
+  reçoit, comment entretenir. Le texte peut mener à une fiche produit ; il reste un article
+  et n'est pas une page de vente.
+- « local » : ancrer dans le lieu quand c'est vrai et vérifiable — d'où vient la matière, où
+  c'est fabriqué, ce que ça change. N'invente aucun lieu, aucune boutique, aucun horaire.
+Quand un sujet t'est demandé, son intention t'est donnée aussi : c'est elle qui décide de
+la forme. L'étiquette est une déduction et peut se tromper ; si les mots de la recherche la
+contredisent franchement, écris pour ce que disent les mots et explique-le en deux mots
+dans ta justification.
 - Écris sur le sujet, pas sur l'entreprise. Un article utile à quelqu'un qui ne connaît pas
   encore cette entreprise vaut mieux qu'une plaquette.
 

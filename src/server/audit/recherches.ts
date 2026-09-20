@@ -3,6 +3,7 @@ import { logger } from '@/server/observability/logger'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { requireFeature } from '@/server/billing/features'
 import { useOAuthAccess } from '@/server/integrations/service'
+import { classer, type Intention } from './intentions'
 import {
   rafraichir,
   requetes,
@@ -287,6 +288,15 @@ export type RequeteReelle = {
   impressions: number
   clics: number
   position: number
+  /**
+   * Ce que la personne voulait, déduit des mots employés.
+   *
+   * Search Console ne le donne pas : il rend des mots, des affichages et une position.
+   * L'étiquette est donc une déduction, et elle est jointe à la requête plutôt que
+   * laissée au modèle pour qu'elle soit la même partout — dans le calendrier, dans le
+   * prompt, et sous les yeux de la personne qui peut la contester.
+   */
+  intention: Intention
 }
 
 /** Ce qu'on donne au rédacteur. Au-delà, il dilue son sujet au lieu de le choisir. */
@@ -352,6 +362,7 @@ export function retenirPourArticle(
       impressions: ligne.impressions,
       clics: ligne.clics,
       position: ligne.position,
+      intention: classer(ligne.cle),
     })
   }
   return retenues

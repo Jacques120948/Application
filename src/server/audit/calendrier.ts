@@ -10,6 +10,7 @@ import {
   type Ligne,
 } from '@/server/integrations/providers/google-search-console'
 import { choisirPropriete } from './recherches'
+import { classer, type Intention } from './intentions'
 
 /**
  * Le calendrier de rédaction, tiré de la demande réelle.
@@ -93,6 +94,14 @@ export type Creneau = {
   position: number
   /** Pourquoi ce sujet, dit avec les chiffres et sans promesse. */
   pourquoi: string
+  /**
+   * Ce que cette recherche veut, déduit de ses mots.
+   *
+   * Affichée avant le clic : c'est elle qui décide de la forme de l'article, et quelqu'un
+   * qui la voit avant de payer peut la contester — en changeant le sujet, ou en écrivant
+   * le sien. Une déduction montrée vaut mieux qu'une déduction cachée.
+   */
+  intention: Intention
 }
 
 export type VueCalendrier = {
@@ -196,6 +205,7 @@ export function planifier(
       langue: page === undefined ? null : langueDuChemin(page),
       date: lundi(depuis, (semaine - 1) * semainesParPeriode + 1),
       requete: ligne.cle,
+      intention: classer(ligne.cle),
       impressions: ligne.impressions,
       clics: ligne.clics,
       position: ligne.position,

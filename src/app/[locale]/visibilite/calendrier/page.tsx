@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
 import { lireCalendrier, type Creneau } from '@/server/audit/calendrier'
+import { INTENTIONS } from '@/server/audit/intentions'
 import { Shell } from '@/components/studio/Shell'
 import { LinkButton } from '@/components/ui'
 
@@ -85,6 +86,15 @@ function Ligne({ creneau, locale, siteId }: { creneau: Creneau; locale: string; 
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="m-0 text-sm font-medium">
           « {creneau.requete} »
+          {/*
+            L'intention, avant le clic. Elle décide de la forme de l'article — un guide, une
+            comparaison, une page qui mène à une fiche — et elle est déduite des mots, pas
+            rendue par Google. La montrer permet de la contester : qui la trouve fausse
+            écrit son propre sujet.
+          */}
+          <span className="ml-2 rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2 py-0.5 text-xs font-normal text-[var(--color-ink-soft)]">
+            {INTENTIONS[creneau.intention]}
+          </span>
           {creneau.langue === null ? null : (
             <span className="ml-2 rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2 py-0.5 text-xs font-normal text-[var(--color-ink-soft)]">
               {nomDeLaLangue(creneau.langue, locale)}

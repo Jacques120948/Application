@@ -39,6 +39,18 @@ import { choisirPropriete, JOURS_LUS } from './recherches'
 /** Ce qu'on inspecte en une fois. Borné parce que le quota de Google nous est inconnu. */
 export const PAGES_INSPECTEES = 20
 
+/**
+ * Le temps qu'on s'autorise à passer chez Google avant de rendre la main.
+ *
+ * Une inspection prend plusieurs secondes, et vingt en série dépassent la durée maximale
+ * de la route. Au-delà, la plateforme coupe : la réponse n'est plus du JSON, l'écran n'a
+ * plus de motif à afficher, et la personne lit « la vérification n'a pas abouti » sans
+ * rien apprendre — alors que quinze pages avaient bel et bien été vérifiées.
+ *
+ * On s'arrête donc avant, et on rend ce qui est fait. Le reste se demande au clic suivant.
+ */
+const BUDGET_MS = 90_000
+
 /** Au-delà, la liste des suspectes ne se lit plus et ne se traite plus. */
 const SUSPECTES_MAX = 60
 
@@ -244,7 +256,16 @@ export async function inspecter(
     .slice(0, PAGES_INSPECTEES)
 
   const pages: EtatPage[] = []
+  const limite = Date.now() + BUDGET_MS
   for (const url of retenues) {
+    /*
+     * Rendre partiellement vaut mieux que se faire couper : une page vérifiée est une
+     * réponse, et la suivante se demandera au clic d'après.
+     */
+    if (Date.now() >= limite) {
+      logger.info('inspection : budget de temps atteint', { faites: pages.length })
+      break
+    }
     const brut = await inspecterUrl(acces.accessToken, propriete, url)
     if (brut.status === 429) {
       logger.warn('inspection : quota Google atteint', { faites: pages.length })
