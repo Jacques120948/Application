@@ -173,6 +173,8 @@ export type Bilan = {
   articles: number
   depots: number
   echecs: number
+  /** Combien de sites auraient écrit un article. Rempli seulement à blanc. */
+  redactionsDues?: number
 }
 
 /** Où la dernière tournée s'est arrêtée. Voir `aTraiter`. */
@@ -312,8 +314,20 @@ async function rediger(
  * est compté et la tournée continue, sans quoi une boutique injoignable priverait tous les
  * comptes suivants de leur nuit.
  */
-export async function tournerQuotidien(limite = SITES_PAR_NUIT): Promise<Bilan> {
+export async function tournerQuotidien(
+  limite = SITES_PAR_NUIT,
+  /**
+   * À blanc : tout se fait sauf écrire.
+   *
+   * Sert à vérifier que la tournée fonctionne sans attendre trois heures du matin, et
+   * sans dépenser un crédit. Elle dit alors combien de sites auraient écrit, ce qui est
+   * l'information qu'on cherche — la machinerie de rédaction, elle, est déjà éprouvée au
+   * clic.
+   */
+  sansRedaction = false,
+): Promise<Bilan> {
   const bilan: Bilan = { sites: 0, indexations: 0, releves: 0, articles: 0, depots: 0, echecs: 0 }
+  if (sansRedaction) bilan.redactionsDues = 0
   const candidats = await aTraiter(limite)
   const maintenant = new Date()
 
@@ -347,12 +361,17 @@ export async function tournerQuotidien(limite = SITES_PAR_NUIT): Promise<Bilan> 
       }
 
       if (redactionDue(reglages, maintenant)) {
-        const issue = await rediger(candidat.userId, candidat.siteId, reglages, 'fr')
-        if (issue.ecrit) {
-          bilan.articles += 1
-          fait.redigeAt = maintenant
+        if (sansRedaction) {
+          // À blanc : on compte, on n'écrit pas, et le reste de la nuit se fait quand même.
+          bilan.redactionsDues = (bilan.redactionsDues ?? 0) + 1
+        } else {
+          const issue = await rediger(candidat.userId, candidat.siteId, reglages, 'fr')
+          if (issue.ecrit) {
+            bilan.articles += 1
+            fait.redigeAt = maintenant
+          }
+          if (issue.depose) bilan.depots += 1
         }
-        if (issue.depose) bilan.depots += 1
       }
 
       if (Object.keys(fait).length > 0) {
