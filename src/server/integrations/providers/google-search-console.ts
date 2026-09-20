@@ -35,6 +35,13 @@ const AUTORISATION = 'https://accounts.google.com/o/oauth2/v2/auth'
 const JETON = 'https://oauth2.googleapis.com/token'
 const API = 'https://searchconsole.googleapis.com/webmasters/v3'
 
+/*
+ * L'inspection d'URL vit sur une autre version de l'API que le reste, et c'est Google qui
+ * en a décidé ainsi : `webmasters/v3` pour les chiffres, `v1` pour l'inspection. Deux bases,
+ * donc, plutôt qu'un chemin bricolé à partir de l'autre.
+ */
+const API_INSPECTION = 'https://searchconsole.googleapis.com/v1'
+
 /** Lire, et rien d'autre. C'est ce que Google affichera à la personne. */
 export const PORTEES = ['https://www.googleapis.com/auth/webmasters.readonly'] as const
 
@@ -164,6 +171,42 @@ export async function listerProprietes(
     .filter((propriete) => propriete.permission !== 'siteUnverifiedUser')
 
   return { ok: true, proprietes }
+}
+
+/**
+ * Ce que Google sait d'une adresse : indexée ou non, et pourquoi.
+ *
+ * Rendue telle quelle, sans interprétation, y compris en cas de refus. C'est volontaire :
+ * cette fonction sert d'abord à savoir ce que l'API accepte réellement — quelle portée elle
+ * exige, quel quota elle applique — et une réponse reformulée ne l'apprendrait à personne.
+ *
+ * La documentation de Google n'est pas joignable depuis l'atelier. Plutôt que d'affirmer de
+ * mémoire ce que cet appel demande et ce qu'il rend, on le lui demande.
+ */
+export async function inspecterUrl(
+  accessToken: string,
+  siteUrl: string,
+  url: string,
+): Promise<{ status: number; corps: unknown }> {
+  const controle = new AbortController()
+  const minuteur = setTimeout(() => controle.abort(), 20_000)
+
+  try {
+    const reponse = await fetch(`${API_INSPECTION}/urlInspection/index:inspect`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ inspectionUrl: url, siteUrl, languageCode: 'fr' }),
+      signal: controle.signal,
+    })
+    return { status: reponse.status, corps: await reponse.json().catch(() => null) }
+  } catch (erreur) {
+    return { status: 0, corps: { erreur: String(erreur).slice(0, 300) } }
+  } finally {
+    clearTimeout(minuteur)
+  }
 }
 
 export type Ligne = {
