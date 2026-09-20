@@ -38,6 +38,13 @@ import {
  * voit. Quelques positions gagnées y valent plus qu'une page neuve, et c'est la seule
  * lecture du tableau qui désigne un travail plutôt qu'un constat.
  *
+ * **Le pays se choisit, et la répartition ne se filtre jamais.** Une page très affichée
+ * depuis un pays qu'on ne sert pas ressemble exactement à une occasion manquée, et n'en est
+ * pas une : sans cette distinction, le produit enverrait réécrire une fiche pour un public
+ * qui n'achètera jamais. La liste des pays, elle, reste toujours celle du monde entier —
+ * sans quoi choisir un pays effacerait les autres de l'écran, et on ne saurait plus comment
+ * en sortir.
+ *
  * **Aucun crédit n'est débité.** Rien ici n'appelle un modèle : on lit une API gratuite,
  * avec le compte Google de la personne. Ce qui ne coûte rien ne se facture pas.
  */
@@ -65,10 +72,21 @@ export type Occasion = {
   clics: number
 }
 
+export type PartPays = {
+  /** Code ISO à trois lettres, tel que Google le rend. */
+  code: string
+  impressions: number
+  clics: number
+}
+
 export type VueRecherches = {
   /** La propriété Search Console retenue, telle que Google la nomme. */
   propriete: string
   jours: number
+  /** Les pays d'où viennent les affichages, les plus nombreux d'abord. Jamais filtré. */
+  pays: PartPays[]
+  /** Le pays sur lequel tout le reste est filtré, ou `null` pour le monde entier. */
+  paysRetenu: string | null
   requetes: Ligne[]
   pages: Ligne[]
   /** Les pages de deuxième page, les plus vues d'abord. */
@@ -165,6 +183,7 @@ export type EchecRecherches =
 export async function lireRecherches(
   userId: string,
   origin: string,
+  pays?: string,
 ): Promise<{ ok: true; vue: VueRecherches } | ({ ok: false } & EchecRecherches)> {
   const acces = await useOAuthAccess(userId, 'google-search-console', rafraichir)
   if (!acces.ok) {
@@ -205,12 +224,23 @@ export async function lireRecherches(
    * de croiser requête et page sans multiplier les lignes par dix ; deux lectures séparées
    * répondent aux deux questions qu'on se pose vraiment, et coûtent deux appels.
    */
-  const [parRequete, parPage] = await Promise.all([
-    requetes(acces.accessToken, propriete, 'query', JOURS_LUS),
-    requetes(acces.accessToken, propriete, 'page', JOURS_LUS),
+  /*
+   * Le code est normalisé ici, une fois, et c'est ce même code qui part chez Google et qui
+   * revient dans la vue. Le laisser brut d'un côté et normalisé de l'autre donnerait un
+   * écran filtré dont aucun bouton n'apparaît choisi — les chiffres d'un pays, sans dire
+   * lequel.
+   */
+  const cible = pays !== undefined && /^[a-z]{3}$/i.test(pays) ? pays.toLowerCase() : undefined
+
+  const [parRequete, parPage, parPays] = await Promise.all([
+    requetes(acces.accessToken, propriete, 'query', JOURS_LUS, cible),
+    requetes(acces.accessToken, propriete, 'page', JOURS_LUS, cible),
+    // Sans filtre, toujours : c'est la liste par laquelle on choisit, et par laquelle on revient.
+    requetes(acces.accessToken, propriete, 'country', JOURS_LUS),
   ])
   if (!parRequete.ok) return { ok: false, etat: 'refus', raison: parRequete.raison }
   if (!parPage.ok) return { ok: false, etat: 'refus', raison: parPage.raison }
+  if (!parPays.ok) return { ok: false, etat: 'refus', raison: parPays.raison }
 
   /*
    * Les totaux sont ceux des lignes rendues, et l'écran le dit : Google ne renvoie que les
@@ -227,6 +257,8 @@ export async function lireRecherches(
   logger.info('recherches lues', {
     requetes: parRequete.lignes.length,
     pages: parPage.lignes.length,
+    pays: parPays.lignes.length,
+    filtre: pays !== undefined,
   })
 
   return {
@@ -234,6 +266,12 @@ export async function lireRecherches(
     vue: {
       propriete,
       jours: JOURS_LUS,
+      pays: parPays.lignes.map((ligne) => ({
+        code: ligne.cle,
+        impressions: ligne.impressions,
+        clics: ligne.clics,
+      })),
+      paysRetenu: cible ?? null,
       requetes: parRequete.lignes.slice(0, LIGNES_AFFICHEES),
       pages: parPage.lignes.slice(0, LIGNES_AFFICHEES),
       occasions: occasions(parPage.lignes).slice(0, LIGNES_AFFICHEES),

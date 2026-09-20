@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { creerEtat, lireEtat } from '@/server/integrations/oauth'
 import { choisirPropriete, occasions, retenirPourArticle } from '@/server/audit/recherches'
 import type { Ligne, Propriete } from '@/server/integrations/providers/google-search-console'
+import { nomDuPays } from '@/lib/pays'
 
 /**
  * L'aller-retour OAuth et la lecture des chiffres de recherche.
@@ -185,5 +186,40 @@ describe('ce que le rédacteur reçoit', () => {
 
   it('ne rend rien quand il n’y a rien : l’article s’écrira sans', () => {
     expect(retenirPourArticle({ occasionsDeRequetes: [], requetes: [] })).toEqual([])
+  })
+})
+
+describe('les noms de pays', () => {
+  it('traduit les codes à trois lettres de Google', () => {
+    expect(nomDuPays('che', 'fr')).toBe('Suisse')
+    expect(nomDuPays('ita', 'fr')).toBe('Italie')
+    expect(nomDuPays('deu', 'fr')).toBe('Allemagne')
+    expect(nomDuPays('usa', 'fr')).toBe('États-Unis')
+  })
+
+  it('suit la langue demandée', () => {
+    expect(nomDuPays('che', 'en')).toBe('Switzerland')
+  })
+
+  it('accepte la casse et les espaces, puisque le code vient d’une adresse', () => {
+    expect(nomDuPays('  ITA  ', 'fr')).toBe('Italie')
+  })
+
+  it('nomme l’origine inconnue plutôt que de la taire', () => {
+    // Google rend « zzz » quand il n'a pas su déterminer d'où venait l'affichage.
+    expect(nomDuPays('zzz', 'fr')).toBe('Origine inconnue')
+    expect(nomDuPays('', 'fr')).toBe('Origine inconnue')
+  })
+
+  it('montre le code plutôt que rien quand il ne le connaît pas', () => {
+    // Une ligne manquante fausserait un total sans que personne ne le voie.
+    expect(nomDuPays('xyz', 'fr')).toBe('XYZ')
+  })
+
+  it('couvre les pays que Google peut rendre', () => {
+    // La table vient d'une liste vérifiée : chaque code doit donner un nom, pas un code.
+    for (const code of ['fra', 'bel', 'lux', 'gbr', 'esp', 'prt', 'aut', 'nld', 'can', 'jpn']) {
+      expect(nomDuPays(code, 'fr')).not.toBe(code.toUpperCase())
+    }
   })
 })

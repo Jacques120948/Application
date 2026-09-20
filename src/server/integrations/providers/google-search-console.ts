@@ -182,17 +182,31 @@ export const LIGNES_MAX = 100
  * Les chiffres de recherche d'une propriété.
  *
  * `dimension` vaut `query` pour ce que les gens tapent, `page` pour les adresses qui
- * sortent. Les deux se lisent sur la même période, ce qui permet de les rapprocher.
+ * sortent, `country` pour l'origine des affichages. Tout se lit sur la même période, ce qui
+ * permet de rapprocher les trois.
+ *
+ * `pays` restreint la lecture à un seul pays, par son code ISO à trois lettres. Sans lui,
+ * les chiffres mélangent tous les marchés — et une page très affichée depuis un pays qu'on
+ * ne sert pas ressemble alors exactement à une occasion manquée, ce qu'elle n'est pas.
  */
 export async function requetes(
   accessToken: string,
   siteUrl: string,
-  dimension: 'query' | 'page',
+  dimension: 'query' | 'page' | 'country',
   jours: number,
+  pays?: string,
 ): Promise<{ ok: true; lignes: Ligne[] } | { ok: false; raison: string }> {
   const fin = new Date()
   const debut = new Date(fin.getTime() - jours * 24 * 60 * 60 * 1000)
   const jour = (date: Date): string => date.toISOString().slice(0, 10)
+
+  /*
+   * Le code est réécrit ici plutôt que cru sur parole : il vient d'un paramètre d'adresse.
+   * Trois lettres minuscules, rien d'autre, et tout le reste vaut « aucun filtre » — une
+   * valeur inattendue rend alors les chiffres de tout le monde, jamais une erreur de Google
+   * sur un écran qu'on venait seulement consulter.
+   */
+  const cible = pays !== undefined && /^[a-z]{3}$/i.test(pays) ? pays.toLowerCase() : undefined
 
   const reponse = await appeler<{
     rows?: { keys?: string[]; clicks?: number; impressions?: number; position?: number }[]
@@ -201,6 +215,13 @@ export async function requetes(
     endDate: jour(fin),
     dimensions: [dimension],
     rowLimit: LIGNES_MAX,
+    ...(cible === undefined
+      ? {}
+      : {
+          dimensionFilterGroups: [
+            { filters: [{ dimension: 'country', operator: 'equals', expression: cible }] },
+          ],
+        }),
   })
   if (!reponse.ok) return { ok: false, raison: reponse.raison }
 
