@@ -22,7 +22,7 @@ export default async function ArticlesPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ siteId?: string; sujet?: string }>
+  searchParams: Promise<{ siteId?: string; sujet?: string; langue?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -80,6 +80,11 @@ export default async function ArticlesPage({
           cout={cout}
           recherchesBranchees={recherchesBranchees}
           sujetPropose={(demande.sujet ?? '').slice(0, 200)}
+          langueProposee={
+            demande.langue !== undefined && /^[a-z]{2}$/.test(demande.langue)
+              ? demande.langue
+              : null
+          }
         />
       </div>
     </Shell>

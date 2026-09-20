@@ -20,19 +20,76 @@ import { Shell } from '@/components/studio/Shell'
  */
 export const maxDuration = 60
 
-/** Ce qu'on propose. Un article par semaine sur deux mois : un rythme qu'on tient. */
-const PAR_SEMAINE = 1
-const SEMAINES = 8
+/**
+ * Les rythmes proposés, et ce que chacun couvre.
+ *
+ * Un plan doit tenir sur la durée qu'on lui donne : proposer huit semaines à quelqu'un qui
+ * publie une fois par mois, c'est un plan abandonné à la troisième semaine. Le choix voyage
+ * dans l'adresse, comme le filtre par pays — il se met en favori et survit au
+ * rafraîchissement.
+ */
+const RYTHMES = {
+  '1-semaine': { parPeriode: 1, periode: 'semaine' as const, periodes: 8, label: '1 par semaine' },
+  '2-semaine': { parPeriode: 2, periode: 'semaine' as const, periodes: 6, label: '2 par semaine' },
+  '3-semaine': { parPeriode: 3, periode: 'semaine' as const, periodes: 4, label: '3 par semaine' },
+  '1-mois': { parPeriode: 1, periode: 'mois' as const, periodes: 6, label: '1 par mois' },
+  '2-mois': { parPeriode: 2, periode: 'mois' as const, periodes: 6, label: '2 par mois' },
+}
+
+type CleRythme = keyof typeof RYTHMES
+
+const RYTHME_PAR_DEFAUT: CleRythme = '1-semaine'
 
 function jour(date: Date, locale: string): string {
   return date.toLocaleDateString(locale, { day: 'numeric', month: 'long' })
+}
+
+/** Le nom d'une langue, dans celle de la personne. Le code brut si le système ne le connaît pas. */
+function nomDeLaLangue(code: string, locale: string): string {
+  try {
+    return new Intl.DisplayNames([locale], { type: 'language' }).of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
+function ChoixDuRythme({ actuel, locale, siteId }: { actuel: CleRythme; locale: string; siteId: string }) {
+  const base = `/${locale}/visibilite/calendrier?siteId=${siteId}`
+  return (
+    <nav className="mb-6 flex flex-wrap gap-2" aria-label="Rythme de publication">
+      {(Object.keys(RYTHMES) as CleRythme[]).map((cle) => {
+        const actif = cle === actuel
+        return (
+          <a
+            key={cle}
+            href={`${base}&rythme=${cle}`}
+            aria-current={actif ? 'true' : undefined}
+            className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
+              actif
+                ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+                : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+            }`}
+          >
+            {RYTHMES[cle].label}
+          </a>
+        )
+      })}
+    </nav>
+  )
 }
 
 function Ligne({ creneau, locale, siteId }: { creneau: Creneau; locale: string; siteId: string }) {
   return (
     <li className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="m-0 text-sm font-medium">« {creneau.requete} »</p>
+        <p className="m-0 text-sm font-medium">
+          « {creneau.requete} »
+          {creneau.langue === null ? null : (
+            <span className="ml-2 rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2 py-0.5 text-xs font-normal text-[var(--color-ink-soft)]">
+              {nomDeLaLangue(creneau.langue, locale)}
+            </span>
+          )}
+        </p>
         <p className="m-0 text-xs text-[var(--color-ink-faint)]">
           semaine du {jour(creneau.date, locale)}
         </p>
@@ -41,7 +98,7 @@ function Ligne({ creneau, locale, siteId }: { creneau: Creneau; locale: string; 
         {creneau.pourquoi}
       </p>
       <a
-        href={`/${locale}/visibilite/articles?siteId=${siteId}&sujet=${encodeURIComponent(creneau.requete)}`}
+        href={`/${locale}/visibilite/articles?siteId=${siteId}&sujet=${encodeURIComponent(creneau.requete)}${creneau.langue === null ? '' : `&langue=${creneau.langue}`}`}
         className="mt-2 inline-block text-xs text-[var(--color-ink-soft)]"
       >
         Faire écrire cet article →
@@ -55,7 +112,7 @@ export default async function CalendrierPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ siteId?: string }>
+  searchParams: Promise<{ siteId?: string; rythme?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -68,10 +125,17 @@ export default async function CalendrierPage({
   ])
   if (tableau === null) redirect(`/${locale}/visibilite`)
 
-  const vue = await lireCalendrier(user.id, tableau.site.id, {
-    parSemaine: PAR_SEMAINE,
-    semaines: SEMAINES,
-  })
+  /*
+   * Le rythme vient de l'adresse : il n'ouvre aucun droit, et une valeur inattendue retombe
+   * sur celui par défaut plutôt que de faire échouer un écran qu'on venait consulter.
+   */
+  const cle: CleRythme =
+    demande.rythme !== undefined && demande.rythme in RYTHMES
+      ? (demande.rythme as CleRythme)
+      : RYTHME_PAR_DEFAUT
+  const rythme = RYTHMES[cle]
+
+  const vue = await lireCalendrier(user.id, tableau.site.id, rythme)
 
   return (
     <Shell
@@ -90,10 +154,12 @@ export default async function CalendrierPage({
         </a>
         <h1 className="mt-4 mb-0 text-2xl font-semibold tracking-tight">Quoi écrire, et quand</h1>
         <p className="mt-2 mb-8 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-          Un sujet par semaine, choisi dans ce que les gens ont réellement tapé pour voir{' '}
+          {rythme.label}, choisi dans ce que les gens ont réellement tapé pour voir{' '}
           {vue.site.host} ces {vue.jours} derniers jours. Les recherches où vous êtes le plus
           près de la première page passent devant.
         </p>
+
+        <ChoixDuRythme actuel={cle} locale={locale} siteId={tableau.site.id} />
 
         {vue.propriete === null ? (
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">

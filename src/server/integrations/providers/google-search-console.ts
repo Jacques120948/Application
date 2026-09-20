@@ -218,6 +218,46 @@ export type Ligne = {
   position: number
 }
 
+/**
+ * Les requêtes avec la page que Google leur associe.
+ *
+ * Deux dimensions à la fois, ce que l'appel ordinaire ne fait pas. Cela sert à une chose :
+ * savoir dans quelle langue Google vous classe pour une requête donnée. Un site multilingue
+ * a des chemins par langue, et c'est Google qui dit lequel il retient — pas un dictionnaire
+ * qui devinerait la langue de deux mots.
+ *
+ * Le croisement multiplie les lignes : à nombre de lignes égal, on couvre moins de requêtes
+ * que la lecture simple. C'est pourquoi il ne sert que de table d'appoint, jamais de source
+ * du classement.
+ */
+export async function requetesEtPages(
+  accessToken: string,
+  siteUrl: string,
+  jours: number,
+): Promise<{ ok: true; lignes: { cle: string; page: string }[] } | { ok: false; raison: string }> {
+  const fin = new Date()
+  const debut = new Date(fin.getTime() - jours * 24 * 60 * 60 * 1000)
+  const jour = (date: Date): string => date.toISOString().slice(0, 10)
+
+  const reponse = await appeler<{ rows?: { keys?: string[] }[] }>(
+    `/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`,
+    accessToken,
+    {
+      startDate: jour(debut),
+      endDate: jour(fin),
+      dimensions: ['query', 'page'],
+      rowLimit: LIGNES_MAX,
+    },
+  )
+  if (!reponse.ok) return { ok: false, raison: reponse.raison }
+
+  const lignes = (reponse.donnees.rows ?? [])
+    .map((ligne) => ({ cle: ligne.keys?.[0] ?? '', page: ligne.keys?.[1] ?? '' }))
+    .filter((ligne) => ligne.cle !== '' && ligne.page !== '')
+
+  return { ok: true, lignes }
+}
+
 /** Ce qu'on demande au plus. Au-delà, l'écran ne se lit plus et l'appel s'alourdit. */
 export const LIGNES_MAX = 100
 

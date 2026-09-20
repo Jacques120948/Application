@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dejaCouvert, planifier } from '@/server/audit/calendrier'
+import { dejaCouvert, langueDuChemin, planifier } from '@/server/audit/calendrier'
 import type { Ligne } from '@/server/integrations/providers/google-search-console'
 
 /**
@@ -29,7 +29,7 @@ describe('le plan de rédaction', () => {
     const { creneaux } = planifier(
       [ligne('loin mais demandé', 78, 900), ligne('à portée', 14, 120)],
       [],
-      { parSemaine: 1, semaines: 4, depuis: JEUDI },
+      { parPeriode: 1, periode: 'semaine', periodes: 4, depuis: JEUDI },
     )
     expect(creneaux.map((c) => c.requete)).toEqual(['à portée', 'loin mais demandé'])
   })
@@ -37,8 +37,9 @@ describe('le plan de rédaction', () => {
   it('écarte la première page : un article de plus n’y ajoute rien', () => {
     // Ce qui s'y joue, c'est le titre et la description. C'est le métier de Néo.
     const { creneaux } = planifier([ligne('déjà premier', 2.4, 5000)], [], {
-      parSemaine: 1,
-      semaines: 4,
+      parPeriode: 1,
+      periode: 'semaine' as const,
+      periodes: 4,
       depuis: JEUDI,
     })
     expect(creneaux).toEqual([])
@@ -47,8 +48,9 @@ describe('le plan de rédaction', () => {
   it('écarte ce qui est trop peu demandé pour porter un article', () => {
     expect(
       planifier([ligne('confidentiel', 15, 3)], [], {
-        parSemaine: 1,
-        semaines: 4,
+        parPeriode: 1,
+        periode: 'semaine',
+        periodes: 4,
         depuis: JEUDI,
       }).creneaux,
     ).toEqual([])
@@ -58,7 +60,7 @@ describe('le plan de rédaction', () => {
     const plan = planifier(
       [ligne('obsidienne noire vertus', 16, 300), ligne('quartz rose', 13, 200)],
       ['Obsidienne noire : origine, vertus et entretien de cette pierre volcanique'],
-      { parSemaine: 1, semaines: 4, depuis: JEUDI },
+      { parPeriode: 1, periode: 'semaine', periodes: 4, depuis: JEUDI },
     )
     expect(plan.creneaux.map((c) => c.requete)).toEqual(['quartz rose'])
     expect(plan.ecartes).toBe(1)
@@ -68,20 +70,21 @@ describe('le plan de rédaction', () => {
     const lignes = Array.from({ length: 6 }, (_, rang) =>
       ligne(`sujet ${rang}`, 12, 1000 - rang * 10),
     )
-    const { creneaux } = planifier(lignes, [], { parSemaine: 2, semaines: 3, depuis: JEUDI })
+    const { creneaux } = planifier(lignes, [], { parPeriode: 2, periode: 'semaine', periodes: 3, depuis: JEUDI })
     expect(creneaux.map((c) => c.semaine)).toEqual([1, 1, 2, 2, 3, 3])
   })
 
   it('ne propose jamais plus que ce que la période peut contenir', () => {
     const lignes = Array.from({ length: 50 }, (_, rang) => ligne(`sujet ${rang}`, 12, 500))
-    const { creneaux } = planifier(lignes, [], { parSemaine: 1, semaines: 8, depuis: JEUDI })
+    const { creneaux } = planifier(lignes, [], { parPeriode: 1, periode: 'semaine', periodes: 8, depuis: JEUDI })
     expect(creneaux).toHaveLength(8)
   })
 
   it('date chaque créneau au lundi de sa semaine', () => {
     const { creneaux } = planifier([ligne('un sujet', 12, 300)], [], {
-      parSemaine: 1,
-      semaines: 1,
+      parPeriode: 1,
+      periode: 'semaine' as const,
+      periodes: 1,
       depuis: JEUDI,
     })
     // Le 17 septembre 2026 est un jeudi : le lundi suivant est le 21.
@@ -96,8 +99,9 @@ describe('le plan de rédaction', () => {
      * produit dont l'argument est que ses chiffres sont mesurés.
      */
     const { creneaux } = planifier([ligne('une requête', 14, 300, 2)], [], {
-      parSemaine: 1,
-      semaines: 1,
+      parPeriode: 1,
+      periode: 'semaine' as const,
+      periodes: 1,
       depuis: JEUDI,
     })
     const pourquoi = creneaux[0]?.pourquoi ?? ''
@@ -121,5 +125,87 @@ describe('les sujets déjà traités', () => {
 
   it('ne couvre rien quand aucun article n’existe', () => {
     expect(dejaCouvert('bougie artisanale', [])).toBe(false)
+  })
+})
+
+describe('la langue d’un sujet', () => {
+  it('se lit dans le chemin de la page que Google classe', () => {
+    /*
+     * Mesurée, pas devinée. On pourrait chercher la langue de « avventurina verde » dans un
+     * dictionnaire ; on regarde plutôt sur quelle page Google classe la requête, parce que
+     * le chemin la porte et que c'est lui qui a tranché.
+     */
+    expect(langueDuChemin('https://cap-nature.ch/it/collections/pietre')).toBe('it')
+    expect(langueDuChemin('https://cap-nature.ch/pt/')).toBe('pt')
+  })
+
+  it('ne prend pas une page ordinaire pour une langue', () => {
+    expect(langueDuChemin('https://cap-nature.ch/collections/bougies')).toBeNull()
+    expect(langueDuChemin('https://cap-nature.ch/')).toBeNull()
+    // Deux lettres exactement : « fr-CH » est un chemin, pas un code de langue ici.
+    expect(langueDuChemin('https://cap-nature.ch/fr-CH/bougies')).toBeNull()
+  })
+
+  it('porte la langue jusqu’au créneau, et se tait quand elle l’ignore', () => {
+    const { creneaux } = planifier(
+      [ligne('avventurina verde', 12, 365), ligne('jaspe rouge', 16, 848)],
+      [],
+      {
+        parPeriode: 1,
+        periode: 'semaine',
+        periodes: 4,
+        depuis: JEUDI,
+        pages: new Map([['avventurina verde', 'https://cap-nature.ch/it/pietre']]),
+      },
+    )
+    const parRequete = new Map(creneaux.map((c) => [c.requete, c.langue]))
+    expect(parRequete.get('avventurina verde')).toBe('it')
+    // Google n'a associé aucune page à celle-ci : on ne prétend pas connaître sa langue.
+    expect(parRequete.get('jaspe rouge')).toBeNull()
+  })
+})
+
+/** L'écart en jours entre deux créneaux, pour que les dates se vérifient sans arithmétique. */
+function ecart(jours: readonly number[], a: number, b: number): number {
+  return ((jours[b] ?? 0) - (jours[a] ?? 0)) / 86_400_000
+}
+
+describe('le rythme de publication', () => {
+  const beaucoup = Array.from({ length: 20 }, (_, rang) => ligne(`sujet ${rang}`, 12, 900 - rang))
+
+  it('espace les créneaux de quatre semaines quand on publie au mois', () => {
+    const { creneaux } = planifier(beaucoup, [], {
+      parPeriode: 1,
+      periode: 'mois',
+      periodes: 3,
+      depuis: JEUDI,
+    })
+    expect(creneaux).toHaveLength(3)
+    const jours = creneaux.map((c) => c.date.getTime())
+    expect(ecart(jours, 0, 1)).toBe(28)
+    expect(ecart(jours, 1, 2)).toBe(28)
+  })
+
+  it('propose autant de sujets que le rythme en demande', () => {
+    // Deux par mois sur six mois : douze sujets, pas huit.
+    const { creneaux } = planifier(beaucoup, [], {
+      parPeriode: 2,
+      periode: 'mois',
+      periodes: 6,
+      depuis: JEUDI,
+    })
+    expect(creneaux).toHaveLength(12)
+    expect(creneaux[0]?.date.getTime()).toBe(creneaux[1]?.date.getTime())
+  })
+
+  it('garde les semaines collées quand on publie à la semaine', () => {
+    const { creneaux } = planifier(beaucoup, [], {
+      parPeriode: 1,
+      periode: 'semaine',
+      periodes: 3,
+      depuis: JEUDI,
+    })
+    const jours = creneaux.map((c) => c.date.getTime())
+    expect(ecart(jours, 0, 1)).toBe(7)
   })
 })

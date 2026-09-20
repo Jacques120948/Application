@@ -209,6 +209,7 @@ export function ArticlesRediges({
   cout,
   recherchesBranchees,
   sujetPropose = '',
+  langueProposee = null,
 }: {
   siteId: string
   host: string
@@ -224,6 +225,14 @@ export function ArticlesRediges({
    * connaît son métier mieux que le classement. Le champ reste modifiable et effaçable.
    */
   sujetPropose?: string
+  /**
+   * La langue dans laquelle écrire, quand le calendrier l'a mesurée.
+   *
+   * Elle ne vient pas d'une devinette : c'est celle de la page sur laquelle Google classe
+   * cette requête. Écrire en français un sujet demandé en italien reviendrait à payer un
+   * texte que personne de ce public ne lira.
+   */
+  langueProposee?: string | null
   /** La fourchette annoncée, ou `null` quand le catalogue ne la donne pas. */
   cout: { min: number; max: number } | null
 }) {
@@ -242,7 +251,12 @@ export function ArticlesRediges({
     const response = await fetch(`/api/sites/${siteId}/articles`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ demande: demande.trim(), locale }),
+      /*
+       * La langue mesurée par le calendrier l'emporte sur celle de l'écran. C'est la même
+       * consigne que d'habitude, avec une autre valeur : Milo écrit dans la langue qu'on
+       * lui donne, et le calendrier sait laquelle Google associe à cette requête.
+       */
+      body: JSON.stringify({ demande: demande.trim(), locale: langueProposee ?? locale }),
     }).catch(() => null)
     const body = (await response?.json().catch(() => null)) as
       | { article?: ArticleCompletVu; message?: string }
@@ -334,6 +348,13 @@ export function ArticlesRediges({
               ))}
             </ul>
           </div>
+        )}
+
+        {langueProposee === null ? null : (
+          <p className="mt-4 mb-0 rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3 text-sm text-[var(--color-ink-soft)]">
+            Cette recherche vous amène sur une page en «&nbsp;{langueProposee}&nbsp;» : Milo
+            écrira dans cette langue.
+          </p>
         )}
 
         <label className="mt-5 block">

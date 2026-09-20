@@ -6,6 +6,7 @@ import {
   listerProprietes,
   rafraichir,
   requetes,
+  requetesEtPages,
   type Ligne,
 } from '@/server/integrations/providers/google-search-console'
 import { choisirPropriete } from './recherches'
@@ -37,6 +38,12 @@ import { choisirPropriete } from './recherches'
  * **Ce qui est déjà écrit ne se réécrit pas.** Un article qui double un article existant
  * crée le contenu dupliqué que l'analyse reprochera au suivant.
  *
+ * **La langue vient de Google, pas d'un dictionnaire.** Un site multilingue reçoit des
+ * requêtes dans plusieurs langues, et écrire en français un article demandé en italien
+ * revient à payer un texte que personne de ce public ne lira. On pourrait deviner la langue
+ * de deux mots ; on préfère regarder sur quelle page Google classe la requête, parce que le
+ * chemin de cette page la porte — et parce que c'est mesuré.
+ *
  * Aucun crédit : c'est du comptage sur une lecture gratuite.
  */
 
@@ -52,9 +59,32 @@ const PAGE_DEUX = { haut: 10.5, bas: 20.5 }
 /** Ce qu'il faut de mots en commun pour considérer qu'un article couvre déjà le sujet. */
 const RECOUVREMENT = 0.6
 
+/**
+ * Le rythme de publication, choisi par la personne.
+ *
+ * Il ne change pas l'ordre des sujets — celui-ci vient des chiffres — mais il change
+ * combien on en propose et sur quelle durée. Une boutique qui tient un article par mois ne
+ * doit pas recevoir un plan de huit semaines qu'elle abandonnera à la troisième.
+ */
+export type Rythme = {
+  /** Combien d'articles par période. */
+  parPeriode: number
+  periode: 'semaine' | 'mois'
+  /** Combien de périodes couvrir. */
+  periodes: number
+}
+
 export type Creneau = {
-  /** Rang de la semaine, à partir de 1. */
+  /** Rang de la période, à partir de 1. */
   semaine: number
+  /**
+   * La langue dans laquelle écrire, quand elle diffère de celle du site.
+   *
+   * `null` veut dire « celle du site » : ou bien la requête tombe sur une page sans préfixe
+   * de langue, ou bien Google ne l'a associée à aucune page dans ce qu'il a rendu. Dans les
+   * deux cas on ne sait pas, et on ne prétend pas savoir.
+   */
+  langue: string | null
   /** Le lundi de cette semaine-là. */
   date: Date
   requete: string
@@ -93,6 +123,23 @@ export function dejaCouvert(requete: string, titres: readonly string[]): boolean
   })
 }
 
+/**
+ * La langue portée par le chemin d'une adresse, ou `null`.
+ *
+ * Conventionnellement, un site multilingue préfixe ses chemins du code de la langue —
+ * `/it/bougies`, `/de/kerzen`. Deux lettres minuscules en tête de chemin, et rien d'autre :
+ * un segment plus long serait une page ordinaire, et s'y fier ferait passer `/fr-CH/` ou
+ * `/produits/` pour des langues.
+ */
+export function langueDuChemin(adresse: string): string | null {
+  try {
+    const segment = new URL(adresse).pathname.split('/').filter(Boolean)[0] ?? ''
+    return /^[a-z]{2}$/.test(segment) ? segment : null
+  } catch {
+    return null
+  }
+}
+
 /** Le lundi de la semaine qui suit, puis les suivants. */
 function lundi(depuis: Date, rang: number): Date {
   const date = new Date(depuis)
@@ -113,7 +160,11 @@ function lundi(depuis: Date, rang: number): Date {
 export function planifier(
   lignes: readonly Ligne[],
   dejaEcrits: readonly string[],
-  options: { parSemaine: number; semaines: number; depuis?: Date },
+  options: Rythme & {
+    depuis?: Date
+    /** La page que Google associe à chaque requête, quand il l'a dit. */
+    pages?: ReadonlyMap<string, string>
+  },
 ): { creneaux: Creneau[]; ecartes: number } {
   const depuis = options.depuis ?? new Date()
   let ecartes = 0
@@ -133,14 +184,17 @@ export function planifier(
       if (aProche !== bProche) return aProche ? -1 : 1
       return b.impressions - a.impressions
     })
-    .slice(0, options.parSemaine * options.semaines)
+    .slice(0, options.parPeriode * options.periodes)
 
+  const semainesParPeriode = options.periode === 'mois' ? 4 : 1
   const creneaux = candidates.map((ligne, rang) => {
-    const semaine = Math.floor(rang / options.parSemaine) + 1
+    const semaine = Math.floor(rang / options.parPeriode) + 1
     const proche = ligne.position < PAGE_DEUX.bas
+    const page = options.pages?.get(ligne.cle)
     return {
       semaine,
-      date: lundi(depuis, semaine),
+      langue: page === undefined ? null : langueDuChemin(page),
+      date: lundi(depuis, (semaine - 1) * semainesParPeriode + 1),
       requete: ligne.cle,
       impressions: ligne.impressions,
       clics: ligne.clics,
@@ -158,7 +212,7 @@ export function planifier(
 export async function lireCalendrier(
   userId: string,
   siteId: string,
-  options: { parSemaine: number; semaines: number },
+  options: Rythme,
 ): Promise<VueCalendrier> {
   const site = await withUserScope(userId, (tx) =>
     tx.site.findFirst({
@@ -191,10 +245,25 @@ export async function lireCalendrier(
   const propriete = proprietes.ok ? choisirPropriete(site.origin, proprietes.proprietes) : null
   if (propriete === null) return vide
 
-  const lignes = await requetes(acces.accessToken, propriete, 'query', JOURS_CALENDRIER)
+  /*
+   * Deux lectures : le classement vient de la première, la langue de la seconde. Le
+   * croisement requête/page couvre moins de requêtes à nombre de lignes égal — il sert donc
+   * de table d'appoint, et une requête absente n'a simplement pas de langue connue.
+   */
+  const [lignes, croisees] = await Promise.all([
+    requetes(acces.accessToken, propriete, 'query', JOURS_CALENDRIER),
+    requetesEtPages(acces.accessToken, propriete, JOURS_CALENDRIER),
+  ])
   if (!lignes.ok) return vide
 
-  const plan = planifier(lignes.lignes, dejaEcrits, options)
+  const pages = new Map<string, string>()
+  if (croisees.ok) {
+    for (const ligne of croisees.lignes) {
+      if (!pages.has(ligne.cle)) pages.set(ligne.cle, ligne.page)
+    }
+  }
+
+  const plan = planifier(lignes.lignes, dejaEcrits, { ...options, pages })
   return {
     site: { id: site.id, host: site.host },
     propriete,
