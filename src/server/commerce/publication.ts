@@ -73,9 +73,32 @@ function echapper(texte: string): string {
  * Ce n'est pas une conversion générale du Markdown, et elle n'a pas à l'être : c'est la
  * conversion de ce que Milo produit, dont la forme est fixée par son schéma.
  */
+/**
+ * La légende d'une photo : le nom de la fiche, cliquable quand elle est en ligne.
+ *
+ * L'image était déjà enveloppée dans un lien, mais rien ne le montrait — il fallait la
+ * survoler pour découvrir qu'elle menait quelque part. Une légende donne au lecteur un
+ * repère visible, et à Google une ancre lisible : l'ancre d'un lien-image se réduit à son
+ * texte alternatif.
+ */
+function legende(photo: { titre?: string; lien: string | null }): string {
+  const nom = (photo.titre ?? '').trim()
+  if (nom === '') return ''
+  const texte = echapper(nom)
+  return photo.lien === null
+    ? `<p><em>${texte}</em></p>`
+    : `<p><em><a href="${echapper(photo.lien)}">${texte}</a></em></p>`
+}
+
 export function enHtml(
   corps: string,
-  illustrations: readonly { section: number; image: string; alt: string; lien: string | null }[],
+  illustrations: readonly {
+    section: number
+    image: string
+    alt: string
+    lien: string | null
+    titre?: string
+  }[],
 ): string {
   const blocs = corps.split(/\n{2,}/u).filter((bloc) => bloc.trim() !== '')
   const sortie: string[] = []
@@ -96,6 +119,8 @@ export function enHtml(
             ? `<p>${balise}</p>`
             : `<p><a href="${echapper(photo.lien)}">${balise}</a></p>`,
         )
+        const sous = legende(photo)
+        if (sous !== '') sortie.push(sous)
       }
       continue
     }
@@ -260,7 +285,12 @@ export async function deposerDansShopify(
     ...(vedette === undefined
       ? {}
       : { image: { url: vedette.image, altText: vedette.alt } }),
-    corpsHtml: `<p>${echapper(article.chapo)}</p>\n${enHtml(article.corps, dansLeCorps)}${questionsEnHtml(article.questions)}`,
+    /*
+     * La légende de l'image à la une ouvre le corps, juste sous la photo que le thème
+     * affiche en tête. Sans elle, cette photo-là ne mènerait à rien : Shopify n'enveloppe
+     * pas l'image à la une dans un lien, et c'est un renvoi vers une fiche qu'on perdrait.
+     */
+    corpsHtml: `${vedette === undefined ? '' : `${legende(vedette)}\n`}<p>${echapper(article.chapo)}</p>\n${enHtml(article.corps, dansLeCorps)}${questionsEnHtml(article.questions)}`,
     resume: `<p>${echapper(article.chapo)}</p>`,
     metaTitle: article.metaTitle,
     metaDescription: article.metaDescription,

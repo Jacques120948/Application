@@ -113,7 +113,20 @@ function Photo({ photo }: { photo: IllustrationVue }) {
           {image}
         </a>
       )}
-      <figcaption className="mt-1 text-xs text-[var(--color-ink-faint)]">{photo.titre}</figcaption>
+      {/*
+        La légende porte le lien, en plus de l'image. Une image cliquable sans rien qui le
+        dise demande de survoler pour le découvrir ; et pour un moteur, l'ancre d'un
+        lien-image se réduit à son texte alternatif.
+      */}
+      <figcaption className="mt-1 text-xs text-[var(--color-ink-faint)]">
+        {photo.lien === null ? (
+          photo.titre
+        ) : (
+          <a href={photo.lien} target="_blank" rel="noopener noreferrer" className="underline">
+            {photo.titre}
+          </a>
+        )}
+      </figcaption>
     </figure>
   )
 }
@@ -185,9 +198,18 @@ function enMarkdown(article: ArticleCompletVu): string {
       if (photo === undefined) return section
       const balise = `![${photo.alt}](${photo.image})`
       const avecLien = photo.lien === null ? balise : `[${balise}](${photo.lien})`
+      // La légende, cliquable elle aussi : c'est elle que lit un moteur, et un lecteur.
+      const sous =
+        photo.titre === ''
+          ? ''
+          : photo.lien === null
+            ? `*${photo.titre}*`
+            : `*[${photo.titre}](${photo.lien})*`
       const lignes = section.split('\n')
       // Après l'intertitre, avant le texte : c'est là qu'elle se lira comme elle s'affiche.
-      return [lignes[0], '', avecLien, ...lignes.slice(1)].join('\n')
+      return [lignes[0], '', avecLien, ...(sous === '' ? [] : ['', sous]), ...lignes.slice(1)].join(
+        '\n',
+      )
     })
     .join('\n')
 

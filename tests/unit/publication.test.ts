@@ -34,6 +34,54 @@ describe('le corps d’un article en HTML', () => {
     expect(html).toContain('&lt;b&gt;')
   })
 
+  it('pose sous la photo une légende cliquable vers la fiche', () => {
+    /*
+     * L'image était déjà un lien, mais rien ne le disait : il fallait la survoler pour le
+     * découvrir. Et pour un moteur, l'ancre d'un lien-image se réduit à son texte
+     * alternatif — la légende lui donne une ancre écrite.
+     */
+    const html = enHtml('## Origine\n\nTexte.', [
+      {
+        section: 0,
+        image: 'https://cdn.shopify.com/obsidienne.jpg',
+        alt: 'Bougie à l’obsidienne',
+        titre: 'Bougie Obsidienne noire',
+        lien: 'https://cap-nature.ch/products/obsidienne',
+      },
+    ])
+    expect(html).toContain(
+      '<p><em><a href="https://cap-nature.ch/products/obsidienne">Bougie Obsidienne noire</a></em></p>',
+    )
+  })
+
+  it('garde la légende sans lien quand la fiche n’est pas en ligne', () => {
+    const html = enHtml('## Origine\n\nTexte.', [
+      {
+        section: 0,
+        image: 'https://cdn.shopify.com/obsidienne.jpg',
+        alt: 'Bougie',
+        titre: 'Bougie Obsidienne noire',
+        lien: null,
+      },
+    ])
+    expect(html).toContain('<p><em>Bougie Obsidienne noire</em></p>')
+    expect(html).not.toContain('<a href')
+  })
+
+  it('échappe la légende, qui vient elle aussi de la boutique', () => {
+    const html = enHtml('## Origine\n\nTexte.', [
+      {
+        section: 0,
+        image: 'https://cdn.shopify.com/x.jpg',
+        alt: 'x',
+        titre: 'Bougie <script>alert(1)</script>',
+        lien: null,
+      },
+    ])
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('&lt;script&gt;')
+  })
+
   it('place la photo sous l’intertitre de sa section', () => {
     const html = enHtml('## Une\n\nTexte.\n\n## Deux\n\nTexte.', [
       {
