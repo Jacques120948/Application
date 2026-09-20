@@ -96,6 +96,8 @@ model User {
   siteArticles         SiteArticle[]
   siteWatches          SiteWatch[]
   siteAutomatisations  SiteAutomatisation[]
+  promptsIa            PromptIA[]
+  relevesIa            ReleveIA[]
   releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
@@ -1236,6 +1238,8 @@ model Site {
   articles       SiteArticle[]
   watches        SiteWatch[]
   automatisation SiteAutomatisation?
+  promptsIa      PromptIA[]
+  relevesIa      ReleveIA[]
   releves        ReleveRecherche[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
@@ -1491,6 +1495,66 @@ model ReleveRecherche {
 
   @@unique([siteId, jour])
   @@index([siteId, jour(sort: Desc)])
+}
+
+/// Une question qu'un client pourrait poser à un assistant, et où la marque devrait sortir.
+///
+/// Écrite par la personne : elle connaît son marché, et une question inventée par un modèle
+/// mesurerait l'imagination du modèle.
+model PromptIA {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// La question, telle qu'un client la poserait. Dans sa langue.
+  texte String
+  /// Le regroupement choisi par la personne.
+  theme String  @default("")
+  /// Éteinte : elle garde son historique et cesse d'être posée et facturée.
+  actif Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site    Site       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  releves ReleveIA[]
+
+  @@unique([siteId, texte])
+  @@index([siteId, actif])
+}
+
+/// Une réponse d'assistant, lue et constatée.
+///
+/// Ces réponses ne sont pas déterministes : la même question posée deux fois donne deux
+/// réponses. C'est l'accumulation qui fait le chiffre — « vue dans 3 relevés sur 10 » est
+/// une fréquence, « vue » serait un mensonge.
+model ReleveIA {
+  id       String @id @default(uuid()) @db.Uuid
+  promptId String @db.Uuid
+  siteId   String @db.Uuid
+  userId   String @db.Uuid
+
+  /// gemini | claude | perplexity. La plateforme réellement interrogée, jamais une
+  /// plateforme approchante dont on emprunterait le nom.
+  plateforme String
+  /// La marque apparaît-elle. Constaté sur le texte, pas déduit.
+  mentionne  Boolean @default(false)
+  /// bon | neutre | reserve | inconnu. Seulement quand la marque est mentionnée.
+  sentiment  String  @default("inconnu")
+  /// Le passage où la marque apparaît, pour que la personne vérifie elle-même.
+  extrait    String  @default("")
+  /// Les adresses citées par l'assistant : c'est là que se voit qui il a lu.
+  sources    Json    @default("[]")
+
+  createdAt DateTime @default(now())
+
+  prompt PromptIA @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  site   Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, createdAt(sort: Desc)])
+  @@index([siteId, createdAt(sort: Desc)])
 }
 
 model SiteArticle {

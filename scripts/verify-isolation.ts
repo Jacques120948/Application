@@ -51,6 +51,8 @@ const PROTECTED_TABLES = [
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',
+  'PromptIA',
+  'ReleveIA',
 ] as const
 
 /*

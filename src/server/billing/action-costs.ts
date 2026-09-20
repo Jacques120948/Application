@@ -58,6 +58,16 @@ export const DEFAULT_ACTION_COSTS: readonly ActionCost[] = [
   { id: 'faq', label: 'Rédiger une foire aux questions', min: 3, max: 5 },
   { id: 'page', label: 'Améliorer une page entière', min: 5, max: 10 },
   { id: 'article', label: 'Écrire un article', min: 8, max: 20 },
+  /*
+   * Le relevé de visibilité dans les assistants, facturé à la question posée.
+   *
+   * Ce coût n'est pas fait de jetons mais d'appels payants à des plateformes extérieures :
+   * une question est posée plusieurs fois, sur plusieurs assistants, et chaque interrogation
+   * a un prix. La fourchette est fixe parce que le nombre d'interrogations l'est aussi — le
+   * nombre de plateformes et de répétitions est une décision d'Evoliia, pas de la personne,
+   * et lui facturer nos réglages serait malhonnête.
+   */
+  { id: 'visibilite-ia', label: 'Mesurer une question dans les assistants', min: 3, max: 3 },
 ]
 
 /** Clé de réglage : les fourchettes annoncées, en JSON. */

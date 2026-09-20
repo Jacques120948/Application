@@ -131,6 +131,16 @@ export const env = {
     return read('GEMINI_API_KEY')
   },
   /**
+   * Clé Perplexity, pour le suivi de visibilité dans les assistants.
+   *
+   * Facultative, et c'est délibéré : sans elle, le suivi tourne sur les deux autres
+   * plateformes plutôt que d'échouer. Une clé manquante retire une colonne d'un tableau,
+   * elle ne casse pas une fonctionnalité — et l'écran dit laquelle manque.
+   */
+  get perplexityApiKey(): string | undefined {
+    return read('PERPLEXITY_API_KEY')
+  },
+  /**
    * Domaine des applications publiées, par exemple `evoliia.app`. Chaque application y
    * reçoit un sous-domaine tiré de son nom court. Sans cette variable, les applications
    * restent servies sous `/a/<nom-court>` et rien ne change : la fonction est éteinte,
