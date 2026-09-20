@@ -4,6 +4,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import {
   ajouterPrompt,
   basculerPrompt,
+  proposerQuestions,
   releverVisibilite,
   supprimerPrompt,
 } from '@/server/audit/visibilite-ia'
@@ -31,6 +32,7 @@ const input = z.discriminatedUnion('geste', [
   z.object({ geste: z.literal('basculer'), promptId: z.string().uuid(), actif: z.boolean() }),
   z.object({ geste: z.literal('retirer'), promptId: z.string().uuid() }),
   z.object({ geste: z.literal('relever') }),
+  z.object({ geste: z.literal('proposer'), locale: z.string().max(5).optional() }),
 ])
 
 export async function POST(request: Request, context: { params: Promise<{ siteId: string }> }) {
@@ -43,6 +45,13 @@ export async function POST(request: Request, context: { params: Promise<{ siteId
     if (demande.geste === 'relever') {
       consume(`visibilite-ia:${user.id}`, RULES.aiOperation)
       return ok({ bilan: await releverVisibilite(user.id, siteId) })
+    }
+
+    if (demande.geste === 'proposer') {
+      consume(`visibilite-ia:proposer:${user.id}`, RULES.aiOperation)
+      return ok({
+        questions: await proposerQuestions(user.id, siteId, demande.locale ?? 'fr'),
+      })
     }
 
     consume(`visibilite-ia:prompts:${user.id}`, RULES.aiOperation)

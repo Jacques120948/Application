@@ -84,6 +84,7 @@ export default async function AssistantsPage({
             plateformes={plateformes}
             cout={cout}
             jours={JOURS}
+            locale={locale}
           />
         )}
       </div>

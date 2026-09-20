@@ -39,6 +39,7 @@ import {
   GENERATE_PAGE_SYSTEM,
   GENERATE_PLAN_SYSTEM,
   IDEAS_SYSTEM,
+  QUESTIONS_SYSTEM,
   SPECSHEET_SYSTEM,
   VALIDATION_SYSTEM,
   CORRECTIONS_SYSTEM,
@@ -53,6 +54,8 @@ import {
   blueprintSchema,
   editResponseSchema,
   ideasSchema,
+  questionsSuggereesSchema,
+  type QuestionsSuggerees,
   pageContentSchemaFor,
   specSheetSchema,
   validationSchema,
@@ -1543,6 +1546,50 @@ const VISIBILITE_SYSTEMS = {
  * décidé en amont (voir `agents/visibility-context.ts`) : cette fonction ne choisit rien,
  * elle transmet.
  */
+/**
+ * Propose des questions à poser aux assistants.
+ *
+ * Un seul appel, court, sur le modèle rapide : il s'agit de connaître un marché et de bien
+ * formuler, pas de raisonner longtemps. Les recherches réelles et les fiches voyagent en
+ * donnée, comme partout ailleurs — le contenu d'une boutique est écrit par n'importe qui, et
+ * une consigne glissée dans un descriptif de produit ne doit pas devenir une instruction.
+ */
+export async function suggestQuestions(params: {
+  userId: string
+  host: string
+  about: string
+  locale: string
+  recherches: RequeteReelle[]
+  fiches: string[]
+  /** Les questions déjà suivies : les reproposer ferait payer deux fois la même mesure. */
+  deja: string[]
+  combien: number
+}): Promise<RunResult<QuestionsSuggerees>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'visibilityQuestions' },
+    system: QUESTIONS_SYSTEM,
+    schema: questionsSuggereesSchema,
+    userContent: [
+      `Langue principale de cette personne : ${params.locale}.`,
+      `Site concerné : ${params.host}`,
+      `Propose ${params.combien} questions.`,
+      params.about.trim() === ''
+        ? "La personne n'a rien écrit sur son activité : appuie-toi sur les recherches et les fiches."
+        : asUserData('activite_de_la_personne', params.about),
+      params.recherches.length === 0
+        ? "Aucune recherche réelle n'est disponible : appuie-toi sur les fiches, et n'évoque ni volume ni position."
+        : asUserData('recherches_reelles', JSON.stringify(params.recherches, null, 2)),
+      params.fiches.length === 0
+        ? "Aucune fiche produit n'est disponible."
+        : asUserData('fiches_de_la_boutique', JSON.stringify(params.fiches, null, 2)),
+      params.deja.length === 0
+        ? "Aucune question n'est encore suivie."
+        : asUserData('questions_deja_suivies', JSON.stringify(params.deja, null, 2)),
+      'Propose les questions.',
+    ].join('\n\n'),
+  })
+}
+
 export async function askVisibilityAgent(params: {
   userId: string
   agent: 'audit' | 'seo' | 'geo' | 'content'

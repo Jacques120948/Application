@@ -15,6 +15,13 @@ import { useState } from 'react'
  * une marque dans un assistant, et rien ici ne le laisse entendre.
  */
 
+export type QuestionProposeeVue = {
+  question: string
+  theme: string
+  langue: string
+  fondement: string
+}
+
 export type FrequenceVue = {
   prompt: { id: string; texte: string; theme: string; actif: boolean }
   releves: number
@@ -116,9 +123,11 @@ export function VisibiliteIA({
   plateformes,
   cout,
   jours,
+  locale,
 }: {
   siteId: string
   host: string
+  locale: string
   initiales: readonly FrequenceVue[]
   /** Les plateformes réellement interrogeables : celles dont la clé est posée. */
   plateformes: readonly string[]
@@ -130,6 +139,12 @@ export function VisibiliteIA({
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [bilan, setBilan] = useState<string | null>(null)
+  /*
+   * Les questions proposées, pas encore suivies. Rien n'est enregistré tant que la personne
+   * n'a pas choisi : une question qu'elle n'aurait pas retenue serait une mesure qu'elle
+   * paierait sans l'avoir décidée.
+   */
+  const [proposees, setProposees] = useState<QuestionProposeeVue[] | null>(null)
 
   const actives = liste.filter((ligne) => ligne.prompt.actif).length
 
@@ -179,6 +194,33 @@ export function VisibiliteIA({
   async function retirer(promptId: string) {
     await appeler({ geste: 'retirer', promptId })
     setListe((actuelles) => actuelles.filter((ligne) => ligne.prompt.id !== promptId))
+  }
+
+  async function proposer() {
+    setOccupe(true)
+    const charge = (await appeler({ geste: 'proposer', locale })) as {
+      questions?: QuestionProposeeVue[]
+    } | null
+    setOccupe(false)
+    if (charge?.questions === undefined) return
+    setProposees(charge.questions)
+  }
+
+  /** Une proposition retenue devient une question suivie, et quitte la liste. */
+  async function retenir(proposee: QuestionProposeeVue) {
+    const charge = (await appeler({
+      geste: 'ajouter',
+      texte: proposee.question,
+      theme: proposee.theme,
+    })) as { prompt?: FrequenceVue['prompt'] } | null
+    if (charge?.prompt === undefined) return
+    setListe((actuelles) => [
+      ...actuelles,
+      { prompt: charge.prompt!, releves: 0, mentions: 0, sentiment: 'inconnu', sources: [] },
+    ])
+    setProposees((actuelles) =>
+      (actuelles ?? []).filter((autre) => autre.question !== proposee.question),
+    )
   }
 
   async function relever() {
@@ -238,15 +280,70 @@ export function VisibiliteIA({
             mieux que « que fait {host} ».
           </span>
         </label>
-        <button
-          type="button"
-          onClick={() => void ajouter()}
-          disabled={occupe || texte.trim().length < 8}
-          className="mt-3 cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm disabled:opacity-50"
-        >
-          Ajouter cette question
-        </button>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => void ajouter()}
+            disabled={occupe || texte.trim().length < 8}
+            className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm disabled:opacity-50"
+          >
+            Ajouter cette question
+          </button>
+          {/*
+            Trouver vingt questions qu'un client poserait à une IA est exactement ce que la
+            personne ne sait pas faire — elle connaît son métier, pas les formulations qu'on
+            tape dans un assistant. Les matériaux, eux, sont là : ce que les gens ont tapé
+            sur Google pour la trouver, et ce que sa boutique vend.
+          */}
+          <button
+            type="button"
+            onClick={() => void proposer()}
+            disabled={occupe}
+            className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {occupe ? 'Gia cherche…' : 'Gia me propose des questions (1 crédit)'}
+          </button>
+        </div>
       </section>
+
+      {proposees === null ? null : (
+        <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+          <p className="m-0 mb-1 text-sm font-medium">
+            {proposees.length === 0
+              ? 'Gia n’a rien de nouveau à proposer.'
+              : `${proposees.length} questions proposées`}
+          </p>
+          <p className="m-0 mb-4 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+            Tirées de ce que les gens tapent réellement sur Google pour vous trouver et de vos
+            fiches produits. Aucune n’est suivie tant que vous ne l’ajoutez pas — gardez ce
+            qui vous parle, ignorez le reste.
+          </p>
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {proposees.map((proposee) => (
+              <li
+                key={proposee.question}
+                className="rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3"
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="m-0 text-sm">{proposee.question}</p>
+                  <button
+                    type="button"
+                    onClick={() => void retenir(proposee)}
+                    className="cursor-pointer border-0 bg-transparent p-0 text-xs whitespace-nowrap text-[var(--color-brand)] underline"
+                  >
+                    Ajouter
+                  </button>
+                </div>
+                <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">
+                  {proposee.theme === '' ? '' : `${proposee.theme} · `}
+                  {proposee.langue.toUpperCase()}
+                  {proposee.fondement === '' ? '' : ` · ${proposee.fondement}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {liste.length === 0 ? null : (
         <section>

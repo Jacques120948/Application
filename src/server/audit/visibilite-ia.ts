@@ -9,6 +9,9 @@ import {
   plateformesDisponibles,
   type Plateforme,
 } from '@/server/integrations/providers/assistants'
+import { suggestQuestions } from '@/server/ai/operations'
+import { lireVitrinePourArticle } from '@/server/commerce/boutique'
+import { recherchesPourArticle } from './recherches'
 
 /**
  * La visibilité dans les assistants, mesurée.
@@ -398,4 +401,76 @@ export async function lireFrequences(
 export async function soldeCouvre(userId: string, questions: number): Promise<boolean> {
   if (questions === 0) return false
   return (await availableCredits(userId)) >= questions * (await coutDuReleve())
+}
+
+/** Une question proposée, pas encore suivie. Rien n'est enregistré tant qu'on n'a pas choisi. */
+export type QuestionProposee = {
+  question: string
+  theme: string
+  langue: string
+  fondement: string
+}
+
+/**
+ * Propose des questions à partir des chiffres réels et du catalogue.
+ *
+ * Inventer vingt questions qu'un client poserait à une IA est exactement ce que la personne
+ * ne sait pas faire : elle connaît son métier, pas les formulations qu'on tape dans un
+ * assistant. Les matériaux, eux, sont déjà là — ce que les gens ont tapé sur Google pour la
+ * trouver, et ce que sa boutique vend.
+ *
+ * Rien n'est enregistré. La liste est proposée, la personne en garde ce qu'elle veut : une
+ * question qu'elle n'aurait pas choisie serait une mesure qu'elle paierait sans l'avoir
+ * décidée.
+ *
+ * Les questions déjà suivies partent avec la demande, pour ne pas les reproposer — la même
+ * mesure payée deux fois est la façon la plus sûre de faire regretter une fonctionnalité.
+ */
+export async function proposerQuestions(
+  userId: string,
+  siteId: string,
+  locale: string,
+  combien = 12,
+): Promise<QuestionProposee[]> {
+  const site = await withUserScope(userId, (tx) =>
+    tx.site.findFirst({
+      where: { id: siteId, userId, deletedAt: null },
+      select: { host: true, origin: true, about: true },
+    }),
+  )
+  if (site === null) throw notFound('Ce site est introuvable.')
+
+  const [recherches, vitrine, deja] = await Promise.all([
+    recherchesPourArticle(userId, site.origin),
+    lireVitrinePourArticle(userId).catch(() => []),
+    listerPrompts(userId, siteId),
+  ])
+
+  const resultat = await suggestQuestions({
+    userId,
+    host: site.host,
+    about: site.about,
+    locale,
+    recherches,
+    fiches: vitrine.slice(0, 20).map((fiche: { titre: string }) => fiche.titre),
+    deja: deja.map((prompt: PromptSuivi) => prompt.texte),
+    combien: Math.min(24, Math.max(3, combien)),
+  })
+
+  /*
+   * Une question qui nomme la marque est écartée ici, et pas seulement demandée dans la
+   * consigne. Elle mesurerait si l'assistant sait lire la question qu'on vient de lui
+   * poser — autant se féliciter d'avoir répondu à soi-même. Une consigne se respecte
+   * presque toujours ; « presque » ne suffit pas quand la mesure est ensuite facturée.
+   */
+  const formes = formesDuNom(site.host, site.host)
+  return resultat.value.questions
+    .filter((proposee: QuestionProposee) => !chercherMention(proposee.question, formes).mentionne)
+    .map((proposee: QuestionProposee) => ({
+      question: proposee.question.trim().slice(0, 300),
+      theme: proposee.theme.trim().slice(0, 60),
+      langue: proposee.langue.trim().slice(0, 5),
+      fondement: proposee.fondement.trim().slice(0, 200),
+    }))
+    .filter((proposee: QuestionProposee) => proposee.question.length >= 8)
 }

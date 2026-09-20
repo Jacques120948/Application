@@ -103,6 +103,32 @@ export const ideasSchema = z
 export type Ideas = z.infer<typeof ideasSchema>
 
 /**
+ * Des questions qu'un client poserait à un assistant.
+ *
+ * Aucune longueur minimale n'est imposée ici, et c'est une leçon payée : les sorties
+ * structurées ne transmettent pas les contraintes de chaîne au modèle — elles sont
+ * retirées du schéma envoyé et vérifiées après coup. Un minimum ne contraint donc rien et
+ * ne fait que rejeter. Ce qu'on attend se dit dans la consigne, pas dans le schéma.
+ */
+export const questionSuggereeSchema = z
+  .object({
+    question: z.string().max(300),
+    /** Le regroupement : « Conseils », « Produits », « Comparaisons », « Confiance »… */
+    theme: z.string().max(60),
+    /** Code de langue à deux lettres, celui dans lequel la question est écrite. */
+    langue: z.string().max(5),
+    /** Sur quoi elle s'appuie : une recherche réelle, une fiche, ou rien. */
+    fondement: z.string().max(200),
+  })
+  .strict()
+
+export const questionsSuggereesSchema = z
+  .object({ questions: z.array(questionSuggereeSchema).max(24) })
+  .strict()
+
+export type QuestionsSuggerees = z.infer<typeof questionsSuggereesSchema>
+
+/**
  * Une opportunité du Radar.
  *
  * C'est une idée, avec ce qui la rend explicable : pourquoi elle convient à CETTE

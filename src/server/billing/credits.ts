@@ -62,6 +62,15 @@ export type CreditedOperation =
   /** Une question posée à l'un des quatre spécialistes de la visibilité. */
   | 'visibilityAsk'
   | 'visibilityArticle'
+  /**
+   * Des questions proposées à partir des recherches réelles et du catalogue.
+   *
+   * Un appel court, et un seul. Il existe parce qu'inventer vingt questions qu'un client
+   * poserait à une IA est exactement ce que la personne ne sait pas faire — et parce que
+   * les matériaux de ces questions sont déjà là : ce que les gens tapent réellement, et ce
+   * que la boutique vend. Rien n'est enregistré : elle choisit, puis ajoute.
+   */
+  | 'visibilityQuestions'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -134,6 +143,7 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    * rendu court soit facturé comme une phrase. Le coût réel des jetons décide au-delà.
    */
   visibilityArticle: 8,
+  visibilityQuestions: 1,
 }
 
 /**

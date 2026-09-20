@@ -110,6 +110,9 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
    * résoudre quoi que ce soit — et un article coûte assez cher comme ça.
    */
   visibilityArticle: { model: MODELS.fast, maxTokens: 16_000, effort: 'medium' },
+  // Proposer des questions demande de la connaissance du marché, pas du raisonnement long :
+  // le modèle rapide suffit, et l'appel est court.
+  visibilityQuestions: { model: MODELS.fast, maxTokens: 4_000, effort: 'low' },
 }
 
 export type TokenUsage = {
