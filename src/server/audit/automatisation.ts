@@ -11,6 +11,7 @@ import { inspecter, lireIndexation } from './indexation'
 import { lireRecherches } from './recherches'
 import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
+import { fairePoint } from './point'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -52,6 +53,8 @@ export type Reglages = {
   depot: boolean
   /** Poser chaque semaine les questions suivies aux assistants. Dépense des crédits. */
   assistants: boolean
+  /** Le point hebdomadaire de Léa sur l'ensemble du site. Dépense des crédits. */
+  point: boolean
   blogId: string
   parPeriode: number
   periode: 'semaine' | 'mois'
@@ -59,6 +62,7 @@ export type Reglages = {
   releveAt: Date | null
   redigeAt: Date | null
   assistantsAt: Date | null
+  pointAt: Date | null
 }
 
 /** Tout à « non ». C'est l'état d'un site dont personne n'a rien demandé. */
@@ -68,6 +72,7 @@ const AU_DEPART: Reglages = {
   redaction: false,
   depot: false,
   assistants: false,
+  point: false,
   blogId: '',
   parPeriode: 1,
   periode: 'semaine',
@@ -75,6 +80,7 @@ const AU_DEPART: Reglages = {
   releveAt: null,
   redigeAt: null,
   assistantsAt: null,
+  pointAt: null,
 }
 
 /** Les rythmes acceptés. Au-delà, ce n'est plus un calendrier éditorial. */
@@ -108,6 +114,7 @@ export async function lireReglages(userId: string, siteId: string): Promise<Regl
     redaction: ligne.redaction,
     depot: ligne.depot,
     assistants: ligne.assistants,
+    point: ligne.point,
     blogId: ligne.blogId,
     parPeriode: ligne.parPeriode,
     periode: periodeValide(ligne.periode),
@@ -115,6 +122,7 @@ export async function lireReglages(userId: string, siteId: string): Promise<Regl
     releveAt: ligne.releveAt,
     redigeAt: ligne.redigeAt,
     assistantsAt: ligne.assistantsAt,
+    pointAt: ligne.pointAt,
   }
 }
 
@@ -127,7 +135,7 @@ export async function lireReglages(userId: string, siteId: string): Promise<Regl
 export async function ecrireReglages(
   userId: string,
   siteId: string,
-  patch: Partial<Omit<Reglages, 'indexeAt' | 'releveAt' | 'redigeAt' | 'assistantsAt'>>,
+  patch: Partial<Omit<Reglages, 'indexeAt' | 'releveAt' | 'redigeAt' | 'assistantsAt' | 'pointAt'>>,
 ): Promise<Reglages> {
   const site = await withUserScope(userId, (tx) =>
     tx.site.findFirst({ where: { id: siteId, userId, deletedAt: null }, select: { id: true } }),
@@ -141,6 +149,7 @@ export async function ecrireReglages(
     redaction: patch.redaction ?? actuel.redaction,
     depot: patch.depot ?? actuel.depot,
     assistants: patch.assistants ?? actuel.assistants,
+    point: patch.point ?? actuel.point,
     blogId: (patch.blogId ?? actuel.blogId).slice(0, 200),
     parPeriode: Math.min(PAR_PERIODE_MAX, Math.max(1, Math.trunc(patch.parPeriode ?? actuel.parPeriode))),
     periode: periodeValide(patch.periode ?? actuel.periode),
@@ -188,6 +197,20 @@ export function assistantsDus(reglages: Reglages, maintenant: Date): boolean {
   return maintenant.getTime() - reglages.assistantsAt.getTime() >= 7 * 24 * 60 * 60 * 1000
 }
 
+/**
+ * Le point hebdomadaire est-il dû ?
+ *
+ * Même cadence et même règle que le reste : une fois par semaine, et le retard ne se
+ * rattrape pas. Trois semaines sans tournée donnent un point, pas trois — un point
+ * hebdomadaire écrit trois fois d'affilée sur les mêmes chiffres ne dirait rien de plus et
+ * coûterait trois fois.
+ */
+export function pointDu(reglages: Reglages, maintenant: Date): boolean {
+  if (!reglages.point) return false
+  if (reglages.pointAt === null) return true
+  return maintenant.getTime() - reglages.pointAt.getTime() >= 7 * 24 * 60 * 60 * 1000
+}
+
 /** Minuit du jour donné, en temps universel : un relevé porte sur un jour, pas sur une heure. */
 function jourDe(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
@@ -201,10 +224,13 @@ export type Bilan = {
   depots: number
   /** Questions posées aux assistants, toutes plateformes confondues. */
   questionsIa: number
+  /** Points hebdomadaires écrits. */
+  points: number
   echecs: number
   /** Combien de sites auraient dépensé. Rempli seulement à blanc. */
   redactionsDues?: number
   relevesIaDus?: number
+  pointsDus?: number
 }
 
 /** Où la dernière tournée s'est arrêtée. Voir `aTraiter`. */
@@ -244,6 +270,7 @@ async function aTraiter(limite: number): Promise<{ siteId: string; userId: strin
             { releve: true },
             { redaction: true },
             { assistants: true },
+            { point: true },
           ],
           site: { deletedAt: null },
         },
@@ -368,11 +395,13 @@ export async function tournerQuotidien(
     articles: 0,
     depots: 0,
     questionsIa: 0,
+    points: 0,
     echecs: 0,
   }
   if (sansRedaction) {
     bilan.redactionsDues = 0
     bilan.relevesIaDus = 0
+    bilan.pointsDus = 0
   }
   const candidats = await aTraiter(limite)
   const maintenant = new Date()
@@ -389,7 +418,13 @@ export async function tournerQuotidien(
       if (site === null) continue
 
       const reglages = await lireReglages(candidat.userId, candidat.siteId)
-      const fait: { indexeAt?: Date; releveAt?: Date; redigeAt?: Date; assistantsAt?: Date } = {}
+      const fait: {
+        indexeAt?: Date
+        releveAt?: Date
+        redigeAt?: Date
+        assistantsAt?: Date
+        pointAt?: Date
+      } = {}
 
       if (reglages.indexation) {
         const vue = await lireIndexation(candidat.userId, candidat.siteId)
@@ -481,6 +516,23 @@ export async function tournerQuotidien(
           } else if (questions > 0) {
             logger.info('relevé assistants différé : solde insuffisant', { site: candidat.siteId })
           }
+        }
+      }
+
+      /*
+       * Le point vient en dernier, et ce n'est pas un détail d'ordre : il lit ce que la
+       * nuit vient de produire. Le faire d'abord raconterait la semaine passée en ignorant
+       * le travail des dix minutes précédentes.
+       */
+      if (pointDu(reglages, maintenant)) {
+        if (sansRedaction) {
+          bilan.pointsDus = (bilan.pointsDus ?? 0) + 1
+        } else if ((await availableCredits(candidat.userId)) > 0) {
+          await fairePoint(candidat.userId, candidat.siteId, 'fr')
+          bilan.points += 1
+          fait.pointAt = maintenant
+        } else {
+          logger.info('point hebdomadaire différé : solde insuffisant', { site: candidat.siteId })
         }
       }
 

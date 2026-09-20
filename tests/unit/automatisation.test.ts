@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assistantsDus, redactionDue } from '@/server/audit/automatisation'
+import { assistantsDus, pointDu, redactionDue } from '@/server/audit/automatisation'
 
 /**
  * Ce qui décide qu'un article automatique part, ou ne part pas.
@@ -17,6 +17,7 @@ const ETEINT = {
   redaction: false,
   depot: false,
   assistants: false,
+  point: false,
   blogId: '',
   parPeriode: 1,
   periode: 'semaine' as const,
@@ -24,6 +25,7 @@ const ETEINT = {
   releveAt: null,
   redigeAt: null,
   assistantsAt: null,
+  pointAt: null,
 }
 
 const LE_20 = new Date('2026-09-20T03:00:00Z')
@@ -102,5 +104,28 @@ describe('le relevé dans les assistants', () => {
     expect(assistantsDus(base, LE_20)).toBe(true)
     // Un passage remet le compteur à ce jour-là : un seul relevé, pas douze.
     expect(assistantsDus({ ...base, assistantsAt: LE_20 }, LE_20)).toBe(false)
+  })
+})
+
+describe('le point hebdomadaire', () => {
+  it('ne part pas quand il n’est pas allumé', () => {
+    expect(pointDu({ ...ETEINT, pointAt: null }, LE_20)).toBe(false)
+  })
+
+  it('part une première fois, puis une fois par semaine', () => {
+    const base = { ...ETEINT, point: true }
+    expect(pointDu(base, LE_20)).toBe(true)
+    expect(pointDu({ ...base, pointAt: new Date('2026-09-15T03:00:00Z') }, LE_20)).toBe(false)
+    expect(pointDu({ ...base, pointAt: new Date('2026-09-13T03:00:00Z') }, LE_20)).toBe(true)
+  })
+
+  it('ne rattrape pas le retard', () => {
+    /*
+     * Un point hebdomadaire écrit trois fois d'affilée sur les mêmes chiffres ne dirait
+     * rien de plus et coûterait trois fois.
+     */
+    const base = { ...ETEINT, point: true, pointAt: new Date('2026-06-01T03:00:00Z') }
+    expect(pointDu(base, LE_20)).toBe(true)
+    expect(pointDu({ ...base, pointAt: LE_20 }, LE_20)).toBe(false)
   })
 })

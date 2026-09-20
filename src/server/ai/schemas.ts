@@ -129,6 +129,39 @@ export const questionsSuggereesSchema = z
 export type QuestionsSuggerees = z.infer<typeof questionsSuggereesSchema>
 
 /**
+ * Le point hebdomadaire de Léa.
+ *
+ * Trois actions au plus, et c'est la contrainte qui fait la valeur : une liste de douze
+ * choses à faire est une liste qu'on ne commence pas. Chaque action porte le fait mesuré
+ * qui la justifie — sans lui, c'est un conseil de magazine, et la personne n'a aucun moyen
+ * de juger s'il la concerne.
+ *
+ * Aucune longueur minimale dans le schéma : les sorties structurées ne transmettent pas les
+ * contraintes de chaîne au modèle, elles ne font que rejeter après coup. Ce qu'on attend se
+ * dit dans la consigne.
+ */
+export const actionPointSchema = z
+  .object({
+    quoi: z.string().max(200),
+    /** Le fait mesuré qui la justifie, repris tel quel. */
+    pourquoi: z.string().max(300),
+    /** audit | seo | geo | content : le spécialiste qui la porte. */
+    qui: z.enum(['audit', 'seo', 'geo', 'content']),
+  })
+  .strict()
+
+export const pointHebdoSchema = z
+  .object({
+    etat: z.string().max(1200),
+    actions: z.array(actionPointSchema).max(3),
+    /** Une phrase par spécialiste concerné, versée dans la mémoire de l'équipe. */
+    retenir: z.array(z.string().max(200)).max(4),
+  })
+  .strict()
+
+export type PointHebdoIA = z.infer<typeof pointHebdoSchema>
+
+/**
  * Une opportunité du Radar.
  *
  * C'est une idée, avec ce qui la rend explicable : pourquoi elle convient à CETTE

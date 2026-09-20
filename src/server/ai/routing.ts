@@ -113,6 +113,9 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   // Proposer des questions demande de la connaissance du marché, pas du raisonnement long :
   // le modèle rapide suffit, et l'appel est court.
   visibilityQuestions: { model: MODELS.fast, maxTokens: 4_000, effort: 'low' },
+  // Le point regarde tout et doit trancher : c'est du raisonnement, sur un long contexte et
+  // une réponse courte. C'est exactement le cas où le modèle de raisonnement se justifie.
+  visibilityPoint: { model: MODELS.reasoning, maxTokens: 4_000, effort: 'medium' },
 }
 
 export type TokenUsage = {

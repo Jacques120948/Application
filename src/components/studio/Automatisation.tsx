@@ -20,6 +20,7 @@ export type ReglagesVus = {
   redaction: boolean
   depot: boolean
   assistants: boolean
+  point: boolean
   blogId: string
   parPeriode: number
   periode: 'semaine' | 'mois'
@@ -70,6 +71,7 @@ export function Automatisation({
   rechercheReliee,
   questionsIa,
   coutIa,
+  coutPoint,
 }: {
   siteId: string
   initiaux: ReglagesVus
@@ -80,6 +82,7 @@ export function Automatisation({
   /** Combien de questions sont suivies : c'est ce qui décide de la dépense hebdomadaire. */
   questionsIa: number
   coutIa: number
+  coutPoint: number
 }) {
   const [reglages, setReglages] = useState<ReglagesVus>(initiaux)
   const [occupe, setOccupe] = useState(false)
@@ -155,6 +158,12 @@ export function Automatisation({
             detail="Milo écrit sur la recherche qui vient en tête du calendrier, dans sa langue. Vous relisez ensuite, comme d’habitude."
             actif={reglages.redaction}
             onChange={(redaction) => changer({ redaction })}
+          />
+          <Interrupteur
+            titre="Le point hebdomadaire de Léa"
+            detail={`Une fois par semaine, Léa regarde tout — l’analyse, les pannes, l’indexation, vos chiffres de recherche, ce qui a été publié, votre visibilité dans les assistants — et dit où vous en êtes et par quoi continuer. Environ ${coutPoint} crédits par semaine. Ses conclusions passent aussi à Néo, Gia et Milo.`}
+            actif={reglages.point}
+            onChange={(point) => changer({ point })}
           />
           <Interrupteur
             titre="Poser vos questions aux assistants chaque semaine"

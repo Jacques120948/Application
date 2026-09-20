@@ -39,6 +39,7 @@ import {
   GENERATE_PAGE_SYSTEM,
   GENERATE_PLAN_SYSTEM,
   IDEAS_SYSTEM,
+  POINT_SYSTEM,
   QUESTIONS_SYSTEM,
   SPECSHEET_SYSTEM,
   VALIDATION_SYSTEM,
@@ -54,7 +55,9 @@ import {
   blueprintSchema,
   editResponseSchema,
   ideasSchema,
+  pointHebdoSchema,
   questionsSuggereesSchema,
+  type PointHebdoIA,
   type QuestionsSuggerees,
   pageContentSchemaFor,
   specSheetSchema,
@@ -1586,6 +1589,39 @@ export async function suggestQuestions(params: {
         ? "Aucune question n'est encore suivie."
         : asUserData('questions_deja_suivies', JSON.stringify(params.deja, null, 2)),
       'Propose les questions.',
+    ].join('\n\n'),
+  })
+}
+
+/**
+ * Le point hebdomadaire de Léa.
+ *
+ * Tout ce qui est mesuré part en donnée, source par source, et les sources absentes partent
+ * aussi — nommées comme absentes. C'est ce qui permet à Léa de se taire sur ce qu'elle n'a
+ * pas, au lieu de le combler : un modèle à qui l'on cache qu'il manque quelque chose
+ * suppose, et une supposition dans un point hebdomadaire devient une décision.
+ */
+export async function writePoint(params: {
+  userId: string
+  host: string
+  locale: string
+  /** Chaque source, déjà résumée par le serveur, ou `null` quand elle n'existe pas. */
+  sources: Record<string, unknown>
+  /** Le point précédent, pour dire ce qui a bougé. */
+  precedent: string | null
+}): Promise<RunResult<PointHebdoIA>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'visibilityPoint' },
+    system: POINT_SYSTEM,
+    schema: pointHebdoSchema,
+    userContent: [
+      `Langue du point : ${params.locale}.`,
+      `Site concerné : ${params.host}`,
+      asUserData('ce_qui_est_mesure', JSON.stringify(params.sources, null, 2)),
+      params.precedent === null
+        ? "C'est le premier point sur ce site : il n'y a rien à comparer, ne fais pas semblant."
+        : asUserData('point_precedent', params.precedent),
+      'Fais le point.',
     ].join('\n\n'),
   })
 }

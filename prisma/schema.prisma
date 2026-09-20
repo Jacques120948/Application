@@ -98,6 +98,7 @@ model User {
   siteAutomatisations  SiteAutomatisation[]
   promptsIa            PromptIA[]
   relevesIa            ReleveIA[]
+  pointsHebdo          PointHebdo[]
   releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
@@ -1240,6 +1241,7 @@ model Site {
   automatisation SiteAutomatisation?
   promptsIa      PromptIA[]
   relevesIa      ReleveIA[]
+  points         PointHebdo[]
   releves        ReleveRecherche[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
@@ -1455,6 +1457,8 @@ model SiteAutomatisation {
   depot      Boolean @default(false)
   /// Poser chaque semaine les questions suivies aux assistants. Dépense des crédits.
   assistants Boolean @default(false)
+  /// Le point hebdomadaire de Léa sur l'ensemble du site. Dépense des crédits.
+  point      Boolean @default(false)
 
   /// Le blog Shopify qui reçoit les dépôts. Vide : le premier de la boutique.
   blogId     String @default("")
@@ -1472,6 +1476,7 @@ model SiteAutomatisation {
   passageAt      DateTime?
   /// Combien de questions ce passage couvre. L'avancement se compte sur les relevés écrits.
   passageAttendu Int       @default(0)
+  pointAt        DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1562,6 +1567,31 @@ model ReleveIA {
   user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([promptId, createdAt(sort: Desc)])
+  @@index([siteId, createdAt(sort: Desc)])
+}
+
+/// Le point hebdomadaire de Léa : où en est ce site, et par quoi continuer.
+///
+/// Conservé plutôt que recalculé : il coûte un appel, et il date — « voilà où vous en étiez
+/// lundi » se compare au lundi suivant.
+model PointHebdo {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// Où en est ce site, en quelques phrases, sur des faits mesurés.
+  etat      String @default("")
+  /// Les prochaines actions : quoi, pourquoi, et par quel spécialiste.
+  actions   Json   @default("[]")
+  /// Ce qui a servi à l'écrire, pour relire un point ancien sans deviner.
+  fondement Json   @default("{}")
+
+  creditsSpent Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([siteId, createdAt(sort: Desc)])
 }
 

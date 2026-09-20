@@ -71,6 +71,14 @@ export type CreditedOperation =
    * que la boutique vend. Rien n'est enregistré : elle choisit, puis ajoute.
    */
   | 'visibilityQuestions'
+  /**
+   * Le point hebdomadaire : où en est ce site, et par quoi continuer.
+   *
+   * Un appel par semaine et par site, sur tout ce qui est mesuré. C'est la seule opération
+   * du produit qui regarde l'ensemble plutôt qu'un écran ; son coût est celui d'un long
+   * contexte lu, pas d'une longue réponse écrite.
+   */
+  | 'visibilityPoint'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -144,6 +152,7 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    */
   visibilityArticle: 8,
   visibilityQuestions: 1,
+  visibilityPoint: 3,
 }
 
 /**

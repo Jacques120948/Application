@@ -16,6 +16,7 @@ const input = z.object({
   redaction: z.boolean().optional(),
   depot: z.boolean().optional(),
   assistants: z.boolean().optional(),
+  point: z.boolean().optional(),
   blogId: z.string().max(200).optional(),
   parPeriode: z.number().int().min(1).max(3).optional(),
   periode: z.enum(['semaine', 'mois']).optional(),

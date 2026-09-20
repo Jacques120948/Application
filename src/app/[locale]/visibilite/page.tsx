@@ -10,6 +10,8 @@ import { parseTargetUrl } from '@/server/audit/net'
 import { Shell } from '@/components/studio/Shell'
 import { SiteBoard } from '@/components/studio/SiteBoard'
 import { TableauVisibilite } from '@/components/studio/TableauVisibilite'
+import { PointHebdo } from '@/components/studio/PointHebdo'
+import { dernierPoint } from '@/server/audit/point'
 
 /**
  * L'écran de la visibilité : le tableau de bord, puis l'ajout d'un site.
@@ -69,10 +71,11 @@ export default async function VisibilitePage({
    * rend trente lignes se referme, et « par quoi je commence » est la seule question que se
    * pose quelqu'un devant cet écran. L'historique montre le reste.
    */
-  const [plan, cout, alertes] = await Promise.all([
+  const [plan, cout, alertes, point] = await Promise.all([
     tableau === null ? null : readPlan(user.id, tableau.site.id),
     estimerCorrection(),
     tableau === null ? [] : listWatches(user.id, tableau.site.id),
+    tableau === null ? null : dernierPoint(user.id, tableau.site.id).catch(() => null),
   ])
   const lignes = (plan?.lignes ?? []).slice(0, PRIORITES_MAX)
 
@@ -85,6 +88,29 @@ export default async function VisibilitePage({
             ? 'Ajoutez un site, lancez son analyse, et suivez ce qu’il faut corriger.'
             : 'Deux notes, ce qu’il faut corriger en premier, et ce que ça a donné depuis la dernière fois.'}
         </p>
+
+        {/*
+          Le point ouvre l'écran. C'est le seul endroit du produit qui réponde à « par quoi
+          je commence » ; tout le reste répond à « où en suis-je », qui est une autre
+          question et qu'on se pose moins souvent.
+        */}
+        {tableau === null ? null : (
+          <div className="mb-8">
+            <PointHebdo
+              locale={locale}
+              href={`/${locale}/visibilite/automatisation?siteId=${tableau.site.id}`}
+              point={
+                point === null
+                  ? null
+                  : {
+                      etat: point.etat,
+                      actions: point.actions,
+                      createdAt: point.createdAt.toISOString(),
+                    }
+              }
+            />
+          </div>
+        )}
 
         {tableau === null ? null : (
           <div className="mb-10">

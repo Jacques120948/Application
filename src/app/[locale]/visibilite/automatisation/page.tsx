@@ -46,6 +46,7 @@ export default async function AutomatisationPage({
     actionCosts(),
   ])
   const coutIa = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia')?.max ?? 3
+  const coutPoint = couts.find((ligne: ActionCost) => ligne.id === 'point')?.max ?? 5
 
   return (
     <Shell
@@ -78,6 +79,7 @@ export default async function AutomatisationPage({
             redaction: reglages.redaction,
             depot: reglages.depot,
             assistants: reglages.assistants,
+            point: reglages.point,
             blogId: reglages.blogId,
             parPeriode: reglages.parPeriode,
             periode: reglages.periode,
@@ -87,6 +89,7 @@ export default async function AutomatisationPage({
           rechercheReliee={recherche}
           questionsIa={prompts.filter((prompt) => prompt.actif).length}
           coutIa={coutIa}
+          coutPoint={coutPoint}
         />
       </div>
     </Shell>

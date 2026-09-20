@@ -53,6 +53,7 @@ const PROTECTED_TABLES = [
   'ReleveRecherche',
   'PromptIA',
   'ReleveIA',
+  'PointHebdo',
 ] as const
 
 /*

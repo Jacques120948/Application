@@ -68,6 +68,11 @@ export const DEFAULT_ACTION_COSTS: readonly ActionCost[] = [
    * et lui facturer nos réglages serait malhonnête.
    */
   { id: 'visibilite-ia', label: 'Mesurer une question dans les assistants', min: 3, max: 3 },
+  /*
+   * Le point hebdomadaire : un long contexte lu, une réponse courte. Son coût est celui de
+   * la lecture, pas de l'écriture — d'où une fourchette étroite malgré la portée.
+   */
+  { id: 'point', label: 'Le point hebdomadaire de Léa', min: 3, max: 6 },
 ]
 
 /** Clé de réglage : les fourchettes annoncées, en JSON. */
