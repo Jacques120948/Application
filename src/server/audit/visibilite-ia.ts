@@ -474,3 +474,203 @@ export async function proposerQuestions(
     }))
     .filter((proposee: QuestionProposee) => proposee.question.length >= 8)
 }
+
+// ───────────────────────── Le tableau de bord ────────────────────────────────
+
+/**
+ * Ce qu'on peut dire honnêtement d'une période, et ce qu'on ne dira pas.
+ *
+ * Trois chiffres par plateforme — des relevés, des mentions, et le rapport des deux — plus
+ * une variation contre la période précédente de même durée. C'est tout ce que la donnée
+ * porte, et c'est déjà beaucoup : une fréquence qui passe de 20 % à 35 % sur trois mois est
+ * une information que personne d'autre ne donne.
+ *
+ * Ce qui n'y figure pas mérite d'être dit : aucune « part de voix ». Une part de voix
+ * suppose de compter les mentions de chaque marque dans chaque réponse, donc de décider ce
+ * qui est une marque — et de le faire assez bien pour qu'un pourcentage veuille dire quelque
+ * chose. Ce qu'on a, ce sont les pages que les assistants citent. C'est un fait, pas une
+ * estimation, et c'est sous ce nom qu'il est rendu.
+ */
+export type CartePlateforme = {
+  plateforme: Plateforme
+  releves: number
+  mentions: number
+  /** Part des relevés où la marque apparaît, en pourcentage entier. */
+  frequence: number
+  /** Écart de fréquence avec la période précédente, ou `null` s'il n'y a rien à comparer. */
+  variation: number | null
+  /** Fréquence par semaine, de la plus ancienne à la plus récente. Pour la courbe. */
+  serie: number[]
+}
+
+export type SiteCite = {
+  domaine: string
+  citations: number
+  /** Vrai quand c'est le site de la personne. */
+  sien: boolean
+}
+
+export type TableauIA = {
+  jours: number
+  plateformes: CartePlateforme[]
+  /** Toutes plateformes confondues. */
+  releves: number
+  mentions: number
+  frequence: number
+  variation: number | null
+  /** Questions citées sur toutes les plateformes interrogées. */
+  citeesPartout: number
+  questions: number
+  sentiment: string
+  /** Les pages citées par les assistants, la sienne comprise, les plus vues d'abord. */
+  sites: SiteCite[]
+  /** Le nombre d'adresses distinctes citées : la taille du terrain. */
+  sourcesUniques: number
+}
+
+/** Le domaine d'une adresse, sans « www. », ou une chaîne vide si elle est illisible. */
+function domaineDe(adresse: string): string {
+  try {
+    return new URL(adresse).hostname.replace(/^www\./u, '').toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+function pourcent(mentions: number, releves: number): number {
+  return releves === 0 ? 0 : Math.round((mentions / releves) * 100)
+}
+
+/**
+ * Le tableau de bord d'une période.
+ *
+ * La période précédente est lue en même temps, et de même durée : « 35 % » ne dit rien,
+ * « 35 %, contre 22 % le mois d'avant » dit tout. C'est la seule façon de rendre un chiffre
+ * de visibilité utile — il ne se juge pas dans l'absolu, personne ne sait ce qu'est une
+ * bonne fréquence dans un assistant.
+ */
+export async function tableauIA(userId: string, siteId: string, jours = 30): Promise<TableauIA> {
+  const site = await withUserScope(userId, (tx) =>
+    tx.site.findFirst({
+      where: { id: siteId, userId, deletedAt: null },
+      select: { host: true },
+    }),
+  )
+  if (site === null) throw notFound('Ce site est introuvable.')
+
+  const maintenant = Date.now()
+  const debut = new Date(maintenant - jours * 24 * 60 * 60 * 1000)
+  const debutAvant = new Date(maintenant - 2 * jours * 24 * 60 * 60 * 1000)
+
+  const lignes = await withUserScope(userId, (tx) =>
+    tx.releveIA.findMany({
+      where: { siteId, userId, createdAt: { gte: debutAvant } },
+      select: {
+        promptId: true,
+        plateforme: true,
+        mentionne: true,
+        sentiment: true,
+        sources: true,
+        createdAt: true,
+      },
+    }),
+  )
+
+  const actuels = lignes.filter((ligne) => ligne.createdAt >= debut)
+  const anciens = lignes.filter((ligne) => ligne.createdAt < debut)
+
+  const plateformes: CartePlateforme[] = []
+  for (const plateforme of plateformesDisponibles()) {
+    const siens = actuels.filter((ligne) => ligne.plateforme === plateforme)
+    const avant = anciens.filter((ligne) => ligne.plateforme === plateforme)
+    const mentions = siens.filter((ligne) => ligne.mentionne).length
+    const frequence = pourcent(mentions, siens.length)
+
+    /*
+     * La courbe est hebdomadaire, quelle que soit la fenêtre : un point par jour sur trente
+     * jours montrerait surtout l'aléa des assistants, qui est ce qu'on veut lisser.
+     */
+    const semaines = Math.max(1, Math.ceil(jours / 7))
+    const serie: number[] = []
+    for (let rang = semaines - 1; rang >= 0; rang -= 1) {
+      const fin = new Date(maintenant - rang * 7 * 24 * 60 * 60 * 1000)
+      const ouverture = new Date(fin.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const tranche = siens.filter(
+        (ligne) => ligne.createdAt >= ouverture && ligne.createdAt < fin,
+      )
+      serie.push(pourcent(tranche.filter((ligne) => ligne.mentionne).length, tranche.length))
+    }
+
+    plateformes.push({
+      plateforme,
+      releves: siens.length,
+      mentions,
+      frequence,
+      variation:
+        avant.length === 0
+          ? null
+          : frequence - pourcent(avant.filter((ligne) => ligne.mentionne).length, avant.length),
+      serie,
+    })
+  }
+
+  const mentions = actuels.filter((ligne) => ligne.mentionne).length
+  const frequence = pourcent(mentions, actuels.length)
+  const frequenceAvant =
+    anciens.length === 0
+      ? null
+      : pourcent(anciens.filter((ligne) => ligne.mentionne).length, anciens.length)
+
+  /*
+   * Citée partout : la question sort sur chaque plateforme interrogée. C'est le seul cas où
+   * l'on peut dire qu'une marque « est visible » sur un sujet sans forcer le mot.
+   */
+  const parQuestion = new Map<string, Set<string>>()
+  for (const ligne of actuels) {
+    if (!ligne.mentionne) continue
+    const vues = parQuestion.get(ligne.promptId) ?? new Set<string>()
+    vues.add(ligne.plateforme)
+    parQuestion.set(ligne.promptId, vues)
+  }
+  const attendues = plateformes.filter((carte) => carte.releves > 0).length
+  const citeesPartout = [...parQuestion.values()].filter(
+    (vues) => attendues > 0 && vues.size >= attendues,
+  ).length
+
+  const tons = new Map<string, number>()
+  for (const ligne of actuels) {
+    if (!ligne.mentionne) continue
+    tons.set(ligne.sentiment, (tons.get(ligne.sentiment) ?? 0) + 1)
+  }
+  const sentiment = [...tons.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'inconnu'
+
+  const sien = site.host.replace(/^www\./u, '').toLowerCase()
+  const citations = new Map<string, number>()
+  for (const ligne of actuels) {
+    const liste = Array.isArray(ligne.sources) ? ligne.sources : []
+    for (const source of liste) {
+      if (typeof source !== 'string') continue
+      const domaine = domaineDe(source)
+      if (domaine === '') continue
+      citations.set(domaine, (citations.get(domaine) ?? 0) + 1)
+    }
+  }
+  const sites = [...citations.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([domaine, nombre]) => ({ domaine, citations: nombre, sien: domaine === sien }))
+
+  return {
+    jours,
+    plateformes,
+    releves: actuels.length,
+    mentions,
+    frequence,
+    variation: frequenceAvant === null ? null : frequence - frequenceAvant,
+    citeesPartout,
+    questions: parQuestion.size,
+    sentiment,
+    sites,
+    sourcesUniques: citations.size,
+  }
+}

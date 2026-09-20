@@ -3,11 +3,12 @@ import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
-import { lireFrequences } from '@/server/audit/visibilite-ia'
+import { lireFrequences, tableauIA } from '@/server/audit/visibilite-ia'
 import { actionCosts, type ActionCost } from '@/server/billing/action-costs'
 import { plateformesDisponibles } from '@/server/integrations/providers/assistants'
 import { Shell } from '@/components/studio/Shell'
 import { VisibiliteIA } from '@/components/studio/VisibiliteIA'
+import { TableauIA } from '@/components/studio/TableauIA'
 
 /**
  * Votre marque dans les assistants.
@@ -26,7 +27,7 @@ export default async function AssistantsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ siteId?: string }>
+  searchParams: Promise<{ siteId?: string; vue?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -39,9 +40,15 @@ export default async function AssistantsPage({
   ])
   if (tableau === null) redirect(`/${locale}/visibilite`)
 
-  const [frequences, couts] = await Promise.all([
+  /*
+   * Deux vues sur la même donnée, et l'onglet voyage dans l'adresse : elle se met en favori
+   * et survit au rafraîchissement, comme le filtre par pays et le rythme du calendrier.
+   */
+  const surLesQuestions = demande.vue === 'questions'
+  const [frequences, couts, bord] = await Promise.all([
     lireFrequences(user.id, tableau.site.id, JOURS),
     actionCosts(),
+    tableauIA(user.id, tableau.site.id, JOURS),
   ])
   const cout = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia')?.max ?? 3
   const plateformes = plateformesDisponibles()
@@ -69,6 +76,29 @@ export default async function AssistantsPage({
           promettre — mais on peut le mesurer, en posant la question et en lisant la réponse.
         </p>
 
+        <nav className="mb-6 flex flex-wrap gap-2" aria-label="Vue">
+          {[
+            { cle: '', label: 'Vue d’ensemble' },
+            { cle: 'questions', label: 'Mes questions' },
+          ].map((onglet) => {
+            const actif = (onglet.cle === 'questions') === surLesQuestions
+            return (
+              <a
+                key={onglet.label}
+                href={`/${locale}/visibilite/assistants?siteId=${tableau.site.id}${onglet.cle === '' ? '' : `&vue=${onglet.cle}`}`}
+                aria-current={actif ? 'true' : undefined}
+                className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
+                  actif
+                    ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+                    : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+                }`}
+              >
+                {onglet.label}
+              </a>
+            )
+          })}
+        </nav>
+
         {plateformes.length === 0 ? (
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
             <p className="m-0 text-sm leading-relaxed">
@@ -76,6 +106,8 @@ export default async function AssistantsPage({
               moins une clé d’API côté serveur.
             </p>
           </div>
+        ) : !surLesQuestions ? (
+          <TableauIA tableau={bord} />
         ) : (
           <VisibiliteIA
             siteId={tableau.site.id}
