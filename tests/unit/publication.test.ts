@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { enHtml } from '@/server/commerce/publication'
+import { auteur, choisirBlog, enHtml } from '@/server/commerce/publication'
 import { deposerBrouillon } from '@/server/integrations/providers/shopify'
 
 /**
@@ -169,5 +169,82 @@ describe('le dépôt du brouillon, quand Shopify refuse', () => {
     expect(depot.ok).toBe(true)
     if (!depot.ok) return
     expect(depot.article.id).toBe('gid://shopify/Article/42')
+  })
+
+  it('transmet l’image à la une quand il y en a une, et rien sinon', async () => {
+    /*
+     * Sans image à la une, l'article paraît nu sur la liste du blog et dans les partages.
+     * Elle voyage par son adresse : Shopify va la chercher là où la boutique la sert déjà.
+     */
+    repond({
+      data: { articleCreate: { article: { id: 'gid://shopify/Article/42' }, userErrors: [] } },
+    })
+
+    await deposerBrouillon(ACCES, 'jeton', {
+      ...BROUILLON,
+      image: { url: 'https://cdn.shopify.com/obsidienne.jpg', altText: 'Obsidienne noire' },
+    })
+    const envoye = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]?.[1]?.body ?? '{}') as string,
+    ) as { variables?: { article?: Record<string, unknown> } }
+    expect(envoye.variables?.article?.image).toEqual({
+      url: 'https://cdn.shopify.com/obsidienne.jpg',
+      altText: 'Obsidienne noire',
+    })
+
+    vi.mocked(fetch).mockClear()
+    await deposerBrouillon(ACCES, 'jeton', BROUILLON)
+    const sansImage = JSON.parse(
+      (vi.mocked(fetch).mock.calls[0]?.[1]?.body ?? '{}') as string,
+    ) as { variables?: { article?: Record<string, unknown> } }
+    expect(sansImage.variables?.article).not.toHaveProperty('image')
+  })
+})
+
+describe('le blog qui reçoit l’article', () => {
+  const BLOGS = [
+    { id: 'gid://shopify/Blog/1', titre: 'Bougies' },
+    { id: 'gid://shopify/Blog/2', titre: 'Minéraux' },
+    { id: 'gid://shopify/Blog/3', titre: 'Bijoux' },
+  ]
+
+  it('prend celui qu’on a désigné', () => {
+    expect(choisirBlog(BLOGS, 'gid://shopify/Blog/2')?.titre).toBe('Minéraux')
+  })
+
+  it('retombe sur le premier quand rien n’est demandé', () => {
+    expect(choisirBlog(BLOGS, undefined)?.titre).toBe('Bougies')
+    expect(choisirBlog(BLOGS, '')?.titre).toBe('Bougies')
+  })
+
+  it('refuse un identifiant qui n’est pas dans la liste', () => {
+    /*
+     * La règle qui compte. L'identifiant vient du navigateur ; s'il n'est pas dans ce que
+     * la boutique vient de rendre, il ne désigne rien qu'on ait le droit d'écrire. Le
+     * remplacer par le premier venu déposerait ailleurs que là où la personne a dit — et
+     * un article déposé au mauvais endroit ne se rattrape pas.
+     */
+    expect(choisirBlog(BLOGS, 'gid://shopify/Blog/999')).toBeUndefined()
+    expect(choisirBlog(BLOGS, 'gid://shopify/Article/1')).toBeUndefined()
+  })
+
+  it('ne rend rien quand la boutique n’a aucun blog', () => {
+    expect(choisirBlog([], undefined)).toBeUndefined()
+  })
+})
+
+describe('l’auteur de l’article déposé', () => {
+  it('est le nom de la boutique, pas celui d’Evoliia', () => {
+    /*
+     * L'article paraît chez le marchand, sous sa marque. Signer du nom de l'outil qui l'a
+     * mis en forme reviendrait à mettre le nom de son traitement de texte au bas de ses
+     * lettres.
+     */
+    expect(auteur('Cap-Nature', 'cap-nature.myshopify.com')).toBe('Cap-Nature')
+  })
+
+  it('retombe sur la poignée quand Shopify ne rend pas de nom', () => {
+    expect(auteur('', 'cap-nature.myshopify.com')).toBe('cap-nature')
+    expect(auteur('   ', 'cap-nature.myshopify.com')).toBe('cap-nature')
   })
 })

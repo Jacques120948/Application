@@ -9,6 +9,7 @@ import {
   frapperJeton,
   lireAcces,
   lireBlogs,
+  type AccesShopify,
 } from '@/server/integrations/providers/shopify'
 import { readArticle } from '@/server/audit/articles'
 import { SHOPIFY_FEATURE } from './boutique'
@@ -34,8 +35,22 @@ import { SHOPIFY_FEATURE } from './boutique'
  * travail.
  */
 
-/** Ce qu'on écrit comme auteur dans Shopify. Le marchand le change s'il veut. */
-const AUTEUR = 'Evoliia'
+/**
+ * L'auteur de l'article, tel qu'il s'affiche sur la boutique.
+ *
+ * C'est le nom de la boutique, pas celui d'Evoliia. L'article paraît chez le marchand,
+ * sous sa marque, et signer du nom de l'outil qui l'a mis en forme reviendrait à mettre
+ * le nom de son traitement de texte au bas de ses lettres. Le marchand le change dans
+ * Shopify s'il préfère autre chose.
+ *
+ * Quand Shopify ne rend pas de nom, on retombe sur la poignée de la boutique — moins
+ * joli, toujours le sien.
+ */
+export function auteur(nomDeBoutique: string, boutique: string): string {
+  const propre = nomDeBoutique.trim()
+  if (propre !== '') return propre.slice(0, 100)
+  return boutique.replace(/\.myshopify\.com$/u, '')
+}
 
 /** Échappe ce qui partirait pour du HTML. Le texte vient d'un modèle, jamais de confiance. */
 function echapper(texte: string): string {
@@ -109,34 +124,16 @@ function questionsEnHtml(questions: readonly { question: string; reponse: string
   return `\n<h2>Questions fréquentes</h2>\n${blocs}`
 }
 
-export type Depot = {
-  /** L'identifiant Shopify de l'article créé. */
-  shopifyId: string
-  /** L'adresse de l'écran Shopify où le relire et le publier. */
-  lien: string
-  blog: string
-}
-
 /**
- * Dépose un article rédigé dans le blog Shopify, en brouillon.
+ * Ouvre la boutique : la connexion, l'offre, puis le jeton.
  *
- * L'ordre des vérifications compte : on refuse d'abord ce qui n'a pas lieu d'être — article
- * inconnu, déjà déposé, offre qui ne l'ouvre pas — avant de toucher au réseau. Un appel
- * lancé puis regretté laisserait un brouillon orphelin dans la boutique de quelqu'un.
+ * Mis en commun parce que deux entrées en ont besoin — lister les blogs pour choisir, et
+ * déposer dedans. L'ordre ne change pas : ce qui n'a pas lieu d'être est refusé avant de
+ * toucher au réseau.
  */
-export async function deposerDansShopify(userId: string, articleId: string): Promise<Depot> {
-  const article = await readArticle(userId, articleId)
-
-  const deja = await withUserScope(userId, (tx) =>
-    tx.siteArticle.findFirst({
-      where: { id: articleId, userId },
-      select: { shopifyId: true, shopifyUrl: true },
-    }),
-  )
-  if (deja?.shopifyId != null && deja.shopifyId !== '') {
-    throw validation('Cet article est déjà dans Shopify. Relisez-le là-bas.')
-  }
-
+async function ouvrirBoutique(
+  userId: string,
+): Promise<{ acces: AccesShopify; jeton: string; connectionId: string }> {
   const connexion = await useCredential(userId, 'shopify')
   if (connexion === null) {
     throw validation('Aucune boutique Shopify n’est connectée.')
@@ -155,20 +152,115 @@ export async function deposerDansShopify(userId: string, articleId: string): Pro
     throw new AppError('VALIDATION', frappe.raison)
   }
 
-  const blogs = await lireBlogs(acces, frappe.jeton)
+  return { acces, jeton: frappe.jeton, connectionId: connexion.connectionId }
+}
+
+/** Un blog de la boutique, tel que l'écran le propose. */
+export type BlogChoisissable = { id: string; titre: string }
+
+/**
+ * Le blog qui recevra l'article, parmi ceux que la boutique vient de rendre.
+ *
+ * Le choix vient du navigateur : il est retrouvé dans la liste, jamais employé tel quel.
+ * Sans cela, un identifiant fabriqué désignerait un blog d'une autre boutique — et une
+ * écriture qui accepte une cible non vérifiée est exactement la façon dont on dépose chez
+ * quelqu'un d'autre.
+ *
+ * Un choix devenu introuvable — blog supprimé entre l'affichage et le clic — rend
+ * `undefined` plutôt que le premier venu : déposer ailleurs que là où l'on a dit ne se
+ * rattrape pas, l'article est public dès qu'il est publié.
+ */
+export function choisirBlog<T extends { id: string }>(
+  blogs: readonly T[],
+  demande: string | undefined,
+): T | undefined {
+  if (demande === undefined || demande === '') return blogs[0]
+  return blogs.find((candidat) => candidat.id === demande)
+}
+
+/**
+ * Les blogs où l'article peut atterrir.
+ *
+ * Une boutique en a souvent plusieurs — « Bougies », « Minéraux », « Bijoux » — et déposer
+ * dans le premier que Shopify renvoie revient à choisir au hasard pour quelqu'un qui, lui,
+ * sait très bien où va son texte.
+ */
+export async function blogsDisponibles(userId: string): Promise<BlogChoisissable[]> {
+  const { acces, jeton } = await ouvrirBoutique(userId)
+  const blogs = await lireBlogs(acces, jeton)
   if (!blogs.ok) throw new AppError('VALIDATION', blogs.raison)
-  const blog = blogs.blogs[0]
-  if (blog === undefined) {
+  return blogs.blogs.map((blog) => ({ id: blog.id, titre: blog.titre }))
+}
+
+export type Depot = {
+  /** L'identifiant Shopify de l'article créé. */
+  shopifyId: string
+  /** L'adresse de l'écran Shopify où le relire et le publier. */
+  lien: string
+  blog: string
+}
+
+/**
+ * Dépose un article rédigé dans le blog Shopify, en brouillon.
+ *
+ * L'ordre des vérifications compte : on refuse d'abord ce qui n'a pas lieu d'être — article
+ * inconnu, déjà déposé, offre qui ne l'ouvre pas — avant de toucher au réseau. Un appel
+ * lancé puis regretté laisserait un brouillon orphelin dans la boutique de quelqu'un.
+ */
+export async function deposerDansShopify(
+  userId: string,
+  articleId: string,
+  blogDemande?: string,
+): Promise<Depot> {
+  const article = await readArticle(userId, articleId)
+
+  const deja = await withUserScope(userId, (tx) =>
+    tx.siteArticle.findFirst({
+      where: { id: articleId, userId },
+      select: { shopifyId: true, shopifyUrl: true },
+    }),
+  )
+  if (deja?.shopifyId != null && deja.shopifyId !== '') {
+    throw validation('Cet article est déjà dans Shopify. Relisez-le là-bas.')
+  }
+
+  const { acces, jeton } = await ouvrirBoutique(userId)
+
+  const blogs = await lireBlogs(acces, jeton)
+  if (!blogs.ok) throw new AppError('VALIDATION', blogs.raison)
+  if (blogs.blogs.length === 0) {
     throw validation(
       'Votre boutique n’a aucun blog. Créez-en un dans Shopify, puis réessayez.',
     )
   }
 
-  const depot = await deposerBrouillon(acces, frappe.jeton, {
+  const blog = choisirBlog(blogs.blogs, blogDemande)
+  if (blog === undefined) {
+    throw validation('Ce blog n’existe plus dans votre boutique. Rouvrez la page et réessayez.')
+  }
+
+  /*
+   * La première photo devient l'image à la une, et quitte le corps.
+   *
+   * Sans elle, l'article n'a pas de vignette : il apparaît nu sur la liste du blog et dans
+   * les partages, alors que la boutique a les photos qu'il faut. La retirer du corps évite
+   * de la voir deux fois — la plupart des thèmes affichent l'image à la une en tête de
+   * l'article, juste au-dessus du texte où elle se trouvait.
+   *
+   * C'est le seul endroit où cette distinction existe : l'écran d'Evoliia et la copie en
+   * Markdown gardent toutes les photos dans le texte, faute d'un « à la une » où la mettre.
+   */
+  const rangees = [...article.illustrations].sort((une, autre) => une.section - autre.section)
+  const [vedette, ...dansLeCorps] = rangees
+
+  const depot = await deposerBrouillon(acces, jeton, {
     blogId: blog.id,
     titre: article.titre,
-    auteur: AUTEUR,
-    corpsHtml: `<p>${echapper(article.chapo)}</p>\n${enHtml(article.corps, article.illustrations)}${questionsEnHtml(article.questions)}`,
+    auteur: auteur(blogs.boutique, acces.boutique),
+    ...(vedette === undefined
+      ? {}
+      : { image: { url: vedette.image, altText: vedette.alt } }),
+    corpsHtml: `<p>${echapper(article.chapo)}</p>\n${enHtml(article.corps, dansLeCorps)}${questionsEnHtml(article.questions)}`,
     resume: `<p>${echapper(article.chapo)}</p>`,
     metaTitle: article.metaTitle,
     metaDescription: article.metaDescription,

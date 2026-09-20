@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 /**
  * Les articles écrits par Milo.
@@ -243,7 +243,14 @@ export function ArticlesRediges({
   const [demande, setDemande] = useState(sujetPropose)
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
-  const [depot, setDepot] = useState<string | null>(null)
+  /*
+   * Le dépôt qu'on vient de faire, et l'article auquel il appartient.
+   *
+   * L'identifiant n'est pas décoratif : sans lui, déposer un article puis en ouvrir un
+   * second montrait au second le lien Shopify du premier, et l'invitait à relire un
+   * brouillon qui n'était pas le sien.
+   */
+  const [depot, setDepot] = useState<{ articleId: string; lien: string } | null>(null)
   /*
    * Le refus du dépôt a son propre état, et s'affiche sous le bouton.
    *
@@ -253,8 +260,47 @@ export function ArticlesRediges({
    * répondu, et expliqué pourquoi.
    */
   const [erreurDepot, setErreurDepot] = useState<string | null>(null)
+  /*
+   * Les blogs de la boutique, et celui qui recevra l'article.
+   *
+   * `null` tant que rien n'a été demandé : une boutique en a souvent plusieurs — Bougies,
+   * Minéraux, Bijoux — et déposer dans le premier que Shopify renvoie revient à choisir au
+   * hasard pour quelqu'un qui sait très bien où va son texte. La liste n'est demandée qu'à
+   * l'ouverture d'un article non déposé : chaque appel frappe un jeton chez Shopify, et
+   * personne ne doit attendre pour une liste qu'il ne regardera pas.
+   */
+  const [blogs, setBlogs] = useState<{ id: string; titre: string }[] | null>(null)
+  const [blogChoisi, setBlogChoisi] = useState('')
   const [envoi, setEnvoi] = useState(false)
   const [copie, setCopie] = useState(false)
+
+  /*
+   * Un seul chargement par visite, déclenché par l'ouverture d'un article pas encore
+   * déposé. Le relire ensuite ne redemande rien : la liste des blogs d'une boutique ne
+   * bouge pas pendant qu'on lit un article.
+   */
+  const lienDepot =
+    ouvert === null
+      ? null
+      : (ouvert.shopifyUrl ?? (depot?.articleId === ouvert.id ? depot.lien : null))
+  const aDeposer = ouvert !== null && lienDepot === null
+  useEffect(() => {
+    if (!aDeposer || blogs !== null) return
+    let vivant = true
+    void (async () => {
+      const response = await fetch('/api/boutique/blogs').catch(() => null)
+      const body = (await response?.json().catch(() => null)) as
+        | { blogs?: { id: string; titre: string }[] }
+        | null
+      if (!vivant) return
+      // Une liste absente n'est pas une erreur à montrer : le dépôt dira lui-même pourquoi.
+      setBlogs(body?.blogs ?? [])
+      setBlogChoisi(body?.blogs?.[0]?.id ?? '')
+    })()
+    return () => {
+      vivant = false
+    }
+  }, [aDeposer, blogs])
 
   async function ecrire() {
     if (occupe) return
@@ -295,7 +341,10 @@ export function ArticlesRediges({
     const body = (await response?.json().catch(() => null)) as
       | { article?: ArticleCompletVu }
       | null
-    if (body?.article !== undefined) setOuvert(body.article)
+    if (body?.article !== undefined) {
+      setErreurDepot(null)
+      setOuvert(body.article)
+    }
   }
 
   async function supprimer(id: string) {
@@ -317,6 +366,7 @@ export function ArticlesRediges({
     const response = await fetch(`/api/articles/${article.id}/shopify`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ blogId: blogChoisi }),
     }).catch(() => null)
     const body = (await response?.json().catch(() => null)) as
       | { lien?: string; blog?: string; message?: string }
@@ -326,7 +376,7 @@ export function ArticlesRediges({
       setErreurDepot(body?.message ?? 'Le dépôt dans Shopify n’a pas abouti.')
       return
     }
-    setDepot(body.lien)
+    setDepot({ articleId: article.id, lien: body.lien })
   }
 
   async function copier(article: ArticleCompletVu) {
@@ -553,9 +603,9 @@ export function ArticlesRediges({
                       un second envoi créerait un doublon dans la boutique.
                     */}
                     <div className="mt-4 grid gap-2 border-t border-[var(--color-line)] pt-4">
-                      {(ouvert.shopifyUrl ?? depot) !== null ? (
+                      {lienDepot !== null ? (
                         <a
-                          href={ouvert.shopifyUrl ?? depot ?? '#'}
+                          href={lienDepot}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-[var(--color-ink-soft)]"
@@ -564,6 +614,22 @@ export function ArticlesRediges({
                         </a>
                       ) : (
                         <>
+                          {blogs === null || blogs.length < 2 ? null : (
+                            <label className="block">
+                              <span className="text-sm font-medium">Dans quel blog ?</span>
+                              <select
+                                value={blogChoisi}
+                                onChange={(event) => setBlogChoisi(event.target.value)}
+                                className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-4 py-2.5 text-sm"
+                              >
+                                {blogs.map((blog) => (
+                                  <option key={blog.id} value={blog.id}>
+                                    {blog.titre}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          )}
                           <button
                             type="button"
                             disabled={envoi}

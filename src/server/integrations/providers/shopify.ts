@@ -614,24 +614,38 @@ export async function lireProduits(
 
 export type BlogShopify = { id: string; titre: string; handle: string }
 
-const REQUETE_BLOGS = `{ blogs(first: 50) { nodes { id title handle } } }`
+/*
+ * Les blogs, et le nom de la boutique dans la même requête.
+ *
+ * Le nom sert d'auteur aux articles déposés. Le demander ici plutôt que dans un appel à
+ * part évite un aller-retour de plus à chaque dépôt, pour une donnée qui voyage déjà.
+ */
+const REQUETE_BLOGS = `{
+  shop { name }
+  blogs(first: 50) { nodes { id title handle } }
+}`
 
 /** Les blogs de la boutique. Il en faut un pour y déposer quoi que ce soit. */
 export async function lireBlogs(
   acces: AccesShopify,
   jeton: string,
-): Promise<{ ok: true; blogs: BlogShopify[] } | { ok: false; raison: string }> {
+): Promise<
+  { ok: true; blogs: BlogShopify[]; boutique: string } | { ok: false; raison: string }
+> {
   const reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_BLOGS)
   if (reponse.status !== 200 || reponse.data === null || reponse.erreurs.length > 0) {
     return { ok: false, raison: refus(reponse.status, reponse.erreurs) }
   }
 
-  const noeuds =
-    (reponse.data as { blogs?: { nodes?: { id?: string; title?: string; handle?: string }[] } })
-      .blogs?.nodes ?? []
+  const charge = reponse.data as {
+    shop?: { name?: string }
+    blogs?: { nodes?: { id?: string; title?: string; handle?: string }[] }
+  }
+  const noeuds = charge.blogs?.nodes ?? []
 
   return {
     ok: true,
+    boutique: decoderEntites(charge.shop?.name ?? ''),
     blogs: noeuds
       .filter((n): n is { id: string; title: string; handle: string } => typeof n.id === 'string')
       .map((n) => ({ id: n.id, titre: decoderEntites(n.title ?? ''), handle: n.handle ?? '' })),
@@ -669,6 +683,14 @@ export async function deposerBrouillon(
     resume: string
     metaTitle: string
     metaDescription: string
+    /**
+     * L'image à la une, celle que le thème montre sur la liste du blog.
+     *
+     * Shopify va la chercher à cette adresse et en garde une copie. L'adresse est celle
+     * d'une photo que la boutique héberge déjà : rien n'est créé, rien n'est facturé, et
+     * personne d'autre que le marchand n'en est l'auteur.
+     */
+    image?: { url: string; altText: string }
   },
 ): Promise<{ ok: true; article: ArticleDepose } | { ok: false; raison: string }> {
   const metachamps = [
@@ -687,6 +709,7 @@ export async function deposerBrouillon(
       summary: brouillon.resume,
       // Jamais vrai. Voir le commentaire ci-dessus.
       isPublished: false,
+      ...(brouillon.image === undefined ? {} : { image: brouillon.image }),
       ...(metachamps.length === 0 ? {} : { metafields: metachamps }),
     },
   })

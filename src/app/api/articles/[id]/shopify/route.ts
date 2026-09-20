@@ -18,7 +18,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const user = await requireUser()
     consume(`shopify:depot:${user.id}`, RULES.aiOperation)
     const { id } = await context.params
-    return ok(await deposerDansShopify(user.id, id))
+    /*
+     * Le blog choisi est lu tel quel, et vérifié plus loin contre la liste que Shopify
+     * rend au moment du dépôt. Une cible venue du navigateur ne se croit pas.
+     */
+    const corps = (await request.json().catch(() => null)) as { blogId?: unknown } | null
+    const blogId = typeof corps?.blogId === 'string' ? corps.blogId.slice(0, 200) : undefined
+    return ok(await deposerDansShopify(user.id, id, blogId))
   } catch (error) {
     return fail(error)
   }
