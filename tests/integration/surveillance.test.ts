@@ -141,6 +141,32 @@ describe('ce que la surveillance ne fait pas', () => {
     expect(passage).toEqual({ constats: 0, ouverts: 0, fermes: 0 })
   })
 
+  it('trouve les sites à contrôler malgré le cloisonnement', async () => {
+    /*
+     * Le défaut qui a rendu la surveillance inopérante depuis son écriture. Le planificateur
+     * lisait la table des sites directement ; `Site` étant sous Row Level Security forcé,
+     * la requête ne levait aucune erreur et rendait zéro ligne. La tâche tournait chaque
+     * semaine, répondait 200, et ne surveillait rien — la panne exacte que cette
+     * fonctionnalité existe pour détecter, retournée contre elle.
+     *
+     * Ce test n'a de valeur que parce qu'il tourne sous le rôle applicatif, avec les
+     * politiques actives. Appeler `surveillerSite` directement, comme les tests précédents,
+     * passe dans une portée d'utilisateur et ne voit donc jamais le problème.
+     */
+    const { runScheduledWatch } = await import('@/server/audit/surveillance')
+    const { setFlag } = await import('@/server/settings/flags')
+
+    await setFlag('surveillance', true)
+    try {
+      // Le site a déjà été contrôlé par les tests précédents : on le rend à nouveau éligible.
+      await prisma.site.updateMany({ where: { id: siteId }, data: { watchedAt: null } })
+      const passage = await runScheduledWatch({ limit: 50 })
+      expect(passage.examines).toBeGreaterThan(0)
+    } finally {
+      await setFlag('surveillance', false)
+    }
+  })
+
   it('répond au planificateur en GET comme en POST, et n’existe pas sans jeton', async () => {
     /*
      * Le GET n'est pas un confort : les tâches planifiées de Vercel n'appellent qu'ainsi,

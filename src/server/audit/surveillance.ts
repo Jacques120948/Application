@@ -3,6 +3,7 @@ import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { notify } from '@/server/notifications/service'
 import { isEnabled } from '@/server/settings/flags'
+import { readSetting, writeSetting } from '@/server/settings/store'
 import { visiter, type PageExploree } from './crawler'
 import type { Signaux } from './extract'
 
@@ -335,6 +336,79 @@ export type PassageSurveillance = {
  * contrôles d'un même site. Le nombre de sites examinés par appel est borné : un
  * planificateur qui appellerait dix fois ne coûterait pas dix fois plus.
  */
+/**
+ * Où la dernière tournée s'est arrêtée. Voir `aControler`.
+ */
+const CURSEUR = 'surveillance.curseur'
+
+/**
+ * Les sites à contrôler, en passant par la portée de chaque propriétaire.
+ *
+ * C'est le défaut qui a rendu la surveillance inopérante depuis son écriture, et il mérite
+ * d'être raconté ici plutôt que réparé en silence. La première version lisait la table des
+ * sites directement, en commentant que « le cloisonnement est repris juste après ». Or
+ * `Site` est sous Row Level Security forcé : hors de la portée d'un utilisateur, la
+ * politique ne rend aucune ligne. La requête ne levait pas d'erreur — elle rendait zéro
+ * site, chaque semaine, indéfiniment.
+ *
+ * C'est exactement la panne que la surveillance existe pour éviter, retournée contre elle :
+ * elle tournait, répondait 200, et ne surveillait rien. Rien dans les journaux ne disait
+ * autre chose que « passée ».
+ *
+ * La lecture passe donc par les utilisateurs, qui ne sont pas cloisonnés, puis par la
+ * portée de chacun. Le cloisonnement n'est pas contourné : il est respecté, un propriétaire
+ * à la fois. Aucune politique n'est assouplie, aucun rôle privilégié n'est introduit — ce
+ * qui serait la façon rapide, et la façon dont on perd l'isolation d'un produit.
+ *
+ * Un curseur mémorise où la tournée s'est arrêtée. Sans lui, les mêmes premiers comptes
+ * seraient servis chaque semaine et les derniers jamais : cinquante sites par passage sur
+ * mille comptes, c'est vingt semaines pour faire le tour, et il faut que ce tour existe.
+ */
+async function aControler(
+  depuis: Date,
+  limite: number,
+): Promise<{ id: string; userId: string }[]> {
+  const utilisateurs = await prisma.user.findMany({
+    where: { disabledAt: null },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  })
+  if (utilisateurs.length === 0) return []
+
+  const curseur = await readSetting(CURSEUR)
+  const reprise = curseur === null ? -1 : utilisateurs.findIndex((u) => u.id === curseur)
+  const depart = reprise < 0 ? 0 : reprise + 1
+  const tournee = [...utilisateurs.slice(depart), ...utilisateurs.slice(0, depart)]
+
+  const candidats: { id: string; userId: string }[] = []
+  let dernier: string | null = null
+
+  for (const utilisateur of tournee) {
+    if (candidats.length >= limite) break
+    const sites = await withUserScope(utilisateur.id, (tx) =>
+      tx.site.findMany({
+        where: {
+          userId: utilisateur.id,
+          deletedAt: null,
+          OR: [{ watchedAt: null }, { watchedAt: { lt: depuis } }],
+        },
+        select: { id: true },
+        orderBy: [{ watchedAt: 'asc' }, { createdAt: 'asc' }],
+        take: limite - candidats.length,
+      }),
+    )
+    candidats.push(...sites.map((site) => ({ id: site.id, userId: utilisateur.id })))
+    dernier = utilisateur.id
+  }
+
+  /*
+   * Le curseur ne va que jusqu'au dernier compte réellement examiné : s'arrêter sur la
+   * borne au milieu d'un compte et marquer le suivant lui ferait sauter son tour.
+   */
+  if (dernier !== null) await writeSetting(CURSEUR, dernier)
+  return candidats
+}
+
 export async function runScheduledWatch(
   options: { limit?: number } = {},
 ): Promise<PassageSurveillance> {
@@ -346,20 +420,8 @@ export async function runScheduledWatch(
   }
 
   const depuis = new Date(Date.now() - JOURS_ENTRE_CONTROLES * 24 * 60 * 60 * 1000)
-  /*
-   * Les sites sont cloisonnés : cette lecture ne sert qu'à savoir lesquels contrôler et pour
-   * qui. Tout ce qui suit repasse par la portée de leur propriétaire.
-   */
-  const candidats = await prisma.site.findMany({
-    where: {
-      deletedAt: null,
-      OR: [{ watchedAt: null }, { watchedAt: { lt: depuis } }],
-      user: { disabledAt: null },
-    },
-    select: { id: true, userId: true },
-    orderBy: [{ watchedAt: 'asc' }, { createdAt: 'asc' }],
-    take: options.limit ?? SITES_PAR_PASSAGE,
-  })
+  const limite = options.limit ?? SITES_PAR_PASSAGE
+  const candidats = await aControler(depuis, limite)
 
   for (const site of candidats) {
     passage.examines += 1
