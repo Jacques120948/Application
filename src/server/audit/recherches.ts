@@ -33,8 +33,8 @@ import {
  * d'Evoliia.
  *
  * **La page 2 est ce qu'on met devant.** Les listes brutes se regardent une fois. Ce qui
- * décide d'une action, c'est la poignée de pages qui sortent entre la onzième et la
- * vingtième place : elles ont déjà la matière pour figurer sur Google, et personne ne les
+ * décide d'une action, c'est la poignée de pages dont la position moyenne dépasse la
+ * dixième sans atteindre la vingtième : elles ont déjà la matière pour figurer sur Google, et personne ne les
  * voit. Quelques positions gagnées y valent plus qu'une page neuve, et c'est la seule
  * lecture du tableau qui désigne un travail plutôt qu'un constat.
  *

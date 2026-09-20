@@ -93,9 +93,10 @@ function Occasions({ occasions }: { occasions: Occasion[] }) {
     <section className="mt-8">
       <h2 className="m-0 text-base font-semibold">À portée de la première page</h2>
       <p className="mt-1 mb-3 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-        Ces pages sortent entre la onzième et la vingtième place : Google les montre déjà,
-        presque personne ne les voit. Quelques places gagnées y rapportent plus qu’une page
-        neuve, parce que la matière est là.
+        Ces pages sortent au-delà de la dixième place en moyenne, sans dépasser la
+        vingtième : selon la recherche, elles apparaissent en bas de la première page ou en
+        haut de la deuxième. Google les montre déjà, presque personne ne les voit. Quelques
+        places gagnées y rapportent plus qu’une page neuve, parce que la matière est là.
       </p>
       {occasions.length === 0 ? (
         <p className="m-0 text-sm text-[var(--color-ink-faint)]">
