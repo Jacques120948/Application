@@ -500,6 +500,13 @@ export function TableauVisibilite({
               Quoi écrire, et quand
             </LinkButton>
             <LinkButton
+              href={`/${locale}/visibilite/assistants?siteId=${site.id}`}
+              variant="secondary"
+              size="medium"
+            >
+              Votre marque dans les IA
+            </LinkButton>
+            <LinkButton
               href={`/${locale}/visibilite/automatisation?siteId=${site.id}`}
               variant="secondary"
               size="medium"
