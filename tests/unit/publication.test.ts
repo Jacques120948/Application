@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enHtml } from '@/server/commerce/publication'
+import { deposerBrouillon } from '@/server/integrations/providers/shopify'
 
 /**
  * La conversion d'un article vers le HTML que reçoit une boutique en ligne.
@@ -88,5 +89,85 @@ describe('ce que le connecteur ne fait jamais', () => {
     for (const interdite of ['productUpdate', 'productDelete', 'articleDelete', 'articleUpdate']) {
       expect(source).not.toContain(interdite)
     }
+  })
+})
+
+describe('le dépôt du brouillon, quand Shopify refuse', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const ACCES = {
+    boutique: 'cap-nature.myshopify.com',
+    clientId: 'x'.repeat(32),
+    clientSecret: 'y'.repeat(32),
+    version: '2025-07',
+  }
+
+  const BROUILLON = {
+    blogId: 'gid://shopify/Blog/1',
+    titre: 'Obsidienne noire',
+    auteur: 'Evoliia',
+    corpsHtml: '<p>Texte.</p>',
+    resume: '<p>Texte.</p>',
+    metaTitle: 'Obsidienne noire',
+    metaDescription: 'Une roche volcanique.',
+  }
+
+  function repond(charge: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(charge), { status: 200 })),
+    )
+  }
+
+  it('rend le motif quand la portée manque, au lieu de « rien renvoyé »', async () => {
+    /*
+     * La forme exacte d'un refus de portée : 200, le champ à null, et le motif au sommet
+     * de la réponse. Le lire seulement lorsque `data` est nul perdait la phrase — et
+     * l'écran disait « Shopify n'a rien renvoyé » à quelqu'un dont la seule chose à faire
+     * était d'ajouter une portée.
+     */
+    repond({
+      data: { articleCreate: null },
+      errors: [
+        {
+          message:
+            'Access denied for articleCreate field. Required access: `write_content` access scope.',
+        },
+      ],
+    })
+
+    const depot = await deposerBrouillon(ACCES, 'jeton', BROUILLON)
+    expect(depot.ok).toBe(false)
+    if (depot.ok) return
+    expect(depot.raison).toContain('write_content')
+  })
+
+  it('rend les reproches de la mutation quand elle en fait', async () => {
+    repond({
+      data: { articleCreate: { article: null, userErrors: [{ field: ['title'], message: 'est vide' }] } },
+    })
+
+    const depot = await deposerBrouillon(ACCES, 'jeton', BROUILLON)
+    expect(depot.ok).toBe(false)
+    if (depot.ok) return
+    expect(depot.raison).toContain('est vide')
+  })
+
+  it('accepte un dépôt propre', async () => {
+    repond({
+      data: {
+        articleCreate: {
+          article: { id: 'gid://shopify/Article/42', handle: 'obsidienne-noire' },
+          userErrors: [],
+        },
+      },
+    })
+
+    const depot = await deposerBrouillon(ACCES, 'jeton', BROUILLON)
+    expect(depot.ok).toBe(true)
+    if (!depot.ok) return
+    expect(depot.article.id).toBe('gid://shopify/Article/42')
   })
 })

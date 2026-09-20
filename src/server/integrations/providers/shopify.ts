@@ -622,7 +622,7 @@ export async function lireBlogs(
   jeton: string,
 ): Promise<{ ok: true; blogs: BlogShopify[] } | { ok: false; raison: string }> {
   const reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_BLOGS)
-  if (reponse.status !== 200 || reponse.data === null) {
+  if (reponse.status !== 200 || reponse.data === null || reponse.erreurs.length > 0) {
     return { ok: false, raison: refus(reponse.status, reponse.erreurs) }
   }
 
@@ -690,7 +690,13 @@ export async function deposerBrouillon(
       ...(metachamps.length === 0 ? {} : { metafields: metachamps }),
     },
   })
-  if (reponse.status !== 200 || reponse.data === null) {
+  /*
+   * Un refus de portée arrive en 200, avec `data.articleCreate` à null et le motif dans
+   * `errors`, au sommet de la réponse. Ne lire `errors` que lorsque `data` est nul perdait
+   * donc la seule phrase qui dit quoi faire : l'écran annonçait « Shopify n'a rien
+   * renvoyé » là où Shopify avait écrit « il manque la portée write_content ».
+   */
+  if (reponse.status !== 200 || reponse.data === null || reponse.erreurs.length > 0) {
     return { ok: false, raison: refus(reponse.status, reponse.erreurs) }
   }
 
