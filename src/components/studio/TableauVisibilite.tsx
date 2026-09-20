@@ -500,6 +500,13 @@ export function TableauVisibilite({
               Quoi écrire, et quand
             </LinkButton>
             <LinkButton
+              href={`/${locale}/visibilite/automatisation?siteId=${site.id}`}
+              variant="secondary"
+              size="medium"
+            >
+              Ce qui tourne tout seul
+            </LinkButton>
+            <LinkButton
               href={`/${locale}/visibilite/articles?siteId=${site.id}`}
               variant="secondary"
               size="medium"

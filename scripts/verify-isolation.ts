@@ -49,6 +49,8 @@ const PROTECTED_TABLES = [
   'VisibilityNote',
   'SiteArticle',
   'SiteWatch',
+  'SiteAutomatisation',
+  'ReleveRecherche',
 ] as const
 
 /*

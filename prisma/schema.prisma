@@ -95,6 +95,8 @@ model User {
   visibilityNotes      VisibilityNote[]
   siteArticles         SiteArticle[]
   siteWatches          SiteWatch[]
+  siteAutomatisations  SiteAutomatisation[]
+  releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
 }
@@ -1226,13 +1228,15 @@ model Site {
   /// Dernier passage de la surveillance. Vide tant qu'elle n'a jamais tourné sur ce site.
   watchedAt DateTime?
 
-  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  audits      Audit[]
-  items       ActionItem[]
-  corrections AuditCorrection[]
-  notes       VisibilityNote[]
-  articles    SiteArticle[]
-  watches     SiteWatch[]
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audits         Audit[]
+  items          ActionItem[]
+  corrections    AuditCorrection[]
+  notes          VisibilityNote[]
+  articles       SiteArticle[]
+  watches        SiteWatch[]
+  automatisation SiteAutomatisation?
+  releves        ReleveRecherche[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
   /// diverger deux historiques qui devraient n'en faire qu'un.
@@ -1427,32 +1431,94 @@ model SiteWatch {
   @@index([siteId, closedAt])
 }
 
+/// Ce que la personne a accepté de laisser tourner seul, pour un site.
+///
+/// Tout est à « non » au départ : rien ne se déclenche parce qu'une fonctionnalité existe.
+/// La rédaction automatique dépense des crédits, donc elle porte son rythme avec elle — ce
+/// qui est autorisé est aussi ce qui est borné.
+model SiteAutomatisation {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @unique @db.Uuid
+  userId String @db.Uuid
+
+  /// Demander chaque nuit à Google l'état de quelques pages. Gratuit.
+  indexation Boolean @default(false)
+  /// Garder une trace quotidienne des chiffres de recherche. Gratuit.
+  releve     Boolean @default(false)
+  /// Faire écrire les articles du calendrier sans les demander. Dépense des crédits.
+  redaction  Boolean @default(false)
+  /// Déposer l'article écrit en brouillon dans Shopify. Jamais publié.
+  depot      Boolean @default(false)
+
+  /// Le blog Shopify qui reçoit les dépôts. Vide : le premier de la boutique.
+  blogId     String @default("")
+  /// Le rythme autorisé, repris du calendrier. C'est la borne de la dépense.
+  parPeriode Int    @default(1)
+  /// semaine | mois
+  periode    String @default("semaine")
+
+  indexeAt DateTime?
+  releveAt DateTime?
+  redigeAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Une photographie quotidienne des chiffres de recherche.
+///
+/// Les écrans ne conservent rien : ils lisent chez Google et jettent. Mais « cette requête
+/// a gagné quatre places cette semaine » ne se dit pas sans une trace d'hier.
+model ReleveRecherche {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// Le jour relevé. Les chiffres portent sur les 28 jours qui le précèdent.
+  jour        DateTime @db.Date
+  clics       Int      @default(0)
+  impressions Int      @default(0)
+  /// Les requêtes les plus vues ce jour-là, telles que Google les rend.
+  requetes    Json     @default("[]")
+
+  createdAt DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, jour])
+  @@index([siteId, jour(sort: Desc)])
+}
+
 model SiteArticle {
   id     String @id @default(uuid()) @db.Uuid
   siteId String @db.Uuid
   userId String @db.Uuid
 
   /// Le sujet retenu, tel qu'il sera relu.
-  sujet     String
+  sujet         String
   /// Ce que la personne a demandé, quand elle a demandé quelque chose. Vide sinon.
-  demande   String   @default("")
+  demande       String    @default("")
   /// Pourquoi ce sujet : ce que l'analyse reprochait au site, dit par l'équipe.
-  fondement String   @default("")
+  fondement     String    @default("")
   /// Les contrôles que cet article vise à combler. Sert à les afficher, pas à promettre.
-  checkIds  String[] @default([])
+  checkIds      String[]  @default([])
   /// Les recherches réelles données au rédacteur, quand Search Console était relié.
   /// Conservées pour qu'on sache, en relisant l'article un an plus tard, sur quelle demande
   /// il a été écrit — et vide quand il n'a été fondé que sur les manques du site.
-  recherches String[] @default([])
+  recherches    String[]  @default([])
   /// [{ section, titre, image, alt, lien }] : les photos de la boutique retenues.
   /// Les adresses pointent la boutique, jamais une copie : Evoliia ne stocke aucune image.
   illustrations Json?
   /// Identifiant Shopify de l'article, une fois déposé. Vide tant qu'il ne l'a pas été.
   /// Sa présence est ce qui empêche un second dépôt, et donc un doublon dans la boutique.
-  shopifyId  String?
+  shopifyId     String?
   /// L'écran Shopify où le relire et le publier.
-  shopifyUrl String?
-  shopifyAt  DateTime?
+  shopifyUrl    String?
+  shopifyAt     DateTime?
 
   titre String
   /// Le premier paragraphe, celui qui doit répondre avant qu'on fasse défiler.

@@ -48,6 +48,20 @@ export const FLAGS = {
     help: "Contrôle chaque semaine que les sites suivis répondent toujours et n'ont pas cessé d'être indexables. Six requêtes par site, aucun crédit consommé. Demande un planificateur qui appelle la route prévue.",
     fallback: false,
   },
+  /**
+   * La tournée quotidienne : indexation, relevé des chiffres, rédaction du calendrier.
+   *
+   * Éteinte par défaut, et c'est le verrou d'exploitant sur la seule fonction du produit
+   * qui puisse dépenser des crédits sans qu'une personne clique. Chaque site a en plus ses
+   * propres réglages, tous à « non » au départ : ce drapeau n'allume rien, il autorise.
+   * L'éteindre arrête tout, pour tout le monde, sans déployer.
+   */
+  automatisation: {
+    key: 'flag.automatisation',
+    label: 'Tournée quotidienne',
+    help: "Autorise ce que chaque personne a allumé site par site : vérification d'indexation, relevé des chiffres de recherche, et rédaction au rythme du calendrier. La rédaction débite les crédits de la personne, au même tarif qu'un clic. Demande un planificateur qui appelle la route prévue.",
+    fallback: false,
+  },
   radar: {
     key: 'flag.radar',
     label: 'Radar d’opportunités',
