@@ -38,13 +38,26 @@ export type ActionCost = {
  * Un titre est une phrase ; un article est une page. Il serait absurde qu'ils coûtent la
  * même chose, et la grille doit se comprendre sans explication : plus le texte rendu est
  * long, plus il coûte.
+ *
+ * La fourchette de l'article vient de mesures, pas d'une estimation : les trois premiers
+ * écrits en production ont coûté 8, 8 et 10 crédits, pour 441, 526 et 759 mots. Elle
+ * annonçait 15 à 30, et aucun n'y entrait — une annonce trop haute n'est pas une prudence,
+ * c'est ce qui fait renoncer à une action deux fois moins chère qu'annoncée.
+ *
+ * Le plancher est donc ce qui a été observé, et le plafond laisse la place à un article
+ * long sans mentir : le coût suit bien moins la longueur qu'on ne le croit, parce que
+ * l'essentiel est le contexte envoyé — les pages du site, les constats, les recherches —
+ * qui ne varie pas. Un article deux fois plus long ne coûte pas deux fois plus.
+ *
+ * Ces valeurs ne servent qu'aux installations neuves : l'exploitant les règle depuis le
+ * back-office, et son réglage prend le pas sur celles-ci.
  */
 export const DEFAULT_ACTION_COSTS: readonly ActionCost[] = [
   { id: 'meta', label: 'Réécrire un titre ou une description', min: 1, max: 1 },
   { id: 'analyse', label: 'Analyser le contenu d’une page en détail', min: 2, max: 3 },
   { id: 'faq', label: 'Rédiger une foire aux questions', min: 3, max: 5 },
   { id: 'page', label: 'Améliorer une page entière', min: 5, max: 10 },
-  { id: 'article', label: 'Écrire un article', min: 15, max: 30 },
+  { id: 'article', label: 'Écrire un article', min: 8, max: 20 },
 ]
 
 /** Clé de réglage : les fourchettes annoncées, en JSON. */
