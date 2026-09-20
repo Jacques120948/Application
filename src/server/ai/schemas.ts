@@ -559,55 +559,40 @@ export type Corrections = z.infer<typeof correctionsSchema>
  * créerait le défaut suivant le jour de sa publication.
  */
 /**
- * La longueur, exigée par le schéma plutôt que demandée dans la consigne.
+ * La longueur ne peut PAS être exigée par ce schéma. Ne la remettez pas ici.
  *
- * Elle l'était par une phrase — « au moins 700 mots au total » — et les deux premiers
- * articles écrits en production ont fait 526 et 441 mots. Ce n'était pas une limite
- * technique : le plafond de jetons valait dix fois ce qui a été rendu. Un modèle tient un
- * objectif par section et néglige un total, parce qu'il n'a aucun moyen de compter ce qu'il
- * n'a pas encore écrit. La contrainte descend donc dans le schéma, qui contraint réellement
- * la sortie, au lieu de rester une intention dans un texte.
+ * Elle l'a été, une journée, et la rédaction a cessé de fonctionner en production. Les
+ * sorties structurées de l'API ne prennent pas les contraintes de longueur de chaîne : le
+ * SDK les retire du schéma envoyé au modèle, puis les applique à sa réponse côté client.
+ * Un minimum écrit ici ne contraint donc rien du tout — il ne fait que refuser après coup
+ * un texte que le modèle n'avait aucune raison d'allonger, et transforme « trop court » en
+ * « l'assistant n'a pas répondu correctement ».
  *
- * C'était la contradiction la plus chère que le produit pouvait s'offrir : vendre quinze à
- * trente crédits un article que sa propre analyse aurait recalé pour contenu trop mince.
+ * La longueur se demande donc dans la consigne, par section plutôt qu'en total, et se
+ * constate ensuite. C'est moins sûr qu'une contrainte, et c'est tout ce que l'API permet.
  *
- * Les valeurs se déduisent du seuil que l'analyse applique, jamais recopiées : le jour où il
- * bouge, le schéma suit. Le rapport signes/mot a été mesuré sur les deux articles réels —
- * 5,99 et 6,33 — et la valeur retenue prend la plus défavorable, de sorte qu'un article tout
- * juste conforme au schéma dépasse le seuil plutôt que de le frôler.
+ * Les bornes hautes, elles, restent : une réponse trop longue est rattrapée plus bas
+ * (`parseTolerantly`) au lieu de jeter un appel déjà payé.
  */
-const SIGNES_PAR_MOT = 6.5
-
-/** Les deux premiers articles en rendaient déjà cinq : le modèle structure, il abrège. */
-const SECTIONS_MIN = 5
-
-/** Un minimum tout juste atteint donnerait un article tout juste refusé. */
-const MARGE = 1.1
-
-const CHAPO_MIN_SIGNES = 400
-
-const SIGNES_VOULUS = Math.ceil(SEUILS_REDACTION.motsMinimum * SIGNES_PAR_MOT * MARGE)
-
-/** Ce que doit faire chaque section pour que l'ensemble tienne le seuil. */
-const SECTION_MIN_SIGNES = Math.ceil((SIGNES_VOULUS - CHAPO_MIN_SIGNES) / SECTIONS_MIN)
 
 /**
- * La forme exigée, telle que la consigne doit la redire au modèle.
+ * Ce que la consigne demande. Des objectifs, pas des garanties — voir ci-dessus.
  *
- * Le schéma contraint déjà la sortie, mais une contrainte qu'on découvre en s'y cognant
- * produit du remplissage : on dit donc d'avance ce qui est attendu, avec les mêmes chiffres,
- * tirés d'ici pour qu'ils ne puissent pas diverger.
+ * Tirés du seuil que l'analyse applique, pour que les deux ne divergent pas. Le rapport
+ * signes/mot vient des articles réellement écrits : 5,99 et 6,33, la plus défavorable
+ * retenue.
  */
-export const ARTICLE_FORME = {
-  sectionsMin: SECTIONS_MIN,
-  sectionSignesMin: SECTION_MIN_SIGNES,
-  chapoSignesMin: CHAPO_MIN_SIGNES,
-} as const
+const SIGNES_PAR_MOT = 6.5
+const SECTIONS_VOULUES = 5
+const CHAPO_SIGNES_VOULUS = 400
 
-/** Ce que le schéma garantit au minimum, en mots. Exporté pour être vérifié par un test. */
-export const ARTICLE_PLANCHER_MOTS = Math.floor(
-  (CHAPO_MIN_SIGNES + SECTIONS_MIN * SECTION_MIN_SIGNES) / SIGNES_PAR_MOT,
-)
+export const ARTICLE_FORME = {
+  sectionsMin: SECTIONS_VOULUES,
+  sectionSignesMin: Math.ceil(
+    (SEUILS_REDACTION.motsMinimum * SIGNES_PAR_MOT - CHAPO_SIGNES_VOULUS) / SECTIONS_VOULUES,
+  ),
+  chapoSignesMin: CHAPO_SIGNES_VOULUS,
+} as const
 
 export const articleSchema = z
   .object({
@@ -617,18 +602,18 @@ export const articleSchema = z
     fondement: z.string().min(1).max(600),
     titre: z.string().min(5).max(160),
     /** Le premier paragraphe : il répond, il n'annonce pas. */
-    chapo: z.string().min(CHAPO_MIN_SIGNES).max(900),
+    chapo: z.string().min(80).max(900),
     sections: z
       .array(
         z
           .object({
             titre: z.string().min(3).max(160),
             /** Le corps de la section, en Markdown simple : paragraphes et listes. */
-            corps: z.string().min(SECTION_MIN_SIGNES).max(4000),
+            corps: z.string().min(1).max(4000),
           })
           .strict(),
       )
-      .min(SECTIONS_MIN)
+      .min(2)
       .max(10),
     questions: z
       .array(

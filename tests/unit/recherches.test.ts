@@ -3,7 +3,7 @@ import { creerEtat, lireEtat } from '@/server/integrations/oauth'
 import { choisirPropriete, occasions, retenirPourArticle } from '@/server/audit/recherches'
 import type { Ligne, Propriete } from '@/server/integrations/providers/google-search-console'
 import { nomDuPays } from '@/lib/pays'
-import { ARTICLE_FORME, ARTICLE_PLANCHER_MOTS } from '@/server/ai/schemas'
+import { ARTICLE_FORME, articleSchema } from '@/server/ai/schemas'
 import { SEUILS_REDACTION } from '@/server/audit/checks/geo'
 
 /**
@@ -227,18 +227,49 @@ describe('les noms de pays', () => {
 })
 
 describe('la longueur d’un article', () => {
-  it('est garantie par le schéma, et non par une consigne', () => {
+  /** Une réponse plausible du modèle : cinq sections, de la longueur qu'il rend vraiment. */
+  function reponse(signesParSection: number) {
+    return {
+      sujet: 'Obsidienne noire',
+      fondement: 'La requête « obsidienne noire » sort en seizième place.',
+      titre: 'Obsidienne noire : origine et vertus',
+      chapo: 'x'.repeat(264),
+      sections: Array.from({ length: 5 }, (_, rang) => ({
+        titre: `Section ${rang + 1}`,
+        corps: 'x'.repeat(signesParSection),
+      })),
+      questions: [
+        { question: 'Qu’est-ce que l’obsidienne ?', reponse: 'Un verre volcanique.' },
+        { question: 'D’où vient-elle ?', reponse: 'De coulées de lave refroidies vite.' },
+      ],
+      metaTitle: 'Obsidienne noire : origine et vertus',
+      metaDescription:
+        'Ce qu’est l’obsidienne noire, d’où elle vient, et pourquoi on la trouve dans les bougies artisanales.',
+    }
+  }
+
+  it('n’est jamais exigée par le schéma : la sortie structurée ne le permet pas', () => {
     /*
-     * La garde qui manquait. « Au moins 700 mots » était une phrase dans un texte, et les
-     * deux premiers articles écrits en production ont fait 526 et 441 mots. Un modèle ne
-     * peut pas compter ce qu'il n'a pas encore écrit : la contrainte doit vivre dans le
-     * schéma, qui contraint réellement la sortie.
+     * La garde qui a coûté une panne. L'API retire les contraintes de longueur de chaîne du
+     * schéma qu'elle envoie au modèle, puis le SDK les applique à sa réponse côté client :
+     * un minimum écrit dans le schéma ne rallonge rien et rejette tout. La rédaction a cessé
+     * de fonctionner en production le jour où on en a mis un.
+     *
+     * Ce test le rappelle en acceptant ce que le modèle rend réellement — ses deux premiers
+     * articles avaient des sections de 462 et 613 signes.
      */
-    expect(ARTICLE_PLANCHER_MOTS).toBeGreaterThanOrEqual(SEUILS_REDACTION.motsMinimum)
+    expect(articleSchema.safeParse(reponse(462)).success).toBe(true)
+    expect(articleSchema.safeParse(reponse(613)).success).toBe(true)
   })
 
-  it('impose assez de sections pour que le plancher soit atteignable sans remplissage', () => {
-    // Un article de 700 mots en deux sections, ce sont deux pavés : le contraire du but.
+  it('reste une consigne, cohérente avec le seuil que l’analyse applique', () => {
+    const vise =
+      ARTICLE_FORME.chapoSignesMin + ARTICLE_FORME.sectionsMin * ARTICLE_FORME.sectionSignesMin
+    // 6,5 signes par mot : la valeur la plus défavorable mesurée sur les articles réels.
+    expect(Math.floor(vise / 6.5)).toBeGreaterThanOrEqual(SEUILS_REDACTION.motsMinimum)
+  })
+
+  it('demande assez de sections pour que la longueur ne donne pas des pavés', () => {
     expect(ARTICLE_FORME.sectionsMin).toBeGreaterThanOrEqual(4)
   })
 
