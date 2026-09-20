@@ -10,6 +10,7 @@ import { lireCalendrier } from './calendrier'
 import { inspecter, lireIndexation } from './indexation'
 import { lireRecherches } from './recherches'
 import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
+import { noterPourEquipe } from '@/server/agents/memoire'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -309,11 +310,11 @@ async function rediger(
   siteId: string,
   reglages: Reglages,
   locale: string,
-): Promise<{ ecrit: boolean; depose: boolean }> {
+): Promise<{ ecrit: boolean; depose: boolean; sujet: string }> {
   const solde = await availableCredits(userId)
   if (solde <= 0) {
     logger.info('rédaction automatique différée : solde insuffisant', { site: siteId })
-    return { ecrit: false, depose: false }
+    return { ecrit: false, depose: false, sujet: '' }
   }
 
   const vue = await lireCalendrier(userId, siteId, {
@@ -322,7 +323,7 @@ async function rediger(
     periodes: 1,
   })
   const creneau = vue.creneaux[0]
-  if (creneau === undefined) return { ecrit: false, depose: false }
+  if (creneau === undefined) return { ecrit: false, depose: false, sujet: '' }
 
   const article = await redigerArticle(userId, siteId, creneau.requete, creneau.langue ?? locale)
 
@@ -338,7 +339,7 @@ async function rediger(
       })
     }
   }
-  return { ecrit: true, depose }
+  return { ecrit: true, depose, sujet: creneau.requete }
 }
 
 /**
@@ -395,7 +396,25 @@ export async function tournerQuotidien(
         const urls = vue.suspectes.slice(0, PAGES_PAR_NUIT).map((page) => page.url)
         if (urls.length > 0) {
           const resultat = await inspecter(candidat.userId, candidat.siteId, urls)
-          if (resultat.ok) bilan.indexations += resultat.pages.length
+          if (resultat.ok) {
+            bilan.indexations += resultat.pages.length
+            /*
+             * Seules les pages absentes de l'index sont retenues pour l'équipe. Dire
+             * chaque nuit « vingt pages vérifiées, tout va bien » noierait en une semaine
+             * les phrases que les spécialistes ont jugées utiles.
+             */
+            const absentes = resultat.pages.filter(
+              (page) => page.verdict !== 'PASS' && page.verdict !== 'NEUTRAL',
+            ).length
+            if (absentes > 0) {
+              await noterPourEquipe(
+                candidat.userId,
+                candidat.siteId,
+                'seo',
+                `${absentes} page(s) vérifiée(s) cette nuit ne sont pas dans l'index de Google.`,
+              )
+            }
+          }
         }
         fait.indexeAt = maintenant
       }
@@ -414,6 +433,14 @@ export async function tournerQuotidien(
           if (issue.ecrit) {
             bilan.articles += 1
             fait.redigeAt = maintenant
+            await noterPourEquipe(
+              candidat.userId,
+              candidat.siteId,
+              'content',
+              issue.sujet === ''
+                ? 'Un article a été écrit automatiquement cette nuit.'
+                : `Article écrit cette nuit sur « ${issue.sujet} »${issue.depose ? ', déposé en brouillon dans Shopify' : ''}.`,
+            )
           }
           if (issue.depose) bilan.depots += 1
         }
@@ -443,6 +470,14 @@ export async function tournerQuotidien(
             const releve = await poursuivrePassage(candidat.userId, candidat.siteId)
             bilan.questionsIa += releve.questions
             fait.assistantsAt = maintenant
+            if (releve.questions > 0) {
+              await noterPourEquipe(
+                candidat.userId,
+                candidat.siteId,
+                'geo',
+                `Relevé chez les assistants : ${releve.mentions} mention(s) sur ${releve.releves} réponses, pour ${releve.questions} question(s).`,
+              )
+            }
           } else if (questions > 0) {
             logger.info('relevé assistants différé : solde insuffisant', { site: candidat.siteId })
           }

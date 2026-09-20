@@ -4,6 +4,7 @@ import { logger } from '@/server/observability/logger'
 import { notify } from '@/server/notifications/service'
 import { isEnabled } from '@/server/settings/flags'
 import { readSetting, writeSetting } from '@/server/settings/store'
+import { noterPourEquipe } from '@/server/agents/memoire'
 import { visiter, type PageExploree } from './crawler'
 import type { Signaux } from './extract'
 
@@ -246,6 +247,17 @@ export async function surveillerSite(userId: string, siteId: string): Promise<Pa
 
   if (ouverts > 0) {
     const premier = constats[0]?.checkId ?? ''
+    /*
+     * L'équipe l'apprend en même temps que la personne. Un spécialiste qui conseille de
+     * travailler des titres sur un site devenu injoignable conseille à côté, et c'est le
+     * genre d'erreur qui fait douter de tout le reste.
+     */
+    await noterPourEquipe(
+      userId,
+      siteId,
+      'audit',
+      `Surveillance : ${ouverts} problème(s) ouvert(s) cette semaine — ${CONTROLES[premier]?.label ?? 'voir le détail'}.`,
+    )
     await notify(userId, {
       kind: 'site_watch',
       title: `${site.label} : ${ouverts} ${ouverts > 1 ? 'problèmes repérés' : 'problème repéré'}`,
