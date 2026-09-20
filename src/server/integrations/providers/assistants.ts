@@ -182,8 +182,34 @@ const PERPLEXITY_MODELE = 'sonar'
 
 type ChargePerplexity = {
   choices?: { message?: { content?: string } }[]
-  citations?: string[]
+  /** La forme historique : une liste d'adresses. */
+  citations?: unknown
+  /** La forme récente : une liste d'objets portant l'adresse. */
+  search_results?: unknown
   error?: { message?: string }
+}
+
+/**
+ * Les adresses citées, quelle que soit la forme employée.
+ *
+ * Perplexity a rendu ses sources sous deux formes au fil des versions : une liste de
+ * chaînes, puis une liste d'objets. N'en lire qu'une donnerait des relevés sans sources le
+ * jour où l'autre arrive — sans erreur, sans journal, et sans que personne le remarque
+ * avant d'ouvrir l'écran et de le trouver vide.
+ */
+function sourcesPerplexity(charge: ChargePerplexity): string[] {
+  const trouvees: string[] = []
+  for (const brut of [charge.citations, charge.search_results]) {
+    if (!Array.isArray(brut)) continue
+    for (const entree of brut) {
+      if (typeof entree === 'string' && entree !== '') trouvees.push(entree)
+      else if (entree !== null && typeof entree === 'object') {
+        const url = (entree as { url?: unknown }).url
+        if (typeof url === 'string' && url !== '') trouvees.push(url)
+      }
+    }
+  }
+  return [...new Set(trouvees)]
 }
 
 /**
@@ -215,7 +241,7 @@ async function demanderPerplexity(question: string): Promise<Reponse> {
   const texte = (charge.choices?.[0]?.message?.content ?? '').trim()
   if (texte === '') return { ok: false, raison: 'Perplexity n’a rien répondu.' }
 
-  return { ok: true, texte, sources: (charge.citations ?? []).filter((url) => url !== '') }
+  return { ok: true, texte, sources: sourcesPerplexity(charge) }
 }
 
 // ─────────────────────────────── Le choix ────────────────────────────────────
