@@ -12,6 +12,7 @@ import {
 import { nomDuPays } from '@/lib/pays'
 import type { Ligne } from '@/server/integrations/providers/google-search-console'
 import { Shell } from '@/components/studio/Shell'
+import { LinkButton } from '@/components/ui'
 
 /**
  * Ce que les gens cherchent.
@@ -43,9 +44,9 @@ function Vide({ locale, titre, texte, lien, lienTexte }: {
     <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
       <p className="m-0 text-sm font-medium">{titre}</p>
       <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">{texte}</p>
-      <a href={`/${locale}${lien}`} className="mt-3 inline-block text-sm text-[var(--color-ink-soft)]">
+      <LinkButton href={`/${locale}${lien}`} variant="secondary" className="mt-3">
         {lienTexte}
-      </a>
+      </LinkButton>
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
 import { lireCalendrier, type Creneau } from '@/server/audit/calendrier'
 import { Shell } from '@/components/studio/Shell'
+import { LinkButton } from '@/components/ui'
 
 /**
  * Le calendrier de rédaction.
@@ -97,12 +98,20 @@ function Ligne({ creneau, locale, siteId }: { creneau: Creneau; locale: string; 
       <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
         {creneau.pourquoi}
       </p>
-      <a
+      {/*
+        Un bouton, et non un lien discret : c'est l'action de l'écran, et elle était
+        jusqu'ici du texte gris de la même taille et de la même couleur que la phrase
+        au-dessus. Rien ne disait qu'on pouvait cliquer, et personne ne clique sur ce
+        qui ne se présente pas comme cliquable.
+      */}
+      <LinkButton
         href={`/${locale}/visibilite/articles?siteId=${siteId}&sujet=${encodeURIComponent(creneau.requete)}${creneau.langue === null ? '' : `&langue=${creneau.langue}`}`}
-        className="mt-2 inline-block text-xs text-[var(--color-ink-soft)]"
+        variant="secondary"
+        size="medium"
+        className="mt-3"
       >
-        Faire écrire cet article →
-      </a>
+        Faire écrire cet article
+      </LinkButton>
     </li>
   )
 }
@@ -168,12 +177,9 @@ export default async function CalendrierPage({
               serait qu’une liste de sujets devinés — et deviner, c’est exactement ce que ce
               produit refuse de faire.
             </p>
-            <a
-              href={`/${locale}/connexions`}
-              className="mt-3 inline-block text-sm text-[var(--color-ink-soft)]"
-            >
+            <LinkButton href={`/${locale}/connexions`} variant="secondary" className="mt-3">
               Connecter Search Console
-            </a>
+            </LinkButton>
           </div>
         ) : vue.creneaux.length === 0 ? (
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">

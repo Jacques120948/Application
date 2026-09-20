@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { readBoutique } from '@/server/commerce/boutique'
 import { Shell } from '@/components/studio/Shell'
+import { LinkButton } from '@/components/ui'
 import { BoutiqueBoard } from '@/components/studio/BoutiqueBoard'
 
 /**
@@ -55,12 +56,9 @@ export default async function BoutiquePage({ params }: { params: Promise<{ local
         {lecture.erreur !== null ? (
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
             <p className="m-0 text-sm">{lecture.erreur}</p>
-            <a
-              href={`/${locale}/connexions`}
-              className="mt-3 inline-block text-sm text-[var(--color-ink-soft)]"
-            >
+            <LinkButton href={`/${locale}/connexions`} variant="secondary" className="mt-3">
               Revoir mes connexions
-            </a>
+            </LinkButton>
           </div>
         ) : lecture.boutique === null ? (
           <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
@@ -69,12 +67,9 @@ export default async function BoutiquePage({ params }: { params: Promise<{ local
               produits et vos articles pour vous montrer ce qui leur manque — en lecture
               seule, elle ne peut rien y écrire.
             </p>
-            <a
-              href={`/${locale}/connexions`}
-              className="mt-3 inline-block text-sm text-[var(--color-ink-soft)]"
-            >
+            <LinkButton href={`/${locale}/connexions`} variant="secondary" className="mt-3">
               Connecter Shopify
-            </a>
+            </LinkButton>
           </div>
         ) : (
           <BoutiqueBoard

@@ -244,6 +244,15 @@ export function ArticlesRediges({
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [depot, setDepot] = useState<string | null>(null)
+  /*
+   * Le refus du dépôt a son propre état, et s'affiche sous le bouton.
+   *
+   * Il partageait celui de la rédaction, affiché en haut de l'écran : sur un article
+   * déplié, le bouton est à deux écrans de là. La personne cliquait, ne voyait rien
+   * bouger, et concluait que le bouton ne marchait pas — alors que Shopify avait
+   * répondu, et expliqué pourquoi.
+   */
+  const [erreurDepot, setErreurDepot] = useState<string | null>(null)
   const [envoi, setEnvoi] = useState(false)
   const [copie, setCopie] = useState(false)
 
@@ -304,7 +313,7 @@ export function ArticlesRediges({
    */
   async function deposer(article: ArticleCompletVu) {
     setEnvoi(true)
-    setErreur(null)
+    setErreurDepot(null)
     const response = await fetch(`/api/articles/${article.id}/shopify`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -314,7 +323,7 @@ export function ArticlesRediges({
       | null
     setEnvoi(false)
     if (response === null || !response.ok || body?.lien === undefined) {
-      setErreur(body?.message ?? 'Le dépôt dans Shopify n’a pas abouti.')
+      setErreurDepot(body?.message ?? 'Le dépôt dans Shopify n’a pas abouti.')
       return
     }
     setDepot(body.lien)
@@ -568,6 +577,11 @@ export function ArticlesRediges({
                             Shopify et vous le publiez vous-même — elle ne publie jamais
                             seule.
                           </p>
+                          {erreurDepot === null ? null : (
+                            <p className="m-0 text-sm text-[var(--color-danger,#b42318)]">
+                              {erreurDepot}
+                            </p>
+                          )}
                         </>
                       )}
                     </div>

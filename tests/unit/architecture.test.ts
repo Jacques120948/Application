@@ -162,6 +162,33 @@ describe('règles de dépendance', () => {
     expect(offenders).toEqual([])
   })
 
+  it('ne déguise aucune action en texte gris', () => {
+    /*
+     * Tailwind retire le soulignement des liens. Un lien écrit `inline-block text-xs
+     * text-[var(--color-ink-soft)]` se retrouve donc exactement de la taille, de la
+     * couleur et de la graisse du paragraphe gris posé juste au-dessus : rien ne dit
+     * qu'on peut cliquer, et personne ne clique.
+     *
+     * C'est arrivé au calendrier, sur « Faire écrire cet article » — l'action de
+     * l'écran. L'écran fonctionnait ; il était simplement muet. Une action se présente
+     * en bouton (`LinkButton`) ; un lien secondaire porte `underline`. Les deux se
+     * voient, et c'est la seule chose demandée ici.
+     */
+    const cache = /<a\b[^>]*inline-block[^>]*text-\[var\(--color-ink-soft\)\]/u
+    const offenders = sources
+      .filter((path) => path.endsWith('.tsx'))
+      .filter((path) =>
+        read(path)
+          .split(/(?=<a\b)/u)
+          .some(
+            (morceau) =>
+              cache.test(morceau) &&
+              !morceau.slice(0, 400).replaceAll('no-underline', '').includes('underline'),
+          ),
+      )
+    expect(offenders).toEqual([])
+  })
+
   it("n'expose aucun secret au navigateur", () => {
     const offenders = sources
       .filter((path) => path.startsWith(join('src', 'components')))

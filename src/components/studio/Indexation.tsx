@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@/components/ui'
+import { Button, LinkButton } from '@/components/ui'
 
 /**
  * Ce que Google a indexé, et ce qu'il ignore.
@@ -99,12 +99,9 @@ export function Indexation({
           savoir ce que Google a indexé — c’est Google qui détient la réponse, et personne
           d’autre.
         </p>
-        <a
-          href={`/${locale}/connexions`}
-          className="mt-3 inline-block text-sm text-[var(--color-ink-soft)]"
-        >
+        <LinkButton href={`/${locale}/connexions`} variant="secondary" className="mt-3">
           Connecter Search Console
-        </a>
+        </LinkButton>
       </div>
     )
   }
@@ -202,7 +199,7 @@ export function Indexation({
                       href={page.lien}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 inline-block text-xs text-[var(--color-ink-soft)]"
+                      className="mt-2 inline-block text-xs text-[var(--color-ink-soft)] underline"
                     >
                       Ouvrir dans Search Console ↗
                     </a>
