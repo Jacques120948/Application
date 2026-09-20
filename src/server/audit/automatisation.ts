@@ -9,6 +9,7 @@ import { redigerArticle } from './articles'
 import { lireCalendrier } from './calendrier'
 import { inspecter, lireIndexation } from './indexation'
 import { lireRecherches } from './recherches'
+import { releverVisibilite, soldeCouvre } from './visibilite-ia'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -48,12 +49,15 @@ export type Reglages = {
   releve: boolean
   redaction: boolean
   depot: boolean
+  /** Poser chaque semaine les questions suivies aux assistants. Dépense des crédits. */
+  assistants: boolean
   blogId: string
   parPeriode: number
   periode: 'semaine' | 'mois'
   indexeAt: Date | null
   releveAt: Date | null
   redigeAt: Date | null
+  assistantsAt: Date | null
 }
 
 /** Tout à « non ». C'est l'état d'un site dont personne n'a rien demandé. */
@@ -62,12 +66,14 @@ const AU_DEPART: Reglages = {
   releve: false,
   redaction: false,
   depot: false,
+  assistants: false,
   blogId: '',
   parPeriode: 1,
   periode: 'semaine',
   indexeAt: null,
   releveAt: null,
   redigeAt: null,
+  assistantsAt: null,
 }
 
 /** Les rythmes acceptés. Au-delà, ce n'est plus un calendrier éditorial. */
@@ -100,12 +106,14 @@ export async function lireReglages(userId: string, siteId: string): Promise<Regl
     releve: ligne.releve,
     redaction: ligne.redaction,
     depot: ligne.depot,
+    assistants: ligne.assistants,
     blogId: ligne.blogId,
     parPeriode: ligne.parPeriode,
     periode: periodeValide(ligne.periode),
     indexeAt: ligne.indexeAt,
     releveAt: ligne.releveAt,
     redigeAt: ligne.redigeAt,
+    assistantsAt: ligne.assistantsAt,
   }
 }
 
@@ -118,7 +126,7 @@ export async function lireReglages(userId: string, siteId: string): Promise<Regl
 export async function ecrireReglages(
   userId: string,
   siteId: string,
-  patch: Partial<Omit<Reglages, 'indexeAt' | 'releveAt' | 'redigeAt'>>,
+  patch: Partial<Omit<Reglages, 'indexeAt' | 'releveAt' | 'redigeAt' | 'assistantsAt'>>,
 ): Promise<Reglages> {
   const site = await withUserScope(userId, (tx) =>
     tx.site.findFirst({ where: { id: siteId, userId, deletedAt: null }, select: { id: true } }),
@@ -131,6 +139,7 @@ export async function ecrireReglages(
     releve: patch.releve ?? actuel.releve,
     redaction: patch.redaction ?? actuel.redaction,
     depot: patch.depot ?? actuel.depot,
+    assistants: patch.assistants ?? actuel.assistants,
     blogId: (patch.blogId ?? actuel.blogId).slice(0, 200),
     parPeriode: Math.min(PAR_PERIODE_MAX, Math.max(1, Math.trunc(patch.parPeriode ?? actuel.parPeriode))),
     periode: periodeValide(patch.periode ?? actuel.periode),
@@ -161,6 +170,23 @@ export function redactionDue(reglages: Reglages, maintenant: Date): boolean {
   return maintenant.getTime() - reglages.redigeAt.getTime() >= intervalle
 }
 
+/**
+ * Le relevé dans les assistants est-il dû ?
+ *
+ * Hebdomadaire, et non quotidien. Ce qu'un assistant répond lundi et mardi est la même
+ * chose, à son aléa près : payer sept fois pour une information qui change au mois est une
+ * dépense sans contrepartie. Deux relevés par question et par semaine font vingt-six mesures
+ * par trimestre, largement de quoi voir une tendance.
+ *
+ * Comme pour la rédaction, le retard ne se rattrape pas : trois semaines sans tournée
+ * donnent un relevé, pas trois.
+ */
+export function assistantsDus(reglages: Reglages, maintenant: Date): boolean {
+  if (!reglages.assistants) return false
+  if (reglages.assistantsAt === null) return true
+  return maintenant.getTime() - reglages.assistantsAt.getTime() >= 7 * 24 * 60 * 60 * 1000
+}
+
 /** Minuit du jour donné, en temps universel : un relevé porte sur un jour, pas sur une heure. */
 function jourDe(date: Date): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()))
@@ -172,9 +198,12 @@ export type Bilan = {
   releves: number
   articles: number
   depots: number
+  /** Questions posées aux assistants, toutes plateformes confondues. */
+  questionsIa: number
   echecs: number
-  /** Combien de sites auraient écrit un article. Rempli seulement à blanc. */
+  /** Combien de sites auraient dépensé. Rempli seulement à blanc. */
   redactionsDues?: number
+  relevesIaDus?: number
 }
 
 /** Où la dernière tournée s'est arrêtée. Voir `aTraiter`. */
@@ -209,7 +238,12 @@ async function aTraiter(limite: number): Promise<{ siteId: string; userId: strin
       tx.siteAutomatisation.findMany({
         where: {
           userId: utilisateur.id,
-          OR: [{ indexation: true }, { releve: true }, { redaction: true }],
+          OR: [
+            { indexation: true },
+            { releve: true },
+            { redaction: true },
+            { assistants: true },
+          ],
           site: { deletedAt: null },
         },
         select: { siteId: true },
@@ -326,8 +360,19 @@ export async function tournerQuotidien(
    */
   sansRedaction = false,
 ): Promise<Bilan> {
-  const bilan: Bilan = { sites: 0, indexations: 0, releves: 0, articles: 0, depots: 0, echecs: 0 }
-  if (sansRedaction) bilan.redactionsDues = 0
+  const bilan: Bilan = {
+    sites: 0,
+    indexations: 0,
+    releves: 0,
+    articles: 0,
+    depots: 0,
+    questionsIa: 0,
+    echecs: 0,
+  }
+  if (sansRedaction) {
+    bilan.redactionsDues = 0
+    bilan.relevesIaDus = 0
+  }
   const candidats = await aTraiter(limite)
   const maintenant = new Date()
 
@@ -343,7 +388,7 @@ export async function tournerQuotidien(
       if (site === null) continue
 
       const reglages = await lireReglages(candidat.userId, candidat.siteId)
-      const fait: { indexeAt?: Date; releveAt?: Date; redigeAt?: Date } = {}
+      const fait: { indexeAt?: Date; releveAt?: Date; redigeAt?: Date; assistantsAt?: Date } = {}
 
       if (reglages.indexation) {
         const vue = await lireIndexation(candidat.userId, candidat.siteId)
@@ -371,6 +416,29 @@ export async function tournerQuotidien(
             fait.redigeAt = maintenant
           }
           if (issue.depose) bilan.depots += 1
+        }
+      }
+
+      if (assistantsDus(reglages, maintenant)) {
+        if (sansRedaction) {
+          bilan.relevesIaDus = (bilan.relevesIaDus ?? 0) + 1
+        } else {
+          /*
+           * Le solde est vérifié avant d'interroger quoi que ce soit. `releverVisibilite`
+           * réserve et refuse de lui-même quand il manque, mais ce refus est une exception
+           * qui compterait comme un échec de tournée — alors qu'un compte à sec est un état
+           * ordinaire, pas une panne.
+           */
+          const questions = await withUserScope(candidat.userId, (tx) =>
+            tx.promptIA.count({ where: { siteId: candidat.siteId, userId: candidat.userId, actif: true } }),
+          )
+          if (questions > 0 && (await soldeCouvre(candidat.userId, questions))) {
+            const releve = await releverVisibilite(candidat.userId, candidat.siteId)
+            bilan.questionsIa += releve.questions
+            fait.assistantsAt = maintenant
+          } else if (questions > 0) {
+            logger.info('relevé assistants différé : solde insuffisant', { site: candidat.siteId })
+          }
         }
       }
 

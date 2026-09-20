@@ -19,6 +19,7 @@ export type ReglagesVus = {
   releve: boolean
   redaction: boolean
   depot: boolean
+  assistants: boolean
   blogId: string
   parPeriode: number
   periode: 'semaine' | 'mois'
@@ -67,6 +68,8 @@ export function Automatisation({
   cout,
   boutiqueReliee,
   rechercheReliee,
+  questionsIa,
+  coutIa,
 }: {
   siteId: string
   initiaux: ReglagesVus
@@ -74,6 +77,9 @@ export function Automatisation({
   cout: { min: number; max: number } | null
   boutiqueReliee: boolean
   rechercheReliee: boolean
+  /** Combien de questions sont suivies : c'est ce qui décide de la dépense hebdomadaire. */
+  questionsIa: number
+  coutIa: number
 }) {
   const [reglages, setReglages] = useState<ReglagesVus>(initiaux)
   const [occupe, setOccupe] = useState(false)
@@ -149,6 +155,16 @@ export function Automatisation({
             detail="Milo écrit sur la recherche qui vient en tête du calendrier, dans sa langue. Vous relisez ensuite, comme d’habitude."
             actif={reglages.redaction}
             onChange={(redaction) => changer({ redaction })}
+          />
+          <Interrupteur
+            titre="Poser vos questions aux assistants chaque semaine"
+            detail={
+              questionsIa === 0
+                ? 'Vous ne suivez aucune question pour l’instant. Ajoutez-en depuis « Votre marque dans les IA ».'
+                : `${questionsIa} question${questionsIa > 1 ? 's' : ''} suivie${questionsIa > 1 ? 's' : ''}, soit ${questionsIa * coutIa} crédits par semaine. Une fois par semaine, pas chaque nuit : une réponse d’assistant ne change pas d’un jour à l’autre.`
+            }
+            actif={reglages.assistants}
+            onChange={(assistants) => changer({ assistants })}
           />
           {!reglages.redaction ? null : (
             <>

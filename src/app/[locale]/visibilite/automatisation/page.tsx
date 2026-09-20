@@ -5,6 +5,8 @@ import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
 import { estimerArticle } from '@/server/audit/articles'
 import { lireReglages } from '@/server/audit/automatisation'
+import { listerPrompts } from '@/server/audit/visibilite-ia'
+import { actionCosts, type ActionCost } from '@/server/billing/action-costs'
 import { hasConnection } from '@/server/integrations/service'
 import { Shell } from '@/components/studio/Shell'
 import { Automatisation } from '@/components/studio/Automatisation'
@@ -35,12 +37,15 @@ export default async function AutomatisationPage({
   ])
   if (tableau === null) redirect(`/${locale}/visibilite`)
 
-  const [reglages, cout, boutique, recherche] = await Promise.all([
+  const [reglages, cout, boutique, recherche, prompts, couts] = await Promise.all([
     lireReglages(user.id, tableau.site.id),
     estimerArticle(),
     hasConnection(user.id, 'shopify'),
     hasConnection(user.id, 'google-search-console'),
+    listerPrompts(user.id, tableau.site.id),
+    actionCosts(),
   ])
+  const coutIa = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia')?.max ?? 3
 
   return (
     <Shell
@@ -72,6 +77,7 @@ export default async function AutomatisationPage({
             releve: reglages.releve,
             redaction: reglages.redaction,
             depot: reglages.depot,
+            assistants: reglages.assistants,
             blogId: reglages.blogId,
             parPeriode: reglages.parPeriode,
             periode: reglages.periode,
@@ -79,6 +85,8 @@ export default async function AutomatisationPage({
           cout={cout}
           boutiqueReliee={boutique}
           rechercheReliee={recherche}
+          questionsIa={prompts.filter((prompt) => prompt.actif).length}
+          coutIa={coutIa}
         />
       </div>
     </Shell>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { redactionDue } from '@/server/audit/automatisation'
+import { assistantsDus, redactionDue } from '@/server/audit/automatisation'
 
 /**
  * Ce qui décide qu'un article automatique part, ou ne part pas.
@@ -16,12 +16,14 @@ const ETEINT = {
   releve: false,
   redaction: false,
   depot: false,
+  assistants: false,
   blogId: '',
   parPeriode: 1,
   periode: 'semaine' as const,
   indexeAt: null,
   releveAt: null,
   redigeAt: null,
+  assistantsAt: null,
 }
 
 const LE_20 = new Date('2026-09-20T03:00:00Z')
@@ -71,5 +73,34 @@ describe('la rédaction automatique', () => {
     expect(redactionDue(tresEnRetard, LE_20)).toBe(true)
     // Et dès qu'un article est écrit, le compteur repart de ce jour-là.
     expect(redactionDue({ ...tresEnRetard, redigeAt: LE_20 }, LE_20)).toBe(false)
+  })
+})
+
+describe('le relevé dans les assistants', () => {
+  it('ne part pas quand il n’est pas allumé', () => {
+    expect(assistantsDus({ ...ETEINT, assistantsAt: null }, LE_20)).toBe(false)
+  })
+
+  it('part une première fois, puis une fois par semaine', () => {
+    /*
+     * Hebdomadaire et non quotidien : ce qu'un assistant répond lundi et mardi est la même
+     * chose, à son aléa près. Payer sept fois pour une information qui change au mois est
+     * une dépense sans contrepartie.
+     */
+    const base = { ...ETEINT, assistants: true }
+    expect(assistantsDus(base, LE_20)).toBe(true)
+    expect(assistantsDus({ ...base, assistantsAt: new Date('2026-09-14T03:00:00Z') }, LE_20)).toBe(
+      false,
+    )
+    expect(assistantsDus({ ...base, assistantsAt: new Date('2026-09-13T03:00:00Z') }, LE_20)).toBe(
+      true,
+    )
+  })
+
+  it('ne rattrape pas le retard', () => {
+    const base = { ...ETEINT, assistants: true, assistantsAt: new Date('2026-07-01T03:00:00Z') }
+    expect(assistantsDus(base, LE_20)).toBe(true)
+    // Un passage remet le compteur à ce jour-là : un seul relevé, pas douze.
+    expect(assistantsDus({ ...base, assistantsAt: LE_20 }, LE_20)).toBe(false)
   })
 })

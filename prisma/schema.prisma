@@ -1453,6 +1453,8 @@ model SiteAutomatisation {
   redaction  Boolean @default(false)
   /// Déposer l'article écrit en brouillon dans Shopify. Jamais publié.
   depot      Boolean @default(false)
+  /// Poser chaque semaine les questions suivies aux assistants. Dépense des crédits.
+  assistants Boolean @default(false)
 
   /// Le blog Shopify qui reçoit les dépôts. Vide : le premier de la boutique.
   blogId     String @default("")
@@ -1461,9 +1463,10 @@ model SiteAutomatisation {
   /// semaine | mois
   periode    String @default("semaine")
 
-  indexeAt DateTime?
-  releveAt DateTime?
-  redigeAt DateTime?
+  indexeAt     DateTime?
+  releveAt     DateTime?
+  redigeAt     DateTime?
+  assistantsAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
