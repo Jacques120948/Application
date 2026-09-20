@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SEUILS_REDACTION } from '@/server/audit/checks/geo'
 import { STYLE_PRESET_IDS, TEMPLATE_KINDS } from '@/server/spec/templates'
 import {
   BLOCK_SCHEMAS,
@@ -557,6 +558,57 @@ export type Corrections = z.infer<typeof correctionsSchema>
  * **Le titre de résultat et la description sont demandés d'emblée.** Sans eux, l'article
  * créerait le défaut suivant le jour de sa publication.
  */
+/**
+ * La longueur, exigée par le schéma plutôt que demandée dans la consigne.
+ *
+ * Elle l'était par une phrase — « au moins 700 mots au total » — et les deux premiers
+ * articles écrits en production ont fait 526 et 441 mots. Ce n'était pas une limite
+ * technique : le plafond de jetons valait dix fois ce qui a été rendu. Un modèle tient un
+ * objectif par section et néglige un total, parce qu'il n'a aucun moyen de compter ce qu'il
+ * n'a pas encore écrit. La contrainte descend donc dans le schéma, qui contraint réellement
+ * la sortie, au lieu de rester une intention dans un texte.
+ *
+ * C'était la contradiction la plus chère que le produit pouvait s'offrir : vendre quinze à
+ * trente crédits un article que sa propre analyse aurait recalé pour contenu trop mince.
+ *
+ * Les valeurs se déduisent du seuil que l'analyse applique, jamais recopiées : le jour où il
+ * bouge, le schéma suit. Le rapport signes/mot a été mesuré sur les deux articles réels —
+ * 5,99 et 6,33 — et la valeur retenue prend la plus défavorable, de sorte qu'un article tout
+ * juste conforme au schéma dépasse le seuil plutôt que de le frôler.
+ */
+const SIGNES_PAR_MOT = 6.5
+
+/** Les deux premiers articles en rendaient déjà cinq : le modèle structure, il abrège. */
+const SECTIONS_MIN = 5
+
+/** Un minimum tout juste atteint donnerait un article tout juste refusé. */
+const MARGE = 1.1
+
+const CHAPO_MIN_SIGNES = 400
+
+const SIGNES_VOULUS = Math.ceil(SEUILS_REDACTION.motsMinimum * SIGNES_PAR_MOT * MARGE)
+
+/** Ce que doit faire chaque section pour que l'ensemble tienne le seuil. */
+const SECTION_MIN_SIGNES = Math.ceil((SIGNES_VOULUS - CHAPO_MIN_SIGNES) / SECTIONS_MIN)
+
+/**
+ * La forme exigée, telle que la consigne doit la redire au modèle.
+ *
+ * Le schéma contraint déjà la sortie, mais une contrainte qu'on découvre en s'y cognant
+ * produit du remplissage : on dit donc d'avance ce qui est attendu, avec les mêmes chiffres,
+ * tirés d'ici pour qu'ils ne puissent pas diverger.
+ */
+export const ARTICLE_FORME = {
+  sectionsMin: SECTIONS_MIN,
+  sectionSignesMin: SECTION_MIN_SIGNES,
+  chapoSignesMin: CHAPO_MIN_SIGNES,
+} as const
+
+/** Ce que le schéma garantit au minimum, en mots. Exporté pour être vérifié par un test. */
+export const ARTICLE_PLANCHER_MOTS = Math.floor(
+  (CHAPO_MIN_SIGNES + SECTIONS_MIN * SECTION_MIN_SIGNES) / SIGNES_PAR_MOT,
+)
+
 export const articleSchema = z
   .object({
     /** Le sujet retenu, en une ligne. */
@@ -565,18 +617,18 @@ export const articleSchema = z
     fondement: z.string().min(1).max(600),
     titre: z.string().min(5).max(160),
     /** Le premier paragraphe : il répond, il n'annonce pas. */
-    chapo: z.string().min(80).max(800),
+    chapo: z.string().min(CHAPO_MIN_SIGNES).max(900),
     sections: z
       .array(
         z
           .object({
             titre: z.string().min(3).max(160),
             /** Le corps de la section, en Markdown simple : paragraphes et listes. */
-            corps: z.string().min(1).max(4000),
+            corps: z.string().min(SECTION_MIN_SIGNES).max(4000),
           })
           .strict(),
       )
-      .min(2)
+      .min(SECTIONS_MIN)
       .max(10),
     questions: z
       .array(

@@ -68,6 +68,7 @@ import {
   correctionsSchema,
   type Corrections,
   articleSchema,
+  ARTICLE_FORME,
   type ArticleRedige,
   type LiaAnswer,
   type LiaFaq,
@@ -1456,12 +1457,22 @@ export async function writeArticle(params: {
   }
   locale: string
 }): Promise<RunResult<ArticleRedige>> {
+  /*
+   * La longueur est dite par section, pas en total.
+   *
+   * « Au moins 700 mots au total » a produit 526 puis 441 mots : un modèle ne peut pas
+   * compter ce qu'il n'a pas encore écrit, et un total lui reste donc abstrait jusqu'à la
+   * fin. Un minimum par section, lui, se tient à chaque section. Les chiffres viennent du
+   * schéma, qui contraint réellement la sortie : les redire ici évite le remplissage d'une
+   * contrainte découverte en s'y cognant, et les tirer de là évite qu'ils divergent.
+   */
   const consignes = [
     `Langue par défaut : ${params.locale}. Si le site est écrit dans une autre langue, suis la sienne.`,
-    `Longueur visée : au moins ${params.seuils.motsMinimum} mots au total.`,
-    `Aucun paragraphe au-delà de ${params.seuils.motsParParagrapheMax} mots.`,
-    `Le chapô fait au moins ${params.seuils.introSignesMinimum} signes et répond dès la première phrase.`,
-    `Au moins ${params.seuils.questionsMinimum} questions-réponses.`,
+    `Au moins ${ARTICLE_FORME.sectionsMin} sections, chacune d'au moins ${ARTICLE_FORME.sectionSignesMin} signes — soit environ ${Math.round(ARTICLE_FORME.sectionSignesMin / 6.5)} mots. Une section plus courte sera refusée.`,
+    `L'article complet fait donc au moins ${params.seuils.motsMinimum} mots. Traite le sujet en profondeur plutôt que d'allonger : des exemples, des cas concrets, des chiffres.`,
+    `Aucun paragraphe au-delà de ${params.seuils.motsParParagrapheMax} mots : plusieurs paragraphes par section, pas un bloc.`,
+    `Le chapô fait au moins ${ARTICLE_FORME.chapoSignesMin} signes et répond dès la première phrase.`,
+    `Au moins ${params.seuils.questionsMinimum} questions-réponses, hors des sections.`,
     `Au moins ${params.seuils.chiffresMinimum} faits chiffrés vérifiables dans le corps.`,
   ].join('\n')
 

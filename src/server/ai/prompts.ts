@@ -853,8 +853,13 @@ La forme, qui n'est pas négociable — ce sont les contrôles qu'Evoliia appliq
 cet article :
 - Le chapô répond dès la première phrase à ce que le titre annonce. Pas de mise en
   contexte, pas de « dans cet article nous verrons », pas de formule d'accueil.
-- Entre deux et dix sections, chacune avec un intertitre qui dit ce qu'elle contient. Un
-  intertitre lu seul doit apprendre quelque chose.
+- Plusieurs sections, chacune avec un intertitre qui dit ce qu'elle contient. Un intertitre
+  lu seul doit apprendre quelque chose. Le nombre de sections et leur longueur minimale te
+  sont donnés : ce sont des minimums, et une section trop courte fait refuser l'article.
+- Une section se traite en profondeur : un exemple concret, un cas, un chiffre, une
+  conséquence pratique. Ne rallonge jamais par du remplissage — répéter le sujet en d'autres
+  termes, annoncer ce que la section va dire, ou conclure ce qu'elle vient de dire. Si un
+  sujet ne donne pas assez de matière pour la longueur demandée, choisis-en un autre.
 - Aucun paragraphe au-delà de la longueur indiquée : un paragraphe trop long ne peut plus
   être repris tel quel dans une réponse.
 - Au moins une liste à puces quelque part : un texte sans prise ne se parcourt pas.

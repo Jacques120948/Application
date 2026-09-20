@@ -3,6 +3,8 @@ import { creerEtat, lireEtat } from '@/server/integrations/oauth'
 import { choisirPropriete, occasions, retenirPourArticle } from '@/server/audit/recherches'
 import type { Ligne, Propriete } from '@/server/integrations/providers/google-search-console'
 import { nomDuPays } from '@/lib/pays'
+import { ARTICLE_FORME, ARTICLE_PLANCHER_MOTS } from '@/server/ai/schemas'
+import { SEUILS_REDACTION } from '@/server/audit/checks/geo'
 
 /**
  * L'aller-retour OAuth et la lecture des chiffres de recherche.
@@ -221,5 +223,28 @@ describe('les noms de pays', () => {
     for (const code of ['fra', 'bel', 'lux', 'gbr', 'esp', 'prt', 'aut', 'nld', 'can', 'jpn']) {
       expect(nomDuPays(code, 'fr')).not.toBe(code.toUpperCase())
     }
+  })
+})
+
+describe('la longueur d’un article', () => {
+  it('est garantie par le schéma, et non par une consigne', () => {
+    /*
+     * La garde qui manquait. « Au moins 700 mots » était une phrase dans un texte, et les
+     * deux premiers articles écrits en production ont fait 526 et 441 mots. Un modèle ne
+     * peut pas compter ce qu'il n'a pas encore écrit : la contrainte doit vivre dans le
+     * schéma, qui contraint réellement la sortie.
+     */
+    expect(ARTICLE_PLANCHER_MOTS).toBeGreaterThanOrEqual(SEUILS_REDACTION.motsMinimum)
+  })
+
+  it('impose assez de sections pour que le plancher soit atteignable sans remplissage', () => {
+    // Un article de 700 mots en deux sections, ce sont deux pavés : le contraire du but.
+    expect(ARTICLE_FORME.sectionsMin).toBeGreaterThanOrEqual(4)
+  })
+
+  it('demande un chapô qui réponde, au-delà du minimum de l’analyse', () => {
+    expect(ARTICLE_FORME.chapoSignesMin).toBeGreaterThanOrEqual(
+      SEUILS_REDACTION.introSignesMinimum,
+    )
   })
 })
