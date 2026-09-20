@@ -146,14 +146,21 @@ export function occasions(lignes: Ligne[]): Occasion[] {
 export type EchecRecherches =
   | { etat: 'non-connecte' }
   | { etat: 'sans-propriete'; hote: string }
+  /** L'offre n'ouvre pas la fonction. Ni une panne, ni un refus de Google. */
+  | { etat: 'hors-offre'; raison: string }
   | { etat: 'refus'; raison: string }
 
 /**
  * Les chiffres de recherche d'un site, ou la raison pour laquelle il n'y en a pas.
  *
- * Aucune de ces raisons n'est une panne : un site non connecté, une propriété absente et une
- * autorisation révoquée sont trois états ordinaires, chacun avec son geste suivant. Une
- * exception les aurait confondus en un écran cassé.
+ * Aucune de ces raisons n'est une panne : un site non connecté, une offre qui ne l'ouvre
+ * pas, une propriété absente et une autorisation révoquée sont quatre états ordinaires,
+ * chacun avec son geste suivant. Une exception les aurait confondus en un écran cassé.
+ *
+ * Et ils restent distincts jusqu'à l'écran. Ranger le refus d'offre avec la panne de Google
+ * a coûté exactement ce qu'on pouvait craindre : un écran qui annonçait « Google n'a pas
+ * répondu » alors que Google avait parfaitement répondu, et qui envoyait chercher la cause
+ * du mauvais côté.
  */
 export async function lireRecherches(
   userId: string,
@@ -179,7 +186,7 @@ export async function lireRecherches(
   } catch (error) {
     return {
       ok: false,
-      etat: 'refus',
+      etat: 'hors-offre',
       raison:
         error instanceof AppError
           ? error.message

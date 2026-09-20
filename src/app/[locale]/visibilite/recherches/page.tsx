@@ -210,6 +210,14 @@ export default async function RecherchesPage({
             lien="/connexions"
             lienTexte="Connecter Search Console"
           />
+        ) : lecture.etat === 'hors-offre' ? (
+          <Vide
+            locale={locale}
+            titre="Votre offre n’ouvre pas les chiffres de recherche."
+            texte={lecture.raison}
+            lien="/abonnement"
+            lienTexte="Voir les offres"
+          />
         ) : lecture.etat === 'sans-propriete' ? (
           <Vide
             locale={locale}
