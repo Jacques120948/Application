@@ -5,6 +5,7 @@ import type { Ligne, Propriete } from '@/server/integrations/providers/google-se
 import { nomDuPays } from '@/lib/pays'
 import { ARTICLE_FORME, articleSchema } from '@/server/ai/schemas'
 import { SEUILS_REDACTION } from '@/server/audit/checks/geo'
+import { clefUrl, suspectes } from '@/server/audit/indexation'
 
 /**
  * L'aller-retour OAuth et la lecture des chiffres de recherche.
@@ -277,5 +278,43 @@ describe('la longueur d’un article', () => {
     expect(ARTICLE_FORME.chapoSignesMin).toBeGreaterThanOrEqual(
       SEUILS_REDACTION.introSignesMinimum,
     )
+  })
+})
+
+describe('les pages suspectes d’indexation', () => {
+  const page = (path: string, depth = 1) => ({
+    url: `https://cap-nature.ch${path}`,
+    path,
+    depth,
+  })
+
+  it('rapproche des adresses que rien ne distingue vraiment', () => {
+    /*
+     * Google lui-même nous l'a montré en retenant l'accueil sans barre finale quand la page
+     * en déclare une. Sans cette réduction, la même page apparaîtrait des deux côtés comme
+     * deux pages différentes, et l'écran annoncerait des absences imaginaires.
+     */
+    expect(clefUrl('https://www.cap-nature.ch/produits/')).toBe(
+      clefUrl('https://cap-nature.ch/produits'),
+    )
+    expect(clefUrl('https://CAP-NATURE.ch/Produits')).toBe('cap-nature.ch/Produits')
+  })
+
+  it('ne retient que les pages que Google n’a jamais affichées', () => {
+    const trouvees = suspectes(
+      [page('/', 0), page('/bougies'), page('/mentions-legales', 3)],
+      ['https://cap-nature.ch/', 'https://www.cap-nature.ch/bougies/'],
+    )
+    expect(trouvees.map((p) => p.path)).toEqual(['/mentions-legales'])
+  })
+
+  it('met les pages les plus proches de l’accueil devant', () => {
+    // Une page de profondeur six qui ne sort pas est rarement une surprise.
+    const trouvees = suspectes([page('/loin', 6), page('/proche', 1)], [])
+    expect(trouvees.map((p) => p.path)).toEqual(['/proche', '/loin'])
+  })
+
+  it('ne rend rien quand tout ce qui est relevé apparaît déjà', () => {
+    expect(suspectes([page('/bougies')], ['https://cap-nature.ch/bougies'])).toEqual([])
   })
 })

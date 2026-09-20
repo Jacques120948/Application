@@ -472,6 +472,13 @@ export function TableauVisibilite({
           <h2 className="m-0 text-lg font-semibold">Votre plan d’action</h2>
           <div className="flex flex-wrap gap-2">
             <LinkButton
+              href={`/${locale}/visibilite/indexation?siteId=${site.id}`}
+              variant="secondary"
+              size="medium"
+            >
+              Vos pages dans Google
+            </LinkButton>
+            <LinkButton
               href={`/${locale}/visibilite/recherches?siteId=${site.id}`}
               variant="secondary"
               size="medium"
