@@ -493,6 +493,13 @@ export function TableauVisibilite({
               Votre boutique
             </LinkButton>
             <LinkButton
+              href={`/${locale}/visibilite/calendrier?siteId=${site.id}`}
+              variant="secondary"
+              size="medium"
+            >
+              Quoi écrire, et quand
+            </LinkButton>
+            <LinkButton
               href={`/${locale}/visibilite/articles?siteId=${site.id}`}
               variant="secondary"
               size="medium"

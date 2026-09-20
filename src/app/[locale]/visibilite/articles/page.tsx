@@ -22,7 +22,7 @@ export default async function ArticlesPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ siteId?: string }>
+  searchParams: Promise<{ siteId?: string; sujet?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -79,6 +79,7 @@ export default async function ArticlesPage({
           }))}
           cout={cout}
           recherchesBranchees={recherchesBranchees}
+          sujetPropose={(demande.sujet ?? '').slice(0, 200)}
         />
       </div>
     </Shell>

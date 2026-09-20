@@ -208,6 +208,7 @@ export function ArticlesRediges({
   articles: initiaux,
   cout,
   recherchesBranchees,
+  sujetPropose = '',
 }: {
   siteId: string
   host: string
@@ -216,12 +217,19 @@ export function ArticlesRediges({
   articles: readonly ArticleResumeVu[]
   /** Search Console est relié : le sujet se choisira sur la demande réelle, pas sur le site. */
   recherchesBranchees: boolean
+  /**
+   * Un sujet apporté par le calendrier, prérempli dans le champ.
+   *
+   * Prérempli et non imposé : c'est une proposition tirée de chiffres, et la personne
+   * connaît son métier mieux que le classement. Le champ reste modifiable et effaçable.
+   */
+  sujetPropose?: string
   /** La fourchette annoncée, ou `null` quand le catalogue ne la donne pas. */
   cout: { min: number; max: number } | null
 }) {
   const [liste, setListe] = useState<ArticleResumeVu[]>([...initiaux])
   const [ouvert, setOuvert] = useState<ArticleCompletVu | null>(null)
-  const [demande, setDemande] = useState('')
+  const [demande, setDemande] = useState(sujetPropose)
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
   const [copie, setCopie] = useState(false)
