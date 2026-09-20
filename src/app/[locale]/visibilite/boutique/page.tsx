@@ -38,7 +38,7 @@ export default async function BoutiquePage({ params }: { params: Promise<{ local
     }))
 
   return (
-    <Shell locale={locale} userName={user.name} credits={credits} screen="visibilite">
+    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite">
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a
           href={`/${locale}/visibilite`}

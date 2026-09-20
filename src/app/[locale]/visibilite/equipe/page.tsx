@@ -43,7 +43,7 @@ export default async function EquipePage({
   ])
 
   return (
-    <Shell locale={locale} userName={user.name} credits={credits} screen="visibilite">
+    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite">
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <div className="mb-8 flex flex-wrap items-baseline justify-between gap-3">
           <div>

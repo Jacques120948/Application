@@ -145,6 +145,23 @@ describe('règles de dépendance', () => {
     expect(offenders).toEqual([])
   })
 
+  it('dit au bandeau qui est administrateur, sur toutes les pages', () => {
+    /*
+     * Le bandeau reçoit `isAdmin` par propriété, et sa valeur par défaut est « non ». Six
+     * pages sur neuf ne la transmettaient pas : le lien vers l'administration disparaissait
+     * dès qu'on ouvrait Visibilité, c'est-à-dire partout où l'on passe son temps. Rien
+     * n'échouait, rien n'était journalisé — le lien n'était simplement pas là.
+     *
+     * C'est la forme de défaut qu'aucun test d'usage ne rattrape : il faut le chercher là
+     * où il naît, dans l'oubli d'une propriété facultative.
+     */
+    const offenders = sources
+      .filter((path) => path.startsWith(join('src', 'app')) && path.endsWith('page.tsx'))
+      .filter((path) => read(path).includes('<Shell'))
+      .filter((path) => !read(path).includes('isAdmin'))
+    expect(offenders).toEqual([])
+  })
+
   it("n'expose aucun secret au navigateur", () => {
     const offenders = sources
       .filter((path) => path.startsWith(join('src', 'components')))

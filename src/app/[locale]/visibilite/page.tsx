@@ -77,7 +77,7 @@ export default async function VisibilitePage({
   const lignes = (plan?.lignes ?? []).slice(0, PRIORITES_MAX)
 
   return (
-    <Shell locale={locale} userName={user.name} credits={credits} screen="visibilite">
+    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite">
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <h1 className="m-0 text-2xl font-semibold tracking-tight">Votre visibilité</h1>
         <p className="mt-2 mb-8 text-sm text-[var(--color-ink-soft)]">
