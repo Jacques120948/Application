@@ -353,16 +353,23 @@ describe('le jugement d’une balise', () => {
 })
 
 describe('la fiche du catalogue', () => {
-  it('déclare une connexion en lecture seule, sans coût pour Evoliia', () => {
+  it('ne demande qu’une seule autorisation d’écriture, et sans coût pour Evoliia', () => {
     const shopify = findProvider('shopify')
     expect(shopify).toBeDefined()
     if (shopify === undefined) return
 
     // La règle du produit : un marchand de plus ne doit pas créer un coût de plus.
     expect(shopify.costToEvoliia).toBe('aucun')
-    // Aucune autorisation d'écriture n'est demandée : un jeton accorde ce qui a été coché.
-    expect(shopify.scopes).toEqual(['read_products', 'read_content'])
-    expect(shopify.scopes.some((scope) => scope.startsWith('write_'))).toBe(false)
+    /*
+     * Une application n'accorde que ce qui a été coché, et ce qui est coché ici sera accordé
+     * pour de bon. `write_content` sert à déposer un brouillon d'article — rien d'autre.
+     * Toute portée d'écriture supplémentaire élargirait ce qu'Evoliia pourrait faire dans la
+     * boutique de quelqu'un, et c'est une décision qui ne se prend pas en passant.
+     */
+    expect(shopify.scopes).toEqual(['read_products', 'read_content', 'write_content'])
+    expect(shopify.scopes.filter((scope) => scope.startsWith('write_'))).toEqual([
+      'write_content',
+    ])
     /*
      * Les deux champs supplémentaires sont déclarés : sans eux, l'écran ne demanderait ni la
      * boutique ni l'identifiant client, et la connexion n'aurait nulle part où s'appliquer.

@@ -1,0 +1,92 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { enHtml } from '@/server/commerce/publication'
+
+/**
+ * La conversion d'un article vers le HTML que reçoit une boutique en ligne.
+ *
+ * C'est le seul endroit où du texte produit par un modèle part vers un site public. Un
+ * convertisseur Markdown complet accepterait le HTML brut mêlé au texte, et donc tout ce
+ * qu'un modèle pourrait produire — une balise de script, un cadre, un pixel de suivi.
+ * Celui-ci ne connaît que quatre formes, et échappe tout le reste.
+ */
+
+const SANS_IMAGES: never[] = []
+
+describe('le corps d’un article en HTML', () => {
+  it('rend les intertitres, les paragraphes et les listes', () => {
+    const html = enHtml('## Origine\n\nUn verre volcanique.\n\n- dur\n- tranchant', SANS_IMAGES)
+    expect(html).toContain('<h2>Origine</h2>')
+    expect(html).toContain('<p>Un verre volcanique.</p>')
+    expect(html).toContain('<ul><li>dur</li><li>tranchant</li></ul>')
+  })
+
+  it('échappe ce qui ressemble à du HTML, au lieu de le laisser passer', () => {
+    /*
+     * La règle qui compte. Ce texte vient d'un modèle et part sur une boutique : rien de ce
+     * qu'il écrit ne doit pouvoir devenir une balise.
+     */
+    const html = enHtml('## <script>alert(1)</script>\n\nUn "essai" & une <b>balise</b>', SANS_IMAGES)
+    expect(html).not.toContain('<script>')
+    expect(html).toContain('&lt;script&gt;')
+    expect(html).toContain('&amp;')
+    expect(html).toContain('&lt;b&gt;')
+  })
+
+  it('place la photo sous l’intertitre de sa section', () => {
+    const html = enHtml('## Une\n\nTexte.\n\n## Deux\n\nTexte.', [
+      {
+        section: 1,
+        image: 'https://cdn.shopify.com/bougie.jpg',
+        alt: 'Bougie obsidienne',
+        lien: 'https://cap-nature.ch/products/bougie',
+      },
+    ])
+    const apresDeux = html.slice(html.indexOf('<h2>Deux</h2>'))
+    expect(apresDeux).toContain('<img src="https://cdn.shopify.com/bougie.jpg"')
+    expect(apresDeux).toContain('alt="Bougie obsidienne"')
+    expect(apresDeux).toContain('<a href="https://cap-nature.ch/products/bougie">')
+    // La première section n'a pas d'image : la photo ne doit pas remonter.
+    expect(html.slice(0, html.indexOf('<h2>Deux</h2>'))).not.toContain('<img')
+  })
+
+  it('échappe aussi les adresses, qui pourraient fermer un attribut', () => {
+    const html = enHtml('## Une\n\nTexte.', [
+      { section: 0, image: 'https://x/"onerror="alert(1)', alt: 'a"b', lien: null },
+    ])
+    expect(html).not.toContain('onerror="alert')
+    expect(html).toContain('&quot;')
+  })
+
+  it('n’invente rien quand il n’y a pas d’image', () => {
+    expect(enHtml('## Une\n\nTexte.', SANS_IMAGES)).not.toContain('<img')
+  })
+})
+
+describe('ce que le connecteur ne fait jamais', () => {
+  it('ne publie pas : isPublished est faux, en dur', () => {
+    /*
+     * La règle qui porte toute la fonctionnalité, et la seule qu'un réglage ne doit jamais
+     * pouvoir renverser. Une intelligence artificielle qui publie seule sur une boutique
+     * marchande, c'est le jour où elle publie une bêtise et où son propriétaire l'apprend
+     * par un client.
+     *
+     * Vérifié sur le texte du connecteur plutôt que par un appel réseau : c'est la valeur
+     * écrite dans le code qui compte, et c'est elle qu'une modification distraite
+     * changerait.
+     */
+    const source = readFileSync('src/server/integrations/providers/shopify.ts', 'utf8')
+    expect(source).toContain('isPublished: false')
+    expect(source).not.toMatch(/isPublished:\s*(true|brouillon|params)/u)
+  })
+
+  it('n’expose aucune autre écriture que le dépôt d’article', () => {
+    const source = readFileSync('src/server/integrations/providers/shopify.ts', 'utf8')
+    const mutations = source.match(/mutation\s*\(/gu) ?? []
+    expect(mutations).toHaveLength(1)
+    expect(source).toContain('articleCreate')
+    for (const interdite of ['productUpdate', 'productDelete', 'articleDelete', 'articleUpdate']) {
+      expect(source).not.toContain(interdite)
+    }
+  })
+})

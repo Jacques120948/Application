@@ -612,6 +612,116 @@ export async function lireProduits(
   )
 }
 
+export type BlogShopify = { id: string; titre: string; handle: string }
+
+const REQUETE_BLOGS = `{ blogs(first: 50) { nodes { id title handle } } }`
+
+/** Les blogs de la boutique. Il en faut un pour y déposer quoi que ce soit. */
+export async function lireBlogs(
+  acces: AccesShopify,
+  jeton: string,
+): Promise<{ ok: true; blogs: BlogShopify[] } | { ok: false; raison: string }> {
+  const reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_BLOGS)
+  if (reponse.status !== 200 || reponse.data === null) {
+    return { ok: false, raison: refus(reponse.status, reponse.erreurs) }
+  }
+
+  const noeuds =
+    (reponse.data as { blogs?: { nodes?: { id?: string; title?: string; handle?: string }[] } })
+      .blogs?.nodes ?? []
+
+  return {
+    ok: true,
+    blogs: noeuds
+      .filter((n): n is { id: string; title: string; handle: string } => typeof n.id === 'string')
+      .map((n) => ({ id: n.id, titre: decoderEntites(n.title ?? ''), handle: n.handle ?? '' })),
+  }
+}
+
+/*
+ * Le dépôt d'un article, et l'unique écriture qu'Evoliia sache faire dans une boutique.
+ *
+ * `isPublished: false` n'est pas une option : c'est la fonctionnalité. Evoliia dépose un
+ * brouillon, le marchand le relit dans Shopify et le publie lui-même. Une intelligence
+ * artificielle qui publie seule sur une boutique marchande, c'est le jour où elle publie une
+ * bêtise et où son propriétaire l'apprend par un client.
+ *
+ * Les balises de référencement passent par les métachamps `global` : le type `Article` de
+ * Shopify n'a pas de champ `seo`, ce qui fait échouer toute la requête si on le demande.
+ */
+const MUTATION_ARTICLE = `mutation($article: ArticleCreateInput!) {
+  articleCreate(article: $article) {
+    article { id handle title }
+    userErrors { code field message }
+  }
+}`
+
+export type ArticleDepose = { id: string; handle: string }
+
+export async function deposerBrouillon(
+  acces: AccesShopify,
+  jeton: string,
+  brouillon: {
+    blogId: string
+    titre: string
+    auteur: string
+    corpsHtml: string
+    resume: string
+    metaTitle: string
+    metaDescription: string
+  },
+): Promise<{ ok: true; article: ArticleDepose } | { ok: false; raison: string }> {
+  const metachamps = [
+    { namespace: 'global', key: 'title_tag', value: brouillon.metaTitle },
+    { namespace: 'global', key: 'description_tag', value: brouillon.metaDescription },
+  ]
+    .filter((champ) => champ.value.trim() !== '')
+    .map((champ) => ({ ...champ, type: 'single_line_text_field' }))
+
+  const reponse = await appeler(acces.boutique, jeton, acces.version, MUTATION_ARTICLE, {
+    article: {
+      blogId: brouillon.blogId,
+      title: brouillon.titre,
+      author: { name: brouillon.auteur },
+      body: brouillon.corpsHtml,
+      summary: brouillon.resume,
+      // Jamais vrai. Voir le commentaire ci-dessus.
+      isPublished: false,
+      ...(metachamps.length === 0 ? {} : { metafields: metachamps }),
+    },
+  })
+  if (reponse.status !== 200 || reponse.data === null) {
+    return { ok: false, raison: refus(reponse.status, reponse.erreurs) }
+  }
+
+  const charge = (
+    reponse.data as {
+      articleCreate?: {
+        article?: { id?: string; handle?: string }
+        userErrors?: { message?: string; field?: string[] }[]
+      }
+    }
+  ).articleCreate
+
+  const reproches = charge?.userErrors ?? []
+  if (reproches.length > 0) {
+    /*
+     * Les refus de Shopify sont rendus dans la charge utile, pas dans le code HTTP : une
+     * réponse 200 peut ne rien avoir créé du tout. Les ignorer ferait annoncer un succès
+     * pour un article qui n'existe nulle part.
+     */
+    const dit = reproches
+      .map((erreur) => `${(erreur.field ?? []).join('.')} ${erreur.message ?? ''}`.trim())
+      .filter((texte) => texte !== '')
+      .join(' · ')
+    return { ok: false, raison: dit === '' ? 'Shopify a refusé le dépôt.' : `Shopify : ${dit}` }
+  }
+
+  const article = charge?.article
+  if (article?.id === undefined) return { ok: false, raison: 'Shopify n’a rien renvoyé.' }
+  return { ok: true, article: { id: article.id, handle: article.handle ?? '' } }
+}
+
 /**
  * Les fiches qui peuvent illustrer un article.
  *

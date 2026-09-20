@@ -409,7 +409,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     category: 'commerce',
     summary: 'Votre boutique Shopify : fiches produits et articles de blog.',
     usage:
-      'Lire vos fiches produits et vos articles pour voir ce qui leur manque côté référencement, tel que vous l’avez saisi, et non tel que votre thème l’affiche.',
+      'Lire vos fiches produits et vos articles pour voir ce qui leur manque côté référencement, et déposer les articles rédigés en brouillon dans votre blog — que vous relisez et publiez vous-même.',
     status: 'available',
     /*
      * Par identifiants d'application, et non par autorisation en un clic.
@@ -428,7 +428,13 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
      * En lecture seule, et la liste est littérale : ce sont les portées à déclarer dans le
      * Dev Dashboard. Rien ici ne permet d'écrire dans la boutique.
      */
-    scopes: ['read_products', 'read_content'],
+    /*
+     * `write_content` est la seule portée d'écriture, et elle ne sert qu'à déposer un
+     * brouillon d'article. Rien dans le code ne publie : `isPublished` vaut `false` en dur
+     * dans le connecteur. La portée permettrait de publier ; le produit ne le fait pas, et
+     * c'est une décision qui se relit dans src/server/commerce/publication.ts.
+     */
+    scopes: ['read_products', 'read_content', 'write_content'],
     costToEvoliia: 'aucun',
     costToCreator: 'gratuit',
     costNotice:
@@ -439,7 +445,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     providerReview:
       'Aucune validation à obtenir : l’application reste privée et ne sert que vos propres boutiques. Une application publique, nécessaire pour figurer sur la place de marché Shopify, demanderait en revanche une revue de Shopify.',
     risk:
-      'Evoliia lit vos fiches et vos articles, elle ne peut rien y écrire : elle n’obtient que les portées que vous avez déclarées, et vous n’en déclarez aucune en écriture. Attention toutefois : si vous ajoutez plus tard des portées d’écriture à cette même application pour un autre usage, Evoliia en hériterait. Réservez-lui son application.',
+      'Evoliia lit vos fiches et vos articles, et dépose les articles rédigés en brouillon non publié. Elle ne publie jamais : c’est vous qui relisez et publiez dans Shopify. La portée d’écriture qu’elle demande permettrait techniquement de publier — c’est le code qui s’y refuse, pas la permission. Ne déclarez aucune autre portée d’écriture sur cette application : Evoliia en hériterait.',
     extraFields: [
       {
         name: 'boutique',
@@ -464,15 +470,15 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       steps: [
         'Ouvrez le Dev Dashboard de Shopify et connectez-vous. Un compte partenaire gratuit suffit.',
         'Créez une application : donnez-lui un nom, par exemple « Evoliia ».',
-        'Ouvrez l’onglet « Versions », déclarez les portées read_products et read_content, et rien d’autre, puis cliquez « Release ».',
+        'Ouvrez l’onglet « Versions », déclarez les portées read_products, read_content et write_content, et rien d’autre, puis cliquez « Release ».',
         'Revenez sur « Home », faites défiler jusqu’à « Install app » et installez l’application sur votre boutique.',
         'Ouvrez l’onglet « Settings » : l’identifiant client et le secret client s’y trouvent.',
         'Revenez ici et collez l’adresse de votre boutique, l’identifiant client et le secret client.',
       ],
       caution:
-        'Ne déclarez aucune portée en écriture : Evoliia n’en a pas besoin pour lire, et une application n’accorde que ce que vous avez déclaré.',
+        'write_content est la seule portée d’écriture à déclarer : elle sert à déposer un brouillon d’article, rien d’autre. N’en ajoutez aucune autre — une application n’accorde que ce que vous avez déclaré, et Evoliia hériterait de tout ce qui figure là.',
     },
-    reviewedOn: '2026-09-18',
+    reviewedOn: '2026-09-20',
   },
   {
     id: 'notion',

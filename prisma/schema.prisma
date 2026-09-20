@@ -1447,6 +1447,12 @@ model SiteArticle {
   /// [{ section, titre, image, alt, lien }] : les photos de la boutique retenues.
   /// Les adresses pointent la boutique, jamais une copie : Evoliia ne stocke aucune image.
   illustrations Json?
+  /// Identifiant Shopify de l'article, une fois déposé. Vide tant qu'il ne l'a pas été.
+  /// Sa présence est ce qui empêche un second dépôt, et donc un doublon dans la boutique.
+  shopifyId  String?
+  /// L'écran Shopify où le relire et le publier.
+  shopifyUrl String?
+  shopifyAt  DateTime?
 
   titre String
   /// Le premier paragraphe, celui qui doit répondre avant qu'on fasse défiler.

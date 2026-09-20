@@ -95,6 +95,8 @@ export type ArticleComplet = ArticleResume & {
   recherches: string[]
   /** Les photos de la boutique retenues, avec la section qu'elles illustrent. */
   illustrations: Illustration[]
+  /** L'écran Shopify où le relire, une fois déposé. `null` tant qu'il ne l'a pas été. */
+  shopifyUrl: string | null
   chapo: string
   corps: string
   questions: { question: string; reponse: string }[]
@@ -181,6 +183,7 @@ export async function readArticle(userId: string, articleId: string): Promise<Ar
     checkIds: article.checkIds,
     recherches: article.recherches,
     illustrations: lireIllustrations(article.illustrations),
+    shopifyUrl: article.shopifyUrl,
     titre: article.titre,
     chapo: article.chapo,
     corps: article.corps,

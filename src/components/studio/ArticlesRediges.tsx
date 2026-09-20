@@ -61,6 +61,8 @@ export type ArticleCompletVu = ArticleResumeVu & {
   checkIds: string[]
   recherches: string[]
   illustrations: IllustrationVue[]
+  /** L'écran Shopify où relire le brouillon, une fois déposé. */
+  shopifyUrl: string | null
   chapo: string
   corps: string
   questions: { question: string; reponse: string }[]
@@ -241,6 +243,8 @@ export function ArticlesRediges({
   const [demande, setDemande] = useState(sujetPropose)
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
+  const [depot, setDepot] = useState<string | null>(null)
+  const [envoi, setEnvoi] = useState(false)
   const [copie, setCopie] = useState(false)
 
   async function ecrire() {
@@ -290,6 +294,30 @@ export function ArticlesRediges({
     if (response === null || !response.ok) return
     setListe((actuels) => actuels.filter((article) => article.id !== id))
     if (ouvert?.id === id) setOuvert(null)
+  }
+
+  /**
+   * Dépose l'article dans Shopify, en brouillon.
+   *
+   * L'état local sert à faire disparaître le bouton sans recharger : le serveur a déjà
+   * enregistré le dépôt, et c'est lui qui refusera un second envoi quoi qu'affiche l'écran.
+   */
+  async function deposer(article: ArticleCompletVu) {
+    setEnvoi(true)
+    setErreur(null)
+    const response = await fetch(`/api/articles/${article.id}/shopify`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+    }).catch(() => null)
+    const body = (await response?.json().catch(() => null)) as
+      | { lien?: string; blog?: string; message?: string }
+      | null
+    setEnvoi(false)
+    if (response === null || !response.ok || body?.lien === undefined) {
+      setErreur(body?.message ?? 'Le dépôt dans Shopify n’a pas abouti.')
+      return
+    }
+    setDepot(body.lien)
   }
 
   async function copier(article: ArticleCompletVu) {
@@ -508,6 +536,41 @@ export function ArticlesRediges({
                     >
                       {copie ? 'Copié' : 'Copier l’article'}
                     </button>
+
+                    {/*
+                      Le dépôt dans Shopify. Un brouillon, jamais une publication : le
+                      marchand relit chez lui, dans l'écran qu'il connaît, et publie
+                      lui-même. Le bouton laisse place à un lien une fois le dépôt fait —
+                      un second envoi créerait un doublon dans la boutique.
+                    */}
+                    <div className="mt-4 grid gap-2 border-t border-[var(--color-line)] pt-4">
+                      {(ouvert.shopifyUrl ?? depot) !== null ? (
+                        <a
+                          href={ouvert.shopifyUrl ?? depot ?? '#'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-[var(--color-ink-soft)]"
+                        >
+                          Brouillon déposé dans Shopify — le relire et le publier ↗
+                        </a>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            disabled={envoi}
+                            onClick={() => void deposer(ouvert)}
+                            className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm"
+                          >
+                            {envoi ? 'Envoi…' : 'Envoyer dans Shopify (brouillon)'}
+                          </button>
+                          <p className="m-0 text-xs text-[var(--color-ink-faint)]">
+                            Evoliia dépose un brouillon non publié. Vous le relisez dans
+                            Shopify et vous le publiez vous-même — elle ne publie jamais
+                            seule.
+                          </p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
