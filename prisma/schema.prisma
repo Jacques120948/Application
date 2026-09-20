@@ -1444,6 +1444,9 @@ model SiteArticle {
   /// Conservées pour qu'on sache, en relisant l'article un an plus tard, sur quelle demande
   /// il a été écrit — et vide quand il n'a été fondé que sur les manques du site.
   recherches String[] @default([])
+  /// [{ section, titre, image, alt, lien }] : les photos de la boutique retenues.
+  /// Les adresses pointent la boutique, jamais une copie : Evoliia ne stocke aucune image.
+  illustrations Json?
 
   titre String
   /// Le premier paragraphe, celui qui doit répondre avant qu'on fasse défiler.

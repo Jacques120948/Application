@@ -1,6 +1,8 @@
 import { notFound, validation } from '@/lib/errors'
 import { writeArticle, type ConstatPourArticle, type PageDuSite } from '@/server/ai/operations'
 import { recherchesPourArticle } from './recherches'
+import { lireVitrinePourArticle } from '@/server/commerce/boutique'
+import { choisirIllustrations, type Illustration } from '@/server/commerce/illustrations'
 import { actionCost } from '@/server/billing/action-costs'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
@@ -91,6 +93,8 @@ export type ArticleComplet = ArticleResume & {
   checkIds: string[]
   /** Les recherches réelles sur lesquelles le sujet a été choisi. Vide sinon. */
   recherches: string[]
+  /** Les photos de la boutique retenues, avec la section qu'elles illustrent. */
+  illustrations: Illustration[]
   chapo: string
   corps: string
   questions: { question: string; reponse: string }[]
@@ -176,6 +180,7 @@ export async function readArticle(userId: string, articleId: string): Promise<Ar
     fondement: article.fondement,
     checkIds: article.checkIds,
     recherches: article.recherches,
+    illustrations: lireIllustrations(article.illustrations),
     titre: article.titre,
     chapo: article.chapo,
     corps: article.corps,
@@ -262,6 +267,13 @@ export async function redigerArticle(
    */
   const recherches = await recherchesPourArticle(userId, site.origin)
 
+  /*
+   * Les fiches qui peuvent illustrer. Lues avant l'appel parce que Milo doit savoir s'il a
+   * le droit de demander des images ; rend une liste vide sans boutique, sans droit ou sans
+   * réponse de Shopify, et l'article s'écrit alors sans illustrations.
+   */
+  const vitrine = await lireVitrinePourArticle(userId)
+
   if (voulu === '' && constats.length === 0 && recherches.length === 0) {
     throw validation(
       'Votre dernière analyse ne relève aucun manque de contenu : dites sur quoi vous voulez un article.',
@@ -276,11 +288,23 @@ export async function redigerArticle(
     pages: duSite,
     constats,
     recherches,
+    boutique: vitrine.length > 0,
     seuils: SEUILS_REDACTION,
     locale,
   })
 
   const article = resultat.value
+
+  /*
+   * Les images sont choisies ici, après la réponse : Milo a décrit ce qu'il voulait montrer,
+   * le rapprochement avec les fiches réelles est du comptage. Aucune adresse n'a traversé le
+   * modèle, ce qui est la seule façon d'être certain qu'aucune n'est inventée.
+   */
+  const illustrations = choisirIllustrations(
+    article.sections.map((section) => section.illustration),
+    vitrine,
+  )
+
   const corps = article.sections
     .map((section) => `## ${section.titre}\n\n${section.corps.trim()}`)
     .join('\n\n')
@@ -296,6 +320,7 @@ export async function redigerArticle(
         fondement: article.fondement,
         checkIds: manques.map((manque) => manque.checkId),
         recherches: recherches.map((ligne) => ligne.requete),
+        illustrations: illustrations as unknown as object,
         titre: article.titre,
         chapo: article.chapo,
         corps,
@@ -313,6 +338,7 @@ export async function redigerArticle(
     siteId,
     mots: wordCount,
     recherches: recherches.length,
+    illustrations: illustrations.length,
     sections: article.sections.length,
     credits: resultat.creditsSpent,
   })
@@ -345,6 +371,31 @@ function lireQuestions(brut: unknown): { question: string; reponse: string }[] {
     const ligne = entree as { question?: unknown; reponse?: unknown }
     if (typeof ligne.question !== 'string' || typeof ligne.reponse !== 'string') continue
     retenues.push({ question: ligne.question, reponse: ligne.reponse })
+  }
+  return retenues
+}
+
+/**
+ * Relit les illustrations enregistrées, sans faire confiance à leur forme.
+ *
+ * C'est du JSON en base : il a été écrit par une version du code, il est relu par une autre.
+ * Une colonne libre se relit toujours en se demandant ce qu'on y trouvera.
+ */
+function lireIllustrations(brut: unknown): Illustration[] {
+  if (!Array.isArray(brut)) return []
+  const retenues: Illustration[] = []
+  for (const entree of brut) {
+    if (typeof entree !== 'object' || entree === null) continue
+    const ligne = entree as Record<string, unknown>
+    if (typeof ligne.image !== 'string' || ligne.image === '') continue
+    if (typeof ligne.section !== 'number') continue
+    retenues.push({
+      section: ligne.section,
+      titre: typeof ligne.titre === 'string' ? ligne.titre : '',
+      image: ligne.image,
+      alt: typeof ligne.alt === 'string' ? ligne.alt : '',
+      lien: typeof ligne.lien === 'string' ? ligne.lien : null,
+    })
   }
   return retenues
 }

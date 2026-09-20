@@ -389,6 +389,18 @@ export type ProduitShopify = {
   descriptionVide: boolean
 }
 
+/** Une fiche en vitrine : ce qu'il faut pour l'illustrer et y renvoyer, rien de plus. */
+export type VitrineShopify = {
+  titre: string
+  handle: string
+  /** L'adresse publique de la fiche. Absente quand elle n'est pas en ligne. */
+  url: string | null
+  /** L'image principale, telle que Shopify la sert. Jamais recopiée ailleurs. */
+  image: string
+  /** Le texte de remplacement saisi par le marchand, souvent vide. */
+  alt: string
+}
+
 export type ArticleShopify = {
   id: string
   titre: string
@@ -407,6 +419,24 @@ const REQUETE_PRODUITS = `query($n: Int!, $apres: String) {
       # Borné : on ne veut pas le descriptif, on veut savoir s'il existe. Tiré en entier sur
       # mille fiches, il ferait plusieurs mégaoctets pour répondre à une question booléenne.
       apercu: description(truncateAt: 40)
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`
+
+/*
+ * La vitrine : les fiches en ligne qui ont une photo.
+ *
+ * Le filtre est posé par Shopify, pas par nous : `status:active` écarte les brouillons et
+ * les archives sans les faire voyager. Illustrer un article avec la photo d'un produit
+ * retiré de la vente est exactement le genre de détail qui se voit tout de suite chez le
+ * client, et jamais chez celui qui l'a écrit.
+ */
+const REQUETE_VITRINE = `query($n: Int!, $apres: String) {
+  products(first: $n, after: $apres, query: "status:active") {
+    nodes {
+      title handle onlineStoreUrl
+      featuredImage { url altText }
     }
     pageInfo { hasNextPage endCursor }
   }
@@ -580,6 +610,50 @@ export async function lireProduits(
     }),
     max,
   )
+}
+
+/**
+ * Les fiches qui peuvent illustrer un article.
+ *
+ * Bornée plus serré que la lecture d'audit : on cherche de quoi illustrer cinq sections, pas
+ * de quoi inventorier une boutique. Une fiche sans photo est écartée ici plutôt que plus
+ * loin — elle ne sert à rien et occuperait une place dans la borne.
+ */
+export async function lireVitrine(
+  acces: AccesShopify,
+  jeton: string,
+  max: number,
+): Promise<{ pieces: VitrineShopify[]; tronque: boolean }> {
+  type Brut = {
+    title: string
+    handle: string
+    onlineStoreUrl: string | null
+    featuredImage: { url: string | null; altText: string | null } | null
+  }
+
+  const lu = await parcourir<Brut, VitrineShopify | null>(
+    acces,
+    jeton,
+    REQUETE_VITRINE,
+    'products',
+    (brut) => {
+      const image = brut.featuredImage?.url ?? ''
+      if (image === '') return null
+      return {
+        titre: decoderEntites(brut.title),
+        handle: brut.handle,
+        url: brut.onlineStoreUrl,
+        image,
+        alt: decoderEntites(brut.featuredImage?.altText ?? ''),
+      }
+    },
+    max,
+  )
+
+  return {
+    pieces: lu.pieces.filter((piece): piece is VitrineShopify => piece !== null),
+    tronque: lu.tronque,
+  }
 }
 
 export async function lireArticles(

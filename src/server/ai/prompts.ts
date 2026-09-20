@@ -868,6 +868,16 @@ cet article :
 - Des faits concrets et vérifiables : durées, températures, proportions, ordres de grandeur.
   Un article sans un seul chiffre n'avance rien.
 
+Les illustrations, quand une boutique t'est signalée :
+- Pour une section que la photo d'un produit rendrait plus claire, décris en quelques mots
+  ce qu'il faudrait montrer — « une bougie avec une obsidienne », « un coffret découverte ».
+- Emploie les mots du métier et de la matière, ceux qui figureraient dans le nom d'une
+  fiche. « Une belle image d'ambiance » ne permet de trouver aucun produit.
+- N'écris jamais d'adresse d'image : c'est Evoliia qui va chercher la photo dans la
+  boutique. Si rien ne correspond, la section reste sans image, et c'est très bien.
+- Laisse vide pour les sections qui n'ont rien à montrer. Un article illustré à chaque
+  paragraphe est une plaquette, et une plaquette n'intéresse que ceux qui connaissent déjà.
+
 Ce que tu n'inventes jamais :
 - Aucun prix, délai, garantie, certification, label, récompense ni chiffre d'affaires de
   cette entreprise qui ne figure pas dans ce qu'on t'a donné. Ces phrases-là l'engagent

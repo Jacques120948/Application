@@ -37,6 +37,15 @@ export type ManqueVu = {
   affected: number
 }
 
+/** Une photo de la boutique, rapprochée d'une section. Jamais une image créée. */
+export type IllustrationVue = {
+  section: number
+  titre: string
+  image: string
+  alt: string
+  lien: string | null
+}
+
 export type ArticleResumeVu = {
   id: string
   sujet: string
@@ -51,6 +60,7 @@ export type ArticleCompletVu = ArticleResumeVu & {
   fondement: string
   checkIds: string[]
   recherches: string[]
+  illustrations: IllustrationVue[]
   chapo: string
   corps: string
   questions: { question: string; reponse: string }[]
@@ -76,8 +86,49 @@ function enClair(iso: string, locale: string): string {
  * paragraphes et des listes à puces. Une bibliothèque Markdown complète apporterait des
  * tableaux, du HTML brut et une surface d'attaque, pour trois formes qu'on connaît déjà.
  */
-function Corps({ texte }: { texte: string }) {
+/**
+ * Une photo de la boutique, telle que la boutique la sert.
+ *
+ * Aucune copie : l'adresse pointe l'image que la boutique héberge déjà. Evoliia n'en stocke
+ * aucune, n'en paie aucune, et l'article se colle tel quel là où ces images vivent. Le lien
+ * vers la fiche est du maillage interne, et il est gratuit.
+ */
+function Photo({ photo }: { photo: IllustrationVue }) {
+  const image = (
+    <img
+      src={photo.image}
+      alt={photo.alt}
+      loading="lazy"
+      className="m-0 w-full rounded-[var(--radius-control)] border border-[var(--color-line)]"
+    />
+  )
+  return (
+    <figure className="m-0 mt-3 mb-1">
+      {photo.lien === null ? (
+        image
+      ) : (
+        <a href={photo.lien} target="_blank" rel="noopener noreferrer">
+          {image}
+        </a>
+      )}
+      <figcaption className="mt-1 text-xs text-[var(--color-ink-faint)]">{photo.titre}</figcaption>
+    </figure>
+  )
+}
+
+function Corps({
+  texte,
+  illustrations,
+}: {
+  texte: string
+  illustrations: readonly IllustrationVue[]
+}) {
   const blocs = texte.split(/\n{2,}/u).filter((bloc) => bloc.trim() !== '')
+  /*
+   * Les sections sont comptées en avançant : le corps est du texte, pas une structure, et
+   * c'est le rang de l'intertitre qui dit à quelle section une photo appartient.
+   */
+  let section = -1
 
   return (
     <>
@@ -86,10 +137,13 @@ function Corps({ texte }: { texte: string }) {
         const cle = `${rang}-${propre.slice(0, 24)}`
 
         if (propre.startsWith('## ')) {
+          section += 1
+          const photo = illustrations.find((image) => image.section === section)
           return (
-            <h3 key={cle} className="mt-6 mb-2 text-base font-semibold">
-              {propre.slice(3).trim()}
-            </h3>
+            <div key={cle}>
+              <h3 className="mt-6 mb-2 text-base font-semibold">{propre.slice(3).trim()}</h3>
+              {photo === undefined ? null : <Photo photo={photo} />}
+            </div>
           )
         }
 
@@ -118,6 +172,23 @@ function Corps({ texte }: { texte: string }) {
 
 /** L'article entier en Markdown, tel qu'il partira vers le site. */
 function enMarkdown(article: ArticleCompletVu): string {
+  /*
+   * Les images sont réinsérées sous leur intertitre. Le corps est du texte : on le recoupe
+   * sur les intertitres pour retrouver les sections, exactement comme l'écran les compte.
+   */
+  const corps = article.corps
+    .split(/\n(?=## )/u)
+    .map((section, rang) => {
+      const photo = article.illustrations.find((image) => image.section === rang)
+      if (photo === undefined) return section
+      const balise = `![${photo.alt}](${photo.image})`
+      const avecLien = photo.lien === null ? balise : `[${balise}](${photo.lien})`
+      const lignes = section.split('\n')
+      // Après l'intertitre, avant le texte : c'est là qu'elle se lira comme elle s'affiche.
+      return [lignes[0], '', avecLien, ...lignes.slice(1)].join('\n')
+    })
+    .join('\n')
+
   const questions =
     article.questions.length === 0
       ? ''
@@ -126,7 +197,7 @@ function enMarkdown(article: ArticleCompletVu): string {
           ...article.questions.map((paire) => `### ${paire.question}\n\n${paire.reponse}\n`),
         ].join('\n')
 
-  return [`# ${article.titre}`, '', article.chapo, '', article.corps, questions].join('\n').trim()
+  return [`# ${article.titre}`, '', article.chapo, '', corps, questions].join('\n').trim()
 }
 
 export function ArticlesRediges({
@@ -368,7 +439,7 @@ export function ArticlesRediges({
                     )}
 
                     <p className="m-0 text-sm leading-relaxed font-medium">{ouvert.chapo}</p>
-                    <Corps texte={ouvert.corps} />
+                    <Corps texte={ouvert.corps} illustrations={ouvert.illustrations} />
 
                     {ouvert.questions.length === 0 ? null : (
                       <>

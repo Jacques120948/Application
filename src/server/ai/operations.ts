@@ -1448,6 +1448,8 @@ export async function writeArticle(params: {
    * du site qu'un sujet fondé sur des chiffres que le modèle aurait comblés lui-même.
    */
   recherches: readonly RequeteReelle[]
+  /** Vrai quand une boutique est lisible : Milo peut alors demander des illustrations. */
+  boutique: boolean
   seuils: {
     motsMinimum: number
     motsParParagrapheMax: number
@@ -1494,6 +1496,9 @@ export async function writeArticle(params: {
       params.recherches.length === 0
         ? "Aucune donnée de recherche n'est disponible pour ce site : fonde ton sujet sur les constats et ne parle ni de volume de recherche, ni de position, ni de concurrence."
         : asUserData('recherches_reelles', JSON.stringify(params.recherches, null, 2)),
+      params.boutique
+        ? "Une boutique est reliée : décris pour les sections qui s'y prêtent la photo de produit à montrer, sans jamais écrire d'adresse."
+        : "Aucune boutique n'est reliée : laisse le champ illustration vide partout.",
       "Écris l'article.",
     ].join('\n\n'),
   })

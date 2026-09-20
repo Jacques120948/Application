@@ -7,9 +7,11 @@ import {
   lireAcces,
   lireArticles,
   lireProduits,
+  lireVitrine,
   PIECES_MAX,
   type ArticleShopify,
   type ProduitShopify,
+  type VitrineShopify,
 } from '@/server/integrations/providers/shopify'
 import { markConnectionError, useCredential } from '@/server/integrations/service'
 import { logger } from '@/server/observability/logger'
@@ -196,5 +198,40 @@ export async function readBoutique(userId: string): Promise<BoutiqueVue | null> 
     const raison = error instanceof Error ? error.message : 'Shopify n’a pas répondu.'
     await markConnectionError(userId, connexion.connectionId, raison)
     throw new AppError('VALIDATION', raison)
+  }
+}
+
+
+/** Ce qu'on lit pour illustrer. Assez pour trouver, pas assez pour faire attendre. */
+const VITRINE_MAX = 250
+
+/**
+ * Les fiches qui peuvent illustrer un article, ou une liste vide.
+ *
+ * Ne lève jamais. Pas de boutique connectée, offre qui ne l'ouvre pas, Shopify injoignable :
+ * l'article s'écrit sans images, comme avant. C'est une source d'appoint devant une action
+ * qui coûte des crédits — la faire échouer serait indéfendable, et illustrer n'est pas ce
+ * pour quoi on paie.
+ */
+export async function lireVitrinePourArticle(userId: string): Promise<VitrineShopify[]> {
+  try {
+    const connexion = await useCredential(userId, 'shopify')
+    if (connexion === null) return []
+
+    const droits = await getEntitlements(userId)
+    if (!droits.granted.includes(SHOPIFY_FEATURE)) return []
+
+    const acces = lireAcces(connexion.secret)
+    if (acces === null) return []
+
+    const frappe = await frapperJeton(acces)
+    if (!frappe.ok) return []
+
+    const vitrine = await lireVitrine(acces, frappe.jeton, VITRINE_MAX)
+    logger.info('vitrine lue pour un article', { fiches: vitrine.pieces.length })
+    return vitrine.pieces
+  } catch {
+    // Un refus de Shopify ne doit pas faire perdre un article déjà payé.
+    return []
   }
 }

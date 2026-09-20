@@ -610,6 +610,16 @@ export const articleSchema = z
             titre: z.string().min(3).max(160),
             /** Le corps de la section, en Markdown simple : paragraphes et listes. */
             corps: z.string().min(1).max(4000),
+            /**
+             * Ce que la section gagnerait à montrer, en quelques mots.
+             *
+             * Une description, jamais une adresse. Un modèle à qui l'on demande une URL en
+             * invente une : elle a la bonne forme, elle ne mène nulle part, et l'article
+             * part chez le client avec des images cassées. C'est le serveur qui cherche la
+             * fiche correspondante et fournit l'adresse réelle — une photo inventée devient
+             * impossible par construction, pas par vigilance.
+             */
+            illustration: z.string().max(120).optional(),
           })
           .strict(),
       )
