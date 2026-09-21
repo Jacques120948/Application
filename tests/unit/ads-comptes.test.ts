@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { findProvider } from '@/server/integrations/catalog'
-import { googleAds } from '@/server/ads/google-ads'
+import { googleAds, messageErreur } from '@/server/ads/google-ads'
 import { PORTEES } from '@/server/ads/google-ads'
 
 /**
@@ -74,5 +74,52 @@ describe('ce qu’on dit d’un refus de Google', () => {
       // Chacune des trois branches nommées doit reprendre la phrase de Google.
       expect(refus.match(/\$\{dit\}/gu)?.length).toBe(3)
     }
+  })
+})
+
+describe('le champ que Google incrimine', () => {
+  it('nomme le champ fautif, et pas seulement la faute', () => {
+    /*
+     * « The required field was not present » ne dit pas lequel. Google le dit juste à côté,
+     * sous location.fieldPathElements — sans quoi il reste à deviner parmi les trente champs
+     * d'une création de campagne, et deviner se paie en allers-retours.
+     */
+    const charge = {
+      error: {
+        message: 'Request contains an invalid argument.',
+        details: [
+          {
+            errors: [
+              {
+                message: 'The required field was not present.',
+                location: {
+                  fieldPathElements: [
+                    { fieldName: 'mutate_operations', index: 4 },
+                    { fieldName: 'ad_group_ad_operation' },
+                    { fieldName: 'create' },
+                    { fieldName: 'ad' },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    }
+    const dit = messageErreur(charge)
+    expect(dit).toContain('The required field was not present.')
+    expect(dit).toContain('mutate_operations[4]')
+    expect(dit).toContain('ad_group_ad_operation.create.ad')
+  })
+
+  it('reste lisible quand Google ne donne pas de chemin', () => {
+    const charge = { error: { message: 'Ailleurs.', details: [{ errors: [{ message: 'Non.' }] }] } }
+    expect(messageErreur(charge)).toBe('Ailleurs. — Non.')
+  })
+
+  it('lit aussi les erreurs rendues en tableau', () => {
+    // searchStream échoue par lots : ses erreurs arrivent dans un tableau, pas un objet.
+    const charge = [{ error: { message: 'En flux.', details: [] } }]
+    expect(messageErreur(charge)).toBe('En flux.')
   })
 })

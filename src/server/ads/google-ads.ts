@@ -238,10 +238,40 @@ export function messageErreur(charge: unknown): string {
     if (!Array.isArray(liste)) continue
     for (const precise of liste) {
       const message = texte((precise as { message?: unknown })?.message)
-      if (message !== '') return general === '' ? message : `${general} — ${message}`
+      if (message === '') continue
+      const ou = champFautif(precise)
+      const dit = ou === '' ? message : `${message} (champ : ${ou})`
+      return general === '' ? dit : `${general} — ${dit}`
     }
   }
   return general
+}
+
+/**
+ * Le chemin du champ que Google incrimine, quand il le donne.
+ *
+ * Troisième fois que ce fichier apprend la même leçon, et la plus coûteuse : « The required
+ * field was not present » ne nomme pas le champ, mais Google le nomme juste à côté, sous
+ * `location.fieldPathElements`. Sans lui, il ne reste qu'à deviner parmi les trente champs
+ * d'une création de campagne — et deviner se paie en allers-retours.
+ *
+ * Les index sont conservés : « operations[4].create.ad » dit quelle opération d'un envoi
+ * groupé a échoué, ce qui est la moitié de la réponse quand sept objets partent ensemble.
+ */
+function champFautif(precise: unknown): string {
+  const location = (precise as { location?: { fieldPathElements?: unknown } } | null)?.location
+  const elements = location?.fieldPathElements
+  if (!Array.isArray(elements)) return ''
+
+  return elements
+    .map((element) => {
+      const objet = (element ?? {}) as { fieldName?: unknown; index?: unknown }
+      const nom = texte(objet.fieldName)
+      if (nom === '') return ''
+      return typeof objet.index === 'number' ? `${nom}[${objet.index}]` : nom
+    })
+    .filter((morceau) => morceau !== '')
+    .join('.')
 }
 
 type ReponseGoogle = { status: number; corps: unknown; erreur: string }
