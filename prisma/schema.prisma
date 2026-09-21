@@ -108,6 +108,7 @@ model User {
   adsGroupes           AdsGroupe[]
   adsElements          AdsElement[]
   adsTermes            AdsTerme[]
+  adsPropositions      AdsProposition[]
   releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
@@ -1785,6 +1786,7 @@ model AdsAccount {
   groupes         AdsGroupe[]
   elements        AdsElement[]
   termes          AdsTerme[]
+  propositions    AdsProposition[]
 
   @@unique([userId, plateforme, compteId])
   @@index([userId, actif])
@@ -1869,10 +1871,11 @@ model AdsGroupe {
   vueAt     DateTime @default(now())
   createdAt DateTime @default(now())
 
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  campagne AdsCampagne  @relation(fields: [campagneId], references: [id], onDelete: Cascade)
-  elements AdsElement[]
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      AdsAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne     AdsCampagne      @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+  elements     AdsElement[]
+  propositions AdsProposition[]
 
   @@unique([accountId, groupeId])
   @@index([campagneId])
@@ -1904,6 +1907,34 @@ model AdsElement {
 
   @@unique([groupeId, champ, texte])
   @@index([accountId, champ])
+}
+
+/// Ce que Naya propose d'ajouter à une annonce. Séparé des éléments réels : ranger une
+/// proposition parmi les titres existants ferait compter « 12 sur 15 » à une annonce qui
+/// n'en a que neuf, et la personne croirait son travail fait.
+model AdsProposition {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  accountId String @db.Uuid
+  groupeId  String @db.Uuid
+
+  /// titre | titre-long | description
+  champ String
+  texte String
+  /// Sur quoi elle s'appuie : ce qui la rend discutable plutôt qu'à prendre ou à laisser.
+  motif String @default("")
+  /// proposee | deposee | ecartee
+  etat  String @default("proposee")
+
+  createdAt DateTime  @default(now())
+  closedAt  DateTime?
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupe  AdsGroupe  @relation(fields: [groupeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupeId, champ, texte])
+  @@index([groupeId, etat])
 }
 
 /// Ce que les gens ont réellement tapé pour déclencher une annonce. Une photographie, pas

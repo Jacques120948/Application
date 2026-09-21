@@ -122,6 +122,36 @@ export const questionSuggereeSchema = z
   })
   .strict()
 
+/**
+ * Un morceau d'annonce proposé.
+ *
+ * Aucune longueur minimale ni maximale dans le schéma : les sorties structurées ne
+ * transmettent pas les contraintes de chaîne au modèle, elles ne font que rejeter après
+ * coup — et rejeter une réponse entière parce qu'un titre fait trente et un caractères
+ * coûterait l'appel pour rien. La limite se dit dans la consigne et se vérifie ensuite,
+ * morceau par morceau : ceux qui dépassent sont écartés, les autres restent.
+ */
+export const elementProposeSchema = z
+  .object({
+    /** titre | titre-long | description */
+    champ: z.enum(['titre', 'titre-long', 'description']),
+    texte: z.string().max(300),
+    /**
+     * Sur quoi il s'appuie : une recherche réelle, un produit, un angle absent des autres.
+     *
+     * C'est ce qui rend la proposition discutable. « Reprend la recherche "bougie quartz
+     * rose", 340 affichages » se vérifie ; un titre seul ne se vérifie pas, il se subit.
+     */
+    motif: z.string().max(200),
+  })
+  .strict()
+
+export const elementsProposesSchema = z
+  .object({ elements: z.array(elementProposeSchema).max(30) })
+  .strict()
+
+export type ElementsProposes = z.infer<typeof elementsProposesSchema>
+
 export const questionsSuggereesSchema = z
   .object({ questions: z.array(questionSuggereeSchema).max(24) })
   .strict()

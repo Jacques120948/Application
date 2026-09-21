@@ -62,6 +62,7 @@ const PROTECTED_TABLES = [
   'AdsGroupe',
   'AdsElement',
   'AdsTerme',
+  'AdsProposition',
   'AdsAction',
 ] as const
 

@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { lireCreatifDuCompte } from '@/server/ads/creatif'
+import { compteActif } from '@/server/ads/comptes'
+import { propositionsDuCompte } from '@/server/ads/redaction'
 import { Shell } from '@/components/studio/Shell'
 import { Annonces } from '@/components/studio/Annonces'
 import { LinkButton } from '@/components/ui'
@@ -34,6 +36,14 @@ export default async function AnnoncesPage({
   const creatif = await lireCreatifDuCompte(user.id).catch(() => null)
   if (creatif === null) redirect(`/${locale}/publicite`)
 
+  /*
+   * Les propositions sont lues en une fois pour tous les contenants : une requête par
+   * contenant ferait trente-deux allers-retours pour afficher une page.
+   */
+  const compte = await compteActif(user.id)
+  const parGroupe = compte === null ? new Map() : await propositionsDuCompte(user.id, compte.id)
+  const propositions = Object.fromEntries(parGroupe)
+
   return (
     <Shell
       locale={locale}
@@ -59,7 +69,12 @@ export default async function AnnoncesPage({
           </LinkButton>
         </div>
 
-        <Annonces groupes={creatif.groupes} termes={creatif.termes} lu={creatif.lu} />
+        <Annonces
+          groupes={creatif.groupes}
+          termes={creatif.termes}
+          lu={creatif.lu}
+          propositions={propositions}
+        />
       </div>
     </Shell>
   )

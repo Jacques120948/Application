@@ -20,6 +20,8 @@
  * dire vaut mieux que de laisser conclure à une campagne que personne ne cherche.
  */
 
+import { PropositionsAds, type PropositionVue } from './PropositionsAds'
+
 export type ElementVu = {
   id: string
   texte: string
@@ -144,10 +146,13 @@ export function Annonces({
   groupes,
   termes,
   lu,
+  propositions,
 }: {
   groupes: readonly GroupeVu[]
   termes: readonly TermeVu[]
   lu: boolean
+  /** Ce que Naya propose, par contenant. Montré à côté de l'existant, jamais mêlé. */
+  propositions: Record<string, PropositionVue[]>
 }) {
   if (!lu) {
     return (
@@ -252,6 +257,24 @@ export function Annonces({
                     )}
                   </div>
                 )}
+
+                <PropositionsAds
+                  groupeId={groupe.id}
+                  initiales={propositions[groupe.id] ?? []}
+                  /*
+                    Le plein se juge sur l'existant ET sur ce qui attend : sans cela, le
+                    bouton laisserait demander quinze titres de plus à une annonce qui en a
+                    déjà neuf et trois en attente, et la personne paierait pour des textes
+                    qui n'ont nulle part où aller.
+                  */
+                  complet={
+                    groupe.titres.length +
+                      groupe.descriptions.length +
+                      groupe.titresLongs.length +
+                      (propositions[groupe.id]?.length ?? 0) >=
+                    max.titres + max.descriptions + max.titresLongs
+                  }
+                />
               </article>
             )
           })

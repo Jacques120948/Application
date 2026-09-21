@@ -40,6 +40,7 @@ import {
   GENERATE_PLAN_SYSTEM,
   IDEAS_SYSTEM,
   POINT_SYSTEM,
+  ELEMENTS_ADS_SYSTEM,
   QUESTIONS_SYSTEM,
   SPECSHEET_SYSTEM,
   VALIDATION_SYSTEM,
@@ -57,8 +58,10 @@ import {
   editResponseSchema,
   ideasSchema,
   pointHebdoSchema,
+  elementsProposesSchema,
   questionsSuggereesSchema,
   type PointHebdoIA,
+  type ElementsProposes,
   type QuestionsSuggerees,
   pageContentSchemaFor,
   specSheetSchema,
@@ -1592,6 +1595,76 @@ export async function suggestQuestions(params: {
         : asUserData('questions_deja_suivies', JSON.stringify(params.deja, null, 2)),
       'Propose les questions.',
     ].join('\n\n'),
+  })
+}
+
+/**
+ * Des titres et des descriptions proposés pour un contenant d'annonce.
+ *
+ * Un seul appel, court, sur le modèle rapide : écrire trente caractères qui disent quelque
+ * chose est un exercice de formulation, pas de raisonnement. Ce qui fait la valeur de
+ * l'appel n'est pas le modèle, c'est ce qu'on lui donne — les titres qui existent déjà, pour
+ * qu'il n'en soit pas le doublon, et les mots que les gens tapent réellement, pour que
+ * l'annonce leur ressemble.
+ *
+ * Tout ce qui vient de la boutique ou de Google voyage en donnée : un descriptif de produit
+ * est écrit par n'importe qui, et une consigne glissée dedans ne doit pas devenir une
+ * instruction.
+ */
+export async function proposerElementsAds(params: {
+  userId: string
+  /** annonces | elements : le contenant, qui décide des champs possibles. */
+  genre: string
+  nomGroupe: string
+  campagne: string
+  activite: string
+  produits: string
+  pays: string
+  /** Ce qui existe déjà, par champ. Le modèle ne doit en être ni le doublon ni le synonyme. */
+  existants: { champ: string; texte: string }[]
+  recherches: RequeteReelle[]
+  fiches: string[]
+  /** Combien il en manque, par champ, pour atteindre le maximum que Google accepte. */
+  manques: { champ: string; combien: number }[]
+}): Promise<RunResult<ElementsProposes>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'adsElements' },
+    system: ELEMENTS_ADS_SYSTEM,
+    schema: elementsProposesSchema,
+    userContent: [
+      `Contenant : « ${params.nomGroupe} », dans la campagne « ${params.campagne} ».`,
+      params.genre === 'elements'
+        ? 'C’est un groupe d’éléments Performance Max : les champs possibles sont titre,' +
+          ' titre-long et description.'
+        : 'C’est un groupe d’annonces Recherche : les champs possibles sont titre et' +
+          ' description. N’utilise pas titre-long.',
+      params.manques.length === 0
+        ? 'Ce contenant est complet : propose des remplacements plus forts que les plus' +
+          ' faibles des textes existants, et dis dans le motif lequel tu remplacerais.'
+        : `Il manque : ${params.manques
+            .map((manque) => `${manque.combien} ${manque.champ}`)
+            .join(', ')}. Propose exactement ce nombre, pas davantage.`,
+      params.activite.trim() === ''
+        ? "La personne n'a rien écrit sur son activité : appuie-toi sur les fiches et les recherches."
+        : asUserData('activite_de_la_personne', params.activite),
+      params.produits.trim() === ''
+        ? ''
+        : asUserData('ce_qui_est_vendu', params.produits),
+      params.pays.trim() === '' ? '' : `Zones de vente : ${params.pays}.`,
+      params.existants.length === 0
+        ? "Ce contenant est vide : tu pars de rien, et tu dois couvrir plusieurs angles."
+        : asUserData('textes_deja_en_place', JSON.stringify(params.existants, null, 2)),
+      params.recherches.length === 0
+        ? "Aucune recherche réelle n'est disponible : appuie-toi sur les fiches, et n'évoque" +
+          ' ni volume ni position.'
+        : asUserData('recherches_reelles', JSON.stringify(params.recherches, null, 2)),
+      params.fiches.length === 0
+        ? "Aucune fiche produit n'est disponible."
+        : asUserData('fiches_de_la_boutique', JSON.stringify(params.fiches, null, 2)),
+      'Propose les textes.',
+    ]
+      .filter((ligne) => ligne !== '')
+      .join('\n\n'),
   })
 }
 

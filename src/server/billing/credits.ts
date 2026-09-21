@@ -61,6 +61,15 @@ export type CreditedOperation =
   | 'visibilityFix'
   /** Une question posée à l'un des quatre spécialistes de la visibilité. */
   | 'visibilityAsk'
+  /**
+   * Des titres et des descriptions proposés pour une annonce.
+   *
+   * Un appel court et un seul, par contenant. Il existe parce que remplir quinze titres de
+   * trente caractères est exactement le travail qu'une commerçante ne fera jamais — et
+   * parce que la matière est déjà là : ce que les gens tapent, ce que la boutique vend, et
+   * les titres qui existent déjà, dont il faut ne pas être le doublon.
+   */
+  | 'adsElements'
   | 'visibilityArticle'
   /**
    * Des questions proposées à partir des recherches réelles et du catalogue.
@@ -152,6 +161,13 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    */
   visibilityArticle: 8,
   visibilityQuestions: 1,
+  /*
+   * Deux crédits, comme une question posée à un spécialiste : c'est un appel court sur le
+   * modèle rapide. Assez peu pour qu'on relance en changeant d'angle — c'est ainsi qu'on
+   * trouve le bon titre, pas du premier coup — et assez pour qu'une boucle accidentelle se
+   * voie sur le compteur.
+   */
+  adsElements: 2,
   visibilityPoint: 3,
 }
 

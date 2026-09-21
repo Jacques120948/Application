@@ -113,6 +113,13 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   // Proposer des questions demande de la connaissance du marché, pas du raisonnement long :
   // le modèle rapide suffit, et l'appel est court.
   visibilityQuestions: { model: MODELS.fast, maxTokens: 4_000, effort: 'low' },
+  /*
+   * Écrire court est un exercice de formulation, pas de raisonnement : il s'agit de dire
+   * une chose en trente caractères sans répéter les neuf titres voisins. Le modèle rapide
+   * suffit, et l'opération doit rester assez peu chère pour qu'on la relance en changeant
+   * d'angle — c'est ainsi qu'on trouve le bon titre, pas du premier coup.
+   */
+  adsElements: { model: MODELS.fast, maxTokens: 4_000, effort: 'low' },
   // Le point regarde tout et doit trancher : c'est du raisonnement, sur un long contexte et
   // une réponse courte. C'est exactement le cas où le modèle de raisonnement se justifie.
   visibilityPoint: { model: MODELS.reasoning, maxTokens: 4_000, effort: 'medium' },
