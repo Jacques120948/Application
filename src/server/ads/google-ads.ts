@@ -334,6 +334,12 @@ function texte(valeur: unknown): string {
   return typeof valeur === 'string' ? valeur : ''
 }
 
+/** Les formes qu'une plateforme regroupe sous un mot-clé, lues défensivement. */
+function variantes(valeur: unknown): string[] {
+  if (!Array.isArray(valeur)) return []
+  return valeur.filter((une): une is string => typeof une === 'string' && une !== '')
+}
+
 async function listerComptes(accessToken: string): Promise<Lecture<CompteAds[]>> {
   const reponse = await appeler(
     `${RACINE}/customers:listAccessibleCustomers`,
@@ -922,6 +928,7 @@ async function ideesDeMotsCles(
           concurrence: texte(mesures.competition),
           coutBasMicros: nombre(mesures.lowTopOfPageBidMicros),
           coutHautMicros: nombre(mesures.highTopOfPageBidMicros),
+          variantes: variantes(ligne.closeVariants),
         }
       })
       .filter((idee) => idee.texte !== ''),
@@ -994,6 +1001,13 @@ async function metriquesDeMotsCles(
           concurrence: texte(mesures.competition),
           coutBasMicros: nombre(mesures.lowTopOfPageBidMicros),
           coutHautMicros: nombre(mesures.highTopOfPageBidMicros),
+          /*
+           * Les formes que Google regroupe. Un commentaire de la version précédente disait
+           * les ignorer « pour ne pas inventer une précision que la donnée n'a pas ». C'était
+           * l'inverse : c'est en les ignorant qu'on a laissé passer « quartz rose » et
+           * « quartzrose » comme deux achats, pour une seule et même recherche.
+           */
+          variantes: variantes(ligne.closeVariants),
         }
       })
       .filter((mesure) => mesure.texte !== ''),

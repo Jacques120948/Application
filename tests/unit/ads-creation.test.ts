@@ -157,6 +157,11 @@ describe('les bornes d’une création', () => {
 })
 
 describe('l’enchère proposée', () => {
+  /** Une fourchette de prix, en micros. */
+  function mot(bas: number, haut: number) {
+    return { coutBasMicros: bas * MICROS, coutHautMicros: haut * MICROS }
+  }
+
   it('se tait quand trop peu de prix sont connus', () => {
     /*
      * Un plan où quatre mots sur douze avaient un prix a rendu trois centimes : vrai pour
@@ -164,30 +169,39 @@ describe('l’enchère proposée', () => {
      * et la campagne ne s'affiche jamais. Mieux vaut demander le montant.
      */
     expect(PRIX_MINIMUM_CONNUS).toBeGreaterThan(1)
-    const deux = [0.4, 0.6].map((montant) => ({ coutBasMicros: montant * MICROS }))
-    expect(enchereProposee(deux, 0)).toBe(0)
+    expect(enchereProposee([mot(0.4, 0.8), mot(0.6, 1)], 0)).toBe(0)
   })
 
-  it('prend la médiane du bas de fourchette', () => {
+  it('prend la médiane du milieu de fourchette', () => {
     /*
      * La médiane et non la moyenne : un seul mot-clé très disputé tirerait la moyenne vers
-     * le haut et ferait payer son prix à tous les autres. Le bas de fourchette et non le
-     * haut : on peut monter en voyant les chiffres, on ne récupère pas ce qu'on a dépensé
-     * en démarrant trop haut.
+     * le haut et ferait payer son prix à tous les autres.
+     *
+     * Le milieu et non le bas, et c'est une correction. Le « bas de fourchette » de Google
+     * est le minimum pour apparaître *parfois* en haut de page : un plancher, pas une
+     * enchère de travail. Un plan a démarré à un centime — la campagne ne se serait jamais
+     * affichée, et son silence serait passé pour une panne.
      */
-    const mots = [0.4, 0.6, 5].map((montant) => ({ coutBasMicros: montant * MICROS }))
+    const mots = [mot(0.2, 0.6), mot(0.4, 0.8), mot(4, 6)]
+    // Milieux : 0.40, 0.60, 5.00 — médiane 0.60.
     expect(enchereProposee(mots, 0)).toBe(0.6 * MICROS)
   })
 
   it('plafonne à ce que l’objectif permet', () => {
     // À 20 CHF par vente et 5 % de conversion plausible, le clic ne peut pas dépasser 1 CHF.
-    const mots = [3, 3, 3].map((montant) => ({ coutBasMicros: montant * MICROS }))
+    const mots = [mot(2, 4), mot(2, 4), mot(2, 4)]
     expect(enchereProposee(mots, 20)).toBe(((20 * TAUX_PLAUSIBLE) / 100) * MICROS)
+  })
+
+  it('se contente du bas quand le haut manque', () => {
+    // Google ne rend pas toujours les deux bornes : mieux vaut le bas que rien.
+    const mots = [mot(0.5, 0), mot(0.5, 0), mot(0.5, 0)]
+    expect(enchereProposee(mots, 0)).toBe(0.5 * MICROS)
   })
 
   it('ne devine pas quand Google n’a donné aucun prix', () => {
     // Un chiffre inventé aurait l'air calculé. L'écran demandera le montant.
-    expect(enchereProposee([{ coutBasMicros: 0 }], 25)).toBe(0)
+    expect(enchereProposee([mot(0, 0), mot(0, 0), mot(0, 0)], 25)).toBe(0)
     expect(enchereProposee([], 25)).toBe(0)
   })
 })

@@ -85,11 +85,11 @@ const VUE = {
 }
 
 const IDEES: IdeeMotCle[] = [
-  { texte: 'bougie quartz rose', volume: 260, concurrence: 'LOW', coutBasMicros: 400_000, coutHautMicros: 900_000 },
-  { texte: 'bougie citrine parfumée', volume: 90, concurrence: 'MEDIUM', coutBasMicros: 500_000, coutHautMicros: 1_200_000 },
+  { texte: 'bougie quartz rose', volume: 260, concurrence: 'LOW', coutBasMicros: 400_000, coutHautMicros: 900_000, variantes: [] },
+  { texte: 'bougie citrine parfumée', volume: 90, concurrence: 'MEDIUM', coutBasMicros: 500_000, coutHautMicros: 1_200_000, variantes: [] },
   // Le planificateur connaît aussi la requête déjà gagnée : elle ne doit pas revenir par là.
-  { texte: 'cap nature bougie', volume: 500, concurrence: 'LOW', coutBasMicros: 200_000, coutHautMicros: 400_000 },
-  { texte: 'bougie pierre naturelle', volume: 1_300, concurrence: 'HIGH', coutBasMicros: 800_000, coutHautMicros: 2_100_000 },
+  { texte: 'cap nature bougie', volume: 500, concurrence: 'LOW', coutBasMicros: 200_000, coutHautMicros: 400_000, variantes: [] },
+  { texte: 'bougie pierre naturelle', volume: 1_300, concurrence: 'HIGH', coutBasMicros: 800_000, coutHautMicros: 2_100_000, variantes: [] },
 ]
 
 beforeAll(async () => {

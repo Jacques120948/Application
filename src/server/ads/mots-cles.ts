@@ -312,11 +312,20 @@ export function plafondEnchere(cpa: number): number {
 export const PRIX_MINIMUM_CONNUS = 3
 
 export function enchereProposee(
-  motsCles: ReadonlyArray<{ coutBasMicros: number }>,
+  motsCles: ReadonlyArray<{ coutBasMicros: number; coutHautMicros: number }>,
   cpa: number,
 ): number {
+  /*
+   * Le milieu de la fourchette, et non son bas. J'avais pris le bas en me disant qu'on
+   * pouvait monter en voyant les chiffres : c'est faux, à un centime il n'y a rien à voir.
+   * Le « bas de fourchette » de Google est le minimum pour apparaître *parfois* en haut de
+   * page — un plancher, pas une enchère de travail. Une campagne qui démarre dessus ne
+   * s'affiche jamais, et son silence passe pour une panne.
+   */
   const prix = motsCles
-    .map((mot) => mot.coutBasMicros)
+    .map((mot) =>
+      mot.coutHautMicros > 0 ? (mot.coutBasMicros + mot.coutHautMicros) / 2 : mot.coutBasMicros,
+    )
     .filter((montant) => montant > 0)
     .sort((une, autre) => une - autre)
 
@@ -341,6 +350,18 @@ export function enchereProposee(
 
   const plafond = plafondEnchere(cpa)
   return plafond === 0 ? Math.round(mediane) : Math.round(Math.min(mediane, plafond))
+}
+
+/**
+ * Une clé insensible à l'ordre des mots.
+ *
+ * « opaline pierre » et « pierre opaline » sont le même achat : Google leur rend les mêmes
+ * chiffres, et les acheter tous les deux occupe deux emplacements pour une seule recherche.
+ * Trier les mots les ramène à une clé unique — ce que la comparaison littérale ne voyait
+ * pas.
+ */
+function clePermutee(texte: string): string {
+  return normaliser(texte).split(' ').sort().join(' ')
 }
 
 /** Une clé de comparaison : les accents et la casse ne font pas deux mots-clés différents. */
@@ -424,7 +445,35 @@ export function croiser(
   devise: string,
 ): { candidats: Candidat[]; dejaGagnees: number } {
   const exclus = new Set(dejaPresents.map(normaliser))
+  for (const present of dejaPresents) exclus.add(clePermutee(present))
+
   const parTexte = new Map(idees.map((idee) => [normaliser(idee.texte), idee]))
+  /*
+   * Les variantes que Google regroupe, ramenées à la forme qu'il a nommée. C'est lui qui
+   * sait : « quartz rose » et « quartzrose » ne se ressemblent pas assez pour qu'un
+   * rapprochement textuel les réunisse, et il les compte pourtant comme une seule recherche.
+   */
+  const canoniques = new Map<string, string>()
+  for (const idee of idees) {
+    /*
+     * La forme canonique passe par la même clé que tout le reste. Une première version
+     * gardait le texte brut : « noir obsidienne » pointait alors vers « obsidienne noire »
+     * pendant que « obsidienne noire » se rangeait sous « noire obsidienne », et les deux
+     * survivaient. Deux identités pour un même mot ne dédupliquent rien.
+     */
+    const canon = clePermutee(idee.texte)
+    for (const variante of idee.variantes) {
+      const cle = normaliser(variante)
+      if (cle !== '' && !canoniques.has(cle)) canoniques.set(cle, canon)
+    }
+  }
+
+  /** La forme sous laquelle ce texte compte, quelles que soient ses orthographes. */
+  const identite = (texte: string): string => {
+    const brut = normaliser(texte)
+    return canoniques.get(brut) ?? clePermutee(brut)
+  }
+
   const retenus = new Set<string>()
   const candidats: Candidat[] = []
   let dejaGagnees = 0
@@ -455,8 +504,9 @@ export function croiser(
   }
 
   for (const requete of requetes) {
-    const cle = normaliser(requete.texte)
-    if (cle === '' || exclus.has(cle) || retenus.has(cle)) continue
+    const brut = normaliser(requete.texte)
+    const cle = identite(requete.texte)
+    if (brut === '' || exclus.has(brut) || exclus.has(cle) || retenus.has(cle)) continue
     /*
      * Marqué vu quoi qu'il advienne, y compris quand la requête est écartée. C'est la
      * correction d'un vrai défaut : sans cette ligne, une requête déjà gagnée ressortait
@@ -465,7 +515,7 @@ export function croiser(
      * site ne sort pas dessus. Le contraire exact de ce qu'on venait de constater.
      */
     retenus.add(cle)
-    const idee = parTexte.get(cle)
+    const idee = parTexte.get(brut)
     const mesures = {
       volume: idee?.volume ?? 0,
       coutBasMicros: idee?.coutBasMicros ?? 0,
@@ -520,8 +570,9 @@ export function croiser(
   }
 
   for (const idee of idees) {
-    const cle = normaliser(idee.texte)
-    if (cle === '' || exclus.has(cle) || retenus.has(cle)) continue
+    const brut = normaliser(idee.texte)
+    const cle = identite(idee.texte)
+    if (brut === '' || exclus.has(brut) || exclus.has(cle) || retenus.has(cle)) continue
     // Sans volume, l'idée ne repose sur rien : ni demande constatée, ni marché mesuré.
     if (idee.volume <= 0) continue
     retenus.add(cle)

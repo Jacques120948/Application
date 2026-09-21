@@ -99,9 +99,9 @@ const VUE = {
  * avaient un prix — vrai, et inexploitable.
  */
 const IDEES: IdeeMotCle[] = [
-  { texte: 'bougie quartz rose', volume: 260, concurrence: 'LOW', coutBasMicros: 400_000, coutHautMicros: 900_000 },
-  { texte: 'bougie citrine parfumée', volume: 90, concurrence: 'MEDIUM', coutBasMicros: 600_000, coutHautMicros: 1_200_000 },
-  { texte: 'bougie pierre naturelle', volume: 310, concurrence: 'LOW', coutBasMicros: 500_000, coutHautMicros: 1_000_000 },
+  { texte: 'bougie quartz rose', volume: 260, concurrence: 'LOW', coutBasMicros: 400_000, coutHautMicros: 900_000, variantes: [] },
+  { texte: 'bougie citrine parfumée', volume: 90, concurrence: 'MEDIUM', coutBasMicros: 600_000, coutHautMicros: 1_200_000, variantes: [] },
+  { texte: 'bougie pierre naturelle', volume: 310, concurrence: 'LOW', coutBasMicros: 500_000, coutHautMicros: 1_000_000, variantes: [] },
 ]
 
 const TEXTES = {
@@ -206,8 +206,12 @@ describe('la préparation d’un plan', () => {
     expect(bilan.plan.motsCles.map((un) => un.texte)).not.toContain('cap nature bougie')
     expect(bilan.plan.titres.length).toBeGreaterThanOrEqual(3)
     expect(bilan.plan.descriptions.length).toBeGreaterThanOrEqual(2)
-    // La médiane du bas de fourchette : 0.40 et 0.60 donnent 0.50.
-    expect(bilan.plan.enchereMicros).toBe(500_000)
+    /*
+     * La médiane des milieux de fourchette : 0.65, 0.75 et 0.90 donnent 0.75. Le milieu et
+     * non le bas — le bas de fourchette de Google est le minimum pour apparaître parfois en
+     * haut de page, pas une enchère avec laquelle une campagne travaille.
+     */
+    expect(bilan.plan.enchereMicros).toBe(750_000)
 
     const plans = await lirePlans(userId)
     expect(plans.map((un) => un.id)).toContain(bilan.plan.id)
@@ -270,9 +274,9 @@ describe('une campagne, une langue', () => {
      * d'attribuer sa langue aux idées qu'il rend, puisqu'elles ne viennent d'aucune page.
      */
     const italiennes = [
-      { texte: 'candela pietra naturale', volume: 400, concurrence: 'LOW', coutBasMicros: 300_000, coutHautMicros: 700_000 },
-      { texte: 'candela quarzo rosa', volume: 220, concurrence: 'LOW', coutBasMicros: 350_000, coutHautMicros: 800_000 },
-      { texte: 'candela ametista', volume: 180, concurrence: 'MEDIUM', coutBasMicros: 400_000, coutHautMicros: 900_000 },
+      { texte: 'candela pietra naturale', volume: 400, concurrence: 'LOW', coutBasMicros: 300_000, coutHautMicros: 700_000, variantes: [] },
+      { texte: 'candela quarzo rosa', volume: 220, concurrence: 'LOW', coutBasMicros: 350_000, coutHautMicros: 800_000, variantes: [] },
+      { texte: 'candela ametista', volume: 180, concurrence: 'MEDIUM', coutBasMicros: 400_000, coutHautMicros: 900_000, variantes: [] },
     ]
     ideesDeMotsCles.mockResolvedValue({ ok: true, valeur: italiennes })
     metriquesDeMotsCles.mockResolvedValue({ ok: true, valeur: italiennes })

@@ -172,6 +172,15 @@ export type IdeeMotCle = {
   /** La fourchette du coût par clic en haut de page, en micros de la devise du compte. */
   coutBasMicros: number
   coutHautMicros: number
+  /**
+   * Les formes que la plateforme regroupe sous ce mot-clé.
+   *
+   * « quartz rose » et « quartzrose », « opaline pierre » et « pierre opaline » : Google les
+   * compte comme une seule recherche et rend les mêmes chiffres pour les deux. Les ignorer
+   * faisait occuper six emplacements sur douze par des doublons — douze emplacements payés
+   * pour six achats distincts.
+   */
+  variantes: string[]
 }
 
 /** Ce que rend une lecture : des données, ou une raison dite à quelqu'un qui n'est pas développeur. */

@@ -27,13 +27,17 @@ import { PROFIL_VIDE } from '@/server/ads/profil'
 
 const MICROS = 1_000_000
 
-function idee(texte: string, champs: { volume?: number; bas?: number; haut?: number } = {}) {
+function idee(
+  texte: string,
+  champs: { volume?: number; bas?: number; haut?: number; variantes?: string[] } = {},
+) {
   return {
     texte,
     volume: champs.volume ?? 100,
     concurrence: 'MEDIUM',
     coutBasMicros: (champs.bas ?? 0.5) * MICROS,
     coutHautMicros: (champs.haut ?? 1) * MICROS,
+    variantes: champs.variantes ?? [],
   }
 }
 
@@ -216,6 +220,87 @@ describe('la langue de la recherche', () => {
     // Elle ne vient d'aucune page du site : l'inconnue est assumée plutôt que devinée.
     const issue = croiser([], [idee('kerzen kaufen', { volume: 500 })], [], 0, 'CHF')
     expect(issue.candidats[0]?.langue).toBe('')
+  })
+})
+
+describe('les doublons', () => {
+  it('réunit les mots que Google regroupe lui-même', () => {
+    /*
+     * Le cas réel : « quartz rose » et « quartzrose », mêmes 480 recherches par mois. Ils
+     * ne se ressemblent pas assez pour qu'un rapprochement textuel les réunisse, et Google
+     * les compte pourtant comme une seule recherche. Les acheter tous les deux occupait
+     * deux emplacements sur douze pour un seul achat.
+     */
+    const issue = croiser(
+      [requete('quartz rose', 12, 400), requete('quartzrose', 12, 380)],
+      [idee('quartz rose', { volume: 480, variantes: ['quartzrose'] })],
+      [],
+      0,
+      'CHF',
+    )
+    expect(issue.candidats).toHaveLength(1)
+    expect(issue.candidats[0]?.texte).toBe('quartz rose')
+  })
+
+  it('réunit les mots inversés, même sans l’aide de Google', () => {
+    // « opaline pierre » et « pierre opaline » : mêmes chiffres, même achat.
+    const issue = croiser(
+      [requete('opaline pierre', 12, 390), requete('pierre opaline', 12, 390)],
+      [],
+      [],
+      0,
+      'CHF',
+    )
+    expect(issue.candidats).toHaveLength(1)
+  })
+
+  it('ne repropose pas l’inversion d’un mot déjà en place', () => {
+    const issue = croiser(
+      [requete('noire obsidienne', 12, 320)],
+      [],
+      ['obsidienne noire'],
+      0,
+      'CHF',
+    )
+    expect(issue.candidats).toHaveLength(0)
+  })
+
+  it('s’en remet à Google pour ce que le tri des mots ne voit pas', () => {
+    /*
+     * « obsidienne noire » et « noir obsidienne » diffèrent d'une lettre : le tri des mots
+     * ne les réunit pas, et aucune règle écrite ici ne le ferait sans risquer de confondre
+     * des mots réellement distincts. C'est précisément à quoi servent les variantes proches
+     * que Google rend — et que cette fonction ignorait jusqu'ici.
+     */
+    const sansAide = croiser(
+      [requete('obsidienne noire', 12, 320), requete('noir obsidienne', 12, 320)],
+      [],
+      [],
+      0,
+      'CHF',
+    )
+    expect(sansAide.candidats).toHaveLength(2)
+
+    const avecAide = croiser(
+      [requete('obsidienne noire', 12, 320), requete('noir obsidienne', 12, 320)],
+      [idee('obsidienne noire', { variantes: ['noir obsidienne'] })],
+      [],
+      0,
+      'CHF',
+    )
+    expect(avecAide.candidats).toHaveLength(1)
+  })
+
+  it('ne confond pas deux mots qui partagent un terme', () => {
+    // La déduplication ne doit pas devenir gourmande : ce sont deux achats distincts.
+    const issue = croiser(
+      [requete('bougie quartz rose', 12, 300), requete('bougie quartz bleu', 12, 300)],
+      [],
+      [],
+      0,
+      'CHF',
+    )
+    expect(issue.candidats).toHaveLength(2)
   })
 })
 
