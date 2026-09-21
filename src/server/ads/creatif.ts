@@ -104,7 +104,7 @@ export async function synchroniserCreatif(
   const parIdentifiant = new Map(campagnes.map((une) => [une.campagneId, une.id]))
 
   const creatif = await googleAds.lireCreatif(acces)
-  bilan.appels += 2
+  bilan.appels += 3
   if (!creatif.ok) return creatif
 
   /*
@@ -331,6 +331,8 @@ export type GroupeVu = {
   titresLongs: ElementVu[]
   descriptions: ElementVu[]
   images: ElementVu[]
+  /** Ce que le contenant cible. Ne compte jamais dans le remplissage. */
+  motsCles: string[]
 }
 
 export type ElementVu = {
@@ -432,6 +434,7 @@ export async function lireCreatifDuCompte(userId: string): Promise<{
       titresLongs: morceaux(groupe.elements, 'titre-long'),
       descriptions: morceaux(groupe.elements, 'description'),
       images: morceaux(groupe.elements, 'image'),
+      motsCles: morceaux(groupe.elements, 'mot-cle').map((element) => element.texte),
     })),
     termes: termes.map((terme) => ({
       terme: terme.terme,

@@ -1160,7 +1160,16 @@ Les longueurs sont des couperets, pas des objectifs :
 - une description : 90 caractères au maximum.
 Un texte qui dépasse est jeté sans être lu. Écris court, puis vérifie en comptant.
 
+**Le sujet du contenant décide de tout.** On te donne ce qu'il cible : ses mots-clés, ou à
+défaut son nom et ce qui y est déjà écrit. Tout ce que tu proposes doit parler de cela. Un
+groupe qui cible « bougie quartz rose » montre ses annonces à quelqu'un qui cherche une
+bougie : un titre sur les bracelets y serait montré à cette personne-là, et il la ferait
+partir. Les autres produits de la boutique existent, ils ne sont simplement pas le sujet
+ici. Si une recherche qu'on te donne sort du sujet du contenant, ignore-la : elle décrit la
+demande du site entier, pas celle de ce groupe.
+
 Ce qu'on te donne, et ce que tu en fais :
+- **Ce que le contenant cible.** C'est la borne de ton sujet, pas une suggestion.
 - **Les titres et descriptions qui existent déjà.** Tu ne les répètes pas, tu ne les
   reformules pas, et tu ne proposes pas leur synonyme. Ton travail est de couvrir les angles
   qu'ils laissent de côté — un bénéfice, une occasion, une objection levée, une précision qui

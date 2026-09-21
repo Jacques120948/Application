@@ -40,6 +40,7 @@ export type GroupeVu = {
   titresLongs: ElementVu[]
   descriptions: ElementVu[]
   images: ElementVu[]
+  motsCles: string[]
 }
 
 export type TermeVu = {
@@ -214,6 +215,22 @@ export function Annonces({
                   />
                   <Remplissage quoi="images" combien={groupe.images.length} sur={max.images} />
                 </div>
+
+                {groupe.motsCles.length === 0 ? null : (
+                  /*
+                    Ce que le contenant cible, dit avant ses textes. C'est ce qui permet de
+                    juger un titre : « Bracelet Pierre Naturelle » n'est pas un mauvais titre
+                    en soi, il est hors sujet dans un groupe qui cible des bougies — et
+                    Google le montrerait à quelqu'un qui cherche une bougie.
+                  */
+                  <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                    <span className="text-[var(--color-ink-faint)]">Cible : </span>
+                    {groupe.motsCles.slice(0, 12).join(' · ')}
+                    {groupe.motsCles.length > 12
+                      ? ` · et ${groupe.motsCles.length - 12} autres`
+                      : ''}
+                  </p>
+                )}
 
                 <Liste titre="Titres" elements={groupe.titres} maximum={max.titres} longueur={30} />
                 <Liste

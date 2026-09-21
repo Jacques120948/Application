@@ -480,6 +480,26 @@ const REQUETE_ELEMENTS = `
   WHERE asset_group_asset.status != 'REMOVED'
 `
 
+/**
+ * Les mots-clés d'un groupe d'annonces.
+ *
+ * C'est ce qui dit de quoi parle le contenant, et rien d'autre ne le dit. Sans eux, on
+ * connaît le nom du groupe — « Groupe d'annonces 1 » — et la demande du site entier, ce qui
+ * conduit tout droit à proposer un titre sur les bracelets dans un groupe qui vend des
+ * bougies. Google montrerait alors ce titre à quelqu'un qui cherche une bougie.
+ *
+ * Les mots-clés négatifs sont lus puis écartés en code plutôt qu'en requête : ils disent ce
+ * que le groupe refuse, ce qui est l'inverse de ce qu'on cherche, et un filtre de moins dans
+ * la requête est un champ de moins qui peut être refusé.
+ */
+const REQUETE_MOTS_CLES = `
+  SELECT ad_group.id, ad_group_criterion.keyword.text, ad_group_criterion.negative
+  FROM ad_group_criterion
+  WHERE ad_group_criterion.type = 'KEYWORD'
+    AND ad_group_criterion.status != 'REMOVED'
+    AND ad_group.status != 'REMOVED'
+`
+
 /** Le texte d'un élément textuel de Google, qui les emballe dans un objet. */
 function texteElement(valeur: unknown): { texte: string; performance: string } {
   const objet = (valeur ?? {}) as Record<string, unknown>
@@ -541,6 +561,20 @@ async function lireCreatif(
         ajouter({ groupeId, champ, texte: lu.texte, elementId: '', performance: lu.performance })
       }
     }
+  }
+
+  const motsCles = await interroger(acces, REQUETE_MOTS_CLES)
+  if (!motsCles.ok) return motsCles
+
+  for (const ligne of motsCles.valeur) {
+    const groupe = (ligne.adGroup ?? {}) as Record<string, unknown>
+    const critere = (ligne.adGroupCriterion ?? {}) as Record<string, unknown>
+    const groupeId = String(nombre(groupe.id))
+    if (groupeId === '0' || !groupes.has(groupeId)) continue
+    // Un mot-clé négatif dit ce que le groupe refuse : c'est l'inverse de ce qu'on cherche.
+    if (critere.negative === true) continue
+    const mot = texte(((critere.keyword ?? {}) as Record<string, unknown>).text)
+    ajouter({ groupeId, champ: 'mot-cle', texte: mot, elementId: '', performance: '' })
   }
 
   const pmax = await interroger(acces, REQUETE_ELEMENTS)

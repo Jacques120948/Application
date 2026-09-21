@@ -258,7 +258,16 @@ export async function redigerPourGroupe(
   )
   if (groupe === null) throw notFound('Ce contenant est introuvable.')
 
-  const aFaire = manques(groupe.genre, groupe.elements, groupe.propositions)
+  /*
+   * Les mots-clés sont retirés des « éléments » avant tout calcul : ce ne sont pas des
+   * morceaux d'annonce, et les compter ferait croire un contenant plus rempli qu'il n'est.
+   */
+  const cible = groupe.elements
+    .filter((element) => element.champ === 'mot-cle')
+    .map((element) => element.texte)
+  const textes = groupe.elements.filter((element) => element.champ !== 'mot-cle')
+
+  const aFaire = manques(groupe.genre, textes, groupe.propositions)
   if (aFaire.length === 0) {
     /*
      * Refusé avant l'appel, et non après : un appel qui ne peut rien produire d'utile ne
@@ -287,10 +296,8 @@ export async function redigerPourGroupe(
     activite: profil.activite,
     produits: profil.produits,
     pays: profil.pays,
-    existants: groupe.elements.map((element) => ({
-      champ: element.champ,
-      texte: element.texte,
-    })),
+    cible,
+    existants: textes.map((element) => ({ champ: element.champ, texte: element.texte })),
     recherches,
     fiches: [],
     manques: aFaire,
@@ -301,7 +308,7 @@ export async function redigerPourGroupe(
    * l'annonce ne diffuse pas et que personne ne comprend pourquoi.
    */
   const interdits = new Set(
-    [...groupe.elements, ...groupe.propositions].map(
+    [...textes, ...groupe.propositions].map(
       (une) => `${une.champ}::${nettoyer(une.texte).toLowerCase()}`,
     ),
   )

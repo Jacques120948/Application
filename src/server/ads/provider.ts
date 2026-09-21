@@ -87,8 +87,15 @@ export type GroupeAds = {
   statut: string
 }
 
-/** Les champs qu'un morceau d'annonce peut occuper. */
-export type ChampAds = 'titre' | 'titre-long' | 'description' | 'image' | 'logo'
+/**
+ * Les champs qu'un morceau d'annonce peut occuper.
+ *
+ * `mot-cle` n'est pas un morceau d'annonce : c'est ce que le contenant cible. Il est rangé
+ * au même endroit parce qu'il a la même vie — il appartient au contenant, il disparaît avec
+ * lui, et il se relit au même rythme. Mais il ne compte jamais dans le remplissage : un
+ * groupe n'a pas « 9 titres sur 15 » parce qu'il a six mots-clés.
+ */
+export type ChampAds = 'titre' | 'titre-long' | 'description' | 'image' | 'logo' | 'mot-cle'
 
 /** Un morceau d'annonce : un titre, une description, une image. */
 export type ElementAds = {

@@ -62,6 +62,8 @@ const GROUPES: GroupeAds[] = [
 ]
 
 const ELEMENTS: ElementAds[] = [
+  // Ce que le contenant cible : la borne du sujet, et jamais un morceau d'annonce.
+  { groupeId: 'g1', champ: 'mot-cle', texte: 'bougie quartz rose', elementId: '', performance: '' },
   { groupeId: 'g1', champ: 'titre', texte: 'Bougies artisanales suisses', elementId: '', performance: 'BEST' },
   { groupeId: 'g1', champ: 'titre', texte: 'Cire de soja naturelle', elementId: '', performance: 'GOOD' },
   // Le même titre, porté par une seconde annonce du même groupe : il ne doit compter qu'une fois.
@@ -143,6 +145,11 @@ describe('la lecture du créatif', () => {
     const annonces = vu?.groupes.find((groupe) => groupe.genre === 'annonces')
     // Trois titres envoyés, deux distincts : Google refuse les doublons dans un contenant.
     expect(annonces?.titres).toHaveLength(2)
+    /*
+     * Le mot-clé est rangé avec les morceaux mais n'en est pas un : le compter ferait croire
+     * un contenant plus rempli qu'il n'est, et dirait « 3 titres sur 15 » pour deux titres.
+     */
+    expect(annonces?.motsCles).toEqual(['bougie quartz rose'])
     expect(annonces?.descriptions).toHaveLength(1)
     expect(annonces?.campagne).toBe('Recherche')
 
@@ -168,7 +175,8 @@ describe('la lecture du créatif', () => {
       ok: true,
       valeur: {
         groupes: [GROUPES[0] as GroupeAds],
-        elements: [ELEMENTS[0] as ElementAds],
+        // Un titre, pas le mot-clé : c'est le remplissage qu'on vérifie ici.
+        elements: [ELEMENTS[1] as ElementAds],
       },
     })
     lireTermes.mockResolvedValue({ ok: true, valeur: [TERMES[0] as TermeAds] })

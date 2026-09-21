@@ -1622,6 +1622,8 @@ export async function proposerElementsAds(params: {
   pays: string
   /** Ce qui existe déjà, par champ. Le modèle ne doit en être ni le doublon ni le synonyme. */
   existants: { champ: string; texte: string }[]
+  /** Ce que le contenant cible. Sans lui, on écrit pour la boutique, pas pour le groupe. */
+  cible: string[]
   recherches: RequeteReelle[]
   fiches: string[]
   /** Combien il en manque, par champ, pour atteindre le maximum que Google accepte. */
@@ -1651,13 +1653,25 @@ export async function proposerElementsAds(params: {
         ? ''
         : asUserData('ce_qui_est_vendu', params.produits),
       params.pays.trim() === '' ? '' : `Zones de vente : ${params.pays}.`,
+      params.cible.length === 0
+        ? 'Ce contenant ne déclare pas ses mots-clés. Déduis son sujet de son nom et des' +
+          ' textes déjà en place, et n’en sors pas.'
+        : asUserData('ce_que_ce_contenant_cible', JSON.stringify(params.cible, null, 2)),
       params.existants.length === 0
         ? "Ce contenant est vide : tu pars de rien, et tu dois couvrir plusieurs angles."
         : asUserData('textes_deja_en_place', JSON.stringify(params.existants, null, 2)),
       params.recherches.length === 0
         ? "Aucune recherche réelle n'est disponible : appuie-toi sur les fiches, et n'évoque" +
           ' ni volume ni position.'
-        : asUserData('recherches_reelles', JSON.stringify(params.recherches, null, 2)),
+        : asUserData(
+            'recherches_reelles_sur_tout_le_site',
+            JSON.stringify(params.recherches, null, 2),
+          ),
+      params.recherches.length === 0
+        ? ''
+        : 'Ces recherches portent sur le site entier, pas sur ce contenant. Écarte celles' +
+          ' qui sortent de son sujet : les reprendre ferait montrer une annonce hors sujet à' +
+          ' quelqu’un qui cherche autre chose.',
       params.fiches.length === 0
         ? "Aucune fiche produit n'est disponible."
         : asUserData('fiches_de_la_boutique', JSON.stringify(params.fiches, null, 2)),

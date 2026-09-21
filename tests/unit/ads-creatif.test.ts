@@ -24,14 +24,15 @@ describe('le rythme du créatif', () => {
     expect(JOURS_TERMES).toBeGreaterThanOrEqual(14)
   })
 
-  it('tient en trois appels par compte, quoi qu’il arrive', () => {
+  it('tient en quatre appels par compte, quoi qu’il arrive', () => {
     /*
-     * Deux pour le contenu — les annonces responsives d'un côté, les groupes d'éléments de
-     * l'autre, Google ne les rendant pas par la même requête — et un pour les termes. Une
-     * boucle par campagne coûterait à tout le monde ce qu'elle ferait gagner à un seul.
+     * Trois pour le contenu — les annonces responsives, les mots-clés qui disent de quoi
+     * parle chaque groupe, et les groupes d'éléments : Google ne les rend pas par la même
+     * requête — et un pour les termes. Une boucle par campagne coûterait à tout le monde ce
+     * qu'elle ferait gagner à un seul, sur un plafond partagé.
      */
     const source = readFileSync('src/server/ads/creatif.ts', 'utf8')
-    expect(source).toContain('bilan.appels += 2')
+    expect(source).toContain('bilan.appels += 3')
     expect(source).toContain('bilan.appels += 1')
     expect(source.match(/googleAds\.lireCreatif\(/gu) ?? []).toHaveLength(1)
     expect(source.match(/googleAds\.lireTermes\(/gu) ?? []).toHaveLength(1)
@@ -60,6 +61,7 @@ describe('la garantie de lecture seule', () => {
     expect(source).toContain('FROM search_term_view')
     expect(source).toContain('FROM asset_group_asset')
     expect(source).toContain('FROM ad_group_ad')
+    expect(source).toContain('FROM ad_group_criterion')
   })
 
   it('ne demande pas un champ que l’API refuse', () => {
