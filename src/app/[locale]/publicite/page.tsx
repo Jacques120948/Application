@@ -10,6 +10,9 @@ import { findVisibilityAgent } from '@/server/agents/visibility'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
+import { TableauAds } from '@/components/studio/TableauAds'
+import { LireCampagnes } from '@/components/studio/LireCampagnes'
+import { lireTableauAds, periodeValide } from '@/server/ads/tableau'
 import { LinkButton } from '@/components/ui'
 
 /**
@@ -23,7 +26,13 @@ import { LinkButton } from '@/components/ui'
  * Les campagnes, les indicateurs et les recommandations viendront remplir cette page à
  * mesure qu'ils existeront. Ce qui est affiché est ce qui est construit.
  */
-export default async function PublicitePage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function PublicitePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>
+  searchParams: Promise<{ jours?: string }>
+}) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
@@ -39,6 +48,14 @@ export default async function PublicitePage({ params }: { params: Promise<{ loca
     ? await Promise.all([hasConnection(user.id, googleAds.id), listerComptesRelies(user.id)])
     : [false, []]
   const actif = comptes.find((compte) => compte.actif) ?? null
+
+  /*
+   * La période voyage dans l'adresse, comme le filtre par pays et le rythme du calendrier :
+   * elle se met en favori et survit au rafraîchissement. Une valeur inattendue retombe sur
+   * sept jours plutôt que de faire échouer un écran qu'on venait consulter.
+   */
+  const jours = periodeValide((await searchParams).jours)
+  const tableau = actif === null ? null : await lireTableauAds(user.id, jours).catch(() => null)
 
   return (
     <Shell
@@ -114,14 +131,30 @@ export default async function PublicitePage({ params }: { params: Promise<{ loca
                 )}
               </section>
 
-              {actif === null ? null : (
-                <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-                  <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                    {actif.synchroAt === null
-                      ? 'Aucune synchronisation n’a encore eu lieu : Naya n’a pas encore lu vos campagnes. La lecture des chiffres arrive à la prochaine étape.'
-                      : `Dernière synchronisation : ${actif.synchroAt.toLocaleString(locale)}.`}
-                  </p>
-                </section>
+              {actif === null || tableau === null ? null : (
+                <>
+                  <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+                    <p className="m-0 mb-3 text-xs text-[var(--color-ink-faint)]">
+                      {actif.synchroAt === null
+                        ? 'Aucune lecture n’a encore eu lieu.'
+                        : `Dernière lecture : ${actif.synchroAt.toLocaleString(locale)}.`}
+                    </p>
+                    <LireCampagnes premiere={actif.synchroAt === null} />
+                  </section>
+                  <TableauAds
+                    base={`/${locale}/publicite`}
+                    tableau={{
+                      devise: tableau.compte.devise,
+                      jours: tableau.jours,
+                      depuis: tableau.depuis,
+                      jusqua: tableau.jusqua,
+                      total: tableau.total,
+                      ecarts: tableau.ecarts,
+                      campagnes: tableau.campagnes,
+                      synchronise: tableau.synchronise,
+                    }}
+                  />
+                </>
               )}
             </>
           )}

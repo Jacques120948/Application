@@ -12,6 +12,7 @@ import { lireRecherches } from './recherches'
 import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
 import { fairePoint } from './point'
+import { synchroniserTous } from '@/server/ads/synchro'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -226,6 +227,8 @@ export type Bilan = {
   questionsIa: number
   /** Points hebdomadaires écrits. */
   points: number
+  /** Comptes publicitaires synchronisés. */
+  comptesAds: number
   echecs: number
   /** Combien de sites auraient dépensé. Rempli seulement à blanc. */
   redactionsDues?: number
@@ -396,6 +399,7 @@ export async function tournerQuotidien(
     depots: 0,
     questionsIa: 0,
     points: 0,
+    comptesAds: 0,
     echecs: 0,
   }
   if (sansRedaction) {
@@ -550,6 +554,24 @@ export async function tournerQuotidien(
       logger.warn('automatisation : un site a échoué', {
         raison: error instanceof Error ? error.message.slice(0, 120) : 'inconnu',
       })
+    }
+  }
+
+  /*
+   * La lecture des campagnes ferme la nuit, et elle ne demande aucun réglage : relier un
+   * compte Google Ads est l'accord. Faire cocher une case de plus après avoir traversé
+   * l'écran de consentement de Google reviendrait à demander deux fois la même chose, et la
+   * seconde serait celle qu'on oublie — le compte resterait relié, la page resterait vide,
+   * et la panne serait cherchée du côté de Google.
+   *
+   * Elle est gratuite : ce sont des lectures, aucun crédit, aucun appel à un modèle. À
+   * blanc, on ne la fait pas — elle écrit en base, et une sonde ne doit rien écrire.
+   */
+  if (!sansRedaction) {
+    const publicite = await synchroniserTous().catch(() => null)
+    if (publicite !== null) {
+      bilan.comptesAds = publicite.comptes
+      bilan.echecs += publicite.echecs
     }
   }
 

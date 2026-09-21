@@ -22,6 +22,8 @@ export type CompteVu = {
   fuseau: string
   gestionnaire: boolean
   actif: boolean
+  /** Le détail a pu être lu chez Google. Faux : le compte existe mais reste opaque. */
+  lisible: boolean
 }
 
 /** Le numéro de compte tel que Google l'écrit, par groupes de trois chiffres. */
@@ -53,7 +55,7 @@ export function ComptesAds({ initiaux }: { initiaux: readonly CompteVu[] }) {
     setComptes((actuels) => actuels.map((compte) => ({ ...compte, actif: compte.id === id })))
   }
 
-  const diffusants = comptes.filter((compte) => !compte.gestionnaire)
+  const diffusants = comptes.filter((compte) => !compte.gestionnaire && compte.lisible)
 
   return (
     <div className="grid gap-3">
@@ -78,7 +80,16 @@ export function ComptesAds({ initiaux }: { initiaux: readonly CompteVu[] }) {
             {compte.fuseau === '' ? '' : ` · ${compte.fuseau}`}
           </p>
 
-          {compte.gestionnaire ? (
+          {!compte.lisible ? (
+            /*
+             * Montré plutôt que caché : le cacher ferait chercher un compte qu'on sait
+             * posséder. Mais pas choisissable — le suivre donnerait un écran vide.
+             */
+            <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              Evoliia n’a pas pu lire ce compte chez Google : il est peut-être fermé,
+              suspendu, ou votre compte Google n’y a plus accès. Il ne peut pas être suivi.
+            </p>
+          ) : compte.gestionnaire ? (
             <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
               Compte administrateur : il gère d’autres comptes et ne diffuse pas de publicité
               lui-même. Il n’a donc ni dépense ni conversion à montrer.

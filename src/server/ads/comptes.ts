@@ -24,6 +24,13 @@ import type { AccesAds } from './provider'
  * **Rien n'est actif tant qu'il n'y a pas de quoi choisir.** Quand l'autorisation ne donne
  * accès qu'à un seul compte diffusant, il est retenu : demander de choisir dans une liste
  * d'un élément est une question dont la réponse est déjà connue.
+ *
+ * **Un compte dont le détail n'a pas été lu n'est pas choisissable.** Il arrive qu'une
+ * autorisation couvre un compte fermé, suspendu, ou dont le compte Google n'a plus les
+ * droits : Google le liste encore, mais refuse d'en dire le nom, la devise et le fuseau. Le
+ * proposer quand même donnerait un tableau de bord vide sans que rien ne l'explique — et
+ * c'est la devise absente qui le trahit, puisque Google la rend toujours pour un compte
+ * lisible.
  */
 
 export type CompteRelie = {
@@ -35,6 +42,13 @@ export type CompteRelie = {
   gestionnaire: boolean
   actif: boolean
   synchroAt: Date | null
+  /**
+   * Le détail du compte a pu être lu chez Google.
+   *
+   * Dérivé de la devise plutôt que conservé : Google la rend toujours pour un compte
+   * lisible, et une colonne de plus serait une vérité à tenir à jour en double.
+   */
+  lisible: boolean
 }
 
 /** Le compte que Naya suit, ou `null` quand aucun n'est relié. */
@@ -67,6 +81,7 @@ function vue(ligne: {
     gestionnaire: ligne.gestionnaire,
     actif: ligne.actif,
     synchroAt: ligne.synchroAt,
+    lisible: ligne.devise !== '',
   }
 }
 
@@ -135,7 +150,9 @@ export async function enregistrerComptes(
    * fait par le produit coûte un tableau de bord vide qu'on cherche ailleurs.
    */
   if (dejaActif === null) {
-    const diffusants = lecture.valeur.filter((compte) => !compte.gestionnaire)
+    const diffusants = lecture.valeur.filter(
+      (compte) => !compte.gestionnaire && compte.devise !== '',
+    )
     const seul = diffusants.length === 1 ? diffusants[0] : undefined
     if (seul !== undefined) {
       await withUserScope(userId, (tx) =>
@@ -157,6 +174,16 @@ export async function choisirCompte(userId: string, adsAccountId: string): Promi
     tx.adsAccount.findFirst({ where: { id: adsAccountId, userId } }),
   )
   if (compte === null) throw notFound('Ce compte publicitaire est introuvable.')
+  if (compte.devise === '') {
+    /*
+     * Refusé côté serveur, et pas seulement grisé à l'écran : ce qui arrive du navigateur
+     * désigne, il n'autorise pas. Un compte illisible suivi donnerait un tableau de bord
+     * vide, et la panne serait cherchée partout sauf ici.
+     */
+    throw validation(
+      'Evoliia n’a pas pu lire ce compte chez Google : il est peut-être fermé, suspendu, ou votre compte Google n’y a plus accès. Choisissez-en un autre.',
+    )
+  }
   if (compte.gestionnaire) {
     /*
      * Refusé plutôt que permis en silence : un compte administrateur n'a ni dépense ni
@@ -175,7 +202,7 @@ export async function choisirCompte(userId: string, adsAccountId: string): Promi
     await tx.adsAccount.updateMany({ where: { id: adsAccountId, userId }, data: { actif: true } })
   })
 
-  return { ...vue(compte), actif: true }
+  return { ...vue(compte), actif: true, lisible: true }
 }
 
 /**
