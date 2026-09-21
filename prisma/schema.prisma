@@ -99,6 +99,12 @@ model User {
   promptsIa            PromptIA[]
   relevesIa            ReleveIA[]
   pointsHebdo          PointHebdo[]
+  adsComptes           AdsAccount[]
+  adsProfils           AdsProfil[]
+  adsCampagnes         AdsCampagne[]
+  adsReleves           AdsReleve[]
+  adsRecommandations   AdsRecommandation[]
+  adsActions           AdsAction[]
   releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
@@ -1723,4 +1729,208 @@ model AuthThrottle {
 
   @@unique([scope, keyHash])
   @@index([blockedUntil])
+}
+
+// ─────────────────────────── Naya — la publicité ─────────────────────────────
+//
+// Six tables, et la raison d'être de l'ensemble tient en une phrase : sans mesure d'hier,
+// on ne peut rien dire d'aujourd'hui. Google Ads rend l'état du moment ; il ne rend pas
+// « votre ROAS a baissé de dix-huit points cette semaine ». Cette phrase-là se fabrique en
+// gardant une ligne par campagne et par jour, et en soustrayant.
+//
+// L'argent est en micros, en entier long. Google rend des millionièmes d'unité monétaire ;
+// les convertir en nombre à virgule à l'écriture ferait entrer une imprécision dans la
+// seule donnée du produit qui soit de l'argent réel. La conversion se fait à la lecture.
+
+/// Un compte publicitaire relié. Les jetons vivent ailleurs, chiffrés : voir
+/// `IntegrationCredential`. Cette table ne porte que ce qu'on affiche.
+model AdsAccount {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// « google-ads » aujourd'hui ; Meta et Microsoft s'y rangeront.
+  plateforme   String    @default("google-ads")
+  /// L'identifiant du compte chez la plateforme. Chez Google : le customer ID sans tirets.
+  compteId     String
+  nom          String    @default("")
+  /// CHF, EUR, USD… telle que la plateforme la déclare. Jamais déduite.
+  devise       String    @default("")
+  /// Le fuseau du compte : c'est lui qui décide où commence une journée de dépense.
+  fuseau       String    @default("")
+  /// Un compte administrateur ne diffuse pas de publicité : il en gère d'autres.
+  gestionnaire Boolean   @default(false)
+  /// Celui que Naya lit. On peut en relier plusieurs et n'en suivre qu'un.
+  actif        Boolean   @default(false)
+  /// Dernière synchronisation réussie, affichée telle quelle.
+  synchroAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profil          AdsProfil?
+  campagnes       AdsCampagne[]
+  releves         AdsReleve[]
+  recommandations AdsRecommandation[]
+  actions         AdsAction[]
+
+  @@unique([userId, plateforme, compteId])
+  @@index([userId, actif])
+}
+
+/// Ce que la personne vise. Un ROAS de 250 % est excellent pour l'une et insuffisant pour
+/// l'autre : c'est sa marge qui tranche, pas une moyenne de marché.
+model AdsProfil {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  accountId String @unique @db.Uuid
+
+  activite            String @default("")
+  pays                String @default("")
+  produits            String @default("")
+  panierMoyenMicros   BigInt @default(0)
+  /// Marge moyenne en pourcentage entier. C'est elle qui rend un ROAS interprétable.
+  margePourcent       Int    @default(0)
+  /// Objectif de rentabilité en pourcentage entier : 200 veut dire 200 %.
+  roasCible           Int    @default(0)
+  cpaCibleMicros      BigInt @default(0)
+  budgetMensuelMicros BigInt @default(0)
+  /// conversions | valeur | roas | cpa
+  objectif            String @default("conversions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+}
+
+/// Une campagne et son état du moment.
+model AdsCampagne {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  accountId String @db.Uuid
+
+  /// L'identifiant chez la plateforme : c'est lui qu'on renvoie pour modifier quoi que ce soit.
+  campagneId   String
+  nom          String  @default("")
+  /// SEARCH | SHOPPING | PERFORMANCE_MAX… tel que la plateforme le nomme.
+  type         String  @default("")
+  /// ENABLED | PAUSED | REMOVED, tel quel.
+  statut       String  @default("")
+  budgetMicros BigInt  @default(0)
+  /// Chez Google, un budget peut servir plusieurs campagnes : le modifier sans le savoir
+  /// changerait le budget d'une campagne qu'on ne regardait pas.
+  budgetId     String  @default("")
+  /// Vrai quand la plateforme signale que la campagne est bridée par son budget.
+  budgetLimite Boolean @default(false)
+
+  vueAt     DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         AdsAccount          @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  releves         AdsReleve[]
+  recommandations AdsRecommandation[]
+  actions         AdsAction[]
+
+  @@unique([accountId, campagneId])
+}
+
+/// Une ligne par campagne et par jour. C'est la table qui porte tout le reste : une
+/// variation est une soustraction, et elle exige qu'on ait gardé les deux journées.
+model AdsReleve {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @db.Uuid
+  accountId  String @db.Uuid
+  campagneId String @db.Uuid
+
+  /// Le jour, dans le fuseau du compte.
+  jour             DateTime @db.Date
+  coutMicros       BigInt   @default(0)
+  impressions      BigInt   @default(0)
+  clics            BigInt   @default(0)
+  /// Fractionnaire : Google compte au dixième quand les conversions sont pondérées.
+  conversions      Float    @default(0)
+  valeurConversion Float    @default(0)
+
+  createdAt DateTime @default(now())
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  AdsAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne AdsCampagne @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+
+  @@unique([campagneId, jour])
+  @@index([accountId, jour(sort: Desc)])
+}
+
+/// Ce que Naya propose. Conservé plutôt que recalculé : une recommandation ignorée doit le
+/// rester, et une recommandation appliquée doit pouvoir être relue avec ses chiffres.
+model AdsRecommandation {
+  id         String  @id @default(uuid()) @db.Uuid
+  userId     String  @db.Uuid
+  accountId  String  @db.Uuid
+  campagneId String? @db.Uuid
+
+  /// Identifiant stable de la règle : ads.budget.limite, ads.roas.chute…
+  regle       String
+  /// urgent | surveiller | opportunite | information
+  priorite    String @default("information")
+  titre       String @default("")
+  /// Ce qui a été constaté, écrit par le code et non par un modèle.
+  observation String @default("")
+  jours       Int    @default(0)
+  /// Les chiffres qui la motivent : c'est ce qui rend l'avis contestable.
+  donnees     Json   @default("{}")
+  /// L'explication en français, écrite par Naya à partir de ces chiffres-là.
+  explication String @default("")
+  /// L'action proposée, sous une forme que le serveur sait exécuter. Jamais du texte libre.
+  action      Json   @default("{}")
+  /// faible | moyen | eleve
+  risque      String @default("faible")
+  /// ouverte | appliquee | ignoree | perimee
+  etat        String @default("ouverte")
+
+  createdAt DateTime  @default(now())
+  closedAt  DateTime?
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne AdsCampagne? @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, etat])
+}
+
+/// Le journal, et la condition du retour arrière. Toute modification est écrite ici AVANT
+/// d'être envoyée, avec sa valeur d'avant : sans cela, « restaurer 40 CHF » est un bouton
+/// qui ment.
+model AdsAction {
+  id         String  @id @default(uuid()) @db.Uuid
+  userId     String  @db.Uuid
+  accountId  String  @db.Uuid
+  campagneId String? @db.Uuid
+
+  /// budget | pause | reprise | mot-cle-negatif…
+  quoi     String
+  motif    String  @default("")
+  avant    Json    @default("{}")
+  apres    Json    @default("{}")
+  /// assiste | autopilote | restauration
+  mode     String  @default("assiste")
+  /// prevu | reussi | refuse — « prevu » est une écriture commencée et non confirmée.
+  resultat String  @default("prevu")
+  /// Le refus de la plateforme, en clair et sans secret.
+  detail   String  @default("")
+  annuleId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne AdsCampagne? @relation(fields: [campagneId], references: [id], onDelete: SetNull)
+  annule   AdsAction?   @relation("AdsActionAnnulee", fields: [annuleId], references: [id], onDelete: SetNull)
+  annulees AdsAction[]  @relation("AdsActionAnnulee")
+
+  @@index([accountId, createdAt(sort: Desc)])
+  @@index([campagneId, quoi])
 }

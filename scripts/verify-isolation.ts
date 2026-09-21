@@ -54,6 +54,12 @@ const PROTECTED_TABLES = [
   'PromptIA',
   'ReleveIA',
   'PointHebdo',
+  'AdsAccount',
+  'AdsProfil',
+  'AdsCampagne',
+  'AdsReleve',
+  'AdsRecommandation',
+  'AdsAction',
 ] as const
 
 /*

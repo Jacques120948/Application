@@ -141,6 +141,25 @@ export const env = {
     return read('PERPLEXITY_API_KEY')
   },
   /**
+   * Jeton développeur Google Ads, délivré à Evoliia et non à ses utilisateurs.
+   *
+   * C'est la pièce qui distingue cette intégration de toutes les autres : chaque personne
+   * autorise son propre compte par OAuth, mais l'application, elle, est identifiée par un
+   * jeton unique appartenant à l'exploitant — et le quota associé est partagé par tout le
+   * monde. Absent, la connexion reste fermée plutôt que d'échouer au premier appel.
+   */
+  get googleAdsDeveloperToken(): string | undefined {
+    return read('GOOGLE_ADS_DEVELOPER_TOKEN')
+  },
+  /**
+   * Le compte administrateur d'Evoliia, quand les comptes sont atteints à travers lui.
+   *
+   * Facultatif : une personne qui relie son propre compte directement n'en a pas besoin.
+   */
+  get googleAdsLoginCustomerId(): string | undefined {
+    return read('GOOGLE_ADS_LOGIN_CUSTOMER_ID')
+  },
+  /**
    * Domaine des applications publiées, par exemple `evoliia.app`. Chaque application y
    * reçoit un sous-domaine tiré de son nom court. Sans cette variable, les applications
    * restent servies sous `/a/<nom-court>` et rien ne change : la fonction est éteinte,

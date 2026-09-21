@@ -1,0 +1,392 @@
+import { env } from '@/lib/env'
+import { echangerJeton, type Jetons } from '@/server/integrations/oauth'
+import { logger } from '@/server/observability/logger'
+import type {
+  AccesAds,
+  AdPlatformProvider,
+  CampagneAds,
+  CompteAds,
+  JourneeAds,
+  Lecture,
+} from './provider'
+
+/**
+ * Google Ads, en lecture.
+ *
+ * Trois choses distinguent cette intégration de Search Console et de Shopify, et chacune a
+ * une conséquence dans ce fichier.
+ *
+ * **Le jeton développeur appartient à Evoliia.** Chaque personne autorise son propre compte
+ * par OAuth, mais l'application est identifiée par un jeton unique, délivré à l'exploitant,
+ * dont le quota est partagé par tous les utilisateurs. C'est la seule ressource du produit
+ * qui se consomme en commun : d'où les lectures groupées plus bas, et non une requête par
+ * campagne.
+ *
+ * **La portée `adwords` ouvre l'écriture.** Google n'en propose pas de version en lecture
+ * seule : demander à lire, c'est obtenir le droit de modifier. On ne peut donc pas compter
+ * sur Google pour empêcher une écriture accidentelle — la garantie doit venir d'ici. Ce
+ * fichier ne contient aucune fonction d'écriture, et n'en contiendra qu'au moment où le
+ * mode assisté sera construit, avec ses confirmations.
+ *
+ * **Les chiffres du jour sont mouvants.** Google corrige ses conversions pendant plusieurs
+ * jours. Une journée lue le matin même n'est pas fausse, elle est provisoire — et c'est
+ * pourquoi les journées se réécrivent à chaque lecture plutôt que de s'empiler.
+ */
+
+/**
+ * La version d'API visée.
+ *
+ * Elle est nommée ici plutôt que devinée : Google publie une version par trimestre et
+ * retire les anciennes. Le jour où celle-ci s'éteint, c'est cette ligne qui change, et un
+ * refus nommé vaut mieux qu'un 404 sans explication.
+ */
+const VERSION = 'v22'
+
+const RACINE = `https://googleads.googleapis.com/${VERSION}`
+const AUTORISATION = 'https://accounts.google.com/o/oauth2/v2/auth'
+const JETON = 'https://oauth2.googleapis.com/token'
+
+/**
+ * La portée demandée, et ce qu'elle implique.
+ *
+ * `adwords` est la seule portée Google Ads. Elle couvre la lecture et l'écriture : Google
+ * n'offre pas de lecture seule sur cette API. C'est dit à la personne sur l'écran de
+ * connexion plutôt que caché — elle doit pouvoir croire ce qu'elle lit, et l'écran de
+ * consentement de Google le lui dira de toute façon.
+ */
+export const PORTEES = ['https://www.googleapis.com/auth/adwords'] as const
+
+const DELAI_MS = 45_000
+
+export function estConfigureAds(): boolean {
+  return (
+    env.googleClientId !== undefined &&
+    env.googleClientSecret !== undefined &&
+    env.googleAdsDeveloperToken !== undefined
+  )
+}
+
+function adresseRetour(): string {
+  return `${env.appUrl}/api/connexions/google/retour`
+}
+
+function urlAutorisation(etat: string): string {
+  const parametres = new URLSearchParams({
+    client_id: env.googleClientId ?? '',
+    redirect_uri: adresseRetour(),
+    response_type: 'code',
+    scope: PORTEES.join(' '),
+    /*
+     * `offline` et `consent` ensemble : sans eux, Google ne délivre un jeton de
+     * rafraîchissement qu'à la toute première autorisation. Une personne qui reconnecte son
+     * compte se retrouverait alors avec un accès qui expire en une heure et ne revient
+     * jamais — une panne qui ne se voit que le lendemain.
+     */
+    access_type: 'offline',
+    prompt: 'consent',
+    state: etat,
+  })
+  return `${AUTORISATION}?${parametres.toString()}`
+}
+
+async function echangerCode(
+  code: string,
+): Promise<{ ok: true; jetons: Jetons } | { ok: false; raison: string }> {
+  return echangerJeton(JETON, {
+    code,
+    client_id: env.googleClientId ?? '',
+    client_secret: env.googleClientSecret ?? '',
+    redirect_uri: adresseRetour(),
+    grant_type: 'authorization_code',
+  })
+}
+
+async function rafraichir(
+  refreshToken: string,
+): Promise<{ ok: true; jetons: Jetons } | { ok: false; raison: string }> {
+  return echangerJeton(JETON, {
+    refresh_token: refreshToken,
+    client_id: env.googleClientId ?? '',
+    client_secret: env.googleClientSecret ?? '',
+    grant_type: 'refresh_token',
+  })
+}
+
+/** Les en-têtes que Google Ads exige, jeton développeur compris. */
+function entetes(accessToken: string, compteId?: string): Record<string, string> {
+  const base: Record<string, string> = {
+    authorization: `Bearer ${accessToken}`,
+    'developer-token': env.googleAdsDeveloperToken ?? '',
+    'content-type': 'application/json',
+  }
+  /*
+   * `login-customer-id` désigne le compte administrateur par lequel on atteint celui qu'on
+   * lit. Il est ignoré par la liste des comptes accessibles, et indispensable dès qu'on
+   * passe par une hiérarchie.
+   */
+  const gestionnaire = compteId ?? env.googleAdsLoginCustomerId
+  if (gestionnaire !== undefined && gestionnaire !== '') {
+    base['login-customer-id'] = gestionnaire.replace(/\D/gu, '')
+  }
+  return base
+}
+
+/** Ce que Google refuse, dit à quelqu'un qui peut y faire quelque chose. */
+function refus(status: number, message: string): string {
+  if (status === 401) {
+    return 'Votre autorisation Google a expiré. Reconnectez votre compte Google Ads.'
+  }
+  if (status === 403) {
+    return 'Google refuse l’accès à ce compte publicitaire. Vérifiez que le compte connecté a bien les droits dessus.'
+  }
+  if (status === 429) {
+    return 'Google limite les demandes en ce moment. Naya réessaiera plus tard.'
+  }
+  return message === ''
+    ? 'Naya ne parvient pas à récupérer vos données Google Ads pour l’instant.'
+    : `Google répond : ${message.slice(0, 150)}`
+}
+
+type ReponseGoogle = { status: number; corps: unknown; erreur: string }
+
+async function appeler(
+  url: string,
+  accessToken: string,
+  compteId: string | undefined,
+  corps?: unknown,
+): Promise<ReponseGoogle | null> {
+  const controle = new AbortController()
+  const minuteur = setTimeout(() => controle.abort(), DELAI_MS)
+  try {
+    const reponse = await fetch(url, {
+      method: corps === undefined ? 'GET' : 'POST',
+      headers: entetes(accessToken, compteId),
+      ...(corps === undefined ? {} : { body: JSON.stringify(corps) }),
+      signal: controle.signal,
+    })
+    const charge = (await reponse.json().catch(() => null)) as unknown
+    /*
+     * Le détail technique reste ici. Ce qui remonte à l'écran est une phrase en français ;
+     * ce qui part dans le journal ne porte ni jeton, ni identifiant de compte.
+     */
+    const erreur =
+      reponse.status === 200
+        ? ''
+        : (((charge as { error?: { message?: string } } | null)?.error?.message ?? '') as string)
+    if (reponse.status !== 200) {
+      logger.warn('Google Ads a refusé une lecture', { status: reponse.status })
+    }
+    return { status: reponse.status, corps: charge, erreur }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(minuteur)
+  }
+}
+
+/**
+ * Une requête GAQL, en flux.
+ *
+ * `searchStream` rend tout en une réponse là où `search` pagine. Pour les volumes qui nous
+ * concernent — quelques dizaines de campagnes, quelques centaines de journées — c'est un
+ * appel au lieu de dix, et le quota est partagé entre tous les utilisateurs d'Evoliia.
+ */
+async function interroger(
+  acces: AccesAds,
+  requete: string,
+): Promise<Lecture<Record<string, unknown>[]>> {
+  const compte = acces.compteId.replace(/\D/gu, '')
+  const reponse = await appeler(
+    `${RACINE}/customers/${compte}/googleAds:searchStream`,
+    acces.accessToken,
+    env.googleAdsLoginCustomerId,
+    { query: requete },
+  )
+  if (reponse === null) {
+    return { ok: false, raison: 'Google Ads est momentanément injoignable. Naya réessaiera.' }
+  }
+  if (reponse.status !== 200) {
+    return { ok: false, raison: refus(reponse.status, reponse.erreur) }
+  }
+
+  /*
+   * La réponse est une liste de lots, chacun portant ses lignes. Lue défensivement : une
+   * forme inattendue doit coûter la lecture, jamais lever au milieu d'une synchronisation
+   * qui traite plusieurs comptes.
+   */
+  const lots = Array.isArray(reponse.corps) ? reponse.corps : [reponse.corps]
+  const lignes: Record<string, unknown>[] = []
+  for (const lot of lots) {
+    const resultats = (lot as { results?: unknown })?.results
+    if (!Array.isArray(resultats)) continue
+    for (const ligne of resultats) {
+      if (ligne !== null && typeof ligne === 'object') lignes.push(ligne as Record<string, unknown>)
+    }
+  }
+  return { ok: true, valeur: lignes }
+}
+
+/** Un nombre venu de Google, qui rend ses entiers longs sous forme de chaîne. */
+function nombre(valeur: unknown): number {
+  if (typeof valeur === 'number') return Number.isFinite(valeur) ? valeur : 0
+  if (typeof valeur === 'string') {
+    const lu = Number(valeur)
+    return Number.isFinite(lu) ? lu : 0
+  }
+  return 0
+}
+
+function texte(valeur: unknown): string {
+  return typeof valeur === 'string' ? valeur : ''
+}
+
+async function listerComptes(accessToken: string): Promise<Lecture<CompteAds[]>> {
+  const reponse = await appeler(
+    `${RACINE}/customers:listAccessibleCustomers`,
+    accessToken,
+    undefined,
+  )
+  if (reponse === null) {
+    return { ok: false, raison: 'Google Ads est momentanément injoignable. Réessayez.' }
+  }
+  if (reponse.status !== 200) return { ok: false, raison: refus(reponse.status, reponse.erreur) }
+
+  const noms = (reponse.corps as { resourceNames?: unknown })?.resourceNames
+  if (!Array.isArray(noms) || noms.length === 0) {
+    return {
+      ok: false,
+      raison:
+        'Ce compte Google n’a accès à aucun compte Google Ads. Vérifiez que vous vous êtes connecté avec le bon compte.',
+    }
+  }
+
+  /*
+   * La liste ne rend que des identifiants. Le nom, la devise et le fuseau se demandent
+   * compte par compte — et c'est le moment de la connexion, pas une boucle quotidienne :
+   * quelques appels une fois valent mieux qu'un écran qui n'affiche que des numéros.
+   */
+  const comptes: CompteAds[] = []
+  for (const nom of noms.slice(0, 20)) {
+    const compteId = texte(nom).split('/').at(-1) ?? ''
+    if (compteId === '') continue
+    const detail = await interroger(
+      { accessToken, compteId },
+      'SELECT customer.id, customer.descriptive_name, customer.currency_code,' +
+        ' customer.time_zone, customer.manager FROM customer LIMIT 1',
+    )
+    if (!detail.ok) {
+      /*
+       * Un compte illisible ne doit pas priver la personne des autres : il arrive qu'une
+       * autorisation couvre un compte fermé ou suspendu.
+       */
+      comptes.push({ compteId, nom: compteId, devise: '', fuseau: '', gestionnaire: false })
+      continue
+    }
+    const client = (detail.valeur[0]?.customer ?? {}) as Record<string, unknown>
+    comptes.push({
+      compteId,
+      nom: texte(client.descriptiveName) === '' ? compteId : texte(client.descriptiveName),
+      devise: texte(client.currencyCode),
+      fuseau: texte(client.timeZone),
+      gestionnaire: client.manager === true,
+    })
+  }
+  return { ok: true, valeur: comptes }
+}
+
+const REQUETE_CAMPAGNES = `
+  SELECT campaign.id, campaign.name, campaign.advertising_channel_type, campaign.status,
+         campaign_budget.id, campaign_budget.amount_micros,
+         campaign.primary_status_reasons
+  FROM campaign
+  WHERE campaign.status != 'REMOVED'
+`
+
+async function lireCampagnes(acces: AccesAds): Promise<Lecture<CampagneAds[]>> {
+  const lecture = await interroger(acces, REQUETE_CAMPAGNES)
+  if (!lecture.ok) return lecture
+
+  return {
+    ok: true,
+    valeur: lecture.valeur.map((ligne) => {
+      const campagne = (ligne.campaign ?? {}) as Record<string, unknown>
+      const budget = (ligne.campaignBudget ?? {}) as Record<string, unknown>
+      const raisons = Array.isArray(campagne.primaryStatusReasons)
+        ? campagne.primaryStatusReasons.map((raison) => texte(raison))
+        : []
+      return {
+        campagneId: String(nombre(campagne.id)),
+        nom: texte(campagne.name),
+        type: texte(campagne.advertisingChannelType),
+        statut: texte(campagne.status),
+        budgetMicros: nombre(budget.amountMicros),
+        budgetId: String(nombre(budget.id)),
+        /*
+         * Google nomme lui-même la cause : on la reprend telle quelle plutôt que de la
+         * déduire d'une dépense proche du budget, qui serait une devinette.
+         */
+        budgetLimite: raisons.includes('CAMPAIGN_BUDGET_CONSTRAINED'),
+      }
+    }),
+  }
+}
+
+async function lireJournees(
+  acces: AccesAds,
+  depuis: string,
+  jusqua: string,
+): Promise<Lecture<JourneeAds[]>> {
+  /*
+   * Les bornes sont recomposées à partir des chiffres lus, jamais interpolées dans la
+   * requête telles qu'elles arrivent : une date est le seul endroit de cette requête où
+   * une valeur extérieure entre, et GAQL n'a pas de paramètres liés.
+   */
+  const borne = (valeur: string): string => {
+    const propre = /^\d{4}-\d{2}-\d{2}$/u.test(valeur) ? valeur : ''
+    return propre
+  }
+  const debut = borne(depuis)
+  const fin = borne(jusqua)
+  if (debut === '' || fin === '') {
+    return { ok: false, raison: 'Période demandée invalide.' }
+  }
+
+  const lecture = await interroger(
+    acces,
+    `SELECT campaign.id, segments.date, metrics.cost_micros, metrics.impressions,
+            metrics.clicks, metrics.conversions, metrics.conversions_value
+     FROM campaign
+     WHERE segments.date BETWEEN '${debut}' AND '${fin}'`,
+  )
+  if (!lecture.ok) return lecture
+
+  return {
+    ok: true,
+    valeur: lecture.valeur.map((ligne) => {
+      const campagne = (ligne.campaign ?? {}) as Record<string, unknown>
+      const segments = (ligne.segments ?? {}) as Record<string, unknown>
+      const mesures = (ligne.metrics ?? {}) as Record<string, unknown>
+      return {
+        campagneId: String(nombre(campagne.id)),
+        jour: texte(segments.date),
+        coutMicros: nombre(mesures.costMicros),
+        impressions: nombre(mesures.impressions),
+        clics: nombre(mesures.clicks),
+        conversions: nombre(mesures.conversions),
+        valeurConversion: nombre(mesures.conversionsValue),
+      }
+    }),
+  }
+}
+
+export const googleAds: AdPlatformProvider = {
+  id: 'google-ads',
+  nom: 'Google Ads',
+  estConfigure: estConfigureAds,
+  urlAutorisation,
+  echangerCode,
+  rafraichir,
+  listerComptes,
+  lireCampagnes,
+  lireJournees,
+}
