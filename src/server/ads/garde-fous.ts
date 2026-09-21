@@ -229,6 +229,52 @@ export function autoriseTexte(
   return { ok: true }
 }
 
+/**
+ * Ce que Google accepte d'images par groupe d'éléments, **et par format**.
+ *
+ * Le « et par format » est la leçon d'un vrai refus. Vingt images ne veut pas dire vingt en
+ * tout : vingt paysages, vingt carrées, vingt portraits, chacune comptée à part. Et Google
+ * vérifie ce compte au rattachement, c'est-à-dire après avoir créé l'image. Un rattachement
+ * refusé laisse donc une image dans le compte, rattachée à rien, que l'API ne sait pas
+ * supprimer. Compter avant, dans le bon format, est la seule façon de ne pas en semer.
+ */
+export const IMAGES_PAR_CHAMP = 20
+
+/**
+ * Les bornes d'un dépôt d'image.
+ *
+ * `places` est le nombre d'images **de ce format** déjà rattachées au groupe, relu chez
+ * Google à l'instant. `format` est le nom lisible du format, uniquement pour que le refus
+ * dise laquelle des trois limites est atteinte — sans quoi « vingt images sur vingt » sur un
+ * groupe qui n'en montre que huit passerait pour une erreur d'Evoliia.
+ */
+export function autoriseImage(
+  demande: Demande & { textesAujourdhui: number },
+  places: number,
+  format: string,
+): Verdict {
+  if (demande.mode !== 'assiste') {
+    return {
+      ok: false,
+      raison:
+        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’une image puisse être envoyée à Google.',
+    }
+  }
+  if (demande.textesAujourdhui >= TEXTES_PAR_JOUR) {
+    return {
+      ok: false,
+      raison: `Vous avez déposé ${TEXTES_PAR_JOUR} éléments aujourd’hui. Reprenez demain.`,
+    }
+  }
+  if (places >= IMAGES_PAR_CHAMP) {
+    return {
+      ok: false,
+      raison: `Ce groupe porte déjà ${places} images au format ${format} sur ${IMAGES_PAR_CHAMP} : Google compte cette limite format par format et n’en accepte pas davantage. Retirez-en une dans Google Ads avant d’en ajouter.`,
+    }
+  }
+  return { ok: true }
+}
+
 /** Les bornes d'un changement de statut. Mettre en pause ne coûte rien ; reprendre, si. */
 export function autoriseStatut(demande: Demande, vers: string): Verdict {
   if (vers !== 'ENABLED' && vers !== 'PAUSED') {

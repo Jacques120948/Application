@@ -685,6 +685,39 @@ async function lireAnnoncesDuGroupe(
 }
 
 /**
+ * Combien d'éléments un groupe porte déjà, par champ.
+ *
+ * Google compte ses limites par type de champ — vingt images carrées, quinze titres, cinq
+ * descriptions — et il les vérifie au rattachement, pas à la création. Un rattachement
+ * refusé laisse donc l'élément créé sans emploi, et l'API ne sait pas le supprimer. Compter
+ * avant est la seule façon de ne pas en semer dans le compte de quelqu'un.
+ */
+async function compterElementsDuGroupe(
+  acces: AccesAds,
+  groupeId: string,
+): Promise<Lecture<Record<string, number>>> {
+  const identifiant = groupeId.replace(/\D/gu, '')
+  if (identifiant === '') return { ok: false, raison: 'Contenant inconnu.' }
+
+  const lecture = await interroger(
+    acces,
+    `SELECT asset_group_asset.field_type
+     FROM asset_group_asset
+     WHERE asset_group.id = ${identifiant}
+       AND asset_group_asset.status != 'REMOVED'`,
+  )
+  if (!lecture.ok) return lecture
+
+  const comptes: Record<string, number> = {}
+  for (const ligne of lecture.valeur) {
+    const champ = texte(((ligne.assetGroupAsset ?? {}) as Record<string, unknown>).fieldType)
+    if (champ === '') continue
+    comptes[champ] = (comptes[champ] ?? 0) + 1
+  }
+  return { ok: true, valeur: comptes }
+}
+
+/**
  * Ce que les gens ont tapé.
  *
  * Seules les campagnes à mots-clés en rendent. Une Performance Max ne livre que des
@@ -746,4 +779,5 @@ export const googleAds: AdPlatformProvider = {
   lireCreatif,
   lireTermes,
   lireAnnoncesDuGroupe,
+  compterElementsDuGroupe,
 }

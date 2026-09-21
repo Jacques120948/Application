@@ -208,4 +208,16 @@ export type AdPlatformProvider = {
    * d'une semaine effacerait ce que la personne a fait entre-temps dans Google Ads.
    */
   lireAnnoncesDuGroupe: (acces: AccesAds, groupeId: string) => Promise<Lecture<AnnonceAds[]>>
+  /**
+   * Combien d'éléments un groupe porte déjà, par champ de la plateforme.
+   *
+   * Lu avant d'écrire, et c'est la leçon d'un vrai refus : Google compte ses limites par
+   * type de champ, et il les vérifie au rattachement — c'est-à-dire après la création de
+   * l'élément. Un rattachement refusé laisse donc un élément orphelin dans le compte, que
+   * l'API ne sait pas supprimer. Compter avant est la seule façon de ne pas en semer.
+   */
+  compterElementsDuGroupe: (
+    acces: AccesAds,
+    groupeId: string,
+  ) => Promise<Lecture<Record<string, number>>>
 }

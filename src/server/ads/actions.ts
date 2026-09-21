@@ -17,9 +17,9 @@ import {
 } from './google-ads-ecriture'
 import {
   autoriseBudget,
+  autoriseImage,
   autoriseStatut,
   autoriseTexte,
-  TEXTES_PAR_JOUR,
   type Demande,
 } from './garde-fous'
 import { FORMATS, nommerImage, photoDeLaFiche, preparerImage, type Format } from './images'
@@ -632,14 +632,39 @@ export async function deposerTexte(userId: string, propositionId: string): Promi
   )
 }
 
-/** Ce que Google accepte d'images par groupe d'éléments. */
-const IMAGES_PAR_GROUPE = 20
-
 /** Les champs d'Evoliia vers ceux de Google, pour un groupe d'éléments. */
 const CHAMPS_GOOGLE: Record<string, string> = {
   titre: 'HEADLINE',
   'titre-long': 'LONG_HEADLINE',
   description: 'DESCRIPTION',
+}
+
+/**
+ * Combien d'éléments de ce champ le groupe porte déjà, relu chez Google à l'instant.
+ *
+ * Ce comptage-là ne peut pas venir de notre base, et c'est une correction et non une
+ * précaution : Google vérifie ses limites **au rattachement**, donc après avoir créé
+ * l'élément. Un rattachement refusé laisse un élément orphelin dans le compte de quelqu'un,
+ * que l'API ne sait pas supprimer — il faut aller le retirer à la main dans la bibliothèque
+ * de Google Ads. Se tromper de quelques unités ne coûte donc pas « un refus, rien de plus » :
+ * ça coûte du rangement à la personne qui nous a fait confiance.
+ *
+ * Une lecture qui échoue refuse le dépôt. Écrire à l'aveugle parce qu'on n'a pas pu compter
+ * serait exactement le geste que ce compteur existe pour empêcher.
+ */
+async function placesChezGoogle(
+  acces: AccesAds,
+  groupeId: string,
+  champGoogle: string,
+): Promise<{ ok: true; places: number } | { ok: false; raison: string }> {
+  const comptes = await googleAds.compterElementsDuGroupe(acces, groupeId)
+  if (!comptes.ok) {
+    return {
+      ok: false,
+      raison: `${comptes.raison} Evoliia n’envoie rien tant qu’elle n’a pas pu vérifier la place disponible : un envoi refusé par Google laisserait un élément inutilisable dans votre compte.`,
+    }
+  }
+  return { ok: true, places: comptes.valeur[champGoogle] ?? 0 }
 }
 
 /**
@@ -649,10 +674,10 @@ const CHAMPS_GOOGLE: Record<string, string> = {
  * n'est remplacé, donc rien ne peut être effacé par mégarde — et le retour arrière détache
  * au lieu de réécrire une liste.
  *
- * Le comptage se fait sur notre base et non sur une relecture chez Google, et c'est une
- * différence assumée : ici, se tromper de quelques unités fait refuser un rattachement par
- * Google, rien de plus. Dans une annonce responsive, la même erreur effacerait les autres
- * textes — d'où la relecture là-bas, et pas ici.
+ * La place disponible est relue chez Google, comme pour une annonce responsive. J'avais
+ * d'abord compté sur notre base en me disant qu'un refus ne coûtait rien : c'est faux.
+ * Google vérifie ses limites au rattachement, donc après la création de l'élément, et un
+ * refus laisse un orphelin que l'API ne sait pas supprimer.
  */
 async function deposerDansElements(
   userId: string,
@@ -671,11 +696,8 @@ async function deposerDansElements(
     return { ok: false, raison: 'Ce type de texte ne peut pas être déposé.' }
   }
 
-  const places = await withUserScope(userId, (tx) =>
-    tx.adsElement.count({
-      where: { userId, groupeId: proposition.groupe.id, champ: proposition.champ },
-    }),
-  )
+  const places = await placesChezGoogle(acces, proposition.groupe.groupeId, champGoogle)
+  if (!places.ok) return places
 
   const textes = await textesAujourdhui(userId, compte.id)
   const verdict = autoriseTexte(
@@ -683,7 +705,7 @@ async function deposerDansElements(
     'elements',
     proposition.champ,
     proposition.texte,
-    places,
+    places.places,
   )
   if (!verdict.ok) return verdict
 
@@ -799,26 +821,28 @@ export async function deposerPhoto(
     }
   }
 
-  const places = await withUserScope(userId, (tx) =>
-    tx.adsElement.count({ where: { userId, groupeId: groupe.id, champ: 'image' } }),
-  )
-  if (places >= IMAGES_PAR_GROUPE) {
-    return {
-      ok: false,
-      raison: `Ce groupe a déjà ${places} images sur ${IMAGES_PAR_GROUPE} : Google n’en accepte pas davantage.`,
-    }
-  }
-
-  const textes = await textesAujourdhui(userId, compte.id)
-  if (textes >= TEXTES_PAR_JOUR) {
-    return {
-      ok: false,
-      raison: `Vous avez déposé ${TEXTES_PAR_JOUR} éléments aujourd’hui. Reprenez demain.`,
-    }
-  }
-
   const acces = await accesCompteActif(userId)
   if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  const cible = FORMATS[demandeur.format]
+
+  /*
+   * Compté chez Google, dans ce format-là seulement. Vingt images ne veut pas dire vingt en
+   * tout : Google tient une limite par format, et il la vérifie au rattachement — donc après
+   * avoir créé l'image. Compter toutes les images ensemble, comme je le faisais, laissait
+   * partir une création que le rattachement refusait ensuite ; l'image restait alors dans le
+   * compte sans rien à quoi être rattachée.
+   */
+  const places = await placesChezGoogle(acces.acces, groupe.groupeId, cible.champGoogle)
+  if (!places.ok) return places
+
+  const textes = await textesAujourdhui(userId, compte.id)
+  const verdict = autoriseImage(
+    { ...ouverture.demande, textesAujourdhui: textes },
+    places.places,
+    cible.nom.toLowerCase(),
+  )
+  if (!verdict.ok) return verdict
 
   /*
    * Téléchargement et recadrage avant toute écriture au journal : ce sont les étapes qui
@@ -827,7 +851,6 @@ export async function deposerPhoto(
    */
   const fiche = await photoDeLaFiche(userId, demandeur.handle)
   const prete = await preparerImage(fiche.image, demandeur.format)
-  const cible = FORMATS[demandeur.format]
 
   let rattachement = ''
 

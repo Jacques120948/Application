@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { autoriseTexte, TEXTES_PAR_JOUR } from '@/server/ads/garde-fous'
+import {
+  autoriseImage,
+  autoriseTexte,
+  IMAGES_PAR_CHAMP,
+  TEXTES_PAR_JOUR,
+} from '@/server/ads/garde-fous'
 import { PROFIL_VIDE } from '@/server/ads/profil'
 
 /**
@@ -87,6 +92,35 @@ describe('les deux genres de contenant', () => {
   })
 })
 
+describe('les bornes d’un dépôt d’image', () => {
+  it('refusent un compte en lecture seule', () => {
+    /*
+     * Ce verrou-là manquait : `deposerPhoto` comptait les places et les dépôts du jour, mais
+     * ne regardait jamais le mode du compte. Relier un compte n'est pas consentir à ce qu'on
+     * y dépose des images.
+     */
+    expect(autoriseImage(demande({ mode: 'lecture' }), 0, 'paysage').ok).toBe(false)
+  })
+
+  it('comptent les places format par format', () => {
+    /*
+     * Vingt images ne veut pas dire vingt en tout. Google tient une limite par format, et il
+     * la vérifie au rattachement — donc après avoir créé l'image. Compter tous les formats
+     * ensemble laissait partir une création que le rattachement refusait ensuite, et l'image
+     * restait dans le compte sans rien à quoi être rattachée.
+     */
+    expect(IMAGES_PAR_CHAMP).toBe(20)
+    const verdict = autoriseImage(demande(), IMAGES_PAR_CHAMP, 'paysage')
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.raison).toContain('paysage')
+    expect(autoriseImage(demande(), IMAGES_PAR_CHAMP - 1, 'paysage').ok).toBe(true)
+  })
+
+  it('bornent les dépôts du jour comme les textes', () => {
+    expect(autoriseImage(demande({ textesAujourdhui: TEXTES_PAR_JOUR }), 0, 'carré').ok).toBe(false)
+  })
+})
+
 describe('la mécanique du dépôt', () => {
   it('relit l’annonce chez Google avant d’écrire', () => {
     /*
@@ -135,6 +169,40 @@ describe('la mécanique du dépôt', () => {
     // plus qu'elle ne demande.
     const source = readFileSync('src/server/ads/actions.ts', 'utf8')
     expect(source).toContain('annonces.valeur.length > 1')
+  })
+
+  it('compte la place chez Google avant de créer un élément', () => {
+    /*
+     * La leçon d'un vrai refus. Google vérifie ses limites au rattachement, c'est-à-dire
+     * après la création de l'élément : un rattachement refusé laisse un orphelin dans le
+     * compte, que l'API ne sait pas supprimer. Compter d'abord est la seule prévention.
+     */
+    const source = readFileSync('src/server/ads/actions.ts', 'utf8')
+    for (const depart of ['async function deposerDansElements', 'export async function deposerPhoto']) {
+      const corps = source.slice(source.indexOf(depart))
+      const compte = corps.indexOf('placesChezGoogle(')
+      const creation = corps.search(/creer(Texte|Image)Element\(/u)
+      expect(compte).toBeGreaterThan(0)
+      expect(creation).toBeGreaterThan(compte)
+    }
+  })
+
+  it('ne compte pas les images dans notre base', () => {
+    /*
+     * Notre base est relue une fois par semaine : entre-temps, quelqu'un a pu ajouter des
+     * images depuis Google Ads. Un comptage local dirait « il reste de la place » et Google
+     * refuserait — après avoir créé l'image.
+     */
+    const source = readFileSync('src/server/ads/actions.ts', 'utf8')
+    expect(source).not.toContain("champ: 'image' }")
+  })
+
+  it('n’envoie rien quand la place n’a pas pu être vérifiée', () => {
+    // Écrire à l'aveugle faute d'avoir pu compter serait exactement le geste que ce
+    // comptage existe pour empêcher.
+    const source = readFileSync('src/server/ads/actions.ts', 'utf8')
+    const corps = source.slice(source.indexOf('async function placesChezGoogle'))
+    expect(corps).toContain('if (!comptes.ok)')
   })
 
   it('renvoie les épinglages plutôt que de les perdre', () => {
