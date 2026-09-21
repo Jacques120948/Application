@@ -2104,6 +2104,11 @@ model AdsMotCle {
   coutHautMicros BigInt @default(0)
   concurrence    String @default("")
 
+  /// « fr », « de », « it »… lue sur la page qui sert la requête. Vide : inconnue.
+  langue    String @default("")
+  /// achat | comparaison | local | information. Vide pour les lignes d'avant ce champ.
+  intention String @default("")
+
   motif     String @default("")
   /// proposee | deposee | ecartee
   etat      String @default("proposee")

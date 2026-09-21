@@ -257,6 +257,20 @@ export type AdPlatformProvider = {
   ) => Promise<Lecture<IdeeMotCle[]>>
 
   /**
+   * Ce que la plateforme sait de mots-clés précis — ceux-là, et pas d'autres.
+   *
+   * Distinct des idées : un générateur d'idées n'a aucune obligation de chiffrer les mots
+   * qu'on lui donne. Celui-ci répond sur la liste exacte, ce qui est indispensable dès
+   * qu'on veut le prix d'une demande déjà constatée plutôt que d'une suggestion.
+   */
+  metriquesDeMotsCles: (
+    acces: AccesAds,
+    motsCles: string[],
+    marche: string,
+    langue: string,
+  ) => Promise<Lecture<IdeeMotCle[]>>
+
+  /**
    * Les mots-clés d'un contenant, relus à l'instant.
    *
    * Lus avant d'en déposer un : notre base a une semaine, et la plateforme refuse deux fois

@@ -1,4 +1,5 @@
 import { notFound } from '@/lib/errors'
+import { langueDuChemin } from '@/lib/langue-chemin'
 import { withUserScope } from '@/server/db/scope'
 import { normaliser } from '@/server/commerce/illustrations'
 import { useOAuthAccess } from '@/server/integrations/service'
@@ -11,6 +12,9 @@ import {
 } from '@/server/integrations/providers/google-search-console'
 import { choisirPropriete } from './recherches'
 import { classer, type Intention } from './intentions'
+
+// Réexportée : elle vivait ici, et deux modules l'importent déjà sous ce nom.
+export { langueDuChemin }
 
 /**
  * Le calendrier de rédaction, tiré de la demande réelle.
@@ -132,22 +136,6 @@ export function dejaCouvert(requete: string, titres: readonly string[]): boolean
   })
 }
 
-/**
- * La langue portée par le chemin d'une adresse, ou `null`.
- *
- * Conventionnellement, un site multilingue préfixe ses chemins du code de la langue —
- * `/it/bougies`, `/de/kerzen`. Deux lettres minuscules en tête de chemin, et rien d'autre :
- * un segment plus long serait une page ordinaire, et s'y fier ferait passer `/fr-CH/` ou
- * `/produits/` pour des langues.
- */
-export function langueDuChemin(adresse: string): string | null {
-  try {
-    const segment = new URL(adresse).pathname.split('/').filter(Boolean)[0] ?? ''
-    return /^[a-z]{2}$/.test(segment) ? segment : null
-  } catch {
-    return null
-  }
-}
 
 /** Le lundi de la semaine qui suit, puis les suivants. */
 function lundi(depuis: Date, rang: number): Date {

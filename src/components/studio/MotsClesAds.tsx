@@ -29,6 +29,8 @@ export type MotCleVue = {
   id: string
   texte: string
   correspondance: string
+  langue: string
+  intention: string
   position: number
   impressions: number
   volume: number
@@ -44,6 +46,14 @@ const CONCURRENCES: Record<string, string> = {
   LOW: 'peu disputé',
   MEDIUM: 'disputé',
   HIGH: 'très disputé',
+}
+
+const LANGUES: Record<string, string> = {
+  fr: 'FR',
+  de: 'DE',
+  it: 'IT',
+  en: 'EN',
+  es: 'ES',
 }
 
 function prix(micros: number, devise: string): string {
@@ -198,6 +208,7 @@ export function MotsClesAds({
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <span className="text-sm font-medium">{un.texte}</span>
                 <span className="shrink-0 text-xs text-[var(--color-ink-faint)]">
+                  {LANGUES[un.langue] === undefined ? '' : `${LANGUES[un.langue]} · `}
                   {un.correspondance === 'exact' ? 'Exact' : 'Expression'}
                   {un.coutHautMicros === 0
                     ? ''
@@ -210,12 +221,32 @@ export function MotsClesAds({
                   {un.motif}
                 </p>
               )}
+              {un.intention === 'information' ? (
+                /*
+                  Un avertissement, pas un filtre : la personne connaît son marché. Mais les
+                  chiffres d'une recherche d'information sont souvent les plus flatteurs de
+                  la liste — gros volume, clic bon marché — et c'est précisément ce qui la
+                  rend coûteuse. Le dire à côté des chiffres, et non à leur place.
+                */
+                <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-warning-strong,var(--color-ink-soft))]">
+                  ⚠ Ces gens cherchent à comprendre, pas à acheter. Le volume est peut-être
+                  élevé et le clic bon marché : c’est ce qui rend ce mot-clé cher en pure
+                  perte.
+                </p>
+              ) : null}
               {aConfirmer === un.id ? (
                 <div className="mt-2 rounded-[var(--radius-control)] bg-[var(--color-surface)] p-3">
                   <p className="m-0 text-sm font-medium">
                     Acheter « {un.texte} » en{' '}
                     {un.correspondance === 'exact' ? 'correspondance exacte' : 'expression exacte'}.
                   </p>
+                  {LANGUES[un.langue] === undefined ? null : (
+                    <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                      Cette recherche est {un.langue === 'de' ? 'en allemand' : un.langue === 'it' ? 'en italien' : un.langue === 'en' ? 'en anglais' : 'en français'}.
+                      Les annonces de ce groupe doivent l’être aussi : sinon les gens verront
+                      un texte dans une langue qu’ils n’ont pas cherchée, et ne cliqueront pas.
+                    </p>
+                  )}
                   <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
                     C’est le seul geste d’Evoliia qui ouvre une dépense au lieu d’en ajuster
                     une : dès que ce mot-clé est en place, Google pourra acheter des clics

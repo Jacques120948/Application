@@ -8,6 +8,7 @@ import type { IdeeMotCle, Lecture } from '@/server/ads/provider'
  * est remplacé — on vérifie ce qu'Evoliia décide, pas que Google réponde.
  */
 const ideesDeMotsCles = vi.fn<() => Promise<Lecture<IdeeMotCle[]>>>()
+const metriquesDeMotsCles = vi.fn<() => Promise<Lecture<IdeeMotCle[]>>>()
 const lireRecherches = vi.fn()
 const proposerElementsAds = vi.fn()
 const creerCampagneComplete = vi.fn()
@@ -16,7 +17,7 @@ const supprimerBudget = vi.fn()
 
 vi.mock('@/server/ads/google-ads', async (original) => {
   const vrai = await original<typeof import('@/server/ads/google-ads')>()
-  return { ...vrai, googleAds: { ...vrai.googleAds, ideesDeMotsCles } }
+  return { ...vrai, googleAds: { ...vrai.googleAds, ideesDeMotsCles, metriquesDeMotsCles } }
 })
 
 vi.mock('@/server/audit/recherches', async (original) => {
@@ -78,6 +79,11 @@ const VUE = {
     { cle: 'bougie citrine parfumée', position: 22, impressions: 180, clics: 1 },
   ],
   requetes: [{ cle: 'cap nature bougie', position: 1, impressions: 800, clics: 190 }],
+  langues: {
+    'bougie quartz rose': 'fr',
+    'bougie citrine parfumée': 'fr',
+    'cap nature bougie': 'fr',
+  },
 }
 
 const IDEES: IdeeMotCle[] = [
@@ -136,6 +142,7 @@ afterAll(async () => {
 beforeEach(async () => {
   for (const espion of [
     ideesDeMotsCles,
+    metriquesDeMotsCles,
     lireRecherches,
     proposerElementsAds,
     creerCampagneComplete,
@@ -145,6 +152,7 @@ beforeEach(async () => {
     espion.mockReset()
   }
   ideesDeMotsCles.mockResolvedValue({ ok: true, valeur: IDEES })
+  metriquesDeMotsCles.mockResolvedValue({ ok: true, valeur: IDEES })
   lireRecherches.mockResolvedValue({ ok: true, vue: VUE })
   proposerElementsAds.mockResolvedValue(TEXTES)
   creerCampagneComplete.mockResolvedValue({
@@ -199,12 +207,14 @@ describe('la préparation d’un plan', () => {
      * un candidat légitime, même quand Search Console ne montre rien d'exploitable.
      */
     ideesDeMotsCles.mockResolvedValue({ ok: true, valeur: [] })
+    metriquesDeMotsCles.mockResolvedValue({ ok: true, valeur: [] })
     lireRecherches.mockResolvedValue({
       ok: true,
       vue: {
         pays: VUE.pays,
         occasionsDeRequetes: [],
         requetes: [{ cle: 'cap nature', position: 1, impressions: 900, clics: 300 }],
+        langues: { 'cap nature': 'fr' },
       },
     })
     await expect(preparer()).rejects.toThrow(/gagnez déjà/u)
@@ -302,6 +312,7 @@ describe('sans les prix de Google', () => {
      * pas. Créer avec une enchère nulle ferait une campagne qui ne diffuse sur rien.
      */
     ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    metriquesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
 
     const { plan } = await preparer()
     expect(plan.motsCles.length).toBeGreaterThan(0)
@@ -316,6 +327,7 @@ describe('sans les prix de Google', () => {
 
   it('accepte l’enchère saisie, sans rien recomposer', async () => {
     ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    metriquesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
     const { plan } = await preparer()
     const appelsAvant = proposerElementsAds.mock.calls.length
 
@@ -334,6 +346,7 @@ describe('sans les prix de Google', () => {
 
   it('refuse une enchère qui épuiserait la journée en un clic', async () => {
     ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    metriquesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
     const { plan } = await preparer()
     // Le budget du plan est de 5 CHF par jour.
     const issue = await fixerEnchere(userId, plan.id, 6_000_000)
@@ -345,6 +358,7 @@ describe('sans les prix de Google', () => {
 
   it('prend l’enchère saisie dès la composition', async () => {
     ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    metriquesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
     const bilan = await preparerCampagne(
       userId,
       {

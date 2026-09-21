@@ -1,3 +1,4 @@
+import { chercheASavoir, classer, type Intention } from '@/server/audit/intentions'
 import type { IdeeMotCle } from './provider'
 import type { ProfilAds } from './profil'
 
@@ -33,13 +34,33 @@ export type RequeteSite = {
   position: number
   impressions: number
   clics: number
+  /**
+   * La langue de la requête, lue sur la page qui la sert. Vide quand elle est inconnue.
+   *
+   * Un site suisse en sert trois, et c'est la donnée qui manquait le plus : les volumes et
+   * les prix n'ont de sens que demandés dans la bonne langue, et un mot-clé italien déposé
+   * dans un groupe d'annonces français ferait voir aux gens une annonce dans une langue
+   * qu'ils n'ont pas cherchée.
+   */
+  langue: string
 }
 
 /** Pourquoi ce mot-clé est dans la liste, en un mot. */
-export type Verdict = 'occasion' | 'a-tester' | 'exigeante'
+export type Verdict = 'occasion' | 'a-tester' | 'exigeante' | 'informative'
 
 export type Candidat = {
   texte: string
+  /** La langue de la requête, quand elle est connue. Vide sinon. */
+  langue: string
+  /**
+   * Ce que la personne voulait : acheter, comparer, trouver près de chez elle, comprendre.
+   *
+   * Le classement existait déjà pour choisir les sujets d'articles ; il manquait ici, et
+   * c'est ce qui faisait proposer « diaspro rosso » — trois mille six cents recherches par
+   * mois, un clic à trois centimes, et des gens qui cherchent les vertus d'une pierre, pas
+   * une bougie. Les chiffres étaient bons ; l'intention ne l'était pas.
+   */
+  intention: Intention
   /** La position organique, ou 0 : la requête ne figure pas dans Search Console. */
   position: number
   impressions: number
@@ -243,6 +264,14 @@ function montant(micros: number, devise: string): string {
   return `${(micros / MICROS).toFixed(2)} ${devise}`
 }
 
+const LANGUES_LISIBLES: Record<string, string> = {
+  fr: 'en français',
+  de: 'en allemand',
+  it: 'en italien',
+  en: 'en anglais',
+  es: 'en espagnol',
+}
+
 function phrase(
   candidat: Omit<Candidat, 'motif' | 'verdict'>,
   taux: number | null,
@@ -250,6 +279,8 @@ function phrase(
   devise: string,
 ): string {
   const morceaux: string[] = []
+  const langue = LANGUES_LISIBLES[candidat.langue]
+  if (langue !== undefined) morceaux.push(`Recherche ${langue}`)
   if (candidat.position > 0) {
     morceaux.push(
       `Position ${candidat.position} dans les résultats naturels, ${candidat.impressions} affichages sur 28 jours`,
@@ -264,6 +295,16 @@ function phrase(
   if (taux !== null) {
     morceaux.push(
       `il faudrait convertir ${String(taux).replace('.', ',')} % des visiteurs pour tenir ${cpa} ${devise} par vente`,
+    )
+  }
+  /*
+   * Mise en dernier et formulée comme un avertissement, pas comme une étiquette. Les
+   * chiffres qui précèdent peuvent être excellents — c'est précisément ce qui rend ce
+   * mot-clé dangereux, et ce qui justifie de le dire après eux plutôt qu'avant.
+   */
+  if (candidat.intention === 'information') {
+    morceaux.push(
+      'mais ces gens cherchent à comprendre, pas à acheter : vous paieriez des visites curieuses',
     )
   }
   if (morceaux.length === 0) return 'Google ne donne ni volume ni prix pour cette recherche.'
@@ -299,10 +340,22 @@ export function croiser(
     verdict: Verdict,
   ): void => {
     const taux = tauxNecessaire(brut.coutHautMicros, cpa)
+    /*
+     * L'ordre des signaux est l'ordre du risque : une recherche qui veut comprendre coûte
+     * de l'argent à coup sûr et ne vend presque jamais. Une enchère chère sur une intention
+     * d'achat reste un pari discutable ; un clic à trois centimes sur « les vertus du jaspe
+     * rouge » est une dépense sans issue.
+     *
+     * Le marqueur explicite, et non le repli de `classer`. La différence a été une vraie
+     * faute : `classer` doit toujours trancher, et range en « information » tout ce qui ne
+     * porte aucun marqueur — ce qui étiquetait « bougie citrine » comme un curieux. Ici on
+     * n'affirme que ce qu'on voit, et un signal rare est un signal qu'on lit.
+     */
+    const informative = chercheASavoir(brut.texte)
     const exigeante = taux !== null && taux > TAUX_PLAUSIBLE
     candidats.push({
       ...brut,
-      verdict: exigeante ? 'exigeante' : verdict,
+      verdict: informative ? 'informative' : exigeante ? 'exigeante' : verdict,
       motif: phrase(brut, taux, cpa, devise),
     })
   }
@@ -349,6 +402,8 @@ export function croiser(
           position: requete.position,
           impressions: requete.impressions,
           clics: requete.clics,
+          langue: requete.langue,
+          intention: classer(requete.texte),
           ...mesures,
         },
         'a-tester',
@@ -362,6 +417,8 @@ export function croiser(
         position: requete.position,
         impressions: requete.impressions,
         clics: requete.clics,
+        langue: requete.langue,
+        intention: classer(requete.texte),
         ...mesures,
       },
       'occasion',
@@ -380,6 +437,12 @@ export function croiser(
         position: 0,
         impressions: 0,
         clics: 0,
+        /*
+         * Aucune langue : une idée du planificateur ne vient d'aucune page du site. C'est
+         * une inconnue assumée — l'écran ne dira rien plutôt que de deviner sur les mots.
+         */
+        langue: '',
+        intention: classer(idee.texte),
         volume: idee.volume,
         coutBasMicros: idee.coutBasMicros,
         coutHautMicros: idee.coutHautMicros,
@@ -394,7 +457,12 @@ export function croiser(
    * ce qui reste à tester, et enfin ce qui coûterait cher. À rang égal, le plus vu passe
    * devant : c'est là que la dépense a le plus de chances de rencontrer quelqu'un.
    */
-  const rang: Record<Verdict, number> = { occasion: 0, 'a-tester': 1, exigeante: 2 }
+  const rang: Record<Verdict, number> = {
+    occasion: 0,
+    'a-tester': 1,
+    exigeante: 2,
+    informative: 3,
+  }
   candidats.sort((une, autre) => {
     if (rang[une.verdict] !== rang[autre.verdict]) return rang[une.verdict] - rang[autre.verdict]
     const poidsUne = une.impressions > 0 ? une.impressions : une.volume

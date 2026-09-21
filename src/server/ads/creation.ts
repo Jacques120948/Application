@@ -259,6 +259,7 @@ export async function preparerCampagne(
     position: ligne.position,
     impressions: ligne.impressions,
     clics: ligne.clics,
+    langue: lecture.vue.langues[ligne.cle] ?? '',
   }))
 
   const graines = requetes.map((requete) => requete.texte)

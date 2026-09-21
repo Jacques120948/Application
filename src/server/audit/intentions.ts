@@ -82,6 +82,45 @@ function porte(presents: ReadonlySet<string>, marqueurs: readonly string[]): boo
 }
 
 /**
+ * Les marqueurs de quelqu'un qui veut comprendre, et non acheter.
+ *
+ * Une liste à part, et c'est une distinction qui a coûté un vrai défaut. `classer` range en
+ * « information » tout ce qui ne porte aucun marqueur : c'est le bon repli pour choisir un
+ * sujet d'article, où le doute ne coûte qu'un guide un peu large. Appliqué à l'achat de
+ * mots-clés, ce même repli étiquetait « bougie citrine » et « quartz rose » — des requêtes
+ * produit parfaitement légitimes — comme « ces gens ne veulent pas acheter ». Faux, et
+ * l'avertissement serait devenu du bruit qu'on apprend à ignorer.
+ *
+ * Ici, on n'affirme donc que ce qu'on voit : « vertus », « proprietà », « bedeutung ». Une
+ * requête sans marqueur ne dit rien de son intention, et on se tait.
+ */
+const INFORMATION = [
+  // français
+  'vertus', 'vertu', 'propriétés', 'proprietes', 'bienfaits', 'bienfait', 'signification',
+  'symbolique', 'symbole', 'comment', 'pourquoi', 'définition', 'definition', 'histoire',
+  'origine', 'origines', 'utilisation', 'recette', 'guide', 'lithothérapie', 'lithotherapie',
+  // allemand
+  'bedeutung', 'wirkung', 'wirkungen', 'eigenschaften', 'anleitung', 'geschichte', 'warum',
+  'herkunft',
+  // italien
+  'proprietà', 'proprieta', 'significato', 'benefici', 'beneficio', 'perché', 'perche',
+  'storia', 'guida', 'origini',
+  // anglais
+  'meaning', 'benefits', 'properties', 'guide', 'history', 'origin', 'healing',
+]
+
+/**
+ * Vrai quand la requête dit explicitement qu'on cherche à comprendre.
+ *
+ * Distincte de `classer`, qui doit toujours trancher : celle-ci a le droit de ne rien dire.
+ * C'est ce qui la rend utilisable avant une dépense — elle ne signale que ce qu'elle voit,
+ * et un signal rare est un signal qu'on lit.
+ */
+export function chercheASavoir(requete: string): boolean {
+  return porte(new Set(mots(requete)), INFORMATION)
+}
+
+/**
  * L'intention d'une recherche.
  *
  * L'ordre des questions est l'ordre des conséquences. Une requête qui dit « acheter » a

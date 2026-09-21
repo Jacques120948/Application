@@ -1,4 +1,5 @@
 import { AppError } from '@/lib/errors'
+import { langueDuChemin } from '@/lib/langue-chemin'
 import { logger } from '@/server/observability/logger'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { requireFeature } from '@/server/billing/features'
@@ -7,6 +8,7 @@ import { classer, type Intention } from './intentions'
 import {
   rafraichir,
   requetes,
+  requetesEtPages,
   listerProprietes,
   type Ligne,
   type Propriete,
@@ -94,6 +96,19 @@ export type VueRecherches = {
   occasions: Occasion[]
   /** Les recherches de deuxième page. C'est la demande réelle sur laquelle écrire. */
   occasionsDeRequetes: Occasion[]
+  /**
+   * La langue de chaque requête, quand elle est connue : « fr », « de », « it ».
+   *
+   * Lue sur la page que Google associe à la requête, et non devinée sur les mots. Un site
+   * suisse sert trois langues, et « diaspro rosso » n'est pas du trafic égaré : c'est la
+   * version italienne qui travaille. Confondre les deux ferait acheter des mots-clés
+   * italiens pour un groupe d'annonces français — les gens verraient une annonce dans une
+   * langue qu'ils n'ont pas cherchée.
+   *
+   * Une requête absente de cette table n'a pas de langue connue, ce qui est un état
+   * ordinaire : le croisement requête/page couvre moins de lignes que le classement seul.
+   */
+  langues: Record<string, string>
   totaux: { clics: number; impressions: number }
 }
 
@@ -233,11 +248,18 @@ export async function lireRecherches(
    */
   const cible = pays !== undefined && /^[a-z]{3}$/i.test(pays) ? pays.toLowerCase() : undefined
 
-  const [parRequete, parPage, parPays] = await Promise.all([
+  const [parRequete, parPage, parPays, croisees] = await Promise.all([
     requetes(acces.accessToken, propriete, 'query', JOURS_LUS, cible),
     requetes(acces.accessToken, propriete, 'page', JOURS_LUS, cible),
     // Sans filtre, toujours : c'est la liste par laquelle on choisit, et par laquelle on revient.
     requetes(acces.accessToken, propriete, 'country', JOURS_LUS),
+    /*
+     * La quatrième lecture ne sert qu'à la langue : elle associe chaque requête à la page
+     * qui l'a servie, et le chemin de cette page porte le code de langue. Son échec n'arrête
+     * rien — on perd la langue, pas les chiffres — parce qu'elle couvre moins de lignes que
+     * le classement et qu'une requête sans langue connue est un état ordinaire.
+     */
+    requetesEtPages(acces.accessToken, propriete, JOURS_LUS),
   ])
   if (!parRequete.ok) return { ok: false, etat: 'refus', raison: parRequete.raison }
   if (!parPage.ok) return { ok: false, etat: 'refus', raison: parPage.raison }
@@ -254,6 +276,15 @@ export async function lireRecherches(
     }),
     { clics: 0, impressions: 0 },
   )
+
+  const langues: Record<string, string> = {}
+  if (croisees.ok) {
+    for (const ligne of croisees.lignes) {
+      if (langues[ligne.cle] !== undefined) continue
+      const langue = langueDuChemin(ligne.page)
+      if (langue !== null) langues[ligne.cle] = langue
+    }
+  }
 
   logger.info('recherches lues', {
     requetes: parRequete.lignes.length,
@@ -277,6 +308,7 @@ export async function lireRecherches(
       pages: parPage.lignes.slice(0, LIGNES_AFFICHEES),
       occasions: occasions(parPage.lignes).slice(0, LIGNES_AFFICHEES),
       occasionsDeRequetes: occasions(parRequete.lignes).slice(0, LIGNES_AFFICHEES),
+      langues,
       totaux,
     },
   }

@@ -61,6 +61,14 @@ const VERSION = 'v22'
  */
 const GRAINES_MAX = 20
 
+/**
+ * Le nombre de mots-clés dont on demande les chiffres d'un coup.
+ *
+ * Google en accepte bien davantage. La borne est la nôtre : au-delà, on chiffrerait une
+ * traîne de requêtes vues une fois, qui n'apprennent rien et consomment le quota partagé.
+ */
+const MOTS_CLES_CHIFFRES = 60
+
 /*
  * Exportées pour le connecteur d'écriture, qui vit dans un fichier séparé. La séparation
  * n'est pas cosmétique : ce fichier-ci porte la garantie « rien ici ne sait modifier », et
@@ -920,6 +928,78 @@ async function ideesDeMotsCles(
   }
 }
 
+/**
+ * Ce que Google sait de mots-clés précis — ceux-là et pas d'autres.
+ *
+ * Distinct de `ideesDeMotsCles`, et la différence compte. Le planificateur d'idées part de
+ * quelques mots et en propose d'autres : il n'a aucune obligation de rendre les métriques
+ * des mots qu'on lui a donnés. C'est ce qui faisait sortir « quartz bleu » sans volume ni
+ * prix alors qu'il venait des chiffres réels du site — on l'avait bien envoyé, Google avait
+ * simplement préféré parler d'autre chose.
+ *
+ * Cet appel-ci ne propose rien : il répond sur la liste exacte. Les deux sont donc
+ * complémentaires — l'un trouve ce qu'on ignore, l'autre chiffre ce qu'on sait déjà.
+ *
+ * Les variantes proches que Google regroupe sont ignorées : il agrège « bougie citrine » et
+ * « bougies citrine » sous une seule ligne, et les séparer inventerait une précision que la
+ * donnée n'a pas.
+ */
+async function metriquesDeMotsCles(
+  acces: AccesAds,
+  motsCles: string[],
+  marche: string,
+  langue: string,
+): Promise<Lecture<IdeeMotCle[]>> {
+  const compte = acces.compteId.replace(/\D/gu, '')
+  const liste = motsCles
+    .map((mot) => mot.trim())
+    .filter((mot) => mot !== '')
+    .slice(0, MOTS_CLES_CHIFFRES)
+  if (liste.length === 0) return { ok: true, valeur: [] }
+
+  const reponse = await appeler(
+    `${RACINE}/customers/${compte}:generateKeywordHistoricalMetrics`,
+    acces.accessToken,
+    env.googleAdsLoginCustomerId,
+    {
+      keywords: liste,
+      language: langue,
+      geoTargetConstants: [marche],
+      keywordPlanNetwork: 'GOOGLE_SEARCH',
+      includeAdultKeywords: false,
+    },
+  )
+  if (reponse === null) {
+    return { ok: false, raison: 'Google Ads est momentanément injoignable. Réessayez.' }
+  }
+  if (reponse.status !== 200) return { ok: false, raison: refus(reponse.status, reponse.erreur) }
+
+  const resultats = (reponse.corps as { results?: unknown })?.results
+  if (!Array.isArray(resultats)) return { ok: true, valeur: [] }
+
+  return {
+    ok: true,
+    valeur: resultats
+      .map((brut) => {
+        const ligne = (brut ?? {}) as Record<string, unknown>
+        /*
+         * `keywordMetrics` ici, `keywordIdeaMetrics` dans l'autre appel : Google donne deux
+         * noms au même objet selon le point d'entrée. Se tromper de nom rendrait des
+         * volumes nuls sans la moindre erreur — un échec silencieux, le pire des deux.
+         */
+        const mesures = (ligne.keywordMetrics ?? {}) as Record<string, unknown>
+        return {
+          texte: texte(ligne.text),
+          volume: nombre(mesures.avgMonthlySearches),
+          concurrence: texte(mesures.competition),
+          coutBasMicros: nombre(mesures.lowTopOfPageBidMicros),
+          coutHautMicros: nombre(mesures.highTopOfPageBidMicros),
+        }
+      })
+      .filter((mesure) => mesure.texte !== ''),
+  }
+}
+
 export const googleAds: AdPlatformProvider = {
   id: 'google-ads',
   nom: 'Google Ads',
@@ -935,5 +1015,6 @@ export const googleAds: AdPlatformProvider = {
   lireAnnoncesDuGroupe,
   compterElementsDuGroupe,
   ideesDeMotsCles,
+  metriquesDeMotsCles,
   lireMotsClesDuGroupe,
 }

@@ -35,8 +35,8 @@ function idee(texte: string, champs: { volume?: number; bas?: number; haut?: num
   }
 }
 
-function requete(texte: string, position: number, impressions = 200) {
-  return { texte, position, impressions, clics: 4 }
+function requete(texte: string, position: number, impressions = 200, langue = 'fr') {
+  return { texte, position, impressions, clics: 4, langue }
 }
 
 describe('le croisement', () => {
@@ -132,6 +132,88 @@ describe('le croisement', () => {
       requete(`bougie ${rang}`, 12),
     )
     expect(croiser(beaucoup, [], [], 0, 'CHF').candidats).toHaveLength(CANDIDATS_MAX)
+  })
+})
+
+describe('l’intention derrière la recherche', () => {
+  it('signale une recherche d’information, si beaux que soient ses chiffres', () => {
+    /*
+     * Le cas réel : « diaspro rosso proprietà », mille affichages, un clic à trois
+     * centimes. Tous les indicateurs au vert — et des gens qui cherchent les vertus d'une
+     * pierre, pas une bougie suisse. Le classement d'intention existait déjà pour les
+     * articles ; il n'était pas branché ici.
+     */
+    const issue = croiser(
+      [requete('diaspro rosso proprietà', 5.8, 1056, 'it')],
+      [idee('diaspro rosso proprietà', { volume: 3600, bas: 0.03, haut: 0.56 })],
+      [],
+      20,
+      'CHF',
+    )
+    expect(issue.candidats[0]?.verdict).toBe('informative')
+    expect(issue.candidats[0]?.motif).toContain('pas à acheter')
+  })
+
+  it('ne signale pas une requête qui ne dit rien de son intention', () => {
+    /*
+     * Choix délibéré, et il a coûté une correction. Le classement général range en
+     * « information » tout ce qui ne porte aucun marqueur : appliqué ici, il étiquetait
+     * « bougie citrine » et « diaspro rosso » comme des curieux. Un avertissement sur
+     * presque tout devient du bruit qu'on apprend à ignorer, et il aurait alors masqué les
+     * vrais cas. On préfère se taire : personne ne peut dire si « diaspro rosso » cherche
+     * une pierre à acheter ou son histoire.
+     */
+    for (const texte of ['diaspro rosso', 'bougie citrine', 'quartz rose']) {
+      const issue = croiser([requete(texte, 12)], [], [], 0, 'CHF')
+      expect(issue.candidats[0]?.verdict).not.toBe('informative')
+    }
+  })
+
+  it('laisse passer une intention d’achat', () => {
+    const issue = croiser([requete('acheter bougie citrine', 12)], [], [], 0, 'CHF')
+    expect(issue.candidats[0]?.verdict).toBe('occasion')
+    expect(issue.candidats[0]?.intention).toBe('achat')
+  })
+
+  it('reconnaît l’achat dans les quatre langues du site', () => {
+    // « comprare » et « kaufen » comptent autant qu'« acheter » : une boutique suisse
+    // reçoit les trois, et n'en reconnaître qu'une rangerait les autres en information.
+    for (const texte of ['comprare diaspro rosso', 'kerzen kaufen', 'acheter bougie']) {
+      const issue = croiser([requete(texte, 12)], [], [], 0, 'CHF')
+      expect(issue.candidats[0]?.intention).toBe('achat')
+    }
+  })
+
+  it('signale sans exclure, et range l’information en dernier', () => {
+    const issue = croiser(
+      [requete('vertus du jaspe', 12, 5000), requete('acheter jaspe', 12, 100)],
+      [],
+      [],
+      0,
+      'CHF',
+    )
+    expect(issue.candidats).toHaveLength(2)
+    expect(issue.candidats[0]?.texte).toBe('acheter jaspe')
+    expect(issue.candidats[1]?.texte).toBe('vertus du jaspe')
+  })
+})
+
+describe('la langue de la recherche', () => {
+  it('voyage jusqu’au candidat', () => {
+    /*
+     * Lue sur la page qui sert la requête, jamais devinée sur les mots. Un mot-clé italien
+     * déposé dans un groupe d'annonces français ferait voir aux gens une annonce dans une
+     * langue qu'ils n'ont pas cherchée.
+     */
+    const issue = croiser([requete('diaspro rosso proprietà', 12, 1056, 'it')], [], [], 0, 'CHF')
+    expect(issue.candidats[0]?.langue).toBe('it')
+    expect(issue.candidats[0]?.motif).toContain('en italien')
+  })
+
+  it('n’invente pas de langue pour une idée du planificateur', () => {
+    // Elle ne vient d'aucune page du site : l'inconnue est assumée plutôt que devinée.
+    const issue = croiser([], [idee('kerzen kaufen', { volume: 500 })], [], 0, 'CHF')
+    expect(issue.candidats[0]?.langue).toBe('')
   })
 })
 

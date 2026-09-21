@@ -3,6 +3,7 @@ import { withUserScope } from '@/server/db/scope'
 import { lireRecherches } from '@/server/audit/recherches'
 import { accesCompteActif, compteActif } from './comptes'
 import { googleAds } from './google-ads'
+import type { IdeeMotCle } from './provider'
 import { MOTS_CLES_PAR_GROUPE } from './garde-fous'
 import {
   cpaAcceptable,
@@ -43,6 +44,8 @@ export type MotCleVue = {
   id: string
   texte: string
   correspondance: string
+  langue: string
+  intention: string
   position: number
   impressions: number
   volume: number
@@ -57,6 +60,8 @@ function vue(ligne: {
   id: string
   texte: string
   correspondance: string
+  langue: string
+  intention: string
   position: number
   impressions: number
   volume: number
@@ -70,6 +75,8 @@ function vue(ligne: {
     id: ligne.id,
     texte: ligne.texte,
     correspondance: ligne.correspondance,
+    langue: ligne.langue,
+    intention: ligne.intention,
     position: ligne.position,
     impressions: ligne.impressions,
     volume: ligne.volume,
@@ -85,6 +92,8 @@ const CHAMPS = {
   id: true,
   texte: true,
   correspondance: true,
+  langue: true,
+  intention: true,
   position: true,
   impressions: true,
   volume: true,
@@ -242,10 +251,60 @@ export async function proposerMotsCles(
     position: ligne.position,
     impressions: ligne.impressions,
     clics: ligne.clics,
+    /*
+     * Lue sur la page qui sert la requête, jamais devinée sur les mots. Une boutique suisse
+     * travaille en trois langues, et ses chiffres italiens ne sont pas du trafic égaré.
+     * Sans langue connue, on retient celle de l'écran plutôt que d'exclure la requête.
+     */
+    langue: lecture.vue.langues[ligne.cle] ?? '',
   }))
 
-  const graines = [...presents, ...requetes.map((requete) => requete.texte)].slice(0, GRAINES_MAX)
-  const idees = await googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, langue.code)
+  /*
+   * Un appel par langue, et c'est la correction d'une vraie faute. Demander les volumes en
+   * français pour « diaspro rosso » n'a aucun sens : Google chiffre une demande qui
+   * n'existe pas dans cette langue, et rend des nombres vrais qui ne décrivent rien. Les
+   * requêtes se regroupent donc par langue, et chaque groupe est chiffré dans la sienne.
+   */
+  const defaut = LANGUES[locale] === undefined ? 'fr' : locale
+  const parLangue = new Map<string, RequeteSite[]>()
+  for (const requete of requetes) {
+    // Une langue que Google ne connaît pas, ou aucune : la requête rejoint celle de l'écran.
+    const cle = LANGUES[requete.langue] === undefined ? defaut : requete.langue
+    const liste = parLangue.get(cle) ?? []
+    liste.push(requete)
+    parLangue.set(cle, liste)
+  }
+
+  const lectures = await Promise.all(
+    [...parLangue.entries()].map(async ([code, lignes]) => {
+      const cible = LANGUES[code] ?? langue
+      if (cible === undefined) return { idees: null, mesures: null }
+      const mots = lignes.map((une) => une.texte)
+      const graines = [...presents, ...mots].slice(0, GRAINES_MAX)
+      /*
+       * Deux appels par langue, et ils ne font pas la même chose. Le générateur d'idées
+       * trouve ce qu'on ignore ; le chiffrage répond sur la liste exacte. Sans le second,
+       * une requête bien réelle du site sortait sans volume ni prix parce que Google avait
+       * préféré proposer autre chose — c'est ce qui faisait apparaître « quartz bleu » nu.
+       */
+      const [idees, mesures] = await Promise.all([
+        googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, cible.code),
+        googleAds.metriquesDeMotsCles(acces.acces, mots, marche.geo, cible.code),
+      ])
+      return { idees, mesures }
+    }),
+  )
+
+  const trouvees: IdeeMotCle[] = []
+  let refus = ''
+  for (const { idees, mesures } of lectures) {
+    if (idees === null || mesures === null) continue
+    if (idees.ok) trouvees.push(...idees.valeur)
+    else if (refus === '') refus = idees.raison
+    if (mesures.ok) trouvees.push(...mesures.valeur)
+    else if (refus === '') refus = mesures.raison
+  }
+  const idees = refus === '' ? { ok: true as const, valeur: trouvees } : { ok: false as const, raison: refus }
   /*
    * Un planificateur muet n'arrête plus la recherche, et ce n'est pas un relâchement.
    * L'erreur que tout ce module existe pour empêcher — acheter une recherche qu'on gagne
@@ -282,6 +341,8 @@ export async function proposerMotsCles(
            * diffuse presque pas. La personne peut resserrer ensuite, dans Google Ads.
            */
           correspondance: 'phrase',
+          langue: candidat.langue,
+          intention: candidat.intention,
           position: candidat.position,
           impressions: candidat.impressions,
           clics: candidat.clics,

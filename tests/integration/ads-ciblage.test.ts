@@ -9,11 +9,12 @@ import type { IdeeMotCle, Lecture } from '@/server/ads/provider'
  * C'est là qu'une erreur ne se verrait pas à l'écran.
  */
 const ideesDeMotsCles = vi.fn<() => Promise<Lecture<IdeeMotCle[]>>>()
+const metriquesDeMotsCles = vi.fn<() => Promise<Lecture<IdeeMotCle[]>>>()
 const lireRecherches = vi.fn()
 
 vi.mock('@/server/ads/google-ads', async (original) => {
   const vrai = await original<typeof import('@/server/ads/google-ads')>()
-  return { ...vrai, googleAds: { ...vrai.googleAds, ideesDeMotsCles } }
+  return { ...vrai, googleAds: { ...vrai.googleAds, ideesDeMotsCles, metriquesDeMotsCles } }
 })
 
 vi.mock('@/server/audit/recherches', async (original) => {
@@ -68,7 +69,19 @@ const VUE = {
     // Déjà gagnée : la payer rachèterait un clic qu'on obtient gratuitement.
     { cle: 'cap nature bougie', position: 1, impressions: 800, clics: 190 },
     { cle: 'bougie quartz rose', position: 14, impressions: 320, clics: 3 },
+    // La version italienne du site travaille : ce n'est pas du trafic égaré.
+    { cle: 'candela diaspro rosso', position: 12, impressions: 240, clics: 2 },
   ],
+  /*
+   * La langue vient de la page qui sert la requête, pas des mots. Une boutique suisse en
+   * sert trois, et les volumes n'ont de sens que demandés dans la bonne.
+   */
+  langues: {
+    'bougie quartz rose': 'fr',
+    'bougie citrine parfumée': 'fr',
+    'cap nature bougie': 'fr',
+    'candela diaspro rosso': 'it',
+  },
 }
 
 const IDEES: IdeeMotCle[] = [
@@ -154,7 +167,9 @@ afterAll(async () => {
 beforeEach(async () => {
   ideesDeMotsCles.mockReset()
   lireRecherches.mockReset()
+  metriquesDeMotsCles.mockReset()
   ideesDeMotsCles.mockResolvedValue({ ok: true, valeur: IDEES })
+  metriquesDeMotsCles.mockResolvedValue({ ok: true, valeur: IDEES })
   lireRecherches.mockResolvedValue({ ok: true, vue: VUE })
   await withUserScope(userId, (tx) => tx.adsMotCle.deleteMany({ where: { userId } }))
 })
@@ -191,10 +206,10 @@ describe('la proposition de mots-clés', () => {
     expect(quartz?.position).toBe(14)
     expect(quartz?.correspondance).toBe('phrase')
 
-    const avant = ideesDeMotsCles.mock.calls.length
+    const avant = ideesDeMotsCles.mock.calls.length + metriquesDeMotsCles.mock.calls.length
     await lireMotsCles(userId, groupeAnnonces)
     await motsClesDuCompte(userId, accountId)
-    expect(ideesDeMotsCles.mock.calls.length).toBe(avant)
+    expect(ideesDeMotsCles.mock.calls.length + metriquesDeMotsCles.mock.calls.length).toBe(avant)
   })
 
   it('refuse une Performance Max, qui n’achète pas de mots-clés', async () => {
@@ -302,10 +317,12 @@ describe('quand Google ferme son planificateur', () => {
      * protection qui compte — ne pas acheter ce qu'on gagne déjà gratuitement — vient de la
      * position organique, que Search Console donne.
      */
-    ideesDeMotsCles.mockResolvedValue({
-      ok: false,
+    const ferme = {
+      ok: false as const,
       raison: 'Le planificateur de mots-clés de Google n’est pas ouvert à votre application',
-    })
+    }
+    ideesDeMotsCles.mockResolvedValue(ferme)
+    metriquesDeMotsCles.mockResolvedValue(ferme)
 
     const bilan = await proposerMotsCles(userId, groupeAnnonces, 'https://cap-nature.ch', 'fr')
     expect(bilan.proposes).toBeGreaterThan(0)
