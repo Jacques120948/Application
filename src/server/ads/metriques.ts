@@ -174,3 +174,36 @@ export function fenetre(
   const debut = new Date(fin.getTime() - (Math.max(1, jours) - 1) * jour)
   return { depuis: jourDansFuseau(debut, fuseau), jusqua: jourDansFuseau(fin, fuseau) }
 }
+
+/**
+ * Le mois en cours, dans le fuseau du compte.
+ *
+ * Sert à confronter la dépense réelle au budget mensuel que la personne s'est fixé. Le mois
+ * s'arrête à hier, comme toutes les fenêtres d'ici : la journée en cours est incomplète, et
+ * la compter dans un rythme ferait annoncer chaque matin qu'on dépense moins que prévu.
+ *
+ * `joursEcoules` vaut zéro le premier du mois, et `hier` vaut alors `null`. C'est une
+ * information, pas un cas limite à masquer : le premier du mois, il n'y a rien à projeter,
+ * et une projection faite sur zéro jour serait un chiffre inventé.
+ */
+export function moisCourant(
+  fuseau: string,
+  maintenant = new Date(),
+): { premier: string; hier: string | null; joursEcoules: number; joursDuMois: number } {
+  const aujourdhui = jourDansFuseau(maintenant, fuseau)
+  const annee = Number(aujourdhui.slice(0, 4))
+  const mois = Number(aujourdhui.slice(5, 7))
+  const jour = Number(aujourdhui.slice(8, 10))
+
+  const deuxChiffres = (valeur: number) => String(valeur).padStart(2, '0')
+  // Le jour 0 du mois suivant est le dernier du mois courant : 28, 29, 30 ou 31 sans table.
+  const joursDuMois = new Date(Date.UTC(annee, mois, 0)).getUTCDate()
+  const joursEcoules = jour - 1
+
+  return {
+    premier: `${annee}-${deuxChiffres(mois)}-01`,
+    hier: joursEcoules === 0 ? null : `${annee}-${deuxChiffres(mois)}-${deuxChiffres(jour - 1)}`,
+    joursEcoules,
+    joursDuMois,
+  }
+}

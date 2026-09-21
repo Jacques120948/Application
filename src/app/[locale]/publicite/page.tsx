@@ -13,6 +13,9 @@ import { ComptesAds } from '@/components/studio/ComptesAds'
 import { TableauAds } from '@/components/studio/TableauAds'
 import { LireCampagnes } from '@/components/studio/LireCampagnes'
 import { lireTableauAds, periodeValide } from '@/server/ads/tableau'
+import { ObjectifsAds } from '@/components/studio/ObjectifsAds'
+import { ProfilAds } from '@/components/studio/ProfilAds'
+import { objectifsDuCompte } from '@/server/ads/profil'
 import { LinkButton } from '@/components/ui'
 
 /**
@@ -56,6 +59,15 @@ export default async function PublicitePage({
    */
   const jours = periodeValide((await searchParams).jours)
   const tableau = actif === null ? null : await lireTableauAds(user.id, jours).catch(() => null)
+
+  /*
+   * Les objectifs sont lus après le tableau parce qu'ils s'y adossent : le verdict de
+   * rentabilité confronte le ROAS de la période affichée au seuil déduit de la marge. Les
+   * calculer sur une autre fenêtre que celle qu'on regarde donnerait un verdict qui ne
+   * correspond à aucun chiffre visible à l'écran.
+   */
+  const objectifs =
+    tableau === null ? null : await objectifsDuCompte(user.id, tableau.compte, tableau.total)
 
   return (
     <Shell
@@ -141,6 +153,14 @@ export default async function PublicitePage({
                     </p>
                     <LireCampagnes premiere={actif.synchroAt === null} />
                   </section>
+                  {objectifs === null || !tableau.synchronise ? null : (
+                    <ObjectifsAds
+                      lecture={objectifs.lecture}
+                      marge={objectifs.profil.margePourcent}
+                      jours={tableau.jours}
+                      ancre="#profil"
+                    />
+                  )}
                   <TableauAds
                     base={`/${locale}/publicite`}
                     tableau={{
@@ -154,6 +174,15 @@ export default async function PublicitePage({
                       synchronise: tableau.synchronise,
                     }}
                   />
+                  {objectifs === null ? null : (
+                    <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+                      <ProfilAds
+                        initial={objectifs.profil}
+                        devise={tableau.compte.devise}
+                        ouvert={!objectifs.renseigne}
+                      />
+                    </section>
+                  )}
                 </>
               )}
             </>

@@ -1,3 +1,4 @@
+import { contextePublicitaire } from '@/server/ads/contexte'
 import { listAudits, readPlan } from '@/server/audit/plan'
 import { JOURS_LUS, recherchesPourArticle } from '@/server/audit/recherches'
 import { withUserScope } from '@/server/db/scope'
@@ -238,12 +239,21 @@ export async function readSiteFacts(
    * qu'il a déjà, et c'est une conversation qu'elle peut tenir dès aujourd'hui.
    */
   if (agent === 'ads') {
+    /*
+     * Le contexte publicitaire est cherché à part parce qu'il peut être absent, et que
+     * l'absence doit s'écrire. Un compte non relié n'est pas un compte à zéro : le premier
+     * appelle « reliez votre compte », le second appelle « vos campagnes ne tournent plus ».
+     * Les confondre ferait dire à Naya que la publicité ne rapporte rien à quelqu'un qui n'en
+     * a jamais fait.
+     */
+    const publicite = await contextePublicitaire(userId)
     return [
       ...base,
       ...(await recherches(userId, siteId)),
-      'DONNÉES PUBLICITAIRES : aucune. Aucun compte Google Ads n’est relié à ce site. Tu ne' +
-        ' disposes d’aucune dépense, d’aucun ROAS, d’aucune conversion et d’aucune campagne :' +
-        ' ne cite aucun chiffre publicitaire, et dis-le quand la question en demande.',
+      publicite ??
+        'DONNÉES PUBLICITAIRES : aucune. Aucun compte Google Ads n’est relié. Tu ne disposes' +
+          ' d’aucune dépense, d’aucun ROAS, d’aucune conversion et d’aucune campagne : ne cite' +
+          ' aucun chiffre publicitaire, et dis-le quand la question en demande.',
     ].join('\n')
   }
   /*
