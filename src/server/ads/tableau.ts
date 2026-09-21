@@ -89,6 +89,15 @@ export type CampagneVue = {
   cout: AvecEcart
   /** Part de la dépense totale de la période, en pourcentage entier. */
   part: number
+  /**
+   * Jours où la campagne a réellement dépensé, sur la période et sur la précédente.
+   *
+   * Sans ce compte, une campagne relancée il y a trois jours se compare à trente jours
+   * pleins et paraît s'effondrer. Ce n'est pas une chute, c'est un artefact de fenêtre — et
+   * c'est le genre de faux signal qui fait mettre en pause une campagne qui va très bien.
+   */
+  joursActifs: number
+  joursActifsAvant: number
 }
 
 /** Une journée de la période, pour la courbe. Les jours sans dépense valent zéro. */
@@ -141,6 +150,21 @@ type LigneReleve = {
   clics: bigint
   conversions: number
   valeurConversion: number
+}
+
+/**
+ * Le nombre de journées où quelque chose a été dépensé.
+ *
+ * Une journée sans dépense n'est pas une journée de diffusion : une campagne en pause
+ * produit des lignes à zéro comme une campagne qui n'existe pas en produit aucune. C'est
+ * la dépense qui fait foi.
+ */
+function joursAvecDepense(lignes: readonly LigneReleve[]): number {
+  const jours = new Set<number>()
+  for (const ligne of lignes) {
+    if (Number(ligne.coutMicros) > 0) jours.add(ligne.jour.getTime())
+  }
+  return jours.size
 }
 
 /** Une ligne de base vers un cumul. Les entiers longs redeviennent des nombres ici, une fois. */
@@ -243,6 +267,8 @@ export async function lireTableauAds(
        * qu'on veut savoir est où l'argent est parti, pas où il était prévu d'aller.
        */
       part: depenseTotale === 0 ? 0 : Math.round((maintenant.cout / depenseTotale) * 100),
+      joursActifs: joursAvecDepense(siennes),
+      joursActifsAvant: joursAvecDepense(siennesAvant),
     }
   })
 

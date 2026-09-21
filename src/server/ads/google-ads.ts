@@ -170,6 +170,36 @@ function refus(status: number, message: string): string {
     : `Google répond : ${message.slice(0, 150)}`
 }
 
+/**
+ * Le message d'erreur de Google, quelle que soit la forme de sa réponse.
+ *
+ * `searchStream` rend ses erreurs dans un tableau — c'est un flux, et un flux qui échoue
+ * échoue par lots. Les autres points d'entrée rendent un objet. Ne lire que l'objet faisait
+ * perdre la phrase de Google exactement là où elle est la plus utile : sur une requête mal
+ * formée, c'est elle qui nomme le champ fautif, et sans elle il ne reste qu'un « Naya ne
+ * parvient pas à lire vos données », qui n'aide personne.
+ *
+ * Le détail précis est encore un cran plus bas, dans `details[].errors[].message` : c'est
+ * là que Google écrit « le champ X n'existe pas » plutôt que « requête invalide ».
+ */
+export function messageErreur(charge: unknown): string {
+  const objet = Array.isArray(charge) ? charge[0] : charge
+  const erreur = (objet as { error?: Record<string, unknown> } | null)?.error
+  if (erreur === undefined || erreur === null) return ''
+
+  const general = texte(erreur.message)
+  const details = Array.isArray(erreur.details) ? erreur.details : []
+  for (const detail of details) {
+    const liste = (detail as { errors?: unknown })?.errors
+    if (!Array.isArray(liste)) continue
+    for (const precise of liste) {
+      const message = texte((precise as { message?: unknown })?.message)
+      if (message !== '') return general === '' ? message : `${general} — ${message}`
+    }
+  }
+  return general
+}
+
 type ReponseGoogle = { status: number; corps: unknown; erreur: string }
 
 async function appeler(
@@ -192,10 +222,7 @@ async function appeler(
      * Le détail technique reste ici. Ce qui remonte à l'écran est une phrase en français ;
      * ce qui part dans le journal ne porte ni jeton, ni identifiant de compte.
      */
-    const erreur =
-      reponse.status === 200
-        ? ''
-        : (((charge as { error?: { message?: string } } | null)?.error?.message ?? '') as string)
+    const erreur = reponse.status === 200 ? '' : messageErreur(charge)
     if (reponse.status !== 200) {
       logger.warn('Google Ads a refusé une lecture', { status: reponse.status })
     }

@@ -81,6 +81,16 @@ const PART_MINIMALE = 10
 const CHUTE_RELATIVE = 0.25
 const CHUTE_EN_POINTS = 30
 
+/**
+ * Le nombre de journées de diffusion qu'il faut dans chaque période pour les comparer.
+ *
+ * Sans ce plancher, une campagne relancée il y a trois jours se compare à trente jours
+ * pleins et paraît s'effondrer — ou décoller. Ce n'est pas un mouvement, c'est un artefact
+ * de fenêtre, et c'est le genre de faux signal qui fait mettre en pause une campagne qui va
+ * très bien. Sept jours de chaque côté : en dessous, la moyenne d'un côté est une anecdote.
+ */
+const JOURS_COMPARABLES = 7
+
 /** Au-delà de ce dépassement projeté, le budget du mois mérite d'être dit. */
 const DEPASSEMENT_BUDGET = 1.1
 
@@ -280,6 +290,17 @@ function chuteRoas(contexte: ContexteRegles): Constat[] {
        */
       if (Math.abs(points) < CHUTE_EN_POINTS) return []
       if (Math.abs(points) / avant < CHUTE_RELATIVE) return []
+      /*
+       * Et les deux périodes doivent avoir diffusé assez pour être comparables. Une
+       * campagne remise en route il y a trois jours n'a pas « baissé » : elle a une
+       * moyenne calculée sur trois jours, en face d'une moyenne calculée sur trente.
+       */
+      if (
+        campagne.joursActifs < JOURS_COMPARABLES ||
+        campagne.joursActifsAvant < JOURS_COMPARABLES
+      ) {
+        return []
+      }
 
       return [
         {
@@ -291,7 +312,8 @@ function chuteRoas(contexte: ContexteRegles): Constat[] {
             `Sur ${contexte.longue.jours} jours, cette campagne a rapporté ${actuel} %, contre` +
             ` ${Math.round(avant)} % sur les ${contexte.longue.jours} jours précédents — une` +
             ` baisse de ${Math.abs(points)} points. Elle a dépensé` +
-            ` ${argent(campagne.actuel.cout, contexte.devise)} sur la période.`,
+            ` ${argent(campagne.actuel.cout, contexte.devise)} sur la période, en` +
+            ` ${campagne.joursActifs} jours de diffusion contre ${campagne.joursActifsAvant}.`,
           jours: contexte.longue.jours,
           donnees: {
             roas: actuel,
@@ -299,6 +321,8 @@ function chuteRoas(contexte: ContexteRegles): Constat[] {
             points,
             depense: campagne.actuel.cout,
             conversions: campagne.actuel.conversions,
+            joursActifs: campagne.joursActifs,
+            joursActifsAvant: campagne.joursActifsAvant,
           },
           action: {},
           risque: 'faible' as const,

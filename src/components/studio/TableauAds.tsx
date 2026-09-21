@@ -47,6 +47,9 @@ export type CampagneVue = {
   cout: EcartVu
   /** Part de la dépense de la période, en pourcentage entier. */
   part: number
+  /** Jours de diffusion réelle, pour que les comparaisons se lisent à leur juste valeur. */
+  joursActifs: number
+  joursActifsAvant: number
 }
 
 export type TableauVu = {
@@ -202,11 +205,14 @@ function Campagne({
   campagne,
   devise,
   assiste,
+  jours,
 }: {
   campagne: CampagneVue
   devise: string
   /** Vrai quand le compte est en mode assisté : sans cela, aucune commande d'écriture. */
   assiste: boolean
+  /** La durée de la période affichée, pour dire « 3 jours sur 30 ». */
+  jours: number
 }) {
   return (
     <li className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
@@ -235,6 +241,23 @@ function Campagne({
           </span>
         </div>
       )}
+
+      {/*
+        Le nombre de jours de diffusion, quand il est loin de couvrir la période. Sans lui,
+        « −395 points » d'une campagne relancée avant-hier se lit comme un effondrement
+        alors que c'est une moyenne de trois jours en face d'une moyenne de trente.
+      */}
+      {campagne.joursActifs > 0 && campagne.joursActifs < jours ? (
+        <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
+          Diffusée {campagne.joursActifs} jour{campagne.joursActifs > 1 ? 's' : ''} sur{' '}
+          {jours}
+          {campagne.joursActifsAvant === 0
+            ? ' — rien sur la période précédente, il n’y a donc rien à comparer.'
+            : campagne.joursActifsAvant > campagne.joursActifs * 2
+              ? ` — contre ${campagne.joursActifsAvant} sur la période précédente. Les comparaisons ci-dessous portent sur des durées très inégales.`
+              : '.'}
+        </p>
+      ) : null}
 
       {campagne.budgetLimite ? (
         <p className="mt-2 mb-0 text-xs text-[var(--color-caution)]">
@@ -434,6 +457,7 @@ export function TableauAds({
                   campagne={campagne}
                   devise={devise}
                   assiste={assiste}
+                  jours={tableau.jours}
                 />
               ))}
             </ul>
@@ -457,6 +481,7 @@ export function TableauAds({
                       campagne={campagne}
                       devise={devise}
                       assiste={assiste}
+                      jours={tableau.jours}
                     />
                   ))}
                 </ul>

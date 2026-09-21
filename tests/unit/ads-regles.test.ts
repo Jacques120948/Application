@@ -37,6 +37,8 @@ function campagne(champs: Partial<CampagneVue> & { nom: string; actuel: Indicate
     cpa: { valeur: champs.actuel.cpa, variation: null, points: null },
     cout: { valeur: champs.actuel.cout, variation: null, points: null },
     part: 100,
+    joursActifs: 30,
+    joursActifsAvant: 30,
     ...champs,
   }
 }
@@ -201,6 +203,20 @@ describe('le budget bridé', () => {
 })
 
 describe('la chute de ROAS', () => {
+  it('se tait sur une campagne relancée il y a quelques jours', () => {
+    /*
+     * Le faux signal le plus coûteux du moteur : une campagne remise en route il y a trois
+     * jours n'a pas « baissé », elle a une moyenne calculée sur trois jours en face d'une
+     * moyenne calculée sur trente. Sans ce plancher, Naya conseillerait de mettre en pause
+     * une campagne qui vient de repartir.
+     */
+    const relancee = campagne({ nom: 'Relancée', actuel: chiffres(100, 300, 4) })
+    relancee.roas = { valeur: 300, variation: null, points: -395 }
+    relancee.joursActifs = 3
+    relancee.joursActifsAvant = 30
+    expect(regles(evaluer(contexte([relancee])))).not.toContain('ads.roas.chute')
+  })
+
   it('exige une baisse à la fois large et relative', () => {
     const grosseChute = campagne({ nom: 'A', actuel: chiffres(100, 300, 4) })
     grosseChute.roas = { valeur: 300, variation: null, points: -200 }

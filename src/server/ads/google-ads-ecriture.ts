@@ -1,5 +1,5 @@
 import { logger } from '@/server/observability/logger'
-import { DELAI_MS, entetes, RACINE } from './google-ads'
+import { DELAI_MS, entetes, messageErreur, RACINE } from './google-ads'
 import type { AccesAds } from './provider'
 
 /**
@@ -59,12 +59,15 @@ async function envoyer(
       body: JSON.stringify(corps),
       signal: controle.signal,
     })
-    const charge = (await reponse.json().catch(() => null)) as {
-      error?: { message?: string }
-    } | null
+    const charge = (await reponse.json().catch(() => null)) as unknown
 
     if (reponse.status !== 200) {
-      const message = charge?.error?.message ?? ''
+      /*
+       * Même lecture que pour les requêtes de lecture : le refus précis de Google vit sous
+       * `details`, et c'est lui qui nomme la cause — « budget partagé », « campagne
+       * supprimée » — là où le message général ne dit que « requête invalide ».
+       */
+      const message = messageErreur(charge)
       /*
        * Ni jeton, ni identifiant de compte, ni montant : un journal se relit, se copie et
        * s'exporte. Le détail utile est écrit dans l'action, qui est cloisonnée.

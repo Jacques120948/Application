@@ -142,6 +142,21 @@ describe('le tableau de bord', () => {
     expect(tableau.serie[0]?.cout).toBe(20)
   })
 
+  it('compte les journées où la campagne a réellement dépensé', async () => {
+    /*
+     * Une journée sans dépense n'est pas une journée de diffusion. Ce compte est ce qui
+     * empêche de comparer trois jours de reprise à trente jours pleins et d'appeler ça
+     * une chute.
+     */
+    const tableau = await lireTableauAds(userId, 7)
+    const forte = tableau.campagnes.find((campagne) => campagne.id === campagneForte)
+    expect(forte?.joursActifs).toBe(1)
+    expect(forte?.joursActifsAvant).toBe(0)
+
+    const ancienne = tableau.campagnes.find((campagne) => campagne.nom === 'Ancienne')
+    expect(ancienne?.joursActifs).toBe(0)
+  })
+
   it('classe les campagnes par dépense, la plus grosse en tête', async () => {
     const tableau = await lireTableauAds(userId, 7, 'depense')
     expect(tableau.campagnes[0]?.id).toBe(campagneForte)
