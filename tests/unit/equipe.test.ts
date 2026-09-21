@@ -1,56 +1,138 @@
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { VISIBILITY_AGENTS, VISIBILITY_AGENT_IDS } from '@/server/agents/visibility'
-import { FEATURE_IDS } from '@/server/billing/features'
+import { AGENTS, AGENT_IDS, findAgent, TEAM_FEATURE } from '@/server/agents/catalog'
+import { FEATURES, findFeature, resolveEntitlements } from '@/server/billing/features'
+import { MINIMUM_COST } from '@/server/billing/credits'
+import { OPERATION_PROFILES } from '@/server/ai/routing'
 
 /**
- * L'équipe, et ce qui doit rester vrai quand elle s'agrandit.
+ * L'équipe marketing.
  *
- * Trois invariants, chacun contre une façon d'abîmer une page qu'on ne regarde plus.
+ * Ce qui est vérifié ici tient en trois idées. Un spécialiste ne s'ouvre que par la couche
+ * de droits, jamais par le nom d'une offre. Une fonction annoncée dans le catalogue doit
+ * exister, sans quoi une grille tarifaire la promettrait pour rien. Et chaque question a un
+ * prix déclaré, faute de quoi le créateur découvrirait sa dépense après coup.
  */
-describe('l’équipe de spécialistes', () => {
-  it('compte les cinq métiers, chacun une seule fois', () => {
-    expect(VISIBILITY_AGENTS.map((agent) => agent.id)).toEqual([...VISIBILITY_AGENT_IDS])
-    expect(new Set(VISIBILITY_AGENT_IDS).size).toBe(VISIBILITY_AGENT_IDS.length)
-  })
 
-  it('n’annonce un portrait que lorsque le fichier existe', () => {
-    /*
-     * L'invariant qui protège la page d'accueil. `AgentAvatar` ne retombe sur la pastille à
-     * initiale que si `avatar` est absent : une adresse pointant vers un fichier manquant
-     * n'affiche pas un repli, elle affiche une image cassée. Et une image cassée sur la
-     * page que tout le monde voit coûte plus cher qu'un portrait qu'on trouve tiède.
-     */
-    const manquants = VISIBILITY_AGENTS.filter((agent) => agent.avatar !== undefined).filter(
-      (agent) => !existsSync(join(process.cwd(), 'public', agent.avatar!.replace(/^\//u, ''))),
+/*
+ * Les offres de ce test déclarent elles-mêmes ce qu'elles ouvrent.
+ *
+ * Elles empruntaient le catalogue commercial, et le jour où il a changé de métier ces
+ * vérifications ont échoué sans qu'une règle de droits ait bougé d'une ligne. Ce qui est
+ * vérifié ici est le mécanisme — accordé, verrouillé, prévu — pas la composition des offres
+ * du moment, qui se décide ailleurs et se change sans prévenir.
+ */
+const PLANS = [
+  { id: 'free', name: 'Découverte', features: [], sortOrder: 0 },
+  {
+    id: 'launch',
+    name: 'Launch',
+    features: ['social_launch_basic', 'social_angles'],
+    sortOrder: 1,
+  },
+  {
+    id: 'builder',
+    name: 'Builder',
+    features: ['social_launch_basic', 'social_angles', 'social_agent'],
+    sortOrder: 2,
+  },
+  {
+    id: 'business',
+    name: 'Business',
+    features: [
+      'social_launch_basic',
+      'social_angles',
+      'social_agent',
+      'marketing_team',
+      'seo_agent',
+      'analytics_agent',
+    ],
+    sortOrder: 3,
+  },
+]
+
+describe('catalogue des spécialistes', () => {
+  it('rattache chaque spécialiste à une fonction qui existe vraiment', () => {
+    const orphelins = AGENTS.filter((agent) => findFeature(agent.feature) === undefined).map(
+      (agent) => `${agent.name} pointe vers ${agent.feature}`,
     )
-    expect(manquants.map((agent) => agent.name)).toEqual([])
+    expect(orphelins).toEqual([])
   })
 
-  it('ouvre chaque spécialiste par un droit qui existe', () => {
-    /*
-     * Un spécialiste dont le droit n'est déclaré nulle part ne s'ouvre jamais, et rien ne
-     * le signale : `requireFeature` refuse, l'écran dit « hors de votre offre », et on
-     * cherche du côté de l'abonnement un défaut qui est dans le catalogue.
-     */
-    const orphelins = VISIBILITY_AGENTS.filter((agent) => !FEATURE_IDS.includes(agent.feature))
-    expect(orphelins.map((agent) => agent.name)).toEqual([])
+  it('ne propose que des spécialistes construits', () => {
+    const promesses = AGENTS.filter(
+      (agent) => findFeature(agent.feature)?.status !== 'live',
+    ).map((agent) => agent.name)
+    expect(promesses).toEqual([])
   })
 
-  it('donne à chacun une teinte, et Naya la sienne', () => {
-    const teintes = VISIBILITY_AGENTS.map((agent) => agent.tint)
-    expect(new Set(teintes).size).toBe(VISIBILITY_AGENTS.length)
-    expect(VISIBILITY_AGENTS.find((agent) => agent.id === 'ads')?.name).toBe('Naya')
+  it('donne à chacun un prénom, un métier et de quoi démarrer', () => {
+    for (const agent of AGENTS) {
+      expect(agent.name.length, agent.id).toBeGreaterThan(1)
+      expect(agent.role.length, agent.id).toBeGreaterThan(3)
+      expect(agent.starters.length, agent.id).toBeGreaterThanOrEqual(2)
+    }
+    expect(new Set(AGENTS.map((agent) => agent.id)).size).toBe(AGENTS.length)
+    expect(AGENTS.map((agent) => agent.id).sort()).toEqual([...AGENT_IDS].sort())
   })
 
-  it('ne promet, pour chacun, que ce qu’il fait déjà', () => {
-    /*
-     * `atWork` décrit le présent livré. Naya répond aux questions mais ne lit encore aucune
-     * campagne : sa ligne reste vide jusqu'à ce que la connexion Google Ads existe.
-     * Décrire une équipe au futur est la façon la plus sûre de décevoir quelqu'un qui
-     * s'inscrit.
-     */
-    expect(VISIBILITY_AGENTS.find((agent) => agent.id === 'ads')?.atWork).toBeNull()
+  it('retrouve un spécialiste par son identifiant, et rien d’autre', () => {
+    expect(findAgent('social')?.name).toBe('Tom')
+    expect(findAgent('inconnu')).toBeUndefined()
+  })
+})
+
+describe('ouverture par l’offre', () => {
+  it('n’ouvre aucun spécialiste à l’offre de découverte', () => {
+    const droits = resolveEntitlements(PLANS[0]!, PLANS)
+    for (const agent of AGENTS) {
+      expect(droits.granted, agent.id).not.toContain(agent.feature)
+    }
+  })
+
+  it('nomme l’offre qui ouvrirait un spécialiste fermé', () => {
+    const droits = resolveEntitlements(PLANS[0]!, PLANS)
+    for (const agent of AGENTS) {
+      const verrou = droits.locked.find((entry) => entry.feature.id === agent.feature)
+      expect(verrou?.availableWith, agent.id).not.toBeNull()
+    }
+  })
+
+  /*
+   * La fonction « équipe » ne s'ouvre pas seule. Relier trois spécialistes entre eux n'a
+   * aucun sens dans une offre qui n'en donne aucun : la personne paierait une coordination
+   * sans rien à coordonner.
+   */
+  it('n’ouvre l’équipe que là où au moins deux spécialistes le sont', () => {
+    const fautes = PLANS.filter((plan) => plan.features.includes(TEAM_FEATURE))
+      .filter(
+        (plan) =>
+          AGENTS.filter((agent) => plan.features.includes(agent.feature)).length < 2,
+      )
+      .map((plan) => plan.id)
+    expect(fautes).toEqual([])
+  })
+})
+
+describe('coût annoncé', () => {
+  it('déclare un plancher et un profil pour chaque opération nouvelle', () => {
+    for (const operation of ['specialist', 'contentVariation', 'monthlyPlan'] as const) {
+      expect(MINIMUM_COST[operation], operation).toBeGreaterThan(0)
+      expect(OPERATION_PROFILES[operation], operation).toBeDefined()
+    }
+  })
+
+  /*
+   * Une question doit rester bon marché. Si elle coûtait autant qu'une construction, plus
+   * personne n'oserait en poser, et la fonction ne servirait à rien.
+   */
+  it('garde une question de spécialiste bien moins chère qu’une construction', () => {
+    expect(MINIMUM_COST.specialist).toBeLessThan(MINIMUM_COST.generate / 4)
+  })
+
+  it('ne laisse aucune fonction du catalogue sans statut lisible', () => {
+    for (const feature of FEATURES) {
+      expect(['live', 'prevu'], feature.id).toContain(feature.status)
+      expect(feature.summary.length, feature.id).toBeGreaterThan(10)
+    }
   })
 })
