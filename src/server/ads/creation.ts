@@ -177,7 +177,7 @@ export async function fixerEnchere(
   userId: string,
   planId: string,
   enchereMicros: number,
-): Promise<{ ok: true } | { ok: false; raison: string }> {
+): Promise<{ ok: true; plan: PlanVue } | { ok: false; raison: string }> {
   const ligne = await withUserScope(userId, (tx) =>
     tx.adsPlanCampagne.findFirst({
       where: { id: planId, userId, etat: 'prepare' },
@@ -189,13 +189,77 @@ export async function fixerEnchere(
   const verdict = autoriseEnchere(enchereMicros, Number(ligne.budgetMicros))
   if (!verdict.ok) return verdict
 
-  await withUserScope(userId, (tx) =>
-    tx.adsPlanCampagne.updateMany({
-      where: { id: ligne.id, userId, etat: 'prepare' },
+  const misAJour = await withUserScope(userId, (tx) =>
+    tx.adsPlanCampagne.update({
+      where: { id: ligne.id },
       data: { enchereMicros: BigInt(Math.round(enchereMicros)) },
+      select: CHAMPS,
     }),
   )
-  return { ok: true }
+  return { ok: true, plan: vue(misAJour) }
+}
+
+/**
+ * Retire un mot-clé d'un plan, et recalcule ce qui en dépend.
+ *
+ * Sans lui, un seul mot indésirable obligeait à abandonner le plan entier et à tout
+ * recomposer — ce qui refait rédiger l'annonce, donc repaie des crédits pour écarter un
+ * mot. Ici rien n'est recomposé : la liste rétrécit, et l'enchère se recalcule sur ce qui
+ * reste, parce qu'elle est une médiane des prix et que retirer un prix la déplace.
+ *
+ * Le retrait porte sur le texte et non sur un rang : un identifiant de position serait faux
+ * dès que deux écrans regardent le même plan.
+ */
+export async function retirerDuPlan(
+  userId: string,
+  planId: string,
+  texte: string,
+): Promise<{ ok: true; plan: PlanVue } | { ok: false; raison: string }> {
+  const compte = await compteActif(userId)
+  if (compte === null) throw notFound('Aucun compte publicitaire n’est suivi.')
+
+  const ligne = await withUserScope(userId, (tx) =>
+    tx.adsPlanCampagne.findFirst({
+      where: { id: planId, userId, accountId: compte.id, etat: 'prepare' },
+      select: { id: true, motsCles: true, enchereMicros: true },
+    }),
+  )
+  if (ligne === null) throw notFound('Ce plan est introuvable.')
+
+  const cible = texte.trim().toLowerCase()
+  const actuels = Array.isArray(ligne.motsCles) ? (ligne.motsCles as MotClePlan[]) : []
+  const restants = actuels.filter((mot) => mot.texte.trim().toLowerCase() !== cible)
+
+  if (restants.length === actuels.length) {
+    return { ok: false, raison: 'Ce mot-clé n’est pas dans ce plan.' }
+  }
+  if (restants.length === 0) {
+    return {
+      ok: false,
+      raison:
+        'Une campagne Recherche sans mot-clé ne diffuse sur rien. Abandonnez le plan si aucun ne vous convient.',
+    }
+  }
+
+  /*
+   * L'enchère se recalcule, mais seulement si elle avait été calculée. Une enchère saisie à
+   * la main est un choix de la personne : la remplacer par une médiane parce qu'elle a
+   * retiré un mot reviendrait à défaire sa décision sans le dire.
+   */
+  const profil = await lireProfil(userId, compte.id)
+  const calculee = enchereProposee(restants, cpaAcceptable(profil))
+  const ancienneCalculee = enchereProposee(actuels, cpaAcceptable(profil))
+  const saisie = Number(ligne.enchereMicros) !== ancienneCalculee
+  const enchere = saisie ? Number(ligne.enchereMicros) : calculee
+
+  const misAJour = await withUserScope(userId, (tx) =>
+    tx.adsPlanCampagne.update({
+      where: { id: ligne.id },
+      data: { motsCles: restants, enchereMicros: BigInt(Math.round(enchere)) },
+      select: CHAMPS,
+    }),
+  )
+  return { ok: true, plan: vue(misAJour) }
 }
 
 export type BilanPreparation = {

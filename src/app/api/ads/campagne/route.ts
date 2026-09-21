@@ -3,7 +3,12 @@ import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
-import { abandonnerPlan, fixerEnchere, preparerCampagne } from '@/server/ads/creation'
+import {
+  abandonnerPlan,
+  fixerEnchere,
+  preparerCampagne,
+  retirerDuPlan,
+} from '@/server/ads/creation'
 import { creerCampagne } from '@/server/ads/actions'
 import { readDashboard } from '@/server/audit/service'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
@@ -37,6 +42,12 @@ const input = z.discriminatedUnion('action', [
   }),
   z.object({ action: z.literal('creer'), planId: z.string().uuid() }),
   z.object({
+    action: z.literal('retirer'),
+    planId: z.string().uuid(),
+    /** Le texte du mot-clé. Un rang serait faux dès que deux écrans regardent le plan. */
+    texte: z.string().min(1).max(200),
+  }),
+  z.object({
     action: z.literal('encherir'),
     planId: z.string().uuid(),
     enchere: z.number().positive().max(1_000),
@@ -60,13 +71,18 @@ export async function POST(request: Request) {
       return ok({ ok: true })
     }
 
+    if (demande.action === 'retirer') {
+      const issue = await retirerDuPlan(user.id, demande.planId, demande.texte)
+      return ok(issue.ok ? { ok: true, plan: issue.plan } : { ok: false, raison: issue.raison })
+    }
+
     if (demande.action === 'encherir') {
       const issue = await fixerEnchere(
         user.id,
         demande.planId,
         Math.round(demande.enchere * 1_000_000),
       )
-      return ok(issue.ok ? { ok: true } : { ok: false, raison: issue.raison })
+      return ok(issue.ok ? { ok: true, plan: issue.plan } : { ok: false, raison: issue.raison })
     }
 
     const site = await readDashboard(user.id).catch(() => null)

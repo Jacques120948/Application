@@ -68,9 +68,8 @@ const { prisma } = await import('@/server/db/client')
 const { clearAll } = await import('@/server/auth/rate-limit')
 const { register } = await import('@/server/auth/service')
 const { withUserScope } = await import('@/server/db/scope')
-const { abandonnerPlan, fixerEnchere, lirePlans, preparerCampagne } = await import(
-  '@/server/ads/creation',
-)
+const { abandonnerPlan, fixerEnchere, lirePlans, preparerCampagne, retirerDuPlan } =
+  await import('@/server/ads/creation')
 const { creerCampagne, restaurer } = await import('@/server/ads/actions')
 const { ensureTestPlan, subscribeToTestPlan } = await import('../helpers/plan')
 
@@ -247,6 +246,79 @@ describe('la préparation d’un plan', () => {
       balance: 100,
     })
     await expect(preparer()).rejects.toThrow(/exige/u)
+  })
+})
+
+describe('retirer un mot-clé du plan', () => {
+  it('le retire et recalcule l’enchère, sans rien recomposer', async () => {
+    /*
+     * Sans ce geste, un seul mot indésirable obligeait à abandonner le plan entier — donc
+     * à refaire rédiger l'annonce, donc à repayer des crédits pour écarter un mot.
+     */
+    const { plan } = await preparer()
+    const cible = plan.motsCles[0]
+    expect(cible).toBeDefined()
+    if (cible === undefined) return
+    const appelsAvant = proposerElementsAds.mock.calls.length
+
+    const issue = await retirerDuPlan(userId, plan.id, cible.texte)
+    expect(issue.ok).toBe(true)
+    if (!issue.ok) return
+
+    expect(issue.plan.motsCles.map((un) => un.texte)).not.toContain(cible.texte)
+    expect(issue.plan.motsCles).toHaveLength(plan.motsCles.length - 1)
+    // Ni l'annonce ni les autres mots n'ont bougé.
+    expect(issue.plan.titres).toEqual(plan.titres)
+    expect(proposerElementsAds.mock.calls.length).toBe(appelsAvant)
+  })
+
+  it('refuse de vider le plan', async () => {
+    // Une campagne Recherche sans mot-clé ne diffuse sur rien.
+    const { plan } = await preparer()
+    for (const mot of plan.motsCles.slice(0, -1)) {
+      expect((await retirerDuPlan(userId, plan.id, mot.texte)).ok).toBe(true)
+    }
+    const dernier = plan.motsCles[plan.motsCles.length - 1]
+    expect(dernier).toBeDefined()
+    if (dernier === undefined) return
+
+    const issue = await retirerDuPlan(userId, plan.id, dernier.texte)
+    expect(issue.ok).toBe(false)
+    if (!issue.ok) expect(issue.raison).toContain('sans mot-clé')
+  })
+
+  it('ne touche pas à une enchère saisie à la main', async () => {
+    /*
+     * Une enchère saisie est un choix de la personne. La remplacer par une médiane parce
+     * qu'elle a retiré un mot reviendrait à défaire sa décision sans le dire.
+     */
+    const { plan } = await preparer()
+    expect((await fixerEnchere(userId, plan.id, 900_000)).ok).toBe(true)
+
+    const cible = plan.motsCles[0]
+    if (cible === undefined) return
+    const issue = await retirerDuPlan(userId, plan.id, cible.texte)
+    expect(issue.ok).toBe(true)
+    if (!issue.ok) return
+    expect(issue.plan.enchereMicros).toBe(900_000)
+  })
+
+  it('ne laisse pas retirer dans le plan d’un autre', async () => {
+    const { plan } = await preparer()
+    const autreEmail = `retrait-${Date.now()}@exemple.test`
+    const autre = (
+      await register(
+        { email: autreEmail, password: 'motdepasse-2026-solide', locale: 'fr' },
+        { ip: randomUUID() },
+      )
+    ).userId
+    try {
+      await expect(retirerDuPlan(autre, plan.id, plan.motsCles[0]?.texte ?? 'x')).rejects.toThrow()
+      const [relu] = await lirePlans(userId)
+      expect(relu?.motsCles).toHaveLength(plan.motsCles.length)
+    } finally {
+      await prisma.user.deleteMany({ where: { email: autreEmail } })
+    }
   })
 })
 

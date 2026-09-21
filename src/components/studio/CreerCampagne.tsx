@@ -69,6 +69,13 @@ export function CreerCampagne({
   /** Vrai quand le compte est en mode assisté. Sans cela, rien ne peut être créé. */
   deposable: boolean
 }) {
+  /*
+   * Les plans vivent dans l'état, pas seulement dans les props. La page était rechargée
+   * après chaque geste — composer, fixer une enchère, retirer un mot — ce qui vidait le
+   * formulaire, remontait en haut de page et faisait perdre trois secondes à chaque fois.
+   * Le serveur rend le plan à jour ; l'écran n'a plus qu'à le remplacer.
+   */
+  const [liste, setListe] = useState<PlanVue[]>([...plans])
   const [ouvert, setOuvert] = useState(false)
   const [nom, setNom] = useState('')
   const [budget, setBudget] = useState('')
@@ -93,7 +100,8 @@ export function CreerCampagne({
       ok?: boolean
       raison?: string
       message?: string
-      bilan?: { dejaGagnees: number; credits: number }
+      plan?: PlanVue
+      bilan?: { plan: PlanVue; dejaGagnees: number; credits: number }
     } | null
     setOccupe(null)
     if (reponse === null || !reponse.ok) {
@@ -126,14 +134,29 @@ export function CreerCampagne({
       'preparer',
     )
     if (lu === null) return
-    setMessage('Plan préparé. Rechargez la page.')
-    window.location.reload()
+    const bilan = lu.bilan
+    if (bilan === undefined) return
+    setListe((actuels) => [bilan.plan, ...actuels])
+    setOuvert(false)
+    setMessage(
+      `Plan composé : ${bilan.plan.motsCles.length} mots-clés, ${bilan.plan.titres.length} titres.` +
+        (bilan.dejaGagnees === 0
+          ? ''
+          : ` ${bilan.dejaGagnees} recherche${bilan.dejaGagnees > 1 ? 's' : ''} écartée${
+              bilan.dejaGagnees > 1 ? 's' : ''
+            } : vous y sortez déjà en tête sans payer.`) +
+        ` ${bilan.credits} crédit${bilan.credits > 1 ? 's' : ''}.`,
+    )
   }
 
   async function creer(planId: string) {
     const lu = await appeler({ action: 'creer', planId }, planId)
     if (lu === null) return
-    window.location.reload()
+    setListe((actuels) => actuels.filter((un) => un.id !== planId))
+    setAConfirmer(null)
+    setMessage(
+      'Campagne créée chez Google, en pause. Elle ne dépensera rien tant que vous ne l’aurez pas lancée depuis Google Ads. Vous pouvez la supprimer depuis le journal, sur la page Publicité.',
+    )
   }
 
   async function encherir(planId: string) {
@@ -144,20 +167,33 @@ export function CreerCampagne({
     }
     const lu = await appeler({ action: 'encherir', planId, enchere: montant }, `enchere-${planId}`)
     if (lu === null) return
-    window.location.reload()
+    const plan = lu.plan
+    if (plan === undefined) return
+    setListe((actuels) => actuels.map((un) => (un.id === plan.id ? plan : un)))
+    setEnchereDuPlan('')
   }
 
   async function abandonner(planId: string) {
     const lu = await appeler({ action: 'abandonner', planId }, planId)
     if (lu === null) return
-    window.location.reload()
+    setListe((actuels) => actuels.filter((un) => un.id !== planId))
+    setMessage('Plan abandonné. Rien n’a été envoyé à Google.')
+  }
+
+  /** Retire un mot-clé du plan. Le serveur rend le plan à jour, enchère recalculée. */
+  async function retirer(planId: string, texte: string) {
+    const lu = await appeler({ action: 'retirer', planId, texte }, `retrait-${texte}`)
+    if (lu === null) return
+    const plan = lu.plan
+    if (plan === undefined) return
+    setListe((actuels) => actuels.map((un) => (un.id === plan.id ? plan : un)))
   }
 
   return (
     <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="m-0 text-base font-semibold">Créer une campagne Recherche</h2>
-        {plans.length > 0 || ouvert ? null : (
+        {liste.length > 0 || ouvert ? null : (
           <button
             type="button"
             onClick={() => setOuvert(true)}
@@ -169,7 +205,7 @@ export function CreerCampagne({
         )}
       </div>
 
-      {plans.length === 0 && !ouvert ? (
+      {liste.length === 0 && !ouvert ? (
         <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
           {deposable
             ? 'Naya compose une campagne complète à partir de ce que les gens tapent déjà pour vous trouver : les mots-clés, l’annonce, le budget, le ciblage. Vous relisez tout avant qu’une seule ligne parte chez Google.'
@@ -177,7 +213,7 @@ export function CreerCampagne({
         </p>
       ) : null}
 
-      {ouvert && plans.length === 0 ? (
+      {ouvert && liste.length === 0 ? (
         <div className="mt-4 grid gap-3">
           <label className="grid gap-1 text-sm">
             <span className="text-[var(--color-ink-soft)]">Nom de la campagne</span>
@@ -253,7 +289,7 @@ export function CreerCampagne({
         </div>
       ) : null}
 
-      {plans.map((plan) => (
+      {liste.map((plan) => (
         <article
           key={plan.id}
           className="mt-4 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-4"
@@ -289,8 +325,8 @@ export function CreerCampagne({
           </p>
           <ul className="m-0 grid list-none gap-1 p-0">
             {plan.motsCles.map((mot) => (
-              <li key={mot.texte} className="text-sm">
-                <span className="font-medium">{mot.texte}</span>{' '}
+              <li key={mot.texte} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                <span className="font-medium">{mot.texte}</span>
                 <span className="text-xs text-[var(--color-ink-faint)]">
                   {mot.correspondance === 'exact' ? 'exact' : 'expression'}
                   {mot.volume === 0 ? '' : ` · ${mot.volume} recherches/mois`}
@@ -298,6 +334,20 @@ export function CreerCampagne({
                     ? ''
                     : ` · ${prix(mot.coutBasMicros, devise)} – ${prix(mot.coutHautMicros, devise)}`}
                 </span>
+                {/*
+                  Retirer un mot ne recompose rien : ni l'annonce, ni les autres mots-clés.
+                  Sans ce bouton, un seul mot indésirable obligeait à abandonner le plan
+                  entier — donc à repayer la rédaction pour écarter un mot.
+                */}
+                <button
+                  type="button"
+                  onClick={() => void retirer(plan.id, mot.texte)}
+                  disabled={occupe !== null}
+                  aria-label={`Retirer ${mot.texte}`}
+                  className="cursor-pointer border-0 bg-transparent p-0 text-xs text-[var(--color-ink-faint)] underline disabled:opacity-50"
+                >
+                  {occupe === `retrait-${mot.texte}` ? '…' : 'retirer'}
+                </button>
               </li>
             ))}
           </ul>
