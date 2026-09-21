@@ -251,6 +251,80 @@ function requeteUnique(url: URL): Promise<Brute> {
 }
 
 /**
+ * Va chercher une image, en octets, sous les mêmes protections qu'une page.
+ *
+ * Séparée de la lecture de page parce qu'elle ne lit pas la même chose : une page se
+ * convertit en texte, une image serait détruite par cette conversion. Tout le reste est
+ * identique, et c'est le point — le résolveur surveillé, le refus des adresses privées, le
+ * plafond d'octets, le délai. Écrire un second client HTTP « juste pour les images » serait
+ * écrire une seconde porte, et la seconde porte est toujours celle qu'on oublie de fermer.
+ *
+ * Les redirections ne sont pas suivies ici : l'adresse vient du catalogue d'une boutique,
+ * elle pointe droit sur un fichier. Une redirection y serait inhabituelle, et refuser
+ * l'inhabituel est moins coûteux que de le suivre.
+ */
+export async function secureFetchBytes(
+  brut: string,
+  maxOctets: number,
+): Promise<{ octets: Buffer; contentType: string }> {
+  const url = parseTargetUrl(brut)
+  if (url.protocol !== 'https:') {
+    throw validation('Cette image doit être servie en HTTPS.')
+  }
+
+  return new Promise((resolve, reject) => {
+    const demande = httpsRequest(
+      url,
+      {
+        method: 'GET',
+        // Le résolveur surveillé : c'est ici que la défense contre le SSRF devient réelle.
+        lookup: lookupSurveille,
+        headers: { 'user-agent': USER_AGENT, accept: 'image/*' },
+        timeout: TIMEOUT_MS,
+      },
+      (message) => {
+        const status = message.statusCode ?? 0
+        if (status !== 200) {
+          message.destroy()
+          reject(validation(`Cette image est introuvable (code ${status}).`))
+          return
+        }
+
+        const morceaux: Buffer[] = []
+        let lus = 0
+        message.on('data', (morceau: Buffer) => {
+          lus += morceau.length
+          if (lus > maxOctets) {
+            /*
+             * Rejeté plutôt que tronqué : une image coupée en deux est un fichier invalide,
+             * et l'envoyer à Google donnerait un refus incompréhensible. Ici, le poids est
+             * la raison, et elle se dit.
+             */
+            message.destroy()
+            reject(validation('Cette image est trop lourde pour être déposée.'))
+            return
+          }
+          morceaux.push(morceau)
+        })
+        message.on('end', () => {
+          resolve({
+            octets: Buffer.concat(morceaux),
+            contentType: String(message.headers['content-type'] ?? ''),
+          })
+        })
+        message.on('error', reject)
+      },
+    )
+
+    demande.on('timeout', () => {
+      demande.destroy(new Error("Le serveur n'a pas répondu à temps."))
+    })
+    demande.on('error', reject)
+    demande.end()
+  })
+}
+
+/**
  * Va chercher une page, en suivant les redirections une par une.
  *
  * Suivre soi-même les redirections n'est pas une coquetterie : c'est la seule façon de

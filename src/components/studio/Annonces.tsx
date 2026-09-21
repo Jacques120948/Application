@@ -20,6 +20,7 @@
  * dire vaut mieux que de laisser conclure à une campagne que personne ne cherche.
  */
 
+import { PhotosAds, type FormatVu, type PhotoVue } from './PhotosAds'
 import { PropositionsAds, type PropositionVue } from './PropositionsAds'
 
 export type ElementVu = {
@@ -148,6 +149,8 @@ export function Annonces({
   termes,
   lu,
   propositions,
+  photos,
+  formats,
   assiste,
 }: {
   groupes: readonly GroupeVu[]
@@ -155,6 +158,10 @@ export function Annonces({
   lu: boolean
   /** Ce que Naya propose, par contenant. Montré à côté de l'existant, jamais mêlé. */
   propositions: Record<string, PropositionVue[]>
+  /** Les photos de la boutique proposées, par contenant. Vides sans boutique connectée. */
+  photos: Record<string, PhotoVue[]>
+  /** Les proportions que Google impose, dites avec ce qu'elles coupent. */
+  formats: readonly FormatVu[]
   /** Vrai quand le compte est en mode assisté : sans cela, aucun dépôt n'est possible. */
   assiste: boolean
 }) {
@@ -276,6 +283,15 @@ export function Annonces({
                       </div>
                     )}
                   </div>
+                )}
+
+                {groupe.genre !== 'elements' ? null : (
+                  <PhotosAds
+                    groupeId={groupe.id}
+                    photos={photos[groupe.id] ?? []}
+                    formats={formats}
+                    deposable={assiste}
+                  />
                 )}
 
                 <PropositionsAds

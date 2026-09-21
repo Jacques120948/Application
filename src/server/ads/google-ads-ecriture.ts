@@ -182,6 +182,32 @@ export async function creerTexteElement(
 }
 
 /**
+ * Crée une image comme élément autonome.
+ *
+ * Les octets partent en base 64, dans le corps de la requête : Google n'a pas de dépôt de
+ * fichier séparé pour cette API. Le nom n'est vu que par la personne, dans son compte, et il
+ * doit être unique — d'où l'horodatage que l'appelant y met.
+ */
+export async function creerImageElement(
+  acces: AccesAds,
+  nom: string,
+  base64: string,
+): Promise<{ ok: true; resourceName: string } | { ok: false; raison: string; technique: string }> {
+  const issue = await envoyerEtLire('assets:mutate', acces, {
+    operations: [{ create: { name: nom, type: 'IMAGE', imageAsset: { data: base64 } } }],
+  })
+  if (!issue.ok) return issue
+  if (issue.resourceName === '') {
+    return {
+      ok: false,
+      raison: 'Google a accepté l’image sans dire où il l’a rangée. Rien n’a été rattaché.',
+      technique: 'resourceName manquant',
+    }
+  }
+  return { ok: true, resourceName: issue.resourceName }
+}
+
+/**
  * Rattache un élément à un groupe d'éléments, dans un champ donné.
  *
  * Rend le nom de ressource du rattachement, et non celui de l'élément : c'est lui qu'il

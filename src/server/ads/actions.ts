@@ -7,6 +7,7 @@ import { accesCompteActif, compteActif, type CompteRelie } from './comptes'
 import type { AccesAds, TexteAnnonceAds } from './provider'
 import { googleAds } from './google-ads'
 import {
+  creerImageElement,
   creerTexteElement,
   detacherElement,
   ecrireBudget,
@@ -14,7 +15,14 @@ import {
   ecrireTextesAnnonce,
   rattacherElement,
 } from './google-ads-ecriture'
-import { autoriseBudget, autoriseStatut, autoriseTexte, type Demande } from './garde-fous'
+import {
+  autoriseBudget,
+  autoriseStatut,
+  autoriseTexte,
+  TEXTES_PAR_JOUR,
+  type Demande,
+} from './garde-fous'
+import { FORMATS, nommerImage, photoDeLaFiche, preparerImage, type Format } from './images'
 import { lireProfil } from './profil'
 
 /**
@@ -624,6 +632,9 @@ export async function deposerTexte(userId: string, propositionId: string): Promi
   )
 }
 
+/** Ce que Google accepte d'images par groupe d'éléments. */
+const IMAGES_PAR_GROUPE = 20
+
 /** Les champs d'Evoliia vers ceux de Google, pour un groupe d'éléments. */
 const CHAMPS_GOOGLE: Record<string, string> = {
   titre: 'HEADLINE',
@@ -746,6 +757,135 @@ async function deposerDansElements(
         await tx.adsAction.updateMany({
           where: { id: actionId, userId },
           data: { avant: { champ, rattache: true, rattachement } },
+        })
+      })
+    },
+  )
+}
+
+/**
+ * Dépose une photo de la boutique dans un groupe d'éléments.
+ *
+ * Même chemin que les textes — créer, rattacher, détacher — et pour la même raison : rien
+ * n'est remplacé, donc rien ne peut être effacé. Ce qui change est ce qui précède : la photo
+ * est téléchargée depuis la boutique, vérifiée sur ses octets, recadrée au format exact que
+ * Google impose, et re-encodée. Elle arrive donc chez Google débarrassée de tout ce qu'un
+ * fichier d'image peut transporter d'autre.
+ *
+ * La photo n'est pas inventée, et c'est le point : une image de bougie produite par une
+ * intelligence artificielle montrerait dans l'annonce un produit qui n'existe pas dans la
+ * boutique. Ici, ce qui est montré est ce qui est vendu.
+ */
+export async function deposerPhoto(
+  userId: string,
+  demandeur: { groupeId: string; handle: string; format: Format },
+): Promise<Issue> {
+  const ouverture = await ouvrir(userId)
+  if (!ouverture.ok) return ouverture
+  const { compte } = ouverture
+
+  const groupe = await withUserScope(userId, (tx) =>
+    tx.adsGroupe.findFirst({
+      where: { id: demandeur.groupeId, userId, accountId: compte.id },
+      select: { id: true, nom: true, genre: true, groupeId: true },
+    }),
+  )
+  if (groupe === null) throw notFound('Ce contenant est introuvable.')
+  if (groupe.genre !== 'elements') {
+    return {
+      ok: false,
+      raison:
+        'Les images ne se déposent que dans un groupe d’éléments. Une annonce responsive n’en porte pas : ses visuels viennent des extensions du compte.',
+    }
+  }
+
+  const places = await withUserScope(userId, (tx) =>
+    tx.adsElement.count({ where: { userId, groupeId: groupe.id, champ: 'image' } }),
+  )
+  if (places >= IMAGES_PAR_GROUPE) {
+    return {
+      ok: false,
+      raison: `Ce groupe a déjà ${places} images sur ${IMAGES_PAR_GROUPE} : Google n’en accepte pas davantage.`,
+    }
+  }
+
+  const textes = await textesAujourdhui(userId, compte.id)
+  if (textes >= TEXTES_PAR_JOUR) {
+    return {
+      ok: false,
+      raison: `Vous avez déposé ${TEXTES_PAR_JOUR} éléments aujourd’hui. Reprenez demain.`,
+    }
+  }
+
+  const acces = await accesCompteActif(userId)
+  if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  /*
+   * Téléchargement et recadrage avant toute écriture au journal : ce sont les étapes qui
+   * échouent le plus souvent — une photo retirée de la boutique, un fichier illisible — et
+   * elles n'ont rien envoyé. Les journaliser laisserait des lignes « prévu » sans objet.
+   */
+  const fiche = await photoDeLaFiche(userId, demandeur.handle)
+  const prete = await preparerImage(fiche.image, demandeur.format)
+  const cible = FORMATS[demandeur.format]
+
+  let rattachement = ''
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: 'image',
+      motif: `Photo « ${fiche.titre} » ajoutée à « ${groupe.nom} » en ${cible.nom.toLowerCase()} (${prete.largeur}×${prete.hauteur})`,
+      campagneId: null,
+      avant: { champ: 'image', rattache: false },
+      apres: { champ: 'image', texte: fiche.image, format: demandeur.format },
+      mode: 'assiste',
+    },
+    async () => {
+      const element = await creerImageElement(
+        acces.acces,
+        nommerImage(fiche.titre, demandeur.format),
+        prete.base64,
+      )
+      if (!element.ok) return element
+
+      const lien = await rattacherElement(
+        acces.acces,
+        groupe.groupeId,
+        element.resourceName,
+        cible.champGoogle,
+      )
+      if (!lien.ok) {
+        return {
+          ok: false,
+          raison: `${lien.raison} L’image a été créée chez Google mais n’a pas été rattachée à ce groupe : elle ne diffusera pas.`,
+          technique: lien.technique,
+        }
+      }
+      rattachement = lien.resourceName
+      return { ok: true }
+    },
+    async (actionId) => {
+      await withUserScope(userId, async (tx) => {
+        await tx.adsElement.createMany({
+          data: [
+            {
+              userId,
+              accountId: compte.id,
+              groupeId: groupe.id,
+              champ: 'image',
+              // L'adresse de la photo chez la boutique : c'est ce que l'écran affiche.
+              texte: fiche.image,
+              elementId: rattachement,
+              origine: 'evoliia',
+            },
+          ],
+          skipDuplicates: true,
+        })
+        await tx.adsAction.updateMany({
+          where: { id: actionId, userId },
+          data: { avant: { champ: 'image', rattache: true, rattachement } },
         })
       })
     },

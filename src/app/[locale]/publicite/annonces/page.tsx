@@ -7,6 +7,7 @@ import { lireCreatifDuCompte } from '@/server/ads/creatif'
 import { compteActif } from '@/server/ads/comptes'
 import { isEnabled } from '@/server/settings/flags'
 import { propositionsDuCompte } from '@/server/ads/redaction'
+import { FORMATS, photosPourGroupe } from '@/server/ads/images'
 import { Shell } from '@/components/studio/Shell'
 import { Annonces } from '@/components/studio/Annonces'
 import { LinkButton } from '@/components/ui'
@@ -52,6 +53,30 @@ export default async function AnnoncesPage({
    */
   const assiste = compte?.mode === 'assiste' && (await isEnabled('publiciteEcriture'))
 
+  /*
+   * Les photos ne sont cherchées que pour les groupes d'éléments, et seulement si l'écriture
+   * est ouverte : lire tout le catalogue Shopify pour l'afficher sans pouvoir rien déposer
+   * serait une lecture payée en temps pour rien.
+   */
+  const contenants = creatif.groupes.filter((groupe) => groupe.genre === 'elements')
+  const photos = assiste
+    ? Object.fromEntries(
+        await Promise.all(
+          contenants.map(async (groupe) => [
+            groupe.id,
+            await photosPourGroupe(user.id, groupe.id).catch(() => []),
+          ]),
+        ),
+      )
+    : {}
+
+  const formats = Object.entries(FORMATS).map(([cle, format]) => ({
+    cle,
+    nom: format.nom,
+    coupe: format.coupe,
+    dimensions: `${format.largeur}×${format.hauteur}`,
+  }))
+
   return (
     <Shell
       locale={locale}
@@ -82,6 +107,8 @@ export default async function AnnoncesPage({
           termes={creatif.termes}
           lu={creatif.lu}
           propositions={propositions}
+          photos={photos}
+          formats={formats}
           assiste={assiste}
         />
       </div>
