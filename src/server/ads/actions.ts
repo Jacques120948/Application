@@ -168,6 +168,20 @@ function aujourdhui(): Date {
 }
 
 /** Les gestes d'argent déjà tentés aujourd'hui, refus compris : c'est la vitesse qu'on borne. */
+/**
+ * Ce qui compte dans un plafond quotidien : ce qui a pu se faire, jamais ce qui a été refusé.
+ *
+ * Les plafonds bornent une dépense, pas un nombre d'appels. Une écriture que Google refuse
+ * ne dépense rien, ne crée rien, ne modifie rien — la compter revenait à punir quelqu'un
+ * d'une panne. Avec une campagne par jour, une seule tentative refusée verrouillait la
+ * journée entière.
+ *
+ * « prévu » reste compté, et ce n'est pas une inconséquence : cet état signifie qu'une
+ * coupure est survenue pendant l'envoi, et que la modification a pu partir. Dans le doute,
+ * on compte — c'est le seul sens où se tromper ne coûte rien.
+ */
+const ABOUTIES = { in: ['reussi', 'prevu'] }
+
 async function faitesAujourdhui(userId: string, accountId: string): Promise<number> {
   return withUserScope(userId, (tx) =>
     tx.adsAction.count({
@@ -176,6 +190,7 @@ async function faitesAujourdhui(userId: string, accountId: string): Promise<numb
         accountId,
         createdAt: { gte: aujourdhui() },
         mode: { not: 'restauration' },
+        resultat: ABOUTIES,
         /*
          * Les dépôts de texte n'y comptent pas. La limite de cinq borne une vitesse de
          * pilotage — au-delà, on ne pilote plus une campagne, on la secoue — et ajouter un
@@ -197,6 +212,7 @@ async function textesAujourdhui(userId: string, accountId: string): Promise<numb
         accountId,
         createdAt: { gte: aujourdhui() },
         mode: { not: 'restauration' },
+        resultat: ABOUTIES,
         /*
          * Tous les dépôts, et non les seuls titres et descriptions. Le compteur en oubliait
          * trois — les titres longs, les images, les mots-clés — ce qui rendait la borne
@@ -224,6 +240,7 @@ async function campagnesAujourdhui(userId: string, accountId: string): Promise<n
         accountId,
         createdAt: { gte: aujourdhui() },
         mode: { not: 'restauration' },
+        resultat: ABOUTIES,
         quoi: 'campagne',
       },
     }),

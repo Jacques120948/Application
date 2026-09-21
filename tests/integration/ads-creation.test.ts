@@ -422,6 +422,29 @@ describe('la création', () => {
     expect(creerCampagneComplete).toHaveBeenCalledTimes(1)
   })
 
+  it('ne décompte pas une tentative que Google a refusée', async () => {
+    /*
+     * Le plafond borne une dépense, pas un nombre d'appels. Une création que Google refuse
+     * ne crée rien et ne dépense rien : la compter verrouillait la journée entière après un
+     * seul échec, ce qui punissait quelqu'un d'une panne.
+     */
+    creerCampagneComplete.mockResolvedValue({
+      ok: false,
+      raison: 'Google refuse : budget invalide.',
+      technique: 'x',
+    })
+    const premier = await preparer()
+    expect((await creerCampagne(userId, premier.plan.id, HOTES)).ok).toBe(false)
+
+    creerCampagneComplete.mockResolvedValue({
+      ok: true,
+      campagne: 'customers/1869511296/campaigns/777',
+      budget: 'customers/1869511296/campaignBudgets/888',
+    })
+    const second = await preparer()
+    expect((await creerCampagne(userId, second.plan.id, HOTES)).ok).toBe(true)
+  })
+
   it('refuse une adresse d’arrivée qui n’est pas chez la personne', async () => {
     const { plan } = await preparer()
     const issue = await creerCampagne(userId, plan.id, ['ailleurs.test'])
