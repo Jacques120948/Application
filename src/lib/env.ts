@@ -141,12 +141,16 @@ export const env = {
     return read('PERPLEXITY_API_KEY')
   },
   /**
-   * Jeton développeur Google Ads, délivré à Evoliia et non à ses utilisateurs.
+   * Jeton développeur Google Ads. Facultatif, et voué à disparaître.
    *
-   * C'est la pièce qui distingue cette intégration de toutes les autres : chaque personne
-   * autorise son propre compte par OAuth, mais l'application, elle, est identifiée par un
-   * jeton unique appartenant à l'exploitant — et le quota associé est partagé par tout le
-   * monde. Absent, la connexion reste fermée plutôt que d'échouer au premier appel.
+   * Google a supprimé les jetons développeur le 9 septembre 2026 : le niveau d'accès
+   * s'attache désormais au projet Google Cloud qui a délivré le client OAuth, et l'en-tête
+   * `developer-token` est ignoré. Il reste accepté pour l'instant, et Google annonce qu'il
+   * sera refusé dans une version majeure à venir.
+   *
+   * On le garde donc lisible, sans jamais l'exiger : une installation ancienne qui le
+   * possède continue de l'envoyer, une installation neuve n'en a pas besoin. Le jour où
+   * Google le refusera, c'est cette variable qu'on retirera, et rien d'autre.
    */
   get googleAdsDeveloperToken(): string | undefined {
     return read('GOOGLE_ADS_DEVELOPER_TOKEN')

@@ -16,11 +16,15 @@ import type {
  * Trois choses distinguent cette intégration de Search Console et de Shopify, et chacune a
  * une conséquence dans ce fichier.
  *
- * **Le jeton développeur appartient à Evoliia.** Chaque personne autorise son propre compte
- * par OAuth, mais l'application est identifiée par un jeton unique, délivré à l'exploitant,
- * dont le quota est partagé par tous les utilisateurs. C'est la seule ressource du produit
- * qui se consomme en commun : d'où les lectures groupées plus bas, et non une requête par
- * campagne.
+ * **Le quota appartient au projet Google Cloud d'Evoliia.** Chaque personne autorise son
+ * propre compte par OAuth, mais le niveau d'accès s'attache au projet Cloud qui a délivré le
+ * client OAuth — donc à l'exploitant, et le plafond quotidien est partagé par tous les
+ * utilisateurs. C'est la seule ressource du produit qui se consomme en commun : d'où les
+ * lectures groupées plus bas, et non une requête par campagne.
+ *
+ * Le jeton développeur, lui, n'existe plus : Google l'a supprimé le 9 septembre 2026 et
+ * ignore désormais l'en-tête. Il est encore envoyé quand l'exploitant en possède un — une
+ * installation ancienne n'a rien à défaire — mais il n'est plus exigé nulle part.
  *
  * **La portée `adwords` ouvre l'écriture.** Google n'en propose pas de version en lecture
  * seule : demander à lire, c'est obtenir le droit de modifier. On ne peut donc pas compter
@@ -58,12 +62,15 @@ export const PORTEES = ['https://www.googleapis.com/auth/adwords'] as const
 
 const DELAI_MS = 45_000
 
+/**
+ * De quoi la connexion a besoin pour s'ouvrir.
+ *
+ * Le client OAuth, et rien d'autre. Exiger en plus un jeton développeur fermerait la
+ * connexion pour tout le monde depuis que Google ne les délivre plus — un verrou posé sur
+ * une porte qui n'existe pas.
+ */
 export function estConfigureAds(): boolean {
-  return (
-    env.googleClientId !== undefined &&
-    env.googleClientSecret !== undefined &&
-    env.googleAdsDeveloperToken !== undefined
-  )
+  return env.googleClientId !== undefined && env.googleClientSecret !== undefined
 }
 
 function adresseRetour(): string {
@@ -116,9 +123,15 @@ async function rafraichir(
 function entetes(accessToken: string, compteId?: string): Record<string, string> {
   const base: Record<string, string> = {
     authorization: `Bearer ${accessToken}`,
-    'developer-token': env.googleAdsDeveloperToken ?? '',
     'content-type': 'application/json',
   }
+  /*
+   * Envoyé seulement s'il existe. Google l'ignore depuis septembre 2026 et annonce qu'il le
+   * refusera dans une version majeure à venir : un en-tête vide envoyé par principe est
+   * exactement ce qui fera échouer toutes les requêtes ce jour-là.
+   */
+  const jeton = env.googleAdsDeveloperToken
+  if (jeton !== undefined && jeton !== '') base['developer-token'] = jeton
   /*
    * `login-customer-id` désigne le compte administrateur par lequel on atteint celui qu'on
    * lit. Il est ignoré par la liste des comptes accessibles, et indispensable dès qu'on
