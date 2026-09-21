@@ -25,6 +25,7 @@ export function LireCampagnes({ premiere }: { premiere: boolean }) {
       raison?: string
       message?: string
       bilan?: { campagnes: number; journees: number }
+      creatif?: { ok?: boolean; raison?: string; bilan?: { groupes: number; termes: number } }
     } | null
     setOccupe(false)
 
@@ -37,11 +38,27 @@ export function LireCampagnes({ premiere }: { premiere: boolean }) {
       return
     }
     const bilan = corps?.bilan
-    setMessage(
+    const chiffres =
       bilan === undefined
-        ? 'Lecture terminée. Rechargez la page.'
-        : `${bilan.campagnes} campagne${bilan.campagnes > 1 ? 's' : ''} et ${bilan.journees} journée${bilan.journees > 1 ? 's' : ''} lues. Rechargez la page pour voir les chiffres.`,
-    )
+        ? 'Lecture terminée.'
+        : `${bilan.campagnes} campagne${bilan.campagnes > 1 ? 's' : ''} et ${bilan.journees} journée${bilan.journees > 1 ? 's' : ''} lues.`
+
+    /*
+     * Le contenu des campagnes est dit à part, parce qu'il peut échouer seul. Le taire
+     * ferait revenir la personne sur une page inchangée sans savoir pourquoi — et lui
+     * ferait chercher ce qu'elle a mal fait là où il n'y a rien de sa faute.
+     */
+    const creatif = corps?.creatif
+    const groupes = creatif?.bilan?.groupes ?? 0
+    const termes = creatif?.bilan?.termes ?? 0
+    const contenu =
+      creatif === undefined
+        ? ''
+        : creatif.ok === true
+          ? ` ${groupes} groupe${groupes > 1 ? 's' : ''} d’annonces et ${termes} terme${termes > 1 ? 's' : ''} de recherche.`
+          : ` En revanche, le contenu des campagnes n’a pas pu être lu : ${creatif.raison ?? 'raison inconnue'}`
+
+    setMessage(`${chiffres}${contenu} Rechargez la page.`)
   }
 
   return (
