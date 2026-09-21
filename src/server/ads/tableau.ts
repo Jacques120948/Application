@@ -7,6 +7,7 @@ import {
   ecartEnPoints,
   fenetre,
   indicateurs,
+  journeesEntre,
   variation,
   type Cumul,
   type Indicateurs,
@@ -33,14 +34,37 @@ import {
  * celles dont on veut parler.
  */
 
-/** Les périodes proposées. Des durées, pas des noms de mois : on compare toujours à égal. */
-export const PERIODES = [1, 3, 7, 14, 30] as const
+/**
+ * Les périodes proposées. Des durées, pas des noms de mois : on compare toujours à égal.
+ *
+ * Quatre-vingt-dix jours est la plus longue, et ce n'est pas un nombre rond choisi au
+ * hasard : c'est ce que la première lecture remonte chez Google. Proposer six mois
+ * afficherait une moitié de courbe vide qu'on prendrait pour une chute d'activité.
+ */
+export const PERIODES = [1, 3, 7, 14, 30, 90] as const
 
 export type Periode = (typeof PERIODES)[number]
 
 export function periodeValide(valeur: unknown): Periode {
   const lu = Number(valeur)
   return (PERIODES as readonly number[]).includes(lu) ? (lu as Periode) : 7
+}
+
+/**
+ * L'ordre des campagnes.
+ *
+ * Par dépense d'abord, et c'est délibéré : l'ordre alphabétique met en haut la campagne dont
+ * le nom commence par A, ce qui n'intéresse personne. Ce qu'on veut voir en premier, c'est
+ * là où part l'argent.
+ */
+export const TRIS = ['depense', 'roas', 'cpa', 'nom'] as const
+
+export type Tri = (typeof TRIS)[number]
+
+export function triValide(valeur: unknown): Tri {
+  return typeof valeur === 'string' && (TRIS as readonly string[]).includes(valeur)
+    ? (valeur as Tri)
+    : 'depense'
 }
 
 /** Un indicateur et son mouvement. `null` des deux côtés quand la donnée manque. */
@@ -63,6 +87,18 @@ export type CampagneVue = {
   roas: AvecEcart
   cpa: AvecEcart
   cout: AvecEcart
+  /** Part de la dépense totale de la période, en pourcentage entier. */
+  part: number
+}
+
+/** Une journée de la période, pour la courbe. Les jours sans dépense valent zéro. */
+export type JourneeVue = {
+  jour: string
+  cout: number
+  valeur: number
+  conversions: number
+  clics: number
+  roas: number | null
 }
 
 export type TableauAds = {
@@ -82,6 +118,9 @@ export type TableauAds = {
     cpc: AvecEcart
   }
   campagnes: CampagneVue[]
+  /** Une entrée par journée de la période, y compris les journées sans dépense. */
+  serie: JourneeVue[]
+  tri: Tri
   /** Faux tant qu'aucune synchronisation n'a eu lieu : l'écran doit le dire, pas afficher zéro. */
   synchronise: boolean
 }
@@ -121,7 +160,11 @@ function enCumul(ligne: LigneReleve): Cumul {
  * La période précédente est lue dans la même requête, et c'est délibéré : deux allers-retours
  * pour deux moitiés de la même phrase seraient deux occasions de les désynchroniser.
  */
-export async function lireTableauAds(userId: string, jours: Periode): Promise<TableauAds> {
+export async function lireTableauAds(
+  userId: string,
+  jours: Periode,
+  tri: Tri = 'depense',
+): Promise<TableauAds> {
   const actif = await compteActif(userId)
   if (actif === null) throw notFound('Aucun compte publicitaire n’est suivi.')
 
@@ -173,6 +216,8 @@ export async function lireTableauAds(userId: string, jours: Periode): Promise<Ta
     }),
   )
 
+  const depenseTotale = total.cout
+
   const vues: CampagneVue[] = campagnes.map((campagne) => {
     const siennes = actuelles.filter((ligne: LigneReleve) => ligne.campagneId === campagne.id)
     const siennesAvant = anciennes.filter((ligne: LigneReleve) => ligne.campagneId === campagne.id)
@@ -193,6 +238,38 @@ export async function lireTableauAds(userId: string, jours: Periode): Promise<Ta
       roas: pourcentage(maintenant.roas, hier.roas),
       cpa: compte(maintenant.cpa, hier.cpa),
       cout: compte(maintenant.cout, hier.cout),
+      /*
+       * La part se calcule sur la dépense de la période affichée, pas sur le budget : ce
+       * qu'on veut savoir est où l'argent est parti, pas où il était prévu d'aller.
+       */
+      part: depenseTotale === 0 ? 0 : Math.round((maintenant.cout / depenseTotale) * 100),
+    }
+  })
+
+  ordonner(vues, tri)
+
+  /*
+   * La courbe est construite à partir de toutes les journées de la fenêtre, pas des seules
+   * qui ont une ligne en base. Une journée sans dépense n'a pas de relevé ; la sauter
+   * rapprocherait deux barres séparées par une semaine de silence.
+   */
+  const parJour = new Map<string, Cumul[]>()
+  for (const ligne of actuelles) {
+    const jour = ligne.jour.toISOString().slice(0, 10)
+    const deja = parJour.get(jour)
+    if (deja === undefined) parJour.set(jour, [enCumul(ligne)])
+    else deja.push(enCumul(ligne))
+  }
+
+  const serie: JourneeVue[] = journeesEntre(bornes.depuis, bornes.jusqua).map((jour) => {
+    const journee = indicateurs(cumuler(parJour.get(jour) ?? []))
+    return {
+      jour,
+      cout: journee.cout,
+      valeur: journee.valeur,
+      conversions: journee.conversions,
+      clics: journee.clics,
+      roas: journee.roas,
     }
   })
 
@@ -212,6 +289,35 @@ export async function lireTableauAds(userId: string, jours: Periode): Promise<Ta
       cpc: compte(total.cpc, avant.cpc),
     },
     campagnes: vues,
+    serie,
+    tri,
     synchronise: actif.synchroAt !== null,
   }
+}
+
+/**
+ * Range les campagnes selon ce qu'on cherche.
+ *
+ * Une campagne dont l'indicateur n'existe pas descend en bas, quel que soit le tri : trier
+ * par ROAS en mettant en tête celles qui n'ont pas de ROAS ferait passer pour meilleures
+ * celles qui n'ont simplement rien dépensé.
+ */
+function ordonner(vues: CampagneVue[], tri: Tri): void {
+  const dernier = (valeur: number | null, decroissant: boolean) =>
+    valeur === null ? (decroissant ? -Infinity : Infinity) : valeur
+
+  if (tri === 'nom') {
+    vues.sort((a, b) => a.nom.localeCompare(b.nom, 'fr'))
+    return
+  }
+  if (tri === 'roas') {
+    vues.sort((a, b) => dernier(b.actuel.roas, true) - dernier(a.actuel.roas, true))
+    return
+  }
+  if (tri === 'cpa') {
+    // Un coût par vente se lit du moins cher au plus cher : c'est le sens de la bonne nouvelle.
+    vues.sort((a, b) => dernier(a.actuel.cpa, false) - dernier(b.actuel.cpa, false))
+    return
+  }
+  vues.sort((a, b) => b.actuel.cout - a.actuel.cout)
 }

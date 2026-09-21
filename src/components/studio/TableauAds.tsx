@@ -15,6 +15,9 @@
  * ils n'ont pas à savoir lire l'interface de Google Ads. Chaque intitulé porte sa phrase.
  */
 
+import type { ReactNode } from 'react'
+import { CourbeAds, type JourneeVue } from './CourbeAds'
+
 export type EcartVu = { valeur: number | null; variation: number | null; points: number | null }
 
 export type IndicateursVus = {
@@ -41,6 +44,8 @@ export type CampagneVue = {
   roas: EcartVu
   cpa: EcartVu
   cout: EcartVu
+  /** Part de la dépense de la période, en pourcentage entier. */
+  part: number
 }
 
 export type TableauVu = {
@@ -51,6 +56,8 @@ export type TableauVu = {
   total: IndicateursVus
   ecarts: Record<string, EcartVu>
   campagnes: CampagneVue[]
+  serie: JourneeVue[]
+  tri: string
   synchronise: boolean
 }
 
@@ -136,7 +143,7 @@ function Carte({
       <p className="m-0 text-xs font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">
         {titre}
       </p>
-      <p className="mt-2 mb-0 text-2xl font-semibold">{valeur}</p>
+      <p className="mt-2 mb-0 text-xl font-semibold sm:text-2xl">{valeur}</p>
       {ecart === undefined ? null : (
         <p className="mt-1 mb-0">
           <Mouvement
@@ -151,6 +158,123 @@ function Carte({
   )
 }
 
+/** Un onglet de filtre : période ou ordre. Le même dessin pour les deux, c'est le même geste. */
+function Onglet({
+  href,
+  actif,
+  children,
+}: {
+  href: string
+  actif: boolean
+  children: ReactNode
+}) {
+  return (
+    <a
+      href={href}
+      aria-current={actif ? 'true' : undefined}
+      className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
+        actif
+          ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+          : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+      }`}
+    >
+      {children}
+    </a>
+  )
+}
+
+const TRIS: ReadonlyArray<{ cle: string; texte: string }> = [
+  { cle: 'depense', texte: 'Dépense' },
+  { cle: 'roas', texte: 'ROAS' },
+  { cle: 'cpa', texte: 'Coût par vente' },
+  { cle: 'nom', texte: 'Nom' },
+]
+
+/**
+ * Une campagne, et la part du budget qu'elle prend.
+ *
+ * La barre de part est la seule chose ici qui ne soit pas dans les chiffres : voir que deux
+ * campagnes sur sept consomment quatre-vingts pour cent de la dépense prend une seconde et
+ * se lit mal dans une colonne de montants.
+ */
+function Campagne({ campagne, devise }: { campagne: CampagneVue; devise: string }) {
+  return (
+    <li className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="m-0 text-sm font-medium">{campagne.nom}</p>
+        <p className="m-0 text-xs text-[var(--color-ink-faint)]">
+          {TYPES[campagne.type] ?? campagne.type} ·{' '}
+          {STATUTS[campagne.statut] ?? campagne.statut} · {montant(campagne.budget, devise)} /
+          jour
+        </p>
+      </div>
+
+      {campagne.part === 0 ? null : (
+        <div className="mt-2 flex items-center gap-2">
+          <div
+            className="h-1.5 flex-1 overflow-hidden rounded-[var(--radius-pill)] bg-[var(--color-canvas)]"
+            role="presentation"
+          >
+            <div
+              className="h-full rounded-[var(--radius-pill)] bg-[var(--color-brand)]"
+              style={{ width: `${Math.min(100, campagne.part)}%` }}
+            />
+          </div>
+          <span className="text-xs text-[var(--color-ink-faint)]">
+            {campagne.part} % de la dépense
+          </span>
+        </div>
+      )}
+
+      {campagne.budgetLimite ? (
+        <p className="mt-2 mb-0 text-xs text-[var(--color-caution)]">
+          Google signale que cette campagne est limitée par son budget : elle pourrait
+          diffuser davantage.
+        </p>
+      ) : null}
+
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {[
+          {
+            quoi: 'Dépenses',
+            valeur: montant(campagne.actuel.cout, devise),
+            ecart: campagne.cout,
+            mieux: false,
+          },
+          {
+            quoi: 'ROAS',
+            valeur: pourcent(campagne.actuel.roas),
+            ecart: campagne.roas,
+            mieux: true,
+          },
+          {
+            quoi: 'Coût par vente',
+            valeur: montant(campagne.actuel.cpa, devise),
+            ecart: campagne.cpa,
+            mieux: false,
+          },
+          {
+            quoi: 'Conversions',
+            valeur: String(campagne.actuel.conversions),
+            ecart: undefined,
+            mieux: true,
+          },
+        ].map((cellule) => (
+          <div key={cellule.quoi}>
+            <p className="m-0 text-sm font-medium">{cellule.valeur}</p>
+            <p className="m-0 text-xs text-[var(--color-ink-faint)]">{cellule.quoi}</p>
+            {cellule.ecart === undefined ? null : (
+              <p className="m-0 mt-0.5">
+                <Mouvement ecart={cellule.ecart} suffixe="" mieuxEnHausse={cellule.mieux} />
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </li>
+  )
+}
+
 export function TableauAds({
   tableau,
   base,
@@ -160,6 +284,14 @@ export function TableauAds({
   base: string
 }) {
   const { devise, total, ecarts } = tableau
+
+  /*
+   * Celles qui ont dépensé d'abord. Les autres existent et restent accessibles, mais plus
+   * bas : une campagne en pause au milieu de celles qui tournent, avec six tirets à la place
+   * de ses chiffres, fait chercher une panne là où il n'y en a pas.
+   */
+  const qui = tableau.campagnes.filter((campagne) => campagne.actuel.cout > 0)
+  const dormantes = tableau.campagnes.filter((campagne) => campagne.actuel.cout === 0)
 
   if (!tableau.synchronise) {
     return (
@@ -176,26 +308,23 @@ export function TableauAds({
   return (
     <div className="grid gap-6">
       <nav className="flex flex-wrap gap-2" aria-label="Période">
-        {[1, 3, 7, 14, 30].map((jours) => {
-          const actif = jours === tableau.jours
-          return (
-            <a
-              key={jours}
-              href={`${base}?jours=${jours}`}
-              aria-current={actif ? 'true' : undefined}
-              className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
-                actif
-                  ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
-                  : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
-              }`}
-            >
-              {jours === 1 ? 'Hier' : `${jours} jours`}
-            </a>
-          )
-        })}
+        {[1, 3, 7, 14, 30, 90].map((jours) => (
+          <Onglet
+            key={jours}
+            href={`${base}?jours=${jours}&tri=${tableau.tri}`}
+            actif={jours === tableau.jours}
+          >
+            {jours === 1 ? 'Hier' : `${jours} jours`}
+          </Onglet>
+        ))}
       </nav>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/*
+        Deux colonnes dès le téléphone. Une colonne unique donnait six cartes hautes qu'il
+        fallait faire défiler pour comparer la dépense au ROAS — c'est-à-dire pour faire la
+        seule chose qu'on vient faire ici.
+      */}
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <Carte
           titre="Dépenses"
           valeur={montant(total.cout, devise)}
@@ -250,80 +379,57 @@ export function TableauAds({
         ))}
       </section>
 
+      <CourbeAds serie={tableau.serie} devise={devise} />
+
       <section>
-        <h2 className="m-0 mb-3 text-base font-semibold">Vos campagnes</h2>
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+          <h2 className="m-0 text-base font-semibold">Vos campagnes</h2>
+          {qui.length <= 1 ? null : (
+            <nav className="flex flex-wrap gap-2" aria-label="Ordre des campagnes">
+              {TRIS.map((choix) => (
+                <Onglet
+                  key={choix.cle}
+                  href={`${base}?jours=${tableau.jours}&tri=${choix.cle}`}
+                  actif={choix.cle === tableau.tri}
+                >
+                  {choix.texte}
+                </Onglet>
+              ))}
+            </nav>
+          )}
+        </div>
         {tableau.campagnes.length === 0 ? (
           <p className="m-0 text-sm text-[var(--color-ink-faint)]">
             Aucune campagne lue sur ce compte.
           </p>
         ) : (
-          <ul className="m-0 grid list-none gap-3 p-0">
-            {tableau.campagnes.map((campagne) => (
-              <li
-                key={campagne.id}
-                className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4"
-              >
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="m-0 text-sm font-medium">{campagne.nom}</p>
-                  <p className="m-0 text-xs text-[var(--color-ink-faint)]">
-                    {TYPES[campagne.type] ?? campagne.type} ·{' '}
-                    {STATUTS[campagne.statut] ?? campagne.statut} ·{' '}
-                    {montant(campagne.budget, devise)} / jour
-                  </p>
-                </div>
+          <>
+            <ul className="m-0 grid list-none gap-3 p-0">
+              {qui.map((campagne) => (
+                <Campagne key={campagne.id} campagne={campagne} devise={devise} />
+              ))}
+            </ul>
 
-                {campagne.budgetLimite ? (
-                  <p className="mt-2 mb-0 text-xs text-[var(--color-caution)]">
-                    Google signale que cette campagne est limitée par son budget : elle
-                    pourrait diffuser davantage.
-                  </p>
-                ) : null}
-
-                <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {[
-                    {
-                      quoi: 'Dépenses',
-                      valeur: montant(campagne.actuel.cout, devise),
-                      ecart: campagne.cout,
-                      mieux: false,
-                    },
-                    {
-                      quoi: 'ROAS',
-                      valeur: pourcent(campagne.actuel.roas),
-                      ecart: campagne.roas,
-                      mieux: true,
-                    },
-                    {
-                      quoi: 'CPA',
-                      valeur: montant(campagne.actuel.cpa, devise),
-                      ecart: campagne.cpa,
-                      mieux: false,
-                    },
-                    {
-                      quoi: 'Conversions',
-                      valeur: String(campagne.actuel.conversions),
-                      ecart: undefined,
-                      mieux: true,
-                    },
-                  ].map((cellule) => (
-                    <div key={cellule.quoi}>
-                      <p className="m-0 text-sm font-medium">{cellule.valeur}</p>
-                      <p className="m-0 text-xs text-[var(--color-ink-faint)]">{cellule.quoi}</p>
-                      {cellule.ecart === undefined ? null : (
-                        <p className="m-0 mt-0.5">
-                          <Mouvement
-                            ecart={cellule.ecart}
-                            suffixe=""
-                            mieuxEnHausse={cellule.mieux}
-                          />
-                        </p>
-                      )}
-                    </div>
+            {dormantes.length === 0 ? null : (
+              /*
+                Repliées, pas retirées. Une campagne sans dépense est souvent celle dont on
+                veut parler — en pause depuis trois semaines, budget épuisé, refusée par
+                Google — et la faire disparaître de l'écran la ferait oublier. Mais la
+                laisser au milieu des autres avec six tirets noie celles qui tournent.
+              */
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-[var(--color-ink-soft)]">
+                  {dormantes.length} campagne{dormantes.length > 1 ? 's' : ''} sans dépense sur
+                  la période
+                </summary>
+                <ul className="m-0 mt-3 grid list-none gap-3 p-0">
+                  {dormantes.map((campagne) => (
+                    <Campagne key={campagne.id} campagne={campagne} devise={devise} />
                   ))}
-                </div>
-              </li>
-            ))}
-          </ul>
+                </ul>
+              </details>
+            )}
+          </>
         )}
       </section>
 

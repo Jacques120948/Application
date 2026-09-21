@@ -207,3 +207,24 @@ export function moisCourant(
     joursDuMois,
   }
 }
+
+/**
+ * Toutes les journées d'une fenêtre, bornes comprises.
+ *
+ * Sert à dessiner une courbe qui ne ment pas. Une journée sans dépense n'a pas de ligne en
+ * base ; si le graphique ne lisait que les lignes existantes, il rapprocherait deux barres
+ * séparées par une semaine de silence et montrerait une continuité qui n'a pas eu lieu. Les
+ * jours vides existent et valent zéro — c'est une dépense nulle, pas une donnée absente.
+ */
+export function journeesEntre(depuis: string, jusqua: string): string[] {
+  const jours: string[] = []
+  const fin = Date.parse(`${jusqua}T00:00:00Z`)
+  let curseur = Date.parse(`${depuis}T00:00:00Z`)
+  if (Number.isNaN(curseur) || Number.isNaN(fin)) return jours
+  // Une borne large : au-delà, c'est une fenêtre aberrante, pas une période à dessiner.
+  while (curseur <= fin && jours.length < 400) {
+    jours.push(new Date(curseur).toISOString().slice(0, 10))
+    curseur += 24 * 60 * 60 * 1000
+  }
+  return jours
+}

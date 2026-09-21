@@ -12,7 +12,7 @@ import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
 import { TableauAds } from '@/components/studio/TableauAds'
 import { LireCampagnes } from '@/components/studio/LireCampagnes'
-import { lireTableauAds, periodeValide } from '@/server/ads/tableau'
+import { lireTableauAds, periodeValide, triValide } from '@/server/ads/tableau'
 import { ObjectifsAds } from '@/components/studio/ObjectifsAds'
 import { ProfilAds } from '@/components/studio/ProfilAds'
 import { objectifsDuCompte } from '@/server/ads/profil'
@@ -34,7 +34,7 @@ export default async function PublicitePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ jours?: string }>
+  searchParams: Promise<{ jours?: string; tri?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -57,8 +57,11 @@ export default async function PublicitePage({
    * elle se met en favori et survit au rafraîchissement. Une valeur inattendue retombe sur
    * sept jours plutôt que de faire échouer un écran qu'on venait consulter.
    */
-  const jours = periodeValide((await searchParams).jours)
-  const tableau = actif === null ? null : await lireTableauAds(user.id, jours).catch(() => null)
+  const demande = await searchParams
+  const jours = periodeValide(demande.jours)
+  const tri = triValide(demande.tri)
+  const tableau =
+    actif === null ? null : await lireTableauAds(user.id, jours, tri).catch(() => null)
 
   /*
    * Les objectifs sont lus après le tableau parce qu'ils s'y adossent : le verdict de
@@ -77,7 +80,7 @@ export default async function PublicitePage({
       isAdmin={user.role === 'ADMIN'}
       screen="visibilite"
     >
-      <div className="mx-auto w-full max-w-3xl px-5 py-10">
+      <div className="mx-auto w-full max-w-5xl px-5 py-10">
         <div className="flex flex-wrap items-center gap-4">
           {naya === undefined ? null : <AgentAvatar agent={naya} size="lg" halo />}
           <div className="min-w-0 flex-1">
@@ -171,6 +174,8 @@ export default async function PublicitePage({
                       total: tableau.total,
                       ecarts: tableau.ecarts,
                       campagnes: tableau.campagnes,
+                      serie: tableau.serie,
+                      tri: tableau.tri,
                       synchronise: tableau.synchronise,
                     }}
                   />

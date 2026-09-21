@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { PERIODES, periodeValide } from '@/server/ads/tableau'
+import { PERIODES, periodeValide, TRIS, triValide } from '@/server/ads/tableau'
+import { journeesEntre } from '@/server/ads/metriques'
 import { JOURS_PREMIERE_LECTURE, JOURS_RELECTURE } from '@/server/ads/synchro'
 
 /**
@@ -31,6 +32,58 @@ describe('la période demandée', () => {
     expect(periodeValide('sept')).toBe(7)
     expect(periodeValide(undefined)).toBe(7)
     expect(periodeValide({ jours: 7 })).toBe(7)
+  })
+})
+
+describe('l’ordre des campagnes', () => {
+  it('accepte les ordres proposés', () => {
+    for (const tri of TRIS) expect(triValide(tri)).toBe(tri)
+  })
+
+  it('retombe sur la dépense pour tout le reste', () => {
+    /*
+     * La dépense d'abord, et pas le nom : l'ordre alphabétique met en tête la campagne dont
+     * le nom commence par A, ce qui n'intéresse personne. Ce qu'on veut voir en premier,
+     * c'est là où part l'argent.
+     */
+    expect(triValide('budget')).toBe('depense')
+    expect(triValide(undefined)).toBe('depense')
+    expect(triValide(42)).toBe('depense')
+  })
+})
+
+describe('les journées d’une fenêtre', () => {
+  it('rend toutes les journées, bornes comprises', () => {
+    expect(journeesEntre('2026-09-18', '2026-09-21')).toEqual([
+      '2026-09-18',
+      '2026-09-19',
+      '2026-09-20',
+      '2026-09-21',
+    ])
+  })
+
+  it('traverse un changement de mois et une fin de février', () => {
+    expect(journeesEntre('2026-01-30', '2026-02-02')).toEqual([
+      '2026-01-30',
+      '2026-01-31',
+      '2026-02-01',
+      '2026-02-02',
+    ])
+    expect(journeesEntre('2028-02-28', '2028-03-01')).toEqual([
+      '2028-02-28',
+      '2028-02-29',
+      '2028-03-01',
+    ])
+  })
+
+  it('ne rend rien quand les bornes sont inversées ou absurdes', () => {
+    expect(journeesEntre('2026-09-21', '2026-09-18')).toEqual([])
+    expect(journeesEntre('hier', 'demain')).toEqual([])
+  })
+
+  it('reste borné face à une fenêtre aberrante', () => {
+    // Le nombre de barres d'un graphique ne doit pas dépendre d'une date mal formée.
+    expect(journeesEntre('2020-01-01', '2026-01-01').length).toBeLessThanOrEqual(400)
   })
 })
 

@@ -19,4 +19,11 @@ export default defineConfig({
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },
+  /*
+   * Le JSX est transformé avec la fabrique moderne, comme dans Next. Sans cela, esbuild
+   * produit des appels à `React.createElement` alors que les composants n'importent pas
+   * React — et un test qui rend un composant échoue sur « React is not defined », pour une
+   * raison qui n'a rien à voir avec le composant.
+   */
+  esbuild: { jsx: 'automatic' },
 })
