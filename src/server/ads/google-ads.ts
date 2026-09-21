@@ -165,20 +165,35 @@ export function entetes(accessToken: string, compteId?: string): Record<string, 
   return base
 }
 
-/** Ce que Google refuse, dit à quelqu'un qui peut y faire quelque chose. */
+/**
+ * Ce que Google refuse, dit à quelqu'un qui peut y faire quelque chose.
+ *
+ * La phrase d'orientation d'abord, la phrase de Google ensuite — et jamais l'une sans
+ * l'autre. C'est la deuxième fois que ce fichier apprend la même leçon. Une première
+ * version ne lisait pas les erreurs rendues en tableau et perdait la cause exacte ; celle-ci
+ * la lisait, mais la jetait dès que le code HTTP était connu, au motif qu'on savait déjà
+ * quoi conseiller. On ne le savait pas : derrière un même 403, Google écrit « ce compte n'a
+ * pas accès au planificateur de mots-clés » ou « l'utilisateur n'a pas les droits sur ce
+ * client », qui n'appellent pas du tout le même geste. Conseiller sans dire pourquoi envoie
+ * quelqu'un vérifier ce qui marchait déjà.
+ *
+ * Rien de ce que Google renvoie ici ne porte de secret : ce sont ses messages d'erreur, pas
+ * la requête.
+ */
 function refus(status: number, message: string): string {
+  const dit = message === '' ? '' : ` Google précise : ${message.slice(0, 250)}`
   if (status === 401) {
-    return 'Votre autorisation Google a expiré. Reconnectez votre compte Google Ads.'
+    return `Votre autorisation Google a expiré. Reconnectez votre compte Google Ads.${dit}`
   }
   if (status === 403) {
-    return 'Google refuse l’accès à ce compte publicitaire. Vérifiez que le compte connecté a bien les droits dessus.'
+    return `Google refuse l’accès à ce compte publicitaire. Vérifiez que le compte connecté a bien les droits dessus.${dit}`
   }
   if (status === 429) {
-    return 'Google limite les demandes en ce moment. Naya réessaiera plus tard.'
+    return `Google limite les demandes en ce moment. Naya réessaiera plus tard.${dit}`
   }
   return message === ''
     ? 'Naya ne parvient pas à récupérer vos données Google Ads pour l’instant.'
-    : `Google répond : ${message.slice(0, 150)}`
+    : `Google répond : ${message.slice(0, 250)}`
 }
 
 /**

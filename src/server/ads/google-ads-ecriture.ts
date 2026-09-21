@@ -29,20 +29,27 @@ import type { AccesAds, TexteAnnonceAds } from './provider'
 
 export type Ecriture = { ok: true } | { ok: false; raison: string; technique: string }
 
-/** Ce que Google refuse, dit à quelqu'un qui peut y faire quelque chose. */
+/**
+ * Ce que Google refuse, dit à quelqu'un qui peut y faire quelque chose.
+ *
+ * La phrase d'orientation, puis celle de Google. Jamais l'une sans l'autre : derrière un
+ * même code, Google nomme des causes qui n'appellent pas le même geste, et conseiller sans
+ * dire pourquoi envoie quelqu'un vérifier ce qui marchait déjà.
+ */
 function refus(status: number, message: string): string {
+  const dit = message === '' ? '' : ` Google précise : ${message.slice(0, 250)}`
   if (status === 401) {
-    return 'Votre autorisation Google a expiré. Reconnectez votre compte Google Ads, puis réessayez.'
+    return `Votre autorisation Google a expiré. Reconnectez votre compte Google Ads, puis réessayez.${dit}`
   }
   if (status === 403) {
-    return 'Google refuse cette modification : le compte connecté n’a pas les droits d’écriture sur ce compte publicitaire.'
+    return `Google refuse cette modification : le compte connecté n’a pas les droits d’écriture sur ce compte publicitaire.${dit}`
   }
   if (status === 429) {
-    return 'Google limite les demandes en ce moment. Réessayez dans quelques minutes.'
+    return `Google limite les demandes en ce moment. Réessayez dans quelques minutes.${dit}`
   }
   return message === ''
     ? 'Google n’a pas accepté la modification, sans dire pourquoi.'
-    : `Google refuse : ${message.slice(0, 200)}`
+    : `Google refuse : ${message.slice(0, 250)}`
 }
 
 async function envoyer(
@@ -294,6 +301,253 @@ export async function retirerMotCle(
   return envoyer('adGroupCriteria:mutate', acces, {
     operations: [{ remove: critereResourceName }],
   })
+}
+
+/** Ce qu'il faut pour bâtir une campagne Recherche, déjà validé par l'appelant. */
+export type PlanCampagne = {
+  nom: string
+  budgetMicros: number
+  enchereMicros: number
+  urlFinale: string
+  /** La constante de pays chez Google : « geoTargetConstants/2756 ». */
+  marcheGeo: string
+  /** La constante de langue : « languageConstants/1002 ». */
+  langueCode: string
+  motsCles: Array<{ texte: string; correspondance: 'phrase' | 'exact' }>
+  titres: string[]
+  descriptions: string[]
+}
+
+/**
+ * Crée une campagne Recherche entière, en un seul envoi indivisible.
+ *
+ * Une campagne, chez Google, ce n'est pas un objet : c'en est sept. Un budget, la campagne,
+ * son pays, sa langue, un groupe d'annonces, ses mots-clés, une annonce. Les créer l'un
+ * après l'autre marcherait quatre-vingt-dix-neuf fois sur cent — et la centième laisserait
+ * un budget sans campagne, ou une campagne sans annonce, dans le compte de quelqu'un. C'est
+ * exactement ce qui s'est produit sur le dépôt d'images : l'élément créé, le rattachement
+ * refusé, l'orphelin impossible à supprimer par l'API.
+ *
+ * `googleAds:mutate` évite ce cas entièrement : les sept opérations passent ensemble ou
+ * aucune ne passe. Les objets se désignent entre eux par des identifiants temporaires
+ * négatifs, que Google remplace par les vrais. `partialFailure` est explicitement à faux —
+ * c'est le réglage qui fait l'indivisibilité, et le laisser par défaut serait s'en remettre
+ * à une valeur qu'on n'a pas choisie.
+ *
+ * Quatre réglages valent d'être dits, parce qu'ils décident où part l'argent.
+ *
+ * **La campagne naît en pause.** Toujours. C'est le seul geste d'Evoliia qui fabrique une
+ * dépense de zéro, et personne ne doit découvrir une campagne active qu'il n'a pas lancée.
+ *
+ * **Le réseau de recherche et le Display sont coupés.** Par défaut, Google diffuse aussi
+ * chez ses partenaires et sur le réseau Display, où les clics sont moins chers et beaucoup
+ * moins qualifiés : un petit budget y passe en entier sans qu'on sache pourquoi.
+ *
+ * **Le ciblage géographique est en présence seulement.** Le défaut de Google est
+ * « présence ou intérêt », qui montre l'annonce à quelqu'un qui, depuis n'importe où, a
+ * manifesté de l'intérêt pour la Suisse. Pour une boutique qui livre en Suisse, c'est de
+ * l'argent dépensé sur des gens qui ne commanderont pas.
+ *
+ * **L'enchère est manuelle.** Une stratégie automatique a besoin d'un historique de
+ * conversions pour apprendre ; sur une campagne neuve, elle dépense d'abord pour acquérir
+ * cet historique. Une enchère fixe est moins performante à terme et parfaitement prévisible
+ * au début — ce qui est ce qu'on veut d'une campagne qui démarre.
+ */
+export async function creerCampagneComplete(
+  acces: AccesAds,
+  plan: PlanCampagne,
+): Promise<
+  { ok: true; campagne: string; budget: string } | { ok: false; raison: string; technique: string }
+> {
+  const base = `customers/${acces.compteId}`
+  const budget = `${base}/campaignBudgets/-1`
+  const campagne = `${base}/campaigns/-2`
+  const groupe = `${base}/adGroups/-3`
+
+  const operations: unknown[] = [
+    {
+      campaignBudgetOperation: {
+        create: {
+          resourceName: budget,
+          name: `${plan.nom} — budget`,
+          amountMicros: String(Math.round(plan.budgetMicros)),
+          deliveryMethod: 'STANDARD',
+          /*
+           * Non partagé, et c'est une protection : un budget partagé modifié plus tard
+           * changerait la dépense d'une autre campagne qu'on ne regardait pas. Les
+           * garde-fous refusent déjà d'y toucher — autant ne pas en fabriquer.
+           */
+          explicitlyShared: false,
+        },
+      },
+    },
+    {
+      campaignOperation: {
+        create: {
+          resourceName: campagne,
+          name: plan.nom,
+          status: 'PAUSED',
+          advertisingChannelType: 'SEARCH',
+          campaignBudget: budget,
+          manualCpc: { enhancedCpcEnabled: false },
+          networkSettings: {
+            targetGoogleSearch: true,
+            targetSearchNetwork: false,
+            targetContentNetwork: false,
+            targetPartnerSearchNetwork: false,
+          },
+          geoTargetTypeSetting: {
+            positiveGeoTargetType: 'PRESENCE',
+            negativeGeoTargetType: 'PRESENCE',
+          },
+        },
+      },
+    },
+    {
+      campaignCriterionOperation: {
+        create: { campaign: campagne, location: { geoTargetConstant: plan.marcheGeo } },
+      },
+    },
+    {
+      campaignCriterionOperation: {
+        create: { campaign: campagne, language: { languageConstant: plan.langueCode } },
+      },
+    },
+    {
+      adGroupOperation: {
+        create: {
+          resourceName: groupe,
+          name: `${plan.nom} — groupe 1`,
+          campaign: campagne,
+          status: 'ENABLED',
+          type: 'SEARCH_STANDARD',
+          cpcBidMicros: String(Math.round(plan.enchereMicros)),
+        },
+      },
+    },
+    ...plan.motsCles.map((mot) => ({
+      adGroupCriterionOperation: {
+        create: {
+          adGroup: groupe,
+          status: 'ENABLED',
+          keyword: {
+            text: mot.texte,
+            matchType: mot.correspondance === 'exact' ? 'EXACT' : 'PHRASE',
+          },
+        },
+      },
+    })),
+    {
+      adGroupAdOperation: {
+        create: {
+          adGroup: groupe,
+          status: 'ENABLED',
+          ad: {
+            finalUrls: [plan.urlFinale],
+            responsiveSearchAd: {
+              headlines: plan.titres.map((texte) => ({ text: texte })),
+              descriptions: plan.descriptions.map((texte) => ({ text: texte })),
+            },
+          },
+        },
+      },
+    },
+  ]
+
+  const issue = await envoyerEtLireTout('googleAds:mutate', acces, {
+    mutateOperations: operations,
+    partialFailure: false,
+    responseContentType: 'RESOURCE_NAME_ONLY',
+  })
+  if (!issue.ok) return issue
+
+  /*
+   * Les noms de ressource reviennent dans l'ordre des opérations : le budget d'abord, la
+   * campagne ensuite. Ce sont les deux seuls qu'il faut garder — supprimer la campagne
+   * emporte le groupe, les mots-clés et l'annonce, mais pas le budget, qui est un objet à
+   * part et resterait dans le compte.
+   */
+  const budgetCree = issue.resourceNames[0] ?? ''
+  const campagneCreee = issue.resourceNames[1] ?? ''
+  if (budgetCree === '' || campagneCreee === '') {
+    return {
+      ok: false,
+      raison:
+        'Google a accepté la création mais n’a pas dit ce qu’il avait créé. Vérifiez dans Google Ads avant de réessayer.',
+      technique: 'reponse-sans-ressources',
+    }
+  }
+  return { ok: true, campagne: campagneCreee, budget: budgetCree }
+}
+
+/** Supprime une campagne. Le groupe, les mots-clés et l'annonce partent avec elle. */
+export async function supprimerCampagne(acces: AccesAds, campagne: string): Promise<Ecriture> {
+  return envoyer('campaigns:mutate', acces, { operations: [{ remove: campagne }] })
+}
+
+/** Supprime un budget. Séparé : il survit à la campagne qu'il servait. */
+export async function supprimerBudget(acces: AccesAds, budget: string): Promise<Ecriture> {
+  return envoyer('campaignBudgets:mutate', acces, { operations: [{ remove: budget }] })
+}
+
+/**
+ * Un envoi indivisible dont on lit tous les noms de ressource créés.
+ *
+ * Distinct de `envoyerEtLire`, qui ne lit que le premier : ici, c'est justement la liste qui
+ * compte, parce qu'une création multiple rend autant de noms qu'elle a fait d'objets, et que
+ * deux d'entre eux — le budget et la campagne — doivent être conservés pour pouvoir défaire.
+ */
+async function envoyerEtLireTout(
+  chemin: string,
+  acces: AccesAds,
+  corps: unknown,
+): Promise<
+  { ok: true; resourceNames: string[] } | { ok: false; raison: string; technique: string }
+> {
+  const controle = new AbortController()
+  const minuteur = setTimeout(() => controle.abort(), DELAI_MS)
+  try {
+    const reponse = await fetch(`${RACINE}/customers/${acces.compteId}/${chemin}`, {
+      method: 'POST',
+      headers: entetes(acces.accessToken),
+      body: JSON.stringify(corps),
+      signal: controle.signal,
+    })
+    const charge = (await reponse.json().catch(() => null)) as unknown
+
+    if (reponse.status !== 200) {
+      const message = messageErreur(charge)
+      logger.warn('Google Ads a refusé une création', { status: reponse.status })
+      return { ok: false, raison: refus(reponse.status, message), technique: message.slice(0, 500) }
+    }
+
+    const resultats = (charge as { mutateOperationResponses?: unknown })?.mutateOperationResponses
+    const noms: string[] = []
+    if (Array.isArray(resultats)) {
+      for (const resultat of resultats) {
+        const objet = (resultat ?? {}) as Record<string, unknown>
+        /*
+         * Chaque réponse porte le nom de son type d'opération — `campaignBudgetResult`,
+         * `campaignResult`… On ne les énumère pas : la seule chose qui compte est le
+         * `resourceName` qui s'y trouve, quel que soit le nom de la boîte.
+         */
+        for (const valeur of Object.values(objet)) {
+          const nom = ((valeur ?? {}) as { resourceName?: unknown }).resourceName
+          if (typeof nom === 'string' && nom !== '') noms.push(nom)
+        }
+      }
+    }
+    return { ok: true, resourceNames: noms }
+  } catch {
+    return {
+      ok: false,
+      raison:
+        'La création n’a pas pu être envoyée à Google. Vérifiez dans Google Ads avant de réessayer : elle a pu partir malgré tout.',
+      technique: 'reseau',
+    }
+  } finally {
+    clearTimeout(minuteur)
+  }
 }
 
 /**

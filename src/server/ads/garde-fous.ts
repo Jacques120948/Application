@@ -371,6 +371,181 @@ export function autoriseMotCle(
   return { ok: true }
 }
 
+/**
+ * Les campagnes qu'Evoliia crée par jour et par compte.
+ *
+ * Une. Bien plus bas que tout le reste, et pour une raison qui n'a rien d'arbitraire : créer
+ * une campagne est le seul geste du produit qui fabrique une dépense à partir de rien. Les
+ * autres ajustent ce qui existe. Quelqu'un qui a besoin d'en créer trois dans la journée a
+ * un projet particulier et le fera dans Google Ads ; une boucle qui en crée trois n'a aucun
+ * projet du tout.
+ */
+export const CAMPAGNES_PAR_JOUR = 1
+
+/** Ce qu'une campagne Recherche exige pour exister, et ce qu'elle accepte au maximum. */
+export const PLACES_CAMPAGNE = {
+  titresMin: 3,
+  titresMax: 15,
+  descriptionsMin: 2,
+  descriptionsMax: 4,
+  motsClesMin: 1,
+}
+
+/**
+ * Le budget quotidien qu'Evoliia accepte de fabriquer, en unités de la devise.
+ *
+ * Le plancher est celui du bon sens : en dessous d'un franc par jour, Google ne diffuse
+ * presque pas et la campagne n'apprend rien. Le plafond absolu existe pour qu'une erreur de
+ * saisie — un zéro de trop — ne crée pas une campagne à mille francs par jour ; il ne
+ * remplace pas la borne du profil, qui est la vraie, et qui est vérifiée juste après.
+ */
+export const BUDGET_MIN = 1
+export const BUDGET_MAX = 500
+
+/** Les jours d'un mois moyen. Le budget mensuel du profil se compare au quotidien par là. */
+const JOURS_DU_MOIS = 30.4
+
+/**
+ * Les bornes de la création d'une campagne.
+ *
+ * C'est le garde-fou le plus sévère du produit, parce que c'est le seul geste qui parte de
+ * zéro. Tous les autres modifient quelque chose que la personne a déjà décidé d'avoir ;
+ * celui-ci fabrique la décision.
+ *
+ * `hotes` sont les domaines de la personne — son site, sa boutique. La page d'arrivée doit
+ * s'y trouver, et ce n'est pas une politesse : sans cette vérification, Evoliia deviendrait
+ * un moyen d'acheter du trafic Google vers n'importe quelle adresse, payé par le compte de
+ * quelqu'un d'autre.
+ */
+export function autoriseCreation(
+  demande: Demande & { campagnesAujourdhui: number },
+  plan: {
+    nom: string
+    budgetMicros: number
+    urlFinale: string
+    motsCles: readonly unknown[]
+    titres: readonly string[]
+    descriptions: readonly string[]
+  },
+  hotes: readonly string[],
+): Verdict {
+  if (demande.mode !== 'assiste') {
+    return {
+      ok: false,
+      raison:
+        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’une campagne puisse être créée.',
+    }
+  }
+  if (demande.campagnesAujourdhui >= CAMPAGNES_PAR_JOUR) {
+    return {
+      ok: false,
+      raison: `Evoliia ne crée qu’une campagne par jour. C’est le seul geste qui fabrique une dépense à partir de rien, et il mérite une nuit de réflexion.`,
+    }
+  }
+  if (plan.nom.trim() === '' || plan.nom.length > 120) {
+    return { ok: false, raison: 'Le nom de la campagne doit tenir en 120 caractères.' }
+  }
+
+  const budget = plan.budgetMicros / 1_000_000
+  if (budget < BUDGET_MIN || budget > BUDGET_MAX) {
+    return {
+      ok: false,
+      raison: `Le budget quotidien doit être compris entre ${BUDGET_MIN} et ${BUDGET_MAX} ${demande.devise}. En dessous, Google ne diffuse presque pas ; au-dessus, Evoliia préfère que vous le régliez vous-même dans Google Ads.`,
+    }
+  }
+  /*
+   * La borne qui compte vraiment. Le budget mensuel du profil est ce que la personne a dit
+   * pouvoir dépenser en tout : une campagne neuve qui le consomme entièrement priverait
+   * celles qui tournent déjà, et personne ne l'aurait demandé.
+   */
+  if (demande.profil.budgetMensuel > 0) {
+    const quotidienMax = demande.profil.budgetMensuel / JOURS_DU_MOIS
+    if (budget > quotidienMax) {
+      return {
+        ok: false,
+        raison: `Votre budget mensuel est de ${demande.profil.budgetMensuel} ${demande.devise}, soit ${quotidienMax.toFixed(2)} ${demande.devise} par jour pour l’ensemble de vos campagnes. Ce budget-ci les dépasserait à lui seul.`,
+      }
+    }
+  }
+
+  /*
+   * L'adresse d'arrivée doit être chez la personne. Sans cette vérification, Evoliia serait
+   * un moyen d'acheter du trafic Google vers n'importe quelle page, payé par le compte de
+   * quelqu'un d'autre.
+   */
+  let hote = ''
+  try {
+    const adresse = new URL(plan.urlFinale)
+    if (adresse.protocol !== 'https:') {
+      return { ok: false, raison: 'La page d’arrivée doit être en HTTPS.' }
+    }
+    hote = adresse.hostname.toLowerCase().replace(/^www\./u, '')
+  } catch {
+    return { ok: false, raison: 'La page d’arrivée n’est pas une adresse valide.' }
+  }
+  const permis = hotes.map((un) => un.toLowerCase().replace(/^www\./u, '')).filter((un) => un !== '')
+  if (!permis.includes(hote)) {
+    return {
+      ok: false,
+      raison: `La page d’arrivée doit être sur un de vos domaines${permis.length === 0 ? '' : ` (${permis.join(', ')})`}. Evoliia n’achète pas de trafic vers une adresse qui n’est pas la vôtre.`,
+    }
+  }
+
+  if (plan.motsCles.length < PLACES_CAMPAGNE.motsClesMin) {
+    return {
+      ok: false,
+      raison: 'Une campagne Recherche sans mot-clé ne diffuse sur rien.',
+    }
+  }
+  if (plan.motsCles.length > MOTS_CLES_PAR_GROUPE) {
+    return {
+      ok: false,
+      raison: `Un groupe d’annonces ne prend pas plus de ${MOTS_CLES_PAR_GROUPE} mots-clés : au-delà, il perd son thème.`,
+    }
+  }
+
+  const textes = (
+    liste: readonly string[],
+    champ: 'titre' | 'description',
+    minimum: number,
+    maximum: number,
+  ): Verdict => {
+    if (liste.length < minimum) {
+      return {
+        ok: false,
+        raison: `Google exige au moins ${minimum} ${champ}s pour une annonce responsive. En dessous, il la refuse et le groupe n’a rien à diffuser.`,
+      }
+    }
+    if (liste.length > maximum) {
+      return { ok: false, raison: `Google n’accepte pas plus de ${maximum} ${champ}s.` }
+    }
+    const longueur = LONGUEURS_ADS[champ] ?? 0
+    for (const texte of liste) {
+      if (texte.trim() === '' || texte.length > longueur) {
+        return {
+          ok: false,
+          raison: `Google refuse ce ${champ} : ${texte.length} caractères pour ${longueur} au maximum.`,
+        }
+      }
+    }
+    return { ok: true }
+  }
+
+  const verdictTitres = textes(
+    plan.titres,
+    'titre',
+    PLACES_CAMPAGNE.titresMin,
+    PLACES_CAMPAGNE.titresMax,
+  )
+  if (!verdictTitres.ok) return verdictTitres
+  return textes(
+    plan.descriptions,
+    'description',
+    PLACES_CAMPAGNE.descriptionsMin,
+    PLACES_CAMPAGNE.descriptionsMax,
+  )
+}
+
 /** Les bornes d'un changement de statut. Mettre en pause ne coûte rien ; reprendre, si. */
 export function autoriseStatut(demande: Demande, vers: string): Verdict {
   if (vers !== 'ENABLED' && vers !== 'PAUSED') {

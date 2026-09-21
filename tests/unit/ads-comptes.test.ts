@@ -55,3 +55,24 @@ describe('le connecteur Google Ads', () => {
     expect(findProvider(googleAds.id)?.status).toBe('available')
   })
 })
+
+describe('ce qu’on dit d’un refus de Google', () => {
+  it('garde la phrase de Google derrière le conseil', () => {
+    /*
+     * La leçon apprise deux fois sur ce fichier. Une première version ne lisait pas les
+     * erreurs rendues en tableau et perdait la cause ; la deuxième la lisait mais la jetait
+     * dès que le code HTTP était connu. Or derrière un même 403, Google écrit « ce compte
+     * n'a pas accès au planificateur » ou « l'utilisateur n'a pas les droits sur ce
+     * client » — deux gestes complètement différents. Conseiller sans dire pourquoi envoie
+     * quelqu'un vérifier ce qui marchait déjà.
+     */
+    for (const fichier of ['src/server/ads/google-ads.ts', 'src/server/ads/google-ads-ecriture.ts']) {
+      const source = readFileSync(fichier, 'utf8')
+      const corps = source.slice(source.indexOf('function refus(status: number'))
+      const fin = corps.indexOf('\n}\n')
+      const refus = corps.slice(0, fin)
+      // Chacune des trois branches nommées doit reprendre la phrase de Google.
+      expect(refus.match(/\$\{dit\}/gu)?.length).toBe(3)
+    }
+  })
+})
