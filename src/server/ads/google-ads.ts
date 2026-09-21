@@ -474,7 +474,7 @@ const REQUETE_ANNONCES = `
  */
 const REQUETE_ELEMENTS = `
   SELECT asset_group.id, asset_group.name, asset_group.status, campaign.id,
-         asset_group_asset.field_type, asset_group_asset.performance_label,
+         asset_group_asset.field_type,
          asset.id, asset.text_asset.text, asset.image_asset.full_size.url
   FROM asset_group_asset
   WHERE asset_group_asset.status != 'REMOVED'
@@ -549,7 +549,6 @@ async function lireCreatif(
   for (const ligne of pmax.valeur) {
     const groupe = (ligne.assetGroup ?? {}) as Record<string, unknown>
     const campagne = (ligne.campaign ?? {}) as Record<string, unknown>
-    const lien = (ligne.assetGroupAsset ?? {}) as Record<string, unknown>
     const element = (ligne.asset ?? {}) as Record<string, unknown>
     const groupeId = String(nombre(groupe.id))
     if (groupeId === '0') continue
@@ -562,7 +561,7 @@ async function lireCreatif(
       statut: texte(groupe.status),
     })
 
-    const champ = CHAMPS[texte(lien.fieldType)]
+    const champ = CHAMPS[texte(((ligne.assetGroupAsset ?? {}) as Record<string, unknown>).fieldType)]
     if (champ === undefined) continue
 
     const contenu =
@@ -574,12 +573,18 @@ async function lireCreatif(
           )
         : texte(((element.textAsset ?? {}) as Record<string, unknown>).text)
 
+    /*
+     * Pas de note de Google sur les éléments d'une Performance Max : la documentation
+     * annonce `asset_group_asset.performance_label`, l'API v22 répond que le champ n'existe
+     * pas. C'est l'API qui fait foi. Le champ reste vide plutôt que d'être rempli d'une
+     * valeur inventée, et l'écran n'affiche alors aucune pastille — ce qui est la vérité.
+     */
     ajouter({
       groupeId,
       champ,
       texte: contenu,
       elementId: String(nombre(element.id)),
-      performance: texte(lien.performanceLabel),
+      performance: '',
     })
   }
 
