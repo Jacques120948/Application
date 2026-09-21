@@ -44,6 +44,8 @@ export type CompteRelie = {
   /** lecture | assiste : ce que Naya a le droit de faire ici. Voir `actions.ts`. */
   mode: string
   synchroAt: Date | null
+  /** Dernière lecture du créatif. Séparée : elle n'a pas le rythme des dépenses. */
+  creaAt: Date | null
   /**
    * Le détail du compte a pu être lu chez Google.
    *
@@ -74,6 +76,7 @@ function vue(ligne: {
   actif: boolean
   mode: string
   synchroAt: Date | null
+  creaAt: Date | null
 }): CompteRelie {
   return {
     id: ligne.id,
@@ -85,6 +88,7 @@ function vue(ligne: {
     actif: ligne.actif,
     mode: ligne.mode,
     synchroAt: ligne.synchroAt,
+    creaAt: ligne.creaAt,
     lisible: ligne.devise !== '',
   }
 }

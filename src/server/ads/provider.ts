@@ -70,6 +70,53 @@ export type JourneeAds = {
   valeurConversion: number
 }
 
+/**
+ * Un contenant d'annonces.
+ *
+ * Une campagne Recherche range ses annonces dans des « groupes d'annonces » ; une
+ * Performance Max range ses titres et ses images dans des « groupes d'éléments ». Deux mots
+ * de Google pour un même rôle. Les garder distincts jusqu'à l'écran remplirait tout le code
+ * de conditions, et Meta apporterait un troisième mot.
+ */
+export type GroupeAds = {
+  groupeId: string
+  campagneId: string
+  nom: string
+  /** annonces | elements — le rôle, pas le mot de la plateforme. */
+  genre: 'annonces' | 'elements'
+  statut: string
+}
+
+/** Les champs qu'un morceau d'annonce peut occuper. */
+export type ChampAds = 'titre' | 'titre-long' | 'description' | 'image' | 'logo'
+
+/** Un morceau d'annonce : un titre, une description, une image. */
+export type ElementAds = {
+  groupeId: string
+  champ: ChampAds
+  /** Le texte, ou l'adresse de l'image. */
+  texte: string
+  /** L'identifiant chez la plateforme, quand elle en donne un. */
+  elementId: string
+  /**
+   * La note de la plateforme, reprise telle quelle : LOW, GOOD, BEST, LEARNING, PENDING.
+   *
+   * Jamais traduite en note sur cent. Ce n'en est pas une — c'est un classement relatif
+   * entre les morceaux d'un même contenant — et la convertir inventerait une échelle.
+   */
+  performance: string
+}
+
+/** Un terme réellement tapé par quelqu'un, et ce qu'il a donné. */
+export type TermeAds = {
+  campagneId: string
+  terme: string
+  impressions: number
+  clics: number
+  conversions: number
+  coutMicros: number
+}
+
 /** Ce que rend une lecture : des données, ou une raison dite à quelqu'un qui n'est pas développeur. */
 export type Lecture<T> = { ok: true; valeur: T } | { ok: false; raison: string }
 
@@ -101,4 +148,19 @@ export type AdPlatformProvider = {
   lireCampagnes: (acces: AccesAds) => Promise<Lecture<CampagneAds[]>>
   /** Les journées, bornes comprises, en AAAA-MM-JJ. */
   lireJournees: (acces: AccesAds, depuis: string, jusqua: string) => Promise<Lecture<JourneeAds[]>>
+  /**
+   * Les contenants et leurs morceaux, en une lecture.
+   *
+   * Rendus ensemble parce qu'ils se lisent ensemble : un morceau sans son contenant n'a nulle
+   * part où aller, et deux appels séparés doubleraient une consommation de plafond partagé
+   * pour la même information.
+   */
+  lireCreatif: (acces: AccesAds) => Promise<Lecture<{ groupes: GroupeAds[]; elements: ElementAds[] }>>
+  /**
+   * Ce que les gens ont tapé, bornes comprises.
+   *
+   * Vide pour les campagnes qui n'en rendent pas : une Performance Max ne livre que des
+   * catégories agrégées. C'est une limite de la plateforme, et l'appelant doit la dire.
+   */
+  lireTermes: (acces: AccesAds, depuis: string, jusqua: string) => Promise<Lecture<TermeAds[]>>
 }

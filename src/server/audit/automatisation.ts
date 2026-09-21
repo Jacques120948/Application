@@ -13,6 +13,7 @@ import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
 import { fairePoint } from './point'
 import { synchroniserTous } from '@/server/ads/synchro'
+import { synchroniserCreatifs } from '@/server/ads/creatif'
 import { evaluerTous } from '@/server/ads/recommandations'
 
 /**
@@ -232,6 +233,8 @@ export type Bilan = {
   comptesAds: number
   /** Recommandations publicitaires ouvertes cette nuit. */
   recommandationsAds: number
+  /** Comptes dont le créatif a été relu — une fois par semaine, pas chaque nuit. */
+  creatifsAds: number
   echecs: number
   /** Combien de sites auraient dépensé. Rempli seulement à blanc. */
   redactionsDues?: number
@@ -404,6 +407,7 @@ export async function tournerQuotidien(
     points: 0,
     comptesAds: 0,
     recommandationsAds: 0,
+    creatifsAds: 0,
     echecs: 0,
   }
   if (sansRedaction) {
@@ -583,6 +587,18 @@ export async function tournerQuotidien(
      * Gratuites aussi : ni requête chez Google, ni crédit, ni modèle. C'est ce qui permet
      * de les passer chaque nuit pour tout le monde sans que la nuit coûte quelque chose.
      */
+    /*
+     * Le créatif se relit une fois par semaine, pas chaque nuit : les dépenses changent tous
+     * les jours, les titres d'une annonce changent une fois par trimestre. Le filtre de
+     * fraîcheur est dans la tournée elle-même — sans lui, trois appels de plus par compte et
+     * par nuit sur un plafond partagé pour apprendre chaque fois la même chose.
+     */
+    const creatif = await synchroniserCreatifs().catch(() => null)
+    if (creatif !== null) {
+      bilan.creatifsAds = creatif.comptes
+      bilan.echecs += creatif.echecs
+    }
+
     const regles = await evaluerTous().catch(() => null)
     if (regles !== null) {
       bilan.recommandationsAds = regles.ouvertes

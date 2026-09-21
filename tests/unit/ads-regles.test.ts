@@ -61,6 +61,7 @@ function tableau(jours: number, campagnes: CampagneVue[], total?: Indicateurs): 
       actif: true,
       mode: 'lecture',
       synchroAt: new Date(),
+      creaAt: null,
       lisible: true,
     },
     jours: jours as TableauAds['jours'],

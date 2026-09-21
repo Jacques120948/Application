@@ -59,6 +59,9 @@ const PROTECTED_TABLES = [
   'AdsCampagne',
   'AdsReleve',
   'AdsRecommandation',
+  'AdsGroupe',
+  'AdsElement',
+  'AdsTerme',
   'AdsAction',
 ] as const
 

@@ -3,6 +3,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { synchroniserCompte } from '@/server/ads/synchro'
+import { synchroniserCreatif } from '@/server/ads/creatif'
 import { evaluerCompte } from '@/server/ads/recommandations'
 import { assertSameOrigin, fail, ok } from '@/server/http/respond'
 
@@ -27,6 +28,14 @@ export async function POST(request: Request) {
 
     const issue = await synchroniserCompte(user.id)
     if (!issue.ok) return ok({ ok: false, raison: issue.raison })
+
+    /*
+     * Le créatif suit, même s'il n'est pas dû. La tournée nocturne ne le relit qu'une fois
+     * par semaine parce qu'il ne bouge pas plus vite ; mais quelqu'un qui clique « lire
+     * maintenant » vient de changer quelque chose et veut le voir, pas apprendre qu'il
+     * faudra attendre mardi.
+     */
+    await synchroniserCreatif(user.id).catch(() => null)
 
     /*
      * Les règles enchaînent sur la lecture, et c'est gratuit : aucune requête chez Google,

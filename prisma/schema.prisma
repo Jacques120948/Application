@@ -105,6 +105,9 @@ model User {
   adsReleves           AdsReleve[]
   adsRecommandations   AdsRecommandation[]
   adsActions           AdsAction[]
+  adsGroupes           AdsGroupe[]
+  adsElements          AdsElement[]
+  adsTermes            AdsTerme[]
   releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
@@ -1766,6 +1769,9 @@ model AdsAccount {
   mode         String    @default("lecture")
   /// Dernière synchronisation réussie, affichée telle quelle.
   synchroAt    DateTime?
+  /// Dernière lecture du créatif : annonces, éléments, termes de recherche. Séparée parce
+  /// qu'elle n'a pas le même rythme — les dépenses changent chaque nuit, les titres non.
+  creaAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1776,6 +1782,9 @@ model AdsAccount {
   releves         AdsReleve[]
   recommandations AdsRecommandation[]
   actions         AdsAction[]
+  groupes         AdsGroupe[]
+  elements        AdsElement[]
+  termes          AdsTerme[]
 
   @@unique([userId, plateforme, compteId])
   @@index([userId, actif])
@@ -1836,8 +1845,92 @@ model AdsCampagne {
   releves         AdsReleve[]
   recommandations AdsRecommandation[]
   actions         AdsAction[]
+  adsGroupes      AdsGroupe[]
+  adsTermes       AdsTerme[]
 
   @@unique([accountId, campagneId])
+}
+
+/// Un contenant d'annonces : groupe d'annonces (Recherche) ou groupe d'éléments (PMax).
+/// Deux mots de Google pour un même rôle ; les garder distincts remplirait le code de
+/// conditions, et Meta en apporterait un troisième.
+model AdsGroupe {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @db.Uuid
+  accountId  String @db.Uuid
+  campagneId String @db.Uuid
+
+  groupeId String @default("")
+  nom      String @default("")
+  /// annonces | elements
+  genre    String @default("annonces")
+  statut   String @default("")
+
+  vueAt     DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne AdsCampagne  @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+  elements AdsElement[]
+
+  @@unique([accountId, groupeId])
+  @@index([campagneId])
+}
+
+/// Un morceau d'annonce : un titre, une description, une image.
+model AdsElement {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  accountId String @db.Uuid
+  groupeId  String @db.Uuid
+
+  /// titre | titre-long | description | image | logo
+  champ       String
+  /// Le texte, ou l'adresse de l'image.
+  texte       String
+  elementId   String @default("")
+  /// LOW | GOOD | BEST | LEARNING | PENDING, la note de Google reprise telle quelle.
+  performance String @default("")
+  /// google | evoliia : d'où vient ce morceau.
+  origine     String @default("google")
+
+  vueAt     DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupe  AdsGroupe  @relation(fields: [groupeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupeId, champ, texte])
+  @@index([accountId, champ])
+}
+
+/// Ce que les gens ont réellement tapé pour déclencher une annonce. Une photographie, pas
+/// un historique : réécrite à chaque lecture.
+model AdsTerme {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @db.Uuid
+  accountId  String @db.Uuid
+  campagneId String @db.Uuid
+
+  terme       String
+  impressions BigInt @default(0)
+  clics       BigInt @default(0)
+  conversions Float  @default(0)
+  coutMicros  BigInt @default(0)
+  /// achat | comparaison | local | information
+  intention   String @default("information")
+
+  vueAt     DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account  AdsAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne AdsCampagne @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+
+  @@unique([campagneId, terme])
+  @@index([accountId])
 }
 
 /// Une ligne par campagne et par jour. C'est la table qui porte tout le reste : une

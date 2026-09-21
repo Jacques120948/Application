@@ -5,9 +5,13 @@ import type {
   AccesAds,
   AdPlatformProvider,
   CampagneAds,
+  ChampAds,
   CompteAds,
+  ElementAds,
+  GroupeAds,
   JourneeAds,
   Lecture,
+  TermeAds,
 } from './provider'
 
 /**
@@ -398,6 +402,212 @@ async function lireJournees(
   }
 }
 
+/**
+ * Les champs de Google, ramenés au vocabulaire d'Evoliia.
+ *
+ * Google distingue trois formats d'image publicitaire — paysage, carré, portrait — et deux
+ * formats de logo. Cette distinction est une contrainte de mise en page, pas de contenu :
+ * pour dire « cette annonce a douze titres et six images », les cinq se réduisent à deux.
+ * Le format exact redeviendra nécessaire le jour où l'on déposera une image, et il se lit
+ * alors sur l'image elle-même.
+ */
+const CHAMPS: Record<string, ChampAds> = {
+  HEADLINE: 'titre',
+  LONG_HEADLINE: 'titre-long',
+  DESCRIPTION: 'description',
+  MARKETING_IMAGE: 'image',
+  SQUARE_MARKETING_IMAGE: 'image',
+  PORTRAIT_MARKETING_IMAGE: 'image',
+  LOGO: 'logo',
+  LANDSCAPE_LOGO: 'logo',
+}
+
+/**
+ * Les annonces responsives d'une campagne Recherche.
+ *
+ * Leurs titres sont portés en ligne dans l'annonce, sans identifiant propre : ce sont des
+ * textes, pas des objets. C'est la différence avec une Performance Max, et la raison pour
+ * laquelle l'unicité, plus loin, porte sur le texte et non sur un numéro.
+ */
+const REQUETE_ANNONCES = `
+  SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id,
+         ad_group_ad.ad.responsive_search_ad.headlines,
+         ad_group_ad.ad.responsive_search_ad.descriptions
+  FROM ad_group_ad
+  WHERE ad_group_ad.status != 'REMOVED'
+    AND ad_group.status != 'REMOVED'
+    AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'
+`
+
+/**
+ * Les groupes d'éléments d'une Performance Max, et leurs morceaux.
+ *
+ * Une seule requête rend les deux : chaque ligne porte le groupe et l'un de ses éléments.
+ * Les demander séparément coûterait deux appels sur un plafond partagé pour la même chose.
+ */
+const REQUETE_ELEMENTS = `
+  SELECT asset_group.id, asset_group.name, asset_group.status, campaign.id,
+         asset_group_asset.field_type, asset_group_asset.performance_label,
+         asset.id, asset.text_asset.text, asset.image_asset.full_size.url
+  FROM asset_group_asset
+  WHERE asset_group_asset.status != 'REMOVED'
+`
+
+/** Le texte d'un élément textuel de Google, qui les emballe dans un objet. */
+function texteElement(valeur: unknown): { texte: string; performance: string } {
+  const objet = (valeur ?? {}) as Record<string, unknown>
+  return {
+    texte: texte(objet.text),
+    performance: texte(objet.assetPerformanceLabel),
+  }
+}
+
+async function lireCreatif(
+  acces: AccesAds,
+): Promise<Lecture<{ groupes: GroupeAds[]; elements: ElementAds[] }>> {
+  const groupes = new Map<string, GroupeAds>()
+  const elements: ElementAds[] = []
+  /*
+   * Un texte identique deux fois dans un même contenant n'existe pas chez Google, mais une
+   * campagne Recherche peut porter plusieurs annonces dans le même groupe, et elles se
+   * partagent souvent des titres. Sans ce filtre, le même titre serait compté deux fois.
+   */
+  const vus = new Set<string>()
+
+  const ajouter = (element: ElementAds) => {
+    if (element.texte === '') return
+    const cle = `${element.groupeId}::${element.champ}::${element.texte}`
+    if (vus.has(cle)) return
+    vus.add(cle)
+    elements.push(element)
+  }
+
+  const annonces = await interroger(acces, REQUETE_ANNONCES)
+  if (!annonces.ok) return annonces
+
+  for (const ligne of annonces.valeur) {
+    const groupe = (ligne.adGroup ?? {}) as Record<string, unknown>
+    const campagne = (ligne.campaign ?? {}) as Record<string, unknown>
+    const annonce = (((ligne.adGroupAd ?? {}) as Record<string, unknown>).ad ?? {}) as Record<
+      string,
+      unknown
+    >
+    const responsive = (annonce.responsiveSearchAd ?? {}) as Record<string, unknown>
+    const groupeId = String(nombre(groupe.id))
+    if (groupeId === '0') continue
+
+    groupes.set(groupeId, {
+      groupeId,
+      campagneId: String(nombre(campagne.id)),
+      nom: texte(groupe.name),
+      genre: 'annonces',
+      statut: texte(groupe.status),
+    })
+
+    for (const [champ, brut] of [
+      ['titre', responsive.headlines],
+      ['description', responsive.descriptions],
+    ] as const) {
+      if (!Array.isArray(brut)) continue
+      for (const entree of brut) {
+        const lu = texteElement(entree)
+        ajouter({ groupeId, champ, texte: lu.texte, elementId: '', performance: lu.performance })
+      }
+    }
+  }
+
+  const pmax = await interroger(acces, REQUETE_ELEMENTS)
+  if (!pmax.ok) return pmax
+
+  for (const ligne of pmax.valeur) {
+    const groupe = (ligne.assetGroup ?? {}) as Record<string, unknown>
+    const campagne = (ligne.campaign ?? {}) as Record<string, unknown>
+    const lien = (ligne.assetGroupAsset ?? {}) as Record<string, unknown>
+    const element = (ligne.asset ?? {}) as Record<string, unknown>
+    const groupeId = String(nombre(groupe.id))
+    if (groupeId === '0') continue
+
+    groupes.set(groupeId, {
+      groupeId,
+      campagneId: String(nombre(campagne.id)),
+      nom: texte(groupe.name),
+      genre: 'elements',
+      statut: texte(groupe.status),
+    })
+
+    const champ = CHAMPS[texte(lien.fieldType)]
+    if (champ === undefined) continue
+
+    const contenu =
+      champ === 'image' || champ === 'logo'
+        ? texte(
+            (((element.imageAsset ?? {}) as Record<string, unknown>).fullSize as
+              | Record<string, unknown>
+              | undefined)?.url,
+          )
+        : texte(((element.textAsset ?? {}) as Record<string, unknown>).text)
+
+    ajouter({
+      groupeId,
+      champ,
+      texte: contenu,
+      elementId: String(nombre(element.id)),
+      performance: texte(lien.performanceLabel),
+    })
+  }
+
+  return { ok: true, valeur: { groupes: [...groupes.values()], elements } }
+}
+
+/**
+ * Ce que les gens ont tapé.
+ *
+ * Seules les campagnes à mots-clés en rendent. Une Performance Max ne livre que des
+ * catégories agrégées, et cette requête ne la couvre tout simplement pas : elle rendra zéro
+ * ligne pour ces campagnes-là, ce qui est la vérité et non une panne.
+ *
+ * La limite n'est pas de la prudence : au-delà de quelques centaines de termes, la traîne
+ * est faite de requêtes vues une fois, qui n'apprennent rien et coûtent du contexte.
+ */
+async function lireTermes(
+  acces: AccesAds,
+  depuis: string,
+  jusqua: string,
+): Promise<Lecture<TermeAds[]>> {
+  const borne = (valeur: string) => (/^\d{4}-\d{2}-\d{2}$/u.test(valeur) ? valeur : '')
+  const debut = borne(depuis)
+  const fin = borne(jusqua)
+  if (debut === '' || fin === '') return { ok: false, raison: 'Période demandée invalide.' }
+
+  const lecture = await interroger(
+    acces,
+    `SELECT campaign.id, search_term_view.search_term, metrics.impressions, metrics.clicks,
+            metrics.conversions, metrics.cost_micros
+     FROM search_term_view
+     WHERE segments.date BETWEEN '${debut}' AND '${fin}'
+     ORDER BY metrics.impressions DESC
+     LIMIT 400`,
+  )
+  if (!lecture.ok) return lecture
+
+  return {
+    ok: true,
+    valeur: lecture.valeur.map((ligne) => {
+      const campagne = (ligne.campaign ?? {}) as Record<string, unknown>
+      const vue = (ligne.searchTermView ?? {}) as Record<string, unknown>
+      const mesures = (ligne.metrics ?? {}) as Record<string, unknown>
+      return {
+        campagneId: String(nombre(campagne.id)),
+        terme: texte(vue.searchTerm),
+        impressions: nombre(mesures.impressions),
+        clics: nombre(mesures.clicks),
+        conversions: nombre(mesures.conversions),
+        coutMicros: nombre(mesures.costMicros),
+      }
+    }),
+  }
+}
+
 export const googleAds: AdPlatformProvider = {
   id: 'google-ads',
   nom: 'Google Ads',
@@ -408,4 +618,6 @@ export const googleAds: AdPlatformProvider = {
   listerComptes,
   lireCampagnes,
   lireJournees,
+  lireCreatif,
+  lireTermes,
 }

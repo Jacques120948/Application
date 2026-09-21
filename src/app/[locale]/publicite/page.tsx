@@ -197,6 +197,18 @@ export default async function PublicitePage({
                         : `Dernière lecture : ${actif.synchroAt.toLocaleString(locale)}.`}
                     </p>
                     <LireCampagnes premiere={actif.synchroAt === null} />
+                    {/*
+                      Le contenu des campagnes vit sur son propre écran : on n'y vient pas
+                      pour la même raison. Les chiffres se regardent le matin, le contenu
+                      quand on a décidé d'écrire.
+                    */}
+                    <LinkButton
+                      href={`/${locale}/publicite/annonces`}
+                      variant="secondary"
+                      className="mt-3"
+                    >
+                      Vos annonces et ce que les gens tapent
+                    </LinkButton>
                   </section>
                   <ModeAds initial={actif.mode} ouvert={ecritureOuverte} />
                   {objectifs === null || !tableau.synchronise ? null : (
