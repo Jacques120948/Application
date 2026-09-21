@@ -100,6 +100,22 @@ export const FLAGS = {
     help: "Modifier une application en plusieurs étapes : l'agent lit les pages concernées avant de décider, corrige ses propres erreurs, et s'arrête sur des bornes d'étapes, de jetons et de crédits. Fermé, la modification assistée classique reste en place.",
     fallback: false,
   },
+  /**
+   * L'écriture vers Google Ads, en mode assisté.
+   *
+   * Éteinte par défaut, et c'est le seul interrupteur du produit qui protège l'argent de
+   * quelqu'un d'autre. Tout le reste s'arrête à une facture ou à des crédits ; ici, une
+   * modification part chez Google et change une dépense réelle dans la minute. L'éteindre
+   * arrête toute écriture, pour tout le monde, sans déployer — et laisse la lecture, les
+   * indicateurs et les recommandations intacts. Chaque personne doit en outre passer son
+   * propre compte en mode assisté : cet interrupteur n'allume rien, il autorise.
+   */
+  publiciteEcriture: {
+    key: 'flag.publicite.ecriture',
+    label: 'Publicité — mode assisté',
+    help: "Autorise Evoliia à envoyer des modifications de budget et de statut vers Google Ads, après confirmation de la personne et avec un journal réversible. Chaque compte reste en lecture seule tant que son propriétaire ne l'a pas changé lui-même. Aucun crédit consommé.",
+    fallback: false,
+  },
 } as const
 
 export type FlagName = keyof typeof FLAGS

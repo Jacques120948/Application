@@ -1,4 +1,5 @@
 import { compteActif } from './comptes'
+import { lireJournal } from './actions'
 import { lireRecommandations } from './recommandations'
 import { objectifsDuCompte, type LectureObjectifs, type ProfilAds } from './profil'
 import { lireTableauAds, type Periode } from './tableau'
@@ -184,6 +185,45 @@ export async function contextePublicitaire(userId: string): Promise<string | nul
     lignes.push('CONSTATS OUVERTS, relevés par les règles d’Evoliia (priorité, titre, observation) :')
     for (const constat of constats) {
       lignes.push(`- [${constat.priorite}] ${constat.titre} — ${constat.observation}`)
+    }
+  }
+
+  /*
+   * Le mode et le journal, pour une seule raison : la consigne de Naya lui interdit d'écrire
+   * qu'elle vient d'ajuster quoi que ce soit, sauf quand on lui donne le journal — et alors
+   * elle le cite tel quel. Sans ces lignes, elle ne saurait pas distinguer « je ne peux rien
+   * modifier » de « je peux le proposer, vous confirmerez ».
+   */
+  lignes.push(
+    compte.mode === 'assiste'
+      ? 'MODE : assisté. Tu peux proposer une modification de budget ou une mise en pause ;' +
+        ' c’est la personne qui confirme, et c’est Evoliia qui l’envoie. N’écris jamais que' +
+        ' tu viens de le faire.'
+      : 'MODE : lecture seule. Evoliia ne peut envoyer aucune modification à Google. Si une' +
+        ' action serait utile, dis ce que tu ferais et indique qu’il faut passer le compte en' +
+        ' mode assisté depuis la page Publicité.',
+  )
+
+  const journal = (await lireJournal(userId, compte.id)).slice(0, 8)
+  if (journal.length === 0) {
+    lignes.push(
+      'JOURNAL : aucune modification n’a été envoyée à Google depuis Evoliia. Ne prétends' +
+        ' pas le contraire.',
+    )
+  } else {
+    lignes.push('JOURNAL des modifications déjà envoyées (la plus récente en premier) :')
+    for (const action of journal) {
+      const etat =
+        action.resultat === 'reussi'
+          ? 'envoyée'
+          : action.resultat === 'refuse'
+            ? 'refusée par Google'
+            : 'issue inconnue'
+      lignes.push(
+        `- ${action.createdAt.toISOString().slice(0, 10)} · ${action.motif}` +
+          `${action.campagne === null ? '' : ` (${action.campagne})`} · ${etat}` +
+          `${action.annulee ? ' · annulée depuis' : ''}`,
+      )
     }
   }
 

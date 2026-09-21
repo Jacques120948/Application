@@ -46,7 +46,13 @@ import type {
  */
 const VERSION = 'v22'
 
-const RACINE = `https://googleads.googleapis.com/${VERSION}`
+/*
+ * Exportées pour le connecteur d'écriture, qui vit dans un fichier séparé. La séparation
+ * n'est pas cosmétique : ce fichier-ci porte la garantie « rien ici ne sait modifier », et
+ * un test la vérifie sur son texte. Y ajouter une fonction d'écriture effacerait la seule
+ * preuve mécanique qu'une lecture reste une lecture.
+ */
+export const RACINE = `https://googleads.googleapis.com/${VERSION}`
 const AUTORISATION = 'https://accounts.google.com/o/oauth2/v2/auth'
 const JETON = 'https://oauth2.googleapis.com/token'
 
@@ -60,7 +66,7 @@ const JETON = 'https://oauth2.googleapis.com/token'
  */
 export const PORTEES = ['https://www.googleapis.com/auth/adwords'] as const
 
-const DELAI_MS = 45_000
+export const DELAI_MS = 45_000
 
 /**
  * De quoi la connexion a besoin pour s'ouvrir.
@@ -120,7 +126,7 @@ async function rafraichir(
 }
 
 /** Les en-têtes que Google Ads exige, jeton développeur compris. */
-function entetes(accessToken: string, compteId?: string): Record<string, string> {
+export function entetes(accessToken: string, compteId?: string): Record<string, string> {
   const base: Record<string, string> = {
     authorization: `Bearer ${accessToken}`,
     'content-type': 'application/json',

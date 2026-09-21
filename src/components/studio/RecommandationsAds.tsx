@@ -36,7 +36,19 @@ export type RecommandationVue = {
   /** Jours écoulés depuis l'ouverture, calculés côté serveur. */
   age: number
   campagne: string | null
+  /**
+   * Ce qu'Evoliia enverrait à Google, monté sur les chiffres du moment.
+   *
+   * `null` quand le constat n'appelle aucune action — un budget qui dérape se regarde, il
+   * ne se corrige pas d'un bouton — ou quand la valeur d'avant n'est plus celle qu'avait vue
+   * la règle.
+   */
+  action: ActionProposeeVue | null
 }
+
+export type ActionProposeeVue =
+  | { type: 'budget'; campagneId: string; versMicros: number; attenduMicros: number; resume: string }
+  | { type: 'statut'; campagneId: string; vers: 'PAUSED'; attendu: string; resume: string }
 
 const PRIORITES: Record<
   RecommandationVue['priorite'],
@@ -60,15 +72,51 @@ export function RecommandationsAds({
   initiales,
   /** Vrai quand la marge n'est pas renseignée : la moitié des règles se taisent alors. */
   sansMarge,
+  /** Vrai quand le compte est en mode assisté : sans cela, aucun bouton d'action. */
+  assiste,
   ancre,
 }: {
   initiales: readonly RecommandationVue[]
   sansMarge: boolean
+  assiste: boolean
   ancre: string
 }) {
   const [liste, setListe] = useState<RecommandationVue[]>([...initiales])
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
+  /*
+   * La confirmation est un état, pas une fenêtre du navigateur. `confirm()` ne permet pas
+   * d'écrire la phrase exacte de ce qui va partir, et c'est précisément cette phrase qui
+   * fait la différence entre confirmer et cliquer.
+   */
+  const [aConfirmer, setAConfirmer] = useState<string | null>(null)
+
+  async function appliquer(une: RecommandationVue) {
+    if (une.action === null) return
+    setOccupe(une.id)
+    setErreur(null)
+    const reponse = await fetch('/api/ads/action', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...une.action, recommandationId: une.id }),
+    }).catch(() => null)
+    const corps = (await reponse?.json().catch(() => null)) as
+      | { ok?: boolean; raison?: string; message?: string }
+      | null
+    setOccupe(null)
+
+    if (reponse === null || !reponse.ok) {
+      setErreur(corps?.message ?? `L’envoi n’a pas abouti (code ${reponse?.status ?? 0}).`)
+      return
+    }
+    if (corps?.ok !== true) {
+      setErreur(corps?.raison ?? 'Google n’a pas accepté la modification.')
+      setAConfirmer(null)
+      return
+    }
+    // La page est rendue côté serveur : budget, statut et journal ont tous changé.
+    window.location.reload()
+  }
 
   async function ecarter(id: string) {
     setOccupe(id)
@@ -139,7 +187,52 @@ export function RecommandationsAds({
                   {une.observation}
                 </p>
 
+                {assiste && une.action !== null ? (
+                  aConfirmer === une.id ? (
+                    /*
+                      La phrase exacte de ce qui va partir, avant le geste. C'est elle qu'on
+                      confirme — pas un bouton dont on a déjà oublié le libellé en cliquant.
+                    */
+                    <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3">
+                      <p className="m-0 text-sm font-medium">{une.action.resume}</p>
+                      <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                        La modification part chez Google immédiatement. Sa valeur d’avant est
+                        conservée : vous pourrez revenir en arrière depuis le journal, en bas
+                        de cette page.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void appliquer(une)}
+                          disabled={occupe !== null}
+                          className="cursor-pointer rounded-[var(--radius-control)] border-0 px-4 py-2 text-sm font-medium text-white [background-image:var(--gradient-cta)] disabled:opacity-50"
+                        >
+                          {occupe === une.id ? 'Envoi…' : 'Confirmer et envoyer'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAConfirmer(null)}
+                          disabled={occupe !== null}
+                          className="cursor-pointer rounded-[var(--radius-control)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm disabled:opacity-50"
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    </div>
+                  ) : null
+                ) : null}
+
                 <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {assiste && une.action !== null && aConfirmer !== une.id ? (
+                    <button
+                      type="button"
+                      onClick={() => setAConfirmer(une.id)}
+                      disabled={occupe !== null}
+                      className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-brand)] bg-transparent px-3 py-1.5 text-xs text-[var(--color-brand-strong)] disabled:opacity-50"
+                    >
+                      Appliquer…
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void ecarter(une.id)}
@@ -149,7 +242,9 @@ export function RecommandationsAds({
                     {occupe === une.id ? 'Un instant…' : 'Ce n’est pas un problème'}
                   </button>
                   <span className="text-xs text-[var(--color-ink-faint)]">
-                    Écarté pour un mois. Rien n’est envoyé à Google.
+                    {assiste
+                      ? 'Écarté pour un mois. Aucune modification sans votre confirmation.'
+                      : 'Écarté pour un mois. Rien n’est envoyé à Google.'}
                   </span>
                 </div>
               </li>
@@ -168,7 +263,10 @@ export function RecommandationsAds({
         Ces constats sont produits par des règles écrites, pas par une intelligence
         artificielle : chacun porte la condition et les chiffres qui l’ont déclenché, et se
         vérifie dans Google Ads. Naya peut vous les expliquer et en discuter — c’est alors
-        qu’elle intervient.
+        qu’elle intervient.{' '}
+        {assiste
+          ? 'Aucune modification ne part sans que vous ayez lu et confirmé la phrase exacte de ce qui sera envoyé.'
+          : ''}
       </p>
     </section>
   )

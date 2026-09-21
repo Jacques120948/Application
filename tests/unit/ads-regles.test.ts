@@ -59,6 +59,7 @@ function tableau(jours: number, campagnes: CampagneVue[], total?: Indicateurs): 
       fuseau: 'Europe/Zurich',
       gestionnaire: false,
       actif: true,
+      mode: 'lecture',
       synchroAt: new Date(),
       lisible: true,
     },

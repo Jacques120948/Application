@@ -7,6 +7,7 @@ import { hasConnection } from '@/server/integrations/service'
 import { listerComptesRelies } from '@/server/ads/comptes'
 import { googleAds } from '@/server/ads/google-ads'
 import { findVisibilityAgent } from '@/server/agents/visibility'
+import { readDashboard } from '@/server/audit/service'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
@@ -16,7 +17,11 @@ import { lireTableauAds, periodeValide, triValide } from '@/server/ads/tableau'
 import { ObjectifsAds } from '@/components/studio/ObjectifsAds'
 import { ProfilAds } from '@/components/studio/ProfilAds'
 import { objectifsDuCompte } from '@/server/ads/profil'
-import { lireRecommandations } from '@/server/ads/recommandations'
+import { lireRecommandations, proposerAction } from '@/server/ads/recommandations'
+import { lireJournal } from '@/server/ads/actions'
+import { isEnabled } from '@/server/settings/flags'
+import { ModeAds } from '@/components/studio/ModeAds'
+import { JournalAds } from '@/components/studio/JournalAds'
 import { RecommandationsAds } from '@/components/studio/RecommandationsAds'
 import { LinkButton } from '@/components/ui'
 
@@ -83,6 +88,23 @@ export default async function PublicitePage({
   const recommandations =
     tableau === null ? [] : await lireRecommandations(user.id, tableau.compte.id)
 
+  /*
+   * L'écriture a deux verrous, et l'écran doit refléter les deux : l'interrupteur
+   * d'exploitation, qui vaut pour toute l'installation, et le mode du compte, que la
+   * personne règle elle-même. Un bouton « appliquer » visible alors que l'un des deux est
+   * fermé serait un bouton qui déçoit au clic.
+   */
+  /*
+   * Le site sert seulement à ouvrir la conversation avec Naya : l'équipe parle d'un site,
+   * et sans lui la page d'échange n'a pas de contexte. Absent, on n'affiche pas le lien
+   * plutôt que de mener vers un écran qui redirigerait aussitôt.
+   */
+  const site = ouvert ? await readDashboard(user.id).catch(() => null) : null
+
+  const ecritureOuverte = ouvert ? await isEnabled('publiciteEcriture') : false
+  const assiste = ecritureOuverte && tableau !== null && tableau.compte.mode === 'assiste'
+  const journal = tableau === null ? [] : await lireJournal(user.id, tableau.compte.id)
+
   return (
     <Shell
       locale={locale}
@@ -100,6 +122,15 @@ export default async function PublicitePage({
               Elle lit vos campagnes Google Ads, explique où part votre argent et ce qu’il
               rapporte, et propose des ajustements. Elle ne modifie rien sans votre accord.
             </p>
+            {site === null ? null : (
+              <LinkButton
+                href={`/${locale}/visibilite/equipe?siteId=${site.site.id}`}
+                variant="secondary"
+                className="mt-3"
+              >
+                Parler à Naya
+              </LinkButton>
+            )}
           </div>
         </div>
 
@@ -167,6 +198,7 @@ export default async function PublicitePage({
                     </p>
                     <LireCampagnes premiere={actif.synchroAt === null} />
                   </section>
+                  <ModeAds initial={actif.mode} ouvert={ecritureOuverte} />
                   {objectifs === null || !tableau.synchronise ? null : (
                     <ObjectifsAds
                       lecture={objectifs.lecture}
@@ -197,7 +229,15 @@ export default async function PublicitePage({
                           0,
                           Math.floor((Date.now() - une.createdAt.getTime()) / 86_400_000),
                         ),
+                        /*
+                         * Montée sur la campagne telle qu'elle est maintenant, et non sur
+                         * ce que la règle avait vu : un constat ouvert il y a douze jours
+                         * porte le budget de ce jour-là, et proposer « 15 → 18 » alors qu'il
+                         * est à 40 depuis serait nommer hausse une baisse.
+                         */
+                        action: proposerAction(une, tableau.campagnes, tableau.compte.devise),
                       }))}
+                      assiste={assiste}
                     />
                   )}
                   <TableauAds
@@ -215,6 +255,24 @@ export default async function PublicitePage({
                       synchronise: tableau.synchronise,
                     }}
                   />
+                  {journal.length === 0 && !assiste ? null : (
+                    <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+                      <JournalAds
+                        initiales={journal.map((une) => ({
+                          id: une.id,
+                          quoi: une.quoi,
+                          motif: une.motif,
+                          mode: une.mode,
+                          resultat: une.resultat,
+                          detail: une.detail,
+                          campagne: une.campagne,
+                          quand: une.createdAt.toLocaleString(locale),
+                          annulee: une.annulee,
+                          restauration: une.restauration,
+                        }))}
+                      />
+                    </section>
+                  )}
                   {objectifs === null ? null : (
                     <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
                       <ProfilAds

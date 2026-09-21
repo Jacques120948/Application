@@ -5,7 +5,7 @@ import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { compteActif, type CompteRelie } from './comptes'
 import { objectifsDuCompte } from './profil'
-import { lireTableauAds } from './tableau'
+import { lireTableauAds, type CampagneVue } from './tableau'
 import { evaluer, type Constat, type Priorite, type Risque } from './regles'
 
 /**
@@ -59,6 +59,8 @@ export type RecommandationVue = {
   risque: Risque
   createdAt: Date
   campagne: string | null
+  /** L'action proposée, telle que les règles l'ont décrite. Vide quand il n'y en a pas. */
+  action: Record<string, unknown>
 }
 
 const PRIORITES: readonly Priorite[] = ['urgent', 'surveiller', 'opportunite', 'information']
@@ -96,6 +98,7 @@ export async function lireRecommandations(
         observation: true,
         jours: true,
         donnees: true,
+        action: true,
         explication: true,
         risque: true,
         createdAt: true,
@@ -113,12 +116,77 @@ export async function lireRecommandations(
       observation: ligne.observation,
       jours: ligne.jours,
       donnees: (ligne.donnees ?? {}) as Record<string, unknown>,
+      action: (ligne.action ?? {}) as Record<string, unknown>,
       explication: ligne.explication,
       risque: risque(ligne.risque),
       createdAt: ligne.createdAt,
       campagne: ligne.campagne?.nom ?? null,
     }))
     .sort((a, b) => RANG[a.priorite] - RANG[b.priorite] || +a.createdAt - +b.createdAt)
+}
+
+/**
+ * Ce qu'on proposerait d'envoyer à Google pour ce constat, monté sur les chiffres du jour.
+ *
+ * Reconstruit ici plutôt que relu du constat, et c'est le point : une recommandation ouverte
+ * il y a douze jours porte le budget qu'elle a vu ce jour-là. Proposer « passer de 15 à 18 »
+ * alors que le budget est à 40 depuis serait proposer une baisse en la nommant hausse. La
+ * valeur d'avant vient donc de la campagne telle qu'elle est maintenant, et le serveur la
+ * revérifiera une dernière fois au moment d'écrire.
+ *
+ * `null` quand le constat ne propose rien, ou quand la campagne a disparu entre-temps.
+ */
+export type ActionProposee =
+  | {
+      type: 'budget'
+      campagneId: string
+      versMicros: number
+      attenduMicros: number
+      resume: string
+    }
+  | { type: 'statut'; campagneId: string; vers: 'PAUSED'; attendu: string; resume: string }
+
+export function proposerAction(
+  recommandation: RecommandationVue,
+  campagnes: readonly CampagneVue[],
+  devise: string,
+): ActionProposee | null {
+  const action = recommandation.action
+  const campagneId = typeof action.campagne === 'string' ? action.campagne : null
+  if (campagneId === null) return null
+
+  const campagne = campagnes.find((une) => une.id === campagneId)
+  if (campagne === undefined) return null
+
+  const montant = (valeur: number) =>
+    `${valeur.toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${devise}`
+
+  if (action.type === 'budget') {
+    const propose = typeof recommandation.donnees.propose === 'number'
+      ? recommandation.donnees.propose
+      : null
+    if (propose === null || campagne.budget <= 0) return null
+    return {
+      type: 'budget',
+      campagneId,
+      versMicros: Math.round(propose * 1_000_000),
+      attenduMicros: Math.round(campagne.budget * 1_000_000),
+      resume: `Passer le budget quotidien de « ${campagne.nom} » de ${montant(campagne.budget)} à ${montant(propose)}.`,
+    }
+  }
+
+  if (action.type === 'pause') {
+    if (campagne.statut !== 'ENABLED') return null
+    return {
+      type: 'statut',
+      campagneId,
+      vers: 'PAUSED',
+      attendu: campagne.statut,
+      resume: `Mettre « ${campagne.nom} » en pause. Elle cessera de diffuser et de dépenser.`,
+    }
+  }
+
+  return null
 }
 
 /** La clé d'unicité d'un constat : la règle, et la campagne qu'elle vise. */

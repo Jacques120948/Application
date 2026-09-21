@@ -1761,6 +1761,9 @@ model AdsAccount {
   gestionnaire Boolean   @default(false)
   /// Celui que Naya lit. On peut en relier plusieurs et n'en suivre qu'un.
   actif        Boolean   @default(false)
+  /// lecture | assiste. Ce que Naya a le droit de faire ici. « lecture » par défaut : une
+  /// autorisation Google donne le droit d'écrire, elle ne dit pas qu'on le souhaite.
+  mode         String    @default("lecture")
   /// Dernière synchronisation réussie, affichée telle quelle.
   synchroAt    DateTime?
 
@@ -1897,6 +1900,7 @@ model AdsRecommandation {
   user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
   campagne AdsCampagne? @relation(fields: [campagneId], references: [id], onDelete: Cascade)
+  actions  AdsAction[]
 
   @@index([accountId, etat])
 }
@@ -1911,26 +1915,31 @@ model AdsAction {
   campagneId String? @db.Uuid
 
   /// budget | pause | reprise | mot-cle-negatif…
-  quoi     String
-  motif    String  @default("")
-  avant    Json    @default("{}")
-  apres    Json    @default("{}")
+  quoi             String
+  motif            String  @default("")
+  avant            Json    @default("{}")
+  apres            Json    @default("{}")
   /// assiste | autopilote | restauration
-  mode     String  @default("assiste")
+  mode             String  @default("assiste")
   /// prevu | reussi | refuse — « prevu » est une écriture commencée et non confirmée.
-  resultat String  @default("prevu")
+  resultat         String  @default("prevu")
   /// Le refus de la plateforme, en clair et sans secret.
-  detail   String  @default("")
-  annuleId String? @db.Uuid
+  detail           String  @default("")
+  annuleId         String? @db.Uuid
+  /// Le constat dont cette action est issue, quand elle vient d'une recommandation. Sans ce
+  /// lien, le journal serait une suite de modifications sans motif.
+  recommandationId String? @db.Uuid
 
   createdAt DateTime @default(now())
 
-  user     User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account  AdsAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  campagne AdsCampagne? @relation(fields: [campagneId], references: [id], onDelete: SetNull)
-  annule   AdsAction?   @relation("AdsActionAnnulee", fields: [annuleId], references: [id], onDelete: SetNull)
-  annulees AdsAction[]  @relation("AdsActionAnnulee")
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account        AdsAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  campagne       AdsCampagne?       @relation(fields: [campagneId], references: [id], onDelete: SetNull)
+  annule         AdsAction?         @relation("AdsActionAnnulee", fields: [annuleId], references: [id], onDelete: SetNull)
+  annulees       AdsAction[]        @relation("AdsActionAnnulee")
+  recommandation AdsRecommandation? @relation(fields: [recommandationId], references: [id], onDelete: SetNull)
 
   @@index([accountId, createdAt(sort: Desc)])
   @@index([campagneId, quoi])
+  @@index([recommandationId])
 }

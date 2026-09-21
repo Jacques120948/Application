@@ -41,6 +41,8 @@ export type CompteRelie = {
   fuseau: string
   gestionnaire: boolean
   actif: boolean
+  /** lecture | assiste : ce que Naya a le droit de faire ici. Voir `actions.ts`. */
+  mode: string
   synchroAt: Date | null
   /**
    * Le détail du compte a pu être lu chez Google.
@@ -70,6 +72,7 @@ function vue(ligne: {
   fuseau: string
   gestionnaire: boolean
   actif: boolean
+  mode: string
   synchroAt: Date | null
 }): CompteRelie {
   return {
@@ -80,6 +83,7 @@ function vue(ligne: {
     fuseau: ligne.fuseau,
     gestionnaire: ligne.gestionnaire,
     actif: ligne.actif,
+    mode: ligne.mode,
     synchroAt: ligne.synchroAt,
     lisible: ligne.devise !== '',
   }
