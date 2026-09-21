@@ -12,6 +12,7 @@ import {
   LANGUES,
   langueDominante,
   marcheDominant,
+  marcheDuProfil,
   plafondEnchere,
   type RequeteSite,
 } from './mots-cles'
@@ -63,6 +64,8 @@ export type PlanVue = {
   enchereMicros: number
   urlFinale: string
   marcheNom: string
+  /** profil | chiffres : le pays a-t-il été déclaré, ou déduit ? Une déduction se vérifie. */
+  marcheSource: string
   langueNom: string
   motsCles: MotClePlan[]
   titres: string[]
@@ -78,6 +81,7 @@ function vue(ligne: {
   enchereMicros: bigint
   urlFinale: string
   marcheNom: string
+  marcheSource: string
   langueNom: string
   motsCles: unknown
   titres: unknown
@@ -99,6 +103,7 @@ function vue(ligne: {
     enchereMicros: Number(ligne.enchereMicros),
     urlFinale: ligne.urlFinale,
     marcheNom: ligne.marcheNom,
+    marcheSource: ligne.marcheSource,
     langueNom: ligne.langueNom,
     motsCles: Array.isArray(ligne.motsCles) ? (ligne.motsCles as MotClePlan[]) : [],
     titres: textes(ligne.titres),
@@ -115,6 +120,7 @@ const CHAMPS = {
   enchereMicros: true,
   urlFinale: true,
   marcheNom: true,
+  marcheSource: true,
   langueNom: true,
   motsCles: true,
   titres: true,
@@ -240,15 +246,33 @@ export async function preparerCampagne(
     )
   }
 
-  const marche = marcheDominant(lecture.vue.pays)
+  /*
+   * Le profil prime, les chiffres ne sont qu'un repli. L'inverse a produit une vraie faute :
+   * une boutique suisse s'est vu proposer une campagne ciblant l'Italie, parce que ses pages
+   * italiennes reçoivent plus d'affichages que ses pages françaises. Le pays d'où viennent
+   * les curieux n'est pas celui où l'on vend, et depuis la Suisse, vendre en Italie veut
+   * dire des frais de douane sur chaque colis.
+   */
+  const profil = await lireProfil(userId, compte.id)
+  const declare = marcheDuProfil(profil.pays)
+  const marche = declare ?? marcheDominant(lecture.vue.pays)
   if (marche === null) {
     throw validation(
-      'Naya ne reconnaît pas le pays d’où viennent vos visiteurs, et une campagne sans pays diffuserait dans le monde entier.',
+      'Naya ne sait pas quel pays viser. Indiquez-le dans votre profil publicitaire : le pays d’où viennent vos visiteurs n’est pas forcément celui où vous vendez, et une campagne sans pays diffuserait dans le monde entier.',
     )
   }
+  const marcheSource = declare === null ? 'chiffres' : 'profil'
   const acces = await accesCompteActif(userId)
   if (!acces.ok) throw validation(acces.raison)
 
+  /*
+   * Une requête dont Search Console ne donne pas la page n'a pas de langue connue. La
+   * laisser vide l'a fait entrer dans une campagne italienne aux côtés de mots italiens,
+   * avec une annonce italienne : « quartz rose » et « obsidienne noire » se sont retrouvés
+   * là, sans prix — puisqu'ils avaient été chiffrés dans une langue où cette demande
+   * n'existe pas. Elle prend donc la langue du site, qui est le repli honnête : on ne sait
+   * pas, on suppose la langue par défaut, et on ne la mêle pas à une autre.
+   */
   const requetes: RequeteSite[] = [
     ...lecture.vue.occasionsDeRequetes,
     ...lecture.vue.requetes,
@@ -257,7 +281,7 @@ export async function preparerCampagne(
     position: ligne.position,
     impressions: ligne.impressions,
     clics: ligne.clics,
-    langue: lecture.vue.langues[ligne.cle] ?? '',
+    langue: lecture.vue.langues[ligne.cle] ?? (LANGUES[locale] === undefined ? 'fr' : locale),
   }))
 
   /*
@@ -277,9 +301,9 @@ export async function preparerCampagne(
    * cette langue. Demander les volumes italiens en français rendrait des nombres vrais qui
    * ne décrivent rien.
    */
-  const dansLaLangue = requetes.filter(
-    (requete) => requete.langue === codeLangue || requete.langue === '',
-  )
+  // Strictement cette langue. Un mot d'une autre langue dans un groupe d'annonces montre
+  // aux gens un texte qu'ils n'ont pas cherché, et consomme l'impression quand même.
+  const dansLaLangue = requetes.filter((requete) => requete.langue === codeLangue)
   const graines = dansLaLangue.map((requete) => requete.texte)
   const [idees, mesures] = await Promise.all([
     googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, langue.code),
@@ -291,7 +315,6 @@ export async function preparerCampagne(
    * compte — ne pas acheter ce qu'on gagne déjà gratuitement — vient de la position
    * organique, que Search Console donne. On perd l'estimation de prix, pas la garantie.
    */
-  const profil = await lireProfil(userId, compte.id)
   const cpa = cpaAcceptable(profil)
   const chiffres = [
     ...(idees.ok ? idees.valeur : []),
@@ -398,6 +421,7 @@ export async function preparerCampagne(
         urlFinale: demande.urlFinale.trim(),
         marcheGeo: marche.geo,
         marcheNom: marche.nom,
+        marcheSource,
         langueCode: langue.code,
         langueNom: langue.nom,
         motsCles,

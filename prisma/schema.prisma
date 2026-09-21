@@ -2146,10 +2146,13 @@ model AdsPlanCampagne {
   /// La page d'arrivée. Vérifiée contre les domaines de la personne, jamais crue.
   urlFinale     String
 
-  marcheGeo  String @default("")
-  marcheNom  String @default("")
-  langueCode String @default("")
-  langueNom  String @default("")
+  marcheGeo    String @default("")
+  marcheNom    String @default("")
+  /// profil | chiffres : le pays a-t-il été déclaré, ou déduit des affichages ? Une
+  /// déduction se vérifie, une déclaration non — et l'écran doit pouvoir le dire.
+  marcheSource String @default("")
+  langueCode   String @default("")
+  langueNom    String @default("")
 
   /// Les mots-clés retenus, avec leurs chiffres au moment du plan.
   motsCles     Json @default("[]")

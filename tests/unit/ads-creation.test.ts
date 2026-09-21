@@ -9,7 +9,12 @@ import {
   MOTS_CLES_PAR_GROUPE,
   PLACES_CAMPAGNE,
 } from '@/server/ads/garde-fous'
-import { enchereProposee, plafondEnchere, TAUX_PLAUSIBLE } from '@/server/ads/mots-cles'
+import {
+  enchereProposee,
+  plafondEnchere,
+  PRIX_MINIMUM_CONNUS,
+  TAUX_PLAUSIBLE,
+} from '@/server/ads/mots-cles'
 import { PROFIL_VIDE } from '@/server/ads/profil'
 
 /**
@@ -152,6 +157,17 @@ describe('les bornes d’une création', () => {
 })
 
 describe('l’enchère proposée', () => {
+  it('se tait quand trop peu de prix sont connus', () => {
+    /*
+     * Un plan où quatre mots sur douze avaient un prix a rendu trois centimes : vrai pour
+     * ces quatre-là, et inexploitable — à ce niveau Google sert ceux qui enchérissent plus,
+     * et la campagne ne s'affiche jamais. Mieux vaut demander le montant.
+     */
+    expect(PRIX_MINIMUM_CONNUS).toBeGreaterThan(1)
+    const deux = [0.4, 0.6].map((montant) => ({ coutBasMicros: montant * MICROS }))
+    expect(enchereProposee(deux, 0)).toBe(0)
+  })
+
   it('prend la médiane du bas de fourchette', () => {
     /*
      * La médiane et non la moyenne : un seul mot-clé très disputé tirerait la moyenne vers
@@ -165,8 +181,8 @@ describe('l’enchère proposée', () => {
 
   it('plafonne à ce que l’objectif permet', () => {
     // À 20 CHF par vente et 5 % de conversion plausible, le clic ne peut pas dépasser 1 CHF.
-    const mots = [{ coutBasMicros: 3 * MICROS }]
-    expect(enchereProposee(mots, 20)).toBe((20 * TAUX_PLAUSIBLE) / 100 * MICROS)
+    const mots = [3, 3, 3].map((montant) => ({ coutBasMicros: montant * MICROS }))
+    expect(enchereProposee(mots, 20)).toBe(((20 * TAUX_PLAUSIBLE) / 100) * MICROS)
   })
 
   it('ne devine pas quand Google n’a donné aucun prix', () => {

@@ -35,6 +35,8 @@ export type PlanVue = {
   enchereMicros: number
   urlFinale: string
   marcheNom: string
+  /** profil | chiffres : le pays a-t-il été déclaré, ou déduit des affichages ? */
+  marcheSource: string
   langueNom: string
   motsCles: MotClePlan[]
   titres: string[]
@@ -268,6 +270,19 @@ export function CreerCampagne({
           <p className="mt-2 mb-0 text-xs text-[var(--color-ink-soft)]">
             Page d’arrivée : {plan.urlFinale}
           </p>
+          {plan.marcheSource === 'chiffres' ? (
+            /*
+              Une déduction se vérifie, une déclaration non. Le pays d'où viennent les
+              curieux n'est pas celui où l'on vend : ne pas le dire a produit une campagne
+              ciblant l'Italie pour une boutique qui ne livre qu'en Suisse.
+            */
+            <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-critical)]">
+              ⚠ {plan.marcheNom} est déduit du pays d’où viennent vos visiteurs, parce que
+              votre profil publicitaire ne dit pas où vous vendez. Ce n’est pas la même
+              chose : des curieux peuvent venir d’un pays que vous ne livrez pas. Renseignez
+              le pays dans votre profil, puis recomposez ce plan.
+            </p>
+          ) : null}
 
           <p className="mt-3 mb-1 text-xs font-semibold tracking-wide text-[var(--color-ink-faint)] uppercase">
             {plan.motsCles.length} mots-clés

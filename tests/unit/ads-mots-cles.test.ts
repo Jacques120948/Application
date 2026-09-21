@@ -9,6 +9,7 @@ import {
   MARCHES,
   langueDominante,
   marcheDominant,
+  marcheDuProfil,
   POSITION_GAGNEE,
   TAUX_PLAUSIBLE,
   tauxNecessaire,
@@ -240,6 +241,33 @@ describe('le coût rapporté à ce qu’on peut se permettre', () => {
   it('garde un seuil de vraisemblance discutable, pas définitif', () => {
     expect(TAUX_PLAUSIBLE).toBeGreaterThan(0)
     expect(TAUX_PLAUSIBLE).toBeLessThan(20)
+  })
+})
+
+describe('le pays où l’on vend', () => {
+  it('lit le profil avant les chiffres', () => {
+    /*
+     * La faute que ce test existe pour empêcher : une boutique suisse s'est vu proposer
+     * une campagne ciblant l'Italie, parce que ses pages italiennes reçoivent plus
+     * d'affichages que ses pages françaises. Le pays d'où viennent les curieux n'est pas
+     * celui où l'on vend — et depuis la Suisse, vendre en Italie veut dire des frais de
+     * douane sur chaque colis.
+     */
+    expect(marcheDuProfil('Suisse')?.code).toBe('che')
+    expect(marcheDuProfil('Suisse')?.geo).toBe('geoTargetConstants/2756')
+  })
+
+  it('accepte les façons ordinaires d’écrire un pays', () => {
+    // Le champ est une phrase libre : quelqu'un y écrit « CH », « Schweiz » ou « Svizzera ».
+    for (const ecriture of ['suisse', 'SUISSE', ' Suisse ', 'CH', 'Schweiz', 'Svizzera']) {
+      expect(marcheDuProfil(ecriture)?.code).toBe('che')
+    }
+  })
+
+  it('ne devine pas un pays qu’elle ne reconnaît pas', () => {
+    // Mieux vaut retomber sur les chiffres, et le dire, que de viser au hasard.
+    expect(marcheDuProfil('')).toBeNull()
+    expect(marcheDuProfil('quelque part en Europe')).toBeNull()
   })
 })
 

@@ -10,6 +10,7 @@ import {
   croiser,
   LANGUES,
   marcheDominant,
+  marcheDuProfil,
   type Candidat,
   type RequeteSite,
 } from './mots-cles'
@@ -226,10 +227,17 @@ export async function proposerMotsCles(
     )
   }
 
-  const marche = marcheDominant(lecture.vue.pays)
+  /*
+   * Le profil prime, les chiffres ne sont qu'un repli — même règle qu'à la création de
+   * campagne, et pour la même raison : le pays d'où viennent les curieux n'est pas celui où
+   * l'on vend. Lire les volumes d'un marché où l'on ne livre pas donne des chiffres vrais
+   * et sans emploi.
+   */
+  const profil = await lireProfil(userId, compte.id)
+  const marche = marcheDuProfil(profil.pays) ?? marcheDominant(lecture.vue.pays)
   if (marche === null) {
     throw validation(
-      'Naya ne reconnaît pas le pays d’où viennent vos visiteurs, et un volume de recherche sans pays ne veut rien dire. Écrivez-moi : la liste des marchés s’élargit d’une ligne.',
+      'Naya ne sait pas quel pays viser. Indiquez-le dans votre profil publicitaire : un volume de recherche sans pays ne veut rien dire, et le pays d’où viennent vos visiteurs n’est pas forcément celui où vous vendez.',
     )
   }
   const langue = LANGUES[locale] ?? LANGUES.fr
@@ -256,7 +264,9 @@ export async function proposerMotsCles(
      * travaille en trois langues, et ses chiffres italiens ne sont pas du trafic égaré.
      * Sans langue connue, on retient celle de l'écran plutôt que d'exclure la requête.
      */
-    langue: lecture.vue.langues[ligne.cle] ?? '',
+    // Inconnue : on suppose la langue du site plutôt que de laisser un vide qui se
+    // mêlerait à n'importe quelle autre langue.
+    langue: lecture.vue.langues[ligne.cle] ?? (LANGUES[locale] === undefined ? 'fr' : locale),
   }))
 
   /*
@@ -316,7 +326,6 @@ export async function proposerMotsCles(
    */
   if (!idees.ok && requetes.length === 0) throw validation(idees.raison)
 
-  const profil = await lireProfil(userId, compte.id)
   const { candidats, dejaGagnees } = croiser(
     requetes,
     idees.ok ? idees.valeur : [],

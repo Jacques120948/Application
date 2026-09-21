@@ -93,9 +93,15 @@ const VUE = {
   },
 }
 
+/*
+ * Trois prix au moins : en dessous, la médiane ne décrit rien et Evoliia refuse de proposer
+ * une enchère. C'est ce qui a fait rendre trois centimes à un plan où quatre mots sur douze
+ * avaient un prix — vrai, et inexploitable.
+ */
 const IDEES: IdeeMotCle[] = [
   { texte: 'bougie quartz rose', volume: 260, concurrence: 'LOW', coutBasMicros: 400_000, coutHautMicros: 900_000 },
   { texte: 'bougie citrine parfumée', volume: 90, concurrence: 'MEDIUM', coutBasMicros: 600_000, coutHautMicros: 1_200_000 },
+  { texte: 'bougie pierre naturelle', volume: 310, concurrence: 'LOW', coutBasMicros: 500_000, coutHautMicros: 1_000_000 },
 ]
 
 const TEXTES = {
@@ -265,6 +271,8 @@ describe('une campagne, une langue', () => {
      */
     const italiennes = [
       { texte: 'candela pietra naturale', volume: 400, concurrence: 'LOW', coutBasMicros: 300_000, coutHautMicros: 700_000 },
+      { texte: 'candela quarzo rosa', volume: 220, concurrence: 'LOW', coutBasMicros: 350_000, coutHautMicros: 800_000 },
+      { texte: 'candela ametista', volume: 180, concurrence: 'MEDIUM', coutBasMicros: 400_000, coutHautMicros: 900_000 },
     ]
     ideesDeMotsCles.mockResolvedValue({ ok: true, valeur: italiennes })
     metriquesDeMotsCles.mockResolvedValue({ ok: true, valeur: italiennes })

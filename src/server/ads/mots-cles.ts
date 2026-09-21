@@ -174,6 +174,57 @@ export function langueDominante(requetes: ReadonlyArray<RequeteSite>): string | 
 }
 
 /**
+ * Les façons d'écrire un pays, vers son code.
+ *
+ * Le champ « pays » du profil publicitaire est une phrase libre : quelqu'un y écrit
+ * « Suisse », « CH », « Schweiz » ou « Suisse romande ». Une table de noms vaut mieux qu'un
+ * appel à un modèle — c'est instantané, gratuit, et quelqu'un qui conteste le pays retenu
+ * peut voir exactement ce qui l'a produit.
+ */
+const NOMS_DE_PAYS: Record<string, string> = {
+  suisse: 'che', ch: 'che', schweiz: 'che', svizzera: 'che', switzerland: 'che',
+  helvetia: 'che', 'suisse romande': 'che',
+  france: 'fra', fr: 'fra', belgique: 'bel', be: 'bel', belgium: 'bel',
+  luxembourg: 'lux', lu: 'lux',
+  allemagne: 'deu', de: 'deu', deutschland: 'deu', germany: 'deu',
+  autriche: 'aut', at: 'aut', osterreich: 'aut',
+  italie: 'ita', it: 'ita', italia: 'ita', italy: 'ita',
+  espagne: 'esp', es: 'esp', espana: 'esp', spain: 'esp',
+  portugal: 'prt', pt: 'prt',
+  'pays-bas': 'nld', nl: 'nld', nederland: 'nld',
+  'royaume-uni': 'gbr', uk: 'gbr', gb: 'gbr', 'united kingdom': 'gbr', angleterre: 'gbr',
+  'etats-unis': 'usa', usa: 'usa', us: 'usa', 'united states': 'usa',
+  canada: 'can', ca: 'can',
+}
+
+/**
+ * Le marché déclaré dans le profil publicitaire, ou `null`.
+ *
+ * C'est la source qui doit primer, et l'avoir oubliée a produit une vraie faute : une
+ * boutique suisse s'est vu proposer une campagne ciblant l'Italie, parce que ses pages
+ * italiennes reçoivent plus d'affichages que ses pages françaises. Le pays d'où viennent
+ * les curieux n'est pas celui où l'on vend — et pour une boutique suisse, vendre en Italie
+ * veut dire des frais de douane sur chaque colis.
+ *
+ * Les chiffres restent le repli quand le profil est vide : mieux vaut un pays constaté
+ * qu'aucun pays du tout.
+ */
+export function marcheDuProfil(pays: string): { code: string; geo: string; nom: string } | null {
+  const propre = pays
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .toLowerCase()
+    .replace(/\s+/gu, ' ')
+    .trim()
+  if (propre === '') return null
+
+  const code = NOMS_DE_PAYS[propre] ?? NOMS_DE_PAYS[propre.replace(/[^a-z ]/gu, '')]
+  if (code === undefined) return null
+  const marche = MARCHES[code]
+  return marche === undefined ? null : { code, ...marche }
+}
+
+/**
  * Le marché à viser, choisi sur les chiffres et non sur une préférence.
  *
  * C'est le pays d'où viennent le plus d'affichages dans Search Console : le seul fait
@@ -257,6 +308,9 @@ export function plafondEnchere(cpa: number): number {
  * conversion invraisemblable. Sans lui, une campagne pourrait démarrer sur une enchère que
  * la marge ne peut pas absorber, et les chiffres mettraient trois semaines à le dire.
  */
+/** En dessous de ce nombre de prix connus, la médiane ne décrit rien et on se tait. */
+export const PRIX_MINIMUM_CONNUS = 3
+
 export function enchereProposee(
   motsCles: ReadonlyArray<{ coutBasMicros: number }>,
   cpa: number,
@@ -267,12 +321,18 @@ export function enchereProposee(
     .sort((une, autre) => une - autre)
 
   /*
+   * En dessous de trois prix connus, la médiane ne décrit rien. Un plan où quatre mots sur
+   * douze ont un prix a rendu trois centimes : vrai pour ces quatre-là, et inexploitable —
+   * à ce niveau, Google sert ceux qui enchérissent plus et la campagne ne s'affiche jamais.
+   * Mieux vaut demander le montant que d'en proposer un qui ne diffusera pas.
+   */
+  if (prix.length < PRIX_MINIMUM_CONNUS) return 0
+
+  /*
    * Aucun prix connu — le planificateur n'a rien rendu. On ne devine pas : l'appelant
    * demandera le montant à la personne plutôt qu'inventer un chiffre qui aurait l'air
    * calculé.
    */
-  if (prix.length === 0) return 0
-
   const milieu = Math.floor(prix.length / 2)
   const mediane =
     prix.length % 2 === 1
