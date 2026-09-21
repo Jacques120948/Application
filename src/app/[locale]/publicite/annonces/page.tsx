@@ -8,9 +8,12 @@ import { compteActif } from '@/server/ads/comptes'
 import { isEnabled } from '@/server/settings/flags'
 import { propositionsDuCompte } from '@/server/ads/redaction'
 import { motsClesDuCompte } from '@/server/ads/ciblage'
+import { lirePlans } from '@/server/ads/creation'
 import { FORMATS, photosPourGroupe } from '@/server/ads/images'
 import { Shell } from '@/components/studio/Shell'
 import { Annonces } from '@/components/studio/Annonces'
+import { CreerCampagne } from '@/components/studio/CreerCampagne'
+import { readDashboard } from '@/server/audit/service'
 import { LinkButton } from '@/components/ui'
 
 /**
@@ -50,6 +53,15 @@ export default async function AnnoncesPage({
   ])
   const propositions = Object.fromEntries(parGroupe)
   const motsCles = Object.fromEntries(parGroupeMots)
+
+  /*
+   * Les plans en attente, et le domaine du site. Le second sert à proposer une page
+   * d'arrivée plausible ; c'est le serveur qui vérifiera qu'elle s'y trouve, pas l'écran.
+   */
+  const [plans, tableau] = await Promise.all([
+    lirePlans(user.id),
+    readDashboard(user.id).catch(() => null),
+  ])
 
   /*
    * Le dépôt a les deux mêmes verrous que les budgets : l'interrupteur d'exploitation, qui
@@ -105,6 +117,15 @@ export default async function AnnoncesPage({
           <LinkButton href={`/${locale}/publicite`} variant="secondary">
             Retour aux chiffres
           </LinkButton>
+        </div>
+
+        <div className="mb-6">
+          <CreerCampagne
+            plans={plans}
+            devise={compte?.devise ?? ''}
+            hote={tableau?.site.host ?? ''}
+            deposable={assiste}
+          />
         </div>
 
         <Annonces

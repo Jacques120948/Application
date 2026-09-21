@@ -7,6 +7,7 @@ import { accesCompteActif, compteActif, type CompteRelie } from './comptes'
 import type { AccesAds, TexteAnnonceAds } from './provider'
 import { googleAds } from './google-ads'
 import {
+  creerCampagneComplete,
   creerImageElement,
   creerMotCle,
   creerTexteElement,
@@ -16,9 +17,12 @@ import {
   ecrireTextesAnnonce,
   rattacherElement,
   retirerMotCle,
+  supprimerBudget,
+  supprimerCampagne,
 } from './google-ads-ecriture'
 import {
   autoriseBudget,
+  autoriseCreation,
   autoriseImage,
   autoriseMotCle,
   autoriseStatut,
@@ -199,6 +203,28 @@ async function textesAujourdhui(userId: string, accountId: string): Promise<numb
          * quotidienne franchissable en changeant simplement de type d'élément.
          */
         quoi: { in: ['titre', 'titre-long', 'description', 'image', 'mot-cle'] },
+      },
+    }),
+  )
+}
+
+/**
+ * Les campagnes créées aujourd'hui sur ce compte.
+ *
+ * Son propre compteur, distinct des gestes d'argent et des dépôts de texte. Créer une
+ * campagne n'est ni l'un ni l'autre : c'est le seul geste qui fabrique une dépense à partir
+ * de rien, et il se borne à un par jour. Le mêler aux autres ferait refuser une création
+ * parce qu'on a ajouté cinq titres le matin — ou l'inverse, bien pire.
+ */
+async function campagnesAujourdhui(userId: string, accountId: string): Promise<number> {
+  return withUserScope(userId, (tx) =>
+    tx.adsAction.count({
+      where: {
+        userId,
+        accountId,
+        createdAt: { gte: aujourdhui() },
+        mode: { not: 'restauration' },
+        quoi: 'campagne',
       },
     }),
   )
@@ -1061,6 +1087,157 @@ export async function deposerMotCle(userId: string, motCleId: string): Promise<I
 }
 
 /**
+ * Crée une campagne Recherche entière, à partir d'un plan que la personne a relu.
+ *
+ * Le seul geste d'Evoliia qui fabrique une dépense au lieu d'en ajuster une. Quatre choses
+ * le distinguent de tout le reste, et chacune répond à ce que ce geste a de particulier.
+ *
+ * **Le plan vient de la base, jamais du navigateur.** Celui-ci ne transmet qu'un
+ * identifiant. Ce qui part chez Google est exactement ce que la personne a lu à l'écran —
+ * si le plan faisait l'aller-retour, il suffirait d'une page modifiée pour créer une
+ * campagne avec un autre budget et une autre adresse d'arrivée.
+ *
+ * **La création est indivisible.** Sept objets partent en un envoi : budget, campagne,
+ * pays, langue, groupe, mots-clés, annonce. C'est la leçon directe de l'image orpheline —
+ * créer l'un après l'autre laisserait, un jour, un budget sans campagne dans le compte de
+ * quelqu'un.
+ *
+ * **La campagne naît en pause.** Toujours, sans réglage possible. Personne ne doit découvrir
+ * une campagne active qu'il n'a pas lancée lui-même.
+ *
+ * **Le retour arrière supprime.** Le budget avec la campagne : il lui survivrait, puisque
+ * c'est un objet à part.
+ */
+export async function creerCampagne(userId: string, planId: string, hotes: string[]): Promise<Issue> {
+  const ouverture = await ouvrir(userId)
+  if (!ouverture.ok) return ouverture
+  const { compte } = ouverture
+
+  const plan = await withUserScope(userId, (tx) =>
+    tx.adsPlanCampagne.findFirst({
+      where: { id: planId, userId, accountId: compte.id, etat: 'prepare' },
+      select: {
+        id: true,
+        nom: true,
+        budgetMicros: true,
+        enchereMicros: true,
+        urlFinale: true,
+        marcheGeo: true,
+        marcheNom: true,
+        langueCode: true,
+        motsCles: true,
+        titres: true,
+        descriptions: true,
+      },
+    }),
+  )
+  if (plan === null) throw notFound('Ce plan est introuvable, ou a déjà été utilisé.')
+
+  const textes = (valeur: unknown): string[] =>
+    Array.isArray(valeur) ? valeur.filter((un): un is string => typeof un === 'string') : []
+  const titres = textes(plan.titres)
+  const descriptions = textes(plan.descriptions)
+  const motsCles = (Array.isArray(plan.motsCles) ? plan.motsCles : [])
+    .map((brut) => {
+      const mot = (brut ?? {}) as Record<string, unknown>
+      return {
+        texte: typeof mot.texte === 'string' ? mot.texte : '',
+        correspondance: mot.correspondance === 'exact' ? ('exact' as const) : ('phrase' as const),
+      }
+    })
+    .filter((mot) => mot.texte !== '')
+
+  const enchere = Number(plan.enchereMicros)
+  if (enchere <= 0) {
+    return {
+      ok: false,
+      raison:
+        'Ce plan n’a pas d’enchère. Google n’a pas donné de prix indicatif pour ces recherches : indiquez vous-même un coût par clic avant de créer la campagne.',
+    }
+  }
+
+  const faites = await campagnesAujourdhui(userId, compte.id)
+  const verdict = autoriseCreation(
+    { ...ouverture.demande, campagnesAujourdhui: faites },
+    {
+      nom: plan.nom,
+      budgetMicros: Number(plan.budgetMicros),
+      urlFinale: plan.urlFinale,
+      motsCles,
+      titres,
+      descriptions,
+    },
+    hotes,
+  )
+  if (!verdict.ok) return verdict
+
+  const acces = await accesCompteActif(userId)
+  if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  let campagneCreee = ''
+  let budgetCree = ''
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: 'campagne',
+      motif: `Campagne « ${plan.nom} » créée en pause : ${Math.round(Number(plan.budgetMicros) / MICROS)} ${compte.devise} par jour, ${motsCles.length} mots-clés, ciblage ${plan.marcheNom}`,
+      campagneId: null,
+      /*
+       * Rien avant : la campagne n'existait pas. Ce qu'il faut pour défaire n'est pas un
+       * état mais deux poignées — la campagne et son budget — écrites après coup, une fois
+       * que Google les a rendues.
+       */
+      avant: { champ: 'campagne', creee: false },
+      apres: {
+        champ: 'campagne',
+        nom: plan.nom,
+        budgetMicros: Number(plan.budgetMicros),
+        urlFinale: plan.urlFinale,
+      },
+      mode: 'assiste',
+    },
+    async () => {
+      const issue = await creerCampagneComplete(acces.acces, {
+        nom: plan.nom,
+        budgetMicros: Number(plan.budgetMicros),
+        enchereMicros: enchere,
+        urlFinale: plan.urlFinale,
+        marcheGeo: plan.marcheGeo,
+        langueCode: plan.langueCode,
+        motsCles,
+        titres,
+        descriptions,
+      })
+      if (!issue.ok) return issue
+      campagneCreee = issue.campagne
+      budgetCree = issue.budget
+      return { ok: true }
+    },
+    async (actionId) => {
+      await withUserScope(userId, async (tx) => {
+        await tx.adsPlanCampagne.updateMany({
+          where: { id: plan.id, userId },
+          data: {
+            etat: 'cree',
+            closedAt: new Date(),
+            campagneRessource: campagneCreee,
+            budgetRessource: budgetCree,
+          },
+        })
+        await tx.adsAction.updateMany({
+          where: { id: actionId, userId },
+          data: {
+            avant: { champ: 'campagne', creee: true, campagne: campagneCreee, budget: budgetCree },
+          },
+        })
+      })
+    },
+  )
+}
+
+/**
  * Remet une action dans l'état d'avant.
  *
  * Elle réutilise les mêmes chemins d'écriture, avec les mêmes garde-fous, et laisse sa
@@ -1099,6 +1276,9 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
     rattachement?: string
     critere?: boolean
     critereId?: string
+    creee?: boolean
+    campagne?: string
+    budget?: string
   }
 
   const acces = await accesCompteActif(userId)
@@ -1114,6 +1294,48 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
    * liste : l'élément reste chez Google, il ne sert simplement plus ici. C'est le chemin le
    * plus sûr des deux, et il se reconnaît à la poignée conservée au dépôt.
    */
+  /*
+   * Défaire une création, c'est supprimer. Il n'y a pas d'état d'avant à remettre : la
+   * campagne n'existait pas. Le budget part avec elle et non avec le reste — c'est un objet
+   * à part chez Google, et il survivrait à la campagne qu'il servait.
+   */
+  if (origine.quoi === 'campagne' && avant.creee === true && typeof avant.campagne === 'string') {
+    const nom = ((origine.apres ?? {}) as { nom?: string }).nom ?? ''
+    const budget = avant.budget ?? ''
+    return journaliser(
+      userId,
+      compte,
+      {
+        quoi: 'campagne',
+        motif: nom === '' ? 'Campagne supprimée' : `Suppression de la campagne « ${nom} »`,
+        campagneId: null,
+        avant: { champ: 'campagne', creee: true, campagne: avant.campagne, budget },
+        apres: { champ: 'campagne', creee: false },
+        mode: 'restauration',
+        annuleId: origine.id,
+      },
+      async () => {
+        const issue = await supprimerCampagne(acces.acces, avant.campagne ?? '')
+        if (!issue.ok) return issue
+        /*
+         * Le budget ensuite, et son échec ne fait pas échouer la suppression : la campagne
+         * n'existe plus, donc plus rien ne dépense. Un budget inutilisé ne coûte rien — il
+         * encombre, ce qui se dit sans annuler un geste réussi.
+         */
+        if (budget !== '') await supprimerBudget(acces.acces, budget)
+        return { ok: true }
+      },
+      async () => {
+        await withUserScope(userId, (tx) =>
+          tx.adsPlanCampagne.updateMany({
+            where: { userId, accountId: compte.id, campagneRessource: avant.campagne },
+            data: { etat: 'abandonne' },
+          }),
+        )
+      },
+    )
+  }
+
   /*
    * Un mot-clé se retire, il ne se met pas en pause. Un critère en pause reste dans le
    * groupe et continue d'apparaître dans tous les rapports ; retiré, il n'y est plus.
