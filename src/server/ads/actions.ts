@@ -4,8 +4,10 @@ import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { isEnabled } from '@/server/settings/flags'
 import { accesCompteActif, compteActif, type CompteRelie } from './comptes'
-import { ecrireBudget, ecrireStatut } from './google-ads-ecriture'
-import { autoriseBudget, autoriseStatut, type Demande } from './garde-fous'
+import type { AccesAds, TexteAnnonceAds } from './provider'
+import { googleAds } from './google-ads'
+import { ecrireBudget, ecrireStatut, ecrireTextesAnnonce } from './google-ads-ecriture'
+import { autoriseBudget, autoriseStatut, autoriseTexte, type Demande } from './garde-fous'
 import { lireProfil } from './profil'
 
 /**
@@ -136,13 +138,45 @@ export async function lireMode(userId: string, accountId: string): Promise<Mode>
   return modeValide(ligne?.mode)
 }
 
-/** Les écritures déjà tentées aujourd'hui, refus compris : c'est la vitesse qu'on borne. */
-async function faitesAujourdhui(userId: string, accountId: string): Promise<number> {
+/** Le début de la journée en cours, pour les compteurs quotidiens. */
+function aujourdhui(): Date {
   const debut = new Date()
   debut.setHours(0, 0, 0, 0)
+  return debut
+}
+
+/** Les gestes d'argent déjà tentés aujourd'hui, refus compris : c'est la vitesse qu'on borne. */
+async function faitesAujourdhui(userId: string, accountId: string): Promise<number> {
   return withUserScope(userId, (tx) =>
     tx.adsAction.count({
-      where: { userId, accountId, createdAt: { gte: debut }, mode: { not: 'restauration' } },
+      where: {
+        userId,
+        accountId,
+        createdAt: { gte: aujourdhui() },
+        mode: { not: 'restauration' },
+        /*
+         * Les dépôts de texte n'y comptent pas. La limite de cinq borne une vitesse de
+         * pilotage — au-delà, on ne pilote plus une campagne, on la secoue — et ajouter un
+         * titre ne pilote rien : ça ne change aucune dépense. Les mêler ferait refuser le
+         * sixième titre d'un samedi matin au motif qu'on a touché un budget la veille.
+         */
+        quoi: { in: ['budget', 'pause', 'reprise'] },
+      },
+    }),
+  )
+}
+
+/** Les textes déposés aujourd'hui. Compteur distinct, pour une limite distincte. */
+async function textesAujourdhui(userId: string, accountId: string): Promise<number> {
+  return withUserScope(userId, (tx) =>
+    tx.adsAction.count({
+      where: {
+        userId,
+        accountId,
+        createdAt: { gte: aujourdhui() },
+        mode: { not: 'restauration' },
+        quoi: { in: ['titre', 'description'] },
+      },
     }),
   )
 }
@@ -221,7 +255,8 @@ async function journaliser(
   ligne: {
     quoi: string
     motif: string
-    campagneId: string
+    /** `null` pour ce qui porte sur un contenant plutôt que sur une campagne. */
+    campagneId: string | null
     avant: Record<string, unknown>
     apres: Record<string, unknown>
     mode: string
@@ -441,6 +476,140 @@ export async function appliquerStatut(
 }
 
 /**
+ * Dépose un texte proposé dans une annonce.
+ *
+ * C'est l'écriture la plus délicate du produit, et pour une raison qui ne se devine pas :
+ * Google ne sait pas « ajouter un titre ». Il remplace la liste entière. Déposer le dixième
+ * exige donc de renvoyer les neuf autres — et si l'on renvoyait ceux que notre base a lus la
+ * semaine dernière, on effacerait ce que la personne a écrit entre-temps dans Google Ads.
+ *
+ * L'annonce est donc relue chez Google à l'instant du dépôt, et c'est cette liste-là, plus
+ * le texte, qui repart. La valeur d'avant conservée au journal est également celle-là : le
+ * retour arrière remet exactement ce qui était en place, épinglages compris.
+ *
+ * Un contenant qui porte plusieurs annonces est refusé. Choisir à la place de la personne
+ * dans laquelle déposer serait deviner ; les modifier toutes serait changer plus qu'elle
+ * n'a demandé.
+ */
+export async function deposerTexte(userId: string, propositionId: string): Promise<Issue> {
+  const ouverture = await ouvrir(userId)
+  if (!ouverture.ok) return ouverture
+  const { compte } = ouverture
+
+  const proposition = await withUserScope(userId, (tx) =>
+    tx.adsProposition.findFirst({
+      where: { id: propositionId, userId, accountId: compte.id, etat: 'proposee' },
+      select: {
+        id: true,
+        champ: true,
+        texte: true,
+        groupe: { select: { id: true, nom: true, genre: true, groupeId: true } },
+      },
+    }),
+  )
+  if (proposition === null) throw notFound('Cette proposition est introuvable.')
+
+  if (proposition.groupe.genre !== 'annonces') {
+    return {
+      ok: false,
+      raison:
+        'Le dépôt dans un groupe d’éléments Performance Max n’est pas encore construit : il passe par un autre chemin chez Google, celui des éléments, qui arrivera avec les images.',
+    }
+  }
+  if (proposition.champ !== 'titre' && proposition.champ !== 'description') {
+    return { ok: false, raison: 'Seuls les titres et les descriptions peuvent être déposés.' }
+  }
+
+  const acces = await accesCompteActif(userId)
+  if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  /*
+   * Relue maintenant, pas reprise de la base. C'est la seule façon de ne pas écraser ce qui
+   * a changé depuis la dernière lecture hebdomadaire.
+   */
+  const annonces = await googleAds.lireAnnoncesDuGroupe(acces.acces, proposition.groupe.groupeId)
+  if (!annonces.ok) return { ok: false, raison: annonces.raison }
+
+  if (annonces.valeur.length === 0) {
+    return {
+      ok: false,
+      raison: 'Ce groupe n’a aucune annonce responsive où déposer ce texte.',
+    }
+  }
+  if (annonces.valeur.length > 1) {
+    return {
+      ok: false,
+      raison: `Ce groupe porte ${annonces.valeur.length} annonces. Evoliia ne choisit pas à votre place dans laquelle déposer, et les modifier toutes changerait plus que vous ne demandez. Faites-le depuis Google Ads.`,
+    }
+  }
+
+  const annonce = annonces.valeur[0]
+  if (annonce === undefined) return { ok: false, raison: 'Annonce introuvable.' }
+
+  const liste = proposition.champ === 'titre' ? annonce.titres : annonce.descriptions
+  if (liste.some((une) => une.texte.trim() === proposition.texte.trim())) {
+    return { ok: false, raison: 'Ce texte est déjà dans l’annonce.' }
+  }
+
+  const textes = await textesAujourdhui(userId, compte.id)
+  const verdict = autoriseTexte(
+    { ...ouverture.demande, textesAujourdhui: textes },
+    proposition.champ,
+    proposition.texte,
+    liste.length,
+  )
+  if (!verdict.ok) return verdict
+
+  const apres = [...liste, { texte: proposition.texte, epingle: '' }]
+  const champ = proposition.champ
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: champ,
+      motif: `${champ === 'titre' ? 'Titre' : 'Description'} ajouté à « ${proposition.groupe.nom} » : ${proposition.texte}`,
+      campagneId: null,
+      /*
+       * La liste entière, avant et après. C'est plus verbeux qu'un seul texte, et c'est la
+       * condition du retour arrière : remettre « la liste d'avant » remet aussi les
+       * épinglages, qu'un retrait naïf du dernier élément aurait perdus.
+       */
+      avant: { champ, textes: liste },
+      apres: { champ, textes: apres },
+      mode: 'assiste',
+    },
+    () => ecrireTextesAnnonce(acces.acces, annonce.resourceName, champ, apres),
+    async () => {
+      await withUserScope(userId, async (tx) => {
+        await tx.adsProposition.updateMany({
+          where: { id: proposition.id, userId },
+          data: { etat: 'deposee', closedAt: new Date() },
+        })
+        /*
+         * Le texte rejoint les éléments réels, marqué comme venant d'Evoliia. C'est la
+         * seule mesure de ce que Naya a apporté, et la prochaine lecture hebdomadaire ne
+         * l'écrasera pas : `origine` n'est jamais réécrit.
+         */
+        await tx.adsElement.createMany({
+          data: [
+            {
+              userId,
+              accountId: compte.id,
+              groupeId: proposition.groupe.id,
+              champ,
+              texte: proposition.texte,
+              origine: 'evoliia',
+            },
+          ],
+          skipDuplicates: true,
+        })
+      })
+    },
+  )
+}
+
+/**
  * Remet une action dans l'état d'avant.
  *
  * Elle réutilise les mêmes chemins d'écriture, avec les mêmes garde-fous, et laisse sa
@@ -460,21 +629,46 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
         quoi: true,
         campagneId: true,
         avant: true,
+        apres: true,
         annulees: { select: { id: true }, take: 1 },
       },
     }),
   )
-  if (origine === null || origine.campagneId === null) {
-    throw notFound('Cette modification est introuvable, ou n’a jamais abouti.')
-  }
+  if (origine === null) throw notFound('Cette modification est introuvable, ou n’a jamais abouti.')
   if (origine.annulees.length > 0) {
     return { ok: false, raison: 'Cette modification a déjà été annulée.' }
   }
 
-  const avant = (origine.avant ?? {}) as { budgetMicros?: number; statut?: string }
-  const cible = await cibleDe(userId, compte.id, origine.campagneId)
+  const avant = (origine.avant ?? {}) as {
+    budgetMicros?: number
+    statut?: string
+    champ?: string
+    textes?: TexteAnnonceAds[]
+  }
+
   const acces = await accesCompteActif(userId)
   if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  /*
+   * Le retour d'un dépôt de texte remet la liste d'avant, épinglages compris. Retirer
+   * simplement le dernier élément de la liste actuelle serait faux dès que quelqu'un a
+   * modifié l'annonce entre-temps : on enlèverait son texte à lui.
+   */
+  if (
+    (origine.quoi === 'titre' || origine.quoi === 'description') &&
+    Array.isArray(avant.textes)
+  ) {
+    return restaurerTexte(userId, compte, acces.acces, origine.id, {
+      champ: origine.quoi,
+      textes: avant.textes,
+      apres: (origine.apres ?? {}) as { textes?: TexteAnnonceAds[] },
+    })
+  }
+
+  if (origine.campagneId === null) {
+    return { ok: false, raison: 'Cette modification ne sait pas se défaire.' }
+  }
+  const cible = await cibleDe(userId, compte.id, origine.campagneId)
 
   if (origine.quoi === 'budget' && typeof avant.budgetMicros === 'number') {
     const vers = Math.round(avant.budgetMicros)
@@ -526,4 +720,81 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
   }
 
   return { ok: false, raison: 'Cette modification ne sait pas se défaire.' }
+}
+
+/**
+ * Le retour arrière d'un dépôt de texte.
+ *
+ * L'annonce est relue avant d'être réécrite, et pour une raison précise : si quelqu'un y a
+ * ajouté un texte depuis, renvoyer la liste d'avant le supprimerait sans que personne l'ait
+ * demandé. On ne restaure donc que si l'annonce est encore telle qu'on l'avait laissée.
+ */
+async function restaurerTexte(
+  userId: string,
+  compte: CompteRelie,
+  acces: AccesAds,
+  annuleId: string,
+  origine: {
+    champ: 'titre' | 'description'
+    textes: TexteAnnonceAds[]
+    apres: { textes?: TexteAnnonceAds[] }
+  },
+): Promise<Issue> {
+  const depose = (origine.apres.textes ?? []).at(-1)
+  if (depose === undefined) return { ok: false, raison: 'Cette modification ne sait pas se défaire.' }
+
+  const groupe = await withUserScope(userId, (tx) =>
+    tx.adsElement.findFirst({
+      where: { userId, accountId: compte.id, champ: origine.champ, texte: depose.texte },
+      select: { groupe: { select: { id: true, groupeId: true } } },
+    }),
+  )
+  if (groupe === null) return { ok: false, raison: 'Le contenant de ce texte est introuvable.' }
+
+  const annonces = await googleAds.lireAnnoncesDuGroupe(acces, groupe.groupe.groupeId)
+  if (!annonces.ok) return { ok: false, raison: annonces.raison }
+  const annonce = annonces.valeur[0]
+  if (annonce === undefined || annonces.valeur.length > 1) {
+    return { ok: false, raison: 'Ce groupe ne porte plus une seule annonce : le retour arrière ne peut pas être sûr.' }
+  }
+
+  const actuelle = origine.champ === 'titre' ? annonce.titres : annonce.descriptions
+  const attendue = origine.apres.textes ?? []
+  if (
+    actuelle.length !== attendue.length ||
+    actuelle.some((une, index) => une.texte !== attendue[index]?.texte)
+  ) {
+    return {
+      ok: false,
+      raison:
+        'Cette annonce a changé depuis le dépôt. Evoliia ne la remet pas dans son état d’avant : elle effacerait ce qui a été écrit entre-temps. Retirez le texte depuis Google Ads.',
+    }
+  }
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: origine.champ,
+      motif: `Retrait de « ${depose.texte} »`,
+      campagneId: null,
+      avant: { champ: origine.champ, textes: actuelle },
+      apres: { champ: origine.champ, textes: origine.textes },
+      mode: 'restauration',
+      annuleId,
+    },
+    () => ecrireTextesAnnonce(acces, annonce.resourceName, origine.champ, origine.textes),
+    async () => {
+      await withUserScope(userId, (tx) =>
+        tx.adsElement.deleteMany({
+          where: {
+            userId,
+            groupeId: groupe.groupe.id,
+            champ: origine.champ,
+            texte: depose.texte,
+          },
+        }),
+      )
+    },
+  )
 }

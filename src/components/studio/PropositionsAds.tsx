@@ -42,16 +42,24 @@ export function PropositionsAds({
   groupeId,
   initiales,
   complet,
+  deposable,
 }: {
   groupeId: string
   initiales: readonly PropositionVue[]
   /** Vrai quand le contenant est plein, propositions en attente comprises. */
   complet: boolean
+  /** Vrai quand le dépôt est possible : mode assisté, et contenant de type annonces. */
+  deposable: boolean
 }) {
   const [liste, setListe] = useState<PropositionVue[]>([...initiales])
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  /*
+   * La confirmation est un état, pas une fenêtre du navigateur : c'est la phrase exacte de
+   * ce qui va partir qu'on confirme, et `confirm()` ne sait pas l'écrire.
+   */
+  const [aConfirmer, setAConfirmer] = useState<string | null>(null)
 
   async function rediger() {
     setOccupe('rediger')
@@ -83,6 +91,33 @@ export function PropositionsAds({
               : `, ${bilan.rejetees} écartée${bilan.rejetees > 1 ? 's' : ''} pour longueur ou doublon`
           }. ${bilan.credits} crédit${bilan.credits > 1 ? 's' : ''}. Rechargez la page.`,
     )
+    window.location.reload()
+  }
+
+  async function deposer(id: string) {
+    setOccupe(id)
+    setErreur(null)
+    setMessage(null)
+    const reponse = await fetch('/api/ads/action', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'texte', propositionId: id }),
+    }).catch(() => null)
+    const corps = (await reponse?.json().catch(() => null)) as
+      | { ok?: boolean; raison?: string; message?: string }
+      | null
+    setOccupe(null)
+
+    if (reponse === null || !reponse.ok) {
+      setErreur(corps?.message ?? `L’envoi n’a pas abouti (code ${reponse?.status ?? 0}).`)
+      return
+    }
+    if (corps?.ok !== true) {
+      setErreur(corps?.raison ?? 'Google n’a pas accepté ce texte.')
+      setAConfirmer(null)
+      return
+    }
+    // La page est rendue côté serveur : l'annonce, le remplissage et le journal ont changé.
     window.location.reload()
   }
 
@@ -149,14 +184,57 @@ export function PropositionsAds({
                   {une.motif}
                 </p>
               )}
-              <button
-                type="button"
-                onClick={() => void ecarter(une.id)}
-                disabled={occupe !== null}
-                className="mt-2 cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-3 py-1 text-xs text-[var(--color-ink-soft)] disabled:opacity-50"
-              >
-                {occupe === une.id ? 'Un instant…' : 'Écarter'}
-              </button>
+              {aConfirmer === une.id ? (
+                <div className="mt-2 rounded-[var(--radius-control)] bg-[var(--color-surface)] p-3">
+                  <p className="m-0 text-sm font-medium">
+                    Ajouter « {une.texte} » à cette annonce.
+                  </p>
+                  <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                    Le texte part chez Google immédiatement et s’ajoute aux autres, sans en
+                    remplacer aucun. La liste d’avant est conservée : vous pourrez revenir en
+                    arrière depuis le journal, sur la page Publicité.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void deposer(une.id)}
+                      disabled={occupe !== null}
+                      className="cursor-pointer rounded-[var(--radius-control)] border-0 px-4 py-2 text-sm font-medium text-white [background-image:var(--gradient-cta)] disabled:opacity-50"
+                    >
+                      {occupe === une.id ? 'Envoi…' : 'Confirmer et envoyer'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAConfirmer(null)}
+                      disabled={occupe !== null}
+                      className="cursor-pointer rounded-[var(--radius-control)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm disabled:opacity-50"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {deposable ? (
+                    <button
+                      type="button"
+                      onClick={() => setAConfirmer(une.id)}
+                      disabled={occupe !== null}
+                      className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-brand)] bg-transparent px-3 py-1 text-xs text-[var(--color-brand-strong)] disabled:opacity-50"
+                    >
+                      Déposer…
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void ecarter(une.id)}
+                    disabled={occupe !== null}
+                    className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-3 py-1 text-xs text-[var(--color-ink-soft)] disabled:opacity-50"
+                  >
+                    {occupe === une.id ? 'Un instant…' : 'Écarter'}
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -172,9 +250,9 @@ export function PropositionsAds({
       )}
 
       <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-        Ces textes ne sont pas encore chez Google : ils vivent chez Evoliia jusqu’à ce que
-        vous décidiez de les déposer. Les longueurs sont vérifiées avant affichage — un titre
-        de trente et un caractères est refusé par Google sans explication utile.
+        {deposable
+          ? 'Un dépôt ajoute le texte aux autres, sans en remplacer aucun, et reste annulable depuis le journal. Les longueurs sont vérifiées avant affichage — un titre de trente et un caractères est refusé par Google sans explication utile.'
+          : 'Ces textes ne sont pas encore chez Google : ils vivent chez Evoliia. Pour pouvoir les déposer, passez votre compte en mode assisté depuis la page Publicité. Les longueurs sont vérifiées avant affichage — un titre de trente et un caractères est refusé par Google sans explication utile.'}
       </p>
     </div>
   )

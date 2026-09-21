@@ -148,12 +148,15 @@ export function Annonces({
   termes,
   lu,
   propositions,
+  assiste,
 }: {
   groupes: readonly GroupeVu[]
   termes: readonly TermeVu[]
   lu: boolean
   /** Ce que Naya propose, par contenant. Montré à côté de l'existant, jamais mêlé. */
   propositions: Record<string, PropositionVue[]>
+  /** Vrai quand le compte est en mode assisté : sans cela, aucun dépôt n'est possible. */
+  assiste: boolean
 }) {
   if (!lu) {
     return (
@@ -277,6 +280,12 @@ export function Annonces({
 
                 <PropositionsAds
                   groupeId={groupe.id}
+                  /*
+                    Le dépôt n'existe pour l'instant que dans les groupes d'annonces : chez
+                    Google, ajouter un élément à une Performance Max passe par un autre
+                    chemin, celui des éléments, qui viendra avec les images.
+                  */
+                  deposable={assiste && groupe.genre === 'annonces'}
                   initiales={propositions[groupe.id] ?? []}
                   /*
                     Le plein se juge sur l'existant ET sur ce qui attend : sans cela, le

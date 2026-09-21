@@ -3,7 +3,7 @@ import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
-import { appliquerBudget, appliquerStatut, restaurer } from '@/server/ads/actions'
+import { appliquerBudget, appliquerStatut, deposerTexte, restaurer } from '@/server/ads/actions'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -37,6 +37,7 @@ const input = z.discriminatedUnion('type', [
     attendu: z.string().max(40),
     recommandationId: z.string().uuid().optional(),
   }),
+  z.object({ type: z.literal('texte'), propositionId: z.string().uuid() }),
   z.object({ type: z.literal('restaurer'), actionId: z.string().uuid() }),
 ])
 
@@ -53,7 +54,9 @@ export async function POST(request: Request) {
         ? await appliquerBudget(user.id, demande)
         : demande.type === 'statut'
           ? await appliquerStatut(user.id, demande)
-          : await restaurer(user.id, demande.actionId)
+          : demande.type === 'texte'
+            ? await deposerTexte(user.id, demande.propositionId)
+            : await restaurer(user.id, demande.actionId)
 
     /*
      * Un refus de Google ou d'un garde-fou n'est pas une erreur HTTP : c'est une réponse. La

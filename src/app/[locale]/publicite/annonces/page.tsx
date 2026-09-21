@@ -5,6 +5,7 @@ import { availableCredits } from '@/server/billing/credits'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { lireCreatifDuCompte } from '@/server/ads/creatif'
 import { compteActif } from '@/server/ads/comptes'
+import { isEnabled } from '@/server/settings/flags'
 import { propositionsDuCompte } from '@/server/ads/redaction'
 import { Shell } from '@/components/studio/Shell'
 import { Annonces } from '@/components/studio/Annonces'
@@ -44,6 +45,13 @@ export default async function AnnoncesPage({
   const parGroupe = compte === null ? new Map() : await propositionsDuCompte(user.id, compte.id)
   const propositions = Object.fromEntries(parGroupe)
 
+  /*
+   * Le dépôt a les deux mêmes verrous que les budgets : l'interrupteur d'exploitation, qui
+   * vaut pour toute l'installation, et le mode du compte, que la personne règle elle-même.
+   * Un bouton visible alors que l'un des deux est fermé serait un bouton qui déçoit au clic.
+   */
+  const assiste = compte?.mode === 'assiste' && (await isEnabled('publiciteEcriture'))
+
   return (
     <Shell
       locale={locale}
@@ -74,6 +82,7 @@ export default async function AnnoncesPage({
           termes={creatif.termes}
           lu={creatif.lu}
           propositions={propositions}
+          assiste={assiste}
         />
       </div>
     </Shell>

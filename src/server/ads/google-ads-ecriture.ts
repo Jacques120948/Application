@@ -1,6 +1,6 @@
 import { logger } from '@/server/observability/logger'
 import { DELAI_MS, entetes, messageErreur, RACINE } from './google-ads'
-import type { AccesAds } from './provider'
+import type { AccesAds, TexteAnnonceAds } from './provider'
 
 /**
  * Google Ads, en écriture — le seul fichier d'Evoliia qui sache modifier une campagne.
@@ -113,6 +113,39 @@ export async function ecrireBudget(
           amountMicros: String(Math.round(montantMicros)),
         },
         updateMask: 'amountMicros',
+      },
+    ],
+  })
+}
+
+/**
+ * Remplace la liste des titres ou des descriptions d'une annonce responsive.
+ *
+ * « Remplace », et non « ajoute » : Google ne sait pas ajouter un texte à une annonce. Y
+ * mettre le dixième titre exige de renvoyer les neuf autres, avec leur épinglage. C'est la
+ * raison pour laquelle l'appelant relit l'annonce juste avant — une liste vieille d'une
+ * semaine effacerait ce que la personne a fait entre-temps dans Google Ads.
+ *
+ * Le nom de ressource est celui que Google a rendu à la lecture, repris tel quel. Le
+ * recomposer à partir d'identifiants serait une occasion de se tromper d'annonce, et une
+ * annonce voisine écrasée ne se voit pas avant plusieurs jours.
+ */
+export async function ecrireTextesAnnonce(
+  acces: AccesAds,
+  resourceName: string,
+  champ: 'titre' | 'description',
+  textes: readonly TexteAnnonceAds[],
+): Promise<Ecriture> {
+  const liste = textes.map((une) =>
+    une.epingle === '' ? { text: une.texte } : { text: une.texte, pinnedField: une.epingle },
+  )
+  const cle = champ === 'titre' ? 'headlines' : 'descriptions'
+
+  return envoyer('ads:mutate', acces, {
+    operations: [
+      {
+        update: { resourceName, responsiveSearchAd: { [cle]: liste } },
+        updateMask: `responsive_search_ad.${cle}`,
       },
     ],
   })

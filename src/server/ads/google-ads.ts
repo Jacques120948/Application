@@ -6,12 +6,14 @@ import type {
   AdPlatformProvider,
   CampagneAds,
   ChampAds,
+  AnnonceAds,
   CompteAds,
   ElementAds,
   GroupeAds,
   JourneeAds,
   Lecture,
   TermeAds,
+  TexteAnnonceAds,
 } from './provider'
 
 /**
@@ -626,6 +628,63 @@ async function lireCreatif(
 }
 
 /**
+ * Les annonces d'un contenant, lues juste avant d'y écrire.
+ *
+ * L'identifiant vient de notre base, mais il traverse une requête GAQL, qui n'a pas de
+ * paramètres liés : il est donc réduit à ses chiffres avant d'y entrer. C'est la même
+ * discipline que pour les dates — tout ce qui entre dans une requête est vérifié, y compris
+ * ce qui vient de chez nous, parce qu'une valeur de confiance qui cesse de l'être ne
+ * s'annonce pas.
+ */
+async function lireAnnoncesDuGroupe(
+  acces: AccesAds,
+  groupeId: string,
+): Promise<Lecture<AnnonceAds[]>> {
+  const identifiant = groupeId.replace(/\D/gu, '')
+  if (identifiant === '') return { ok: false, raison: 'Contenant inconnu.' }
+
+  const lecture = await interroger(
+    acces,
+    `SELECT ad_group_ad.ad.resource_name,
+            ad_group_ad.ad.responsive_search_ad.headlines,
+            ad_group_ad.ad.responsive_search_ad.descriptions
+     FROM ad_group_ad
+     WHERE ad_group.id = ${identifiant}
+       AND ad_group_ad.status != 'REMOVED'
+       AND ad_group_ad.ad.type = 'RESPONSIVE_SEARCH_AD'`,
+  )
+  if (!lecture.ok) return lecture
+
+  const textes = (brut: unknown): TexteAnnonceAds[] => {
+    if (!Array.isArray(brut)) return []
+    return brut
+      .map((entree) => {
+        const objet = (entree ?? {}) as Record<string, unknown>
+        return { texte: texte(objet.text), epingle: texte(objet.pinnedField) }
+      })
+      .filter((une) => une.texte !== '')
+  }
+
+  return {
+    ok: true,
+    valeur: lecture.valeur
+      .map((ligne) => {
+        const annonce = (((ligne.adGroupAd ?? {}) as Record<string, unknown>).ad ?? {}) as Record<
+          string,
+          unknown
+        >
+        const responsive = (annonce.responsiveSearchAd ?? {}) as Record<string, unknown>
+        return {
+          resourceName: texte(annonce.resourceName),
+          titres: textes(responsive.headlines),
+          descriptions: textes(responsive.descriptions),
+        }
+      })
+      .filter((annonce) => annonce.resourceName !== ''),
+  }
+}
+
+/**
  * Ce que les gens ont tapé.
  *
  * Seules les campagnes à mots-clés en rendent. Une Performance Max ne livre que des
@@ -686,4 +745,5 @@ export const googleAds: AdPlatformProvider = {
   lireJournees,
   lireCreatif,
   lireTermes,
+  lireAnnoncesDuGroupe,
 }

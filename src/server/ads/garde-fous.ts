@@ -151,6 +151,70 @@ export function autoriseBudget(
   return { ok: true }
 }
 
+/**
+ * Le nombre de textes déposés par jour et par compte.
+ *
+ * Bien plus haut que les gestes d'argent, et c'est volontaire : ajouter un titre ne dépense
+ * rien. Google borne déjà naturellement — quinze titres et quatre descriptions par annonce —
+ * et cette limite-ci n'existe que pour arrêter une boucle, pas pour freiner quelqu'un qui
+ * remplit ses annonces un samedi matin.
+ */
+export const TEXTES_PAR_JOUR = 40
+
+/** Ce que Google accepte, en caractères. Un texte plus long est refusé sans être lu. */
+const LONGUEURS_ADS: Record<string, number> = { titre: 30, description: 90 }
+
+/** Ce que Google accepte par annonce responsive. */
+const PLACES_ADS: Record<string, number> = { titre: 15, description: 4 }
+
+/**
+ * Les bornes d'un dépôt de texte.
+ *
+ * `places` est le nombre de textes déjà présents dans l'annonce, relu chez Google à
+ * l'instant. Pas celui de notre base : entre la lecture hebdomadaire et le dépôt, quelqu'un
+ * a pu remplir l'annonce, et déposer le seizième titre ferait refuser l'écriture entière —
+ * donc perdre aussi les quinze autres que l'on renvoie avec.
+ */
+export function autoriseTexte(
+  demande: Demande & { textesAujourdhui: number },
+  champ: string,
+  texte: string,
+  places: number,
+): Verdict {
+  if (demande.mode !== 'assiste') {
+    return {
+      ok: false,
+      raison:
+        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’un texte puisse être envoyé à Google.',
+    }
+  }
+  if (demande.textesAujourdhui >= TEXTES_PAR_JOUR) {
+    return {
+      ok: false,
+      raison: `Vous avez déposé ${TEXTES_PAR_JOUR} textes aujourd’hui. Reprenez demain.`,
+    }
+  }
+
+  const longueur = LONGUEURS_ADS[champ]
+  const maximum = PLACES_ADS[champ]
+  if (longueur === undefined || maximum === undefined) {
+    return { ok: false, raison: 'Seuls les titres et les descriptions peuvent être déposés.' }
+  }
+  if (texte.trim() === '' || texte.length > longueur) {
+    return {
+      ok: false,
+      raison: `Google refuse ce ${champ} : ${texte.length} caractères pour ${longueur} au maximum.`,
+    }
+  }
+  if (places >= maximum) {
+    return {
+      ok: false,
+      raison: `Cette annonce a déjà ${places} ${champ}s sur ${maximum} : Google n’en accepte pas davantage. Retirez-en un dans Google Ads avant d’en ajouter.`,
+    }
+  }
+  return { ok: true }
+}
+
 /** Les bornes d'un changement de statut. Mettre en pause ne coûte rien ; reprendre, si. */
 export function autoriseStatut(demande: Demande, vers: string): Verdict {
   if (vers !== 'ENABLED' && vers !== 'PAUSED') {

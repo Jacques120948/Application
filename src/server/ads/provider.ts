@@ -114,6 +114,36 @@ export type ElementAds = {
   performance: string
 }
 
+/**
+ * Une annonce responsive, telle qu'il faut la connaître pour y ajouter un texte.
+ *
+ * Google ne sait pas « ajouter un titre » : il remplace la liste entière. Y ajouter le
+ * seizième exige donc de connaître les quinze autres à l'instant où l'on écrit — et
+ * d'emporter leur épinglage, sinon un titre épinglé en première position redeviendrait
+ * libre sans que personne l'ait demandé.
+ *
+ * C'est aussi pourquoi cette lecture est faite juste avant l'écriture et non reprise de la
+ * base : entre la lecture hebdomadaire et le dépôt, quelqu'un a pu modifier l'annonce dans
+ * Google Ads. Renvoyer une liste vieille d'une semaine effacerait son travail.
+ */
+export type AnnonceAds = {
+  /** Le nom de ressource complet chez la plateforme : c'est lui qu'on renvoie pour écrire. */
+  resourceName: string
+  titres: TexteAnnonceAds[]
+  descriptions: TexteAnnonceAds[]
+}
+
+export type TexteAnnonceAds = {
+  texte: string
+  /**
+   * La position où ce texte est figé, quand il l'est : HEADLINE_1, DESCRIPTION_2…
+   *
+   * Vide quand le texte est libre. Reprise telle quelle et renvoyée telle quelle : la
+   * perdre déplacerait un texte que la personne avait délibérément fixé.
+   */
+  epingle: string
+}
+
 /** Un terme réellement tapé par quelqu'un, et ce qu'il a donné. */
 export type TermeAds = {
   campagneId: string
@@ -170,4 +200,12 @@ export type AdPlatformProvider = {
    * catégories agrégées. C'est une limite de la plateforme, et l'appelant doit la dire.
    */
   lireTermes: (acces: AccesAds, depuis: string, jusqua: string) => Promise<Lecture<TermeAds[]>>
+  /**
+   * Les annonces d'un contenant, lues à l'instant où l'on va écrire.
+   *
+   * Séparée de `lireCreatif`, qui lit tout le compte une fois par semaine pour l'afficher.
+   * Celle-ci lit un seul contenant, juste avant une écriture, parce qu'une liste vieille
+   * d'une semaine effacerait ce que la personne a fait entre-temps dans Google Ads.
+   */
+  lireAnnoncesDuGroupe: (acces: AccesAds, groupeId: string) => Promise<Lecture<AnnonceAds[]>>
 }

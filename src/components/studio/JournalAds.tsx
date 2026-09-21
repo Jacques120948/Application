@@ -33,6 +33,8 @@ const QUOI: Record<string, string> = {
   budget: 'Budget quotidien',
   pause: 'Mise en pause',
   reprise: 'Remise en diffusion',
+  titre: 'Titre d’annonce',
+  description: 'Description d’annonce',
 }
 
 const RESULTATS: Record<string, { mot: string; couleur: string }> = {
