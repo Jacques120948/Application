@@ -3,6 +3,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { synchroniserCompte } from '@/server/ads/synchro'
+import { evaluerCompte } from '@/server/ads/recommandations'
 import { assertSameOrigin, fail, ok } from '@/server/http/respond'
 
 /**
@@ -26,6 +27,14 @@ export async function POST(request: Request) {
 
     const issue = await synchroniserCompte(user.id)
     if (!issue.ok) return ok({ ok: false, raison: issue.raison })
+
+    /*
+     * Les règles enchaînent sur la lecture, et c'est gratuit : aucune requête chez Google,
+     * aucun crédit, des comparaisons de nombres sur ce qu'on vient d'écrire. Les séparer
+     * obligerait à cliquer deux fois pour une seule question — « et alors ? ».
+     */
+    await evaluerCompte(user.id).catch(() => null)
+
     return ok({ ok: true, bilan: issue.bilan })
   } catch (error) {
     return fail(error)

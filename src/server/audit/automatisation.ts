@@ -13,6 +13,7 @@ import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
 import { fairePoint } from './point'
 import { synchroniserTous } from '@/server/ads/synchro'
+import { evaluerTous } from '@/server/ads/recommandations'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -229,6 +230,8 @@ export type Bilan = {
   points: number
   /** Comptes publicitaires synchronisés. */
   comptesAds: number
+  /** Recommandations publicitaires ouvertes cette nuit. */
+  recommandationsAds: number
   echecs: number
   /** Combien de sites auraient dépensé. Rempli seulement à blanc. */
   redactionsDues?: number
@@ -400,6 +403,7 @@ export async function tournerQuotidien(
     questionsIa: 0,
     points: 0,
     comptesAds: 0,
+    recommandationsAds: 0,
     echecs: 0,
   }
   if (sansRedaction) {
@@ -572,6 +576,17 @@ export async function tournerQuotidien(
     if (publicite !== null) {
       bilan.comptesAds = publicite.comptes
       bilan.echecs += publicite.echecs
+    }
+
+    /*
+     * Les règles passent après la lecture, sur les chiffres qui viennent d'être écrits.
+     * Gratuites aussi : ni requête chez Google, ni crédit, ni modèle. C'est ce qui permet
+     * de les passer chaque nuit pour tout le monde sans que la nuit coûte quelque chose.
+     */
+    const regles = await evaluerTous().catch(() => null)
+    if (regles !== null) {
+      bilan.recommandationsAds = regles.ouvertes
+      bilan.echecs += regles.echecs
     }
   }
 

@@ -16,6 +16,8 @@ import { lireTableauAds, periodeValide, triValide } from '@/server/ads/tableau'
 import { ObjectifsAds } from '@/components/studio/ObjectifsAds'
 import { ProfilAds } from '@/components/studio/ProfilAds'
 import { objectifsDuCompte } from '@/server/ads/profil'
+import { lireRecommandations } from '@/server/ads/recommandations'
+import { RecommandationsAds } from '@/components/studio/RecommandationsAds'
 import { LinkButton } from '@/components/ui'
 
 /**
@@ -71,6 +73,15 @@ export default async function PublicitePage({
    */
   const objectifs =
     tableau === null ? null : await objectifsDuCompte(user.id, tableau.compte, tableau.total)
+
+  /*
+   * Les recommandations sont lues, jamais recalculées à l'ouverture. Les recalculer ici
+   * ferait reparaître à chaque visite un avis écarté la veille, et écrirait en base sur une
+   * simple consultation. Elles sont produites après chaque lecture de campagnes, après
+   * chaque changement de marge, et chaque nuit.
+   */
+  const recommandations =
+    tableau === null ? [] : await lireRecommandations(user.id, tableau.compte.id)
 
   return (
     <Shell
@@ -162,6 +173,31 @@ export default async function PublicitePage({
                       marge={objectifs.profil.margePourcent}
                       jours={tableau.jours}
                       ancre="#profil"
+                    />
+                  )}
+                  {objectifs === null || !tableau.synchronise ? null : (
+                    <RecommandationsAds
+                      ancre="#profil"
+                      sansMarge={objectifs.lecture.seuil === null}
+                      initiales={recommandations.map((une) => ({
+                        id: une.id,
+                        regle: une.regle,
+                        priorite: une.priorite,
+                        titre: une.titre,
+                        observation: une.observation,
+                        jours: une.jours,
+                        risque: une.risque,
+                        campagne: une.campagne,
+                        /*
+                         * L'âge est calculé ici plutôt que dans le navigateur : une date
+                         * rendue par le serveur et comparée à l'horloge du poste donne des
+                         * « ouvert depuis -1 jour » quand les deux ne sont pas d'accord.
+                         */
+                        age: Math.max(
+                          0,
+                          Math.floor((Date.now() - une.createdAt.getTime()) / 86_400_000),
+                        ),
+                      }))}
                     />
                   )}
                   <TableauAds

@@ -4,6 +4,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { enregistrerProfil, OBJECTIFS } from '@/server/ads/profil'
+import { evaluerCompte } from '@/server/ads/recommandations'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -39,6 +40,14 @@ export async function POST(request: Request) {
     requireFeature(await getEntitlements(user.id), 'visibility_ads_agent')
     const saisie = input.parse(await readJson(request))
     const { profil } = await enregistrerProfil(user.id, saisie)
+
+    /*
+     * Les règles repassent immédiatement. La marge décide de tous les verdicts de
+     * rentabilité : attendre la nuit pour en tirer les conséquences laisserait la personne
+     * devant un écran qui n'a pas bougé après le seul geste qui change tout.
+     */
+    await evaluerCompte(user.id).catch(() => null)
+
     return ok({ profil })
   } catch (error) {
     return fail(error)

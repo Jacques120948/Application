@@ -1,4 +1,5 @@
 import { compteActif } from './comptes'
+import { lireRecommandations } from './recommandations'
 import { objectifsDuCompte, type LectureObjectifs, type ProfilAds } from './profil'
 import { lireTableauAds, type Periode } from './tableau'
 
@@ -166,9 +167,31 @@ export async function contextePublicitaire(userId: string): Promise<string | nul
     }
   }
 
+  /*
+   * Les constats ouverts, tels que les règles les ont écrits. Naya les explique ; elle ne
+   * les produit pas et ne les complète pas. C'est le partage de travail de tout ce module :
+   * la détection est une condition qu'on peut lire, l'explication est une phrase qu'on peut
+   * comprendre, et confier la première à un modèle reviendrait à rendre une dépense réelle
+   * dépendante d'une formulation.
+   */
+  const constats = await lireRecommandations(userId, compte.id)
+  if (constats.length === 0) {
+    lignes.push(
+      'CONSTATS OUVERTS : aucun. Les règles d’Evoliia n’ont rien relevé sur les trente' +
+        ' derniers jours. N’en invente pas.',
+    )
+  } else {
+    lignes.push('CONSTATS OUVERTS, relevés par les règles d’Evoliia (priorité, titre, observation) :')
+    for (const constat of constats) {
+      lignes.push(`- [${constat.priorite}] ${constat.titre} — ${constat.observation}`)
+    }
+  }
+
   lignes.push(
     'Tous ces chiffres ont été calculés par Evoliia. Ne les recalcule pas, ne les complète' +
-      ' pas, et ne cite aucun chiffre publicitaire qui ne figure pas ci-dessus.',
+      ' pas, et ne cite aucun chiffre publicitaire qui ne figure pas ci-dessus. Les constats' +
+      ' ci-dessus sont produits par des règles écrites : tu les expliques et tu en discutes,' +
+      ' tu n’en inventes pas d’autres et tu ne dis pas en avoir appliqué un.',
   )
 
   return lignes.join('\n')
