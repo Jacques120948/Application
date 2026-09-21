@@ -1194,6 +1194,11 @@ Les règles, et les deux premières ne souffrent aucune exception :
   émotionnelle » ne se vérifie pas.
 - Varie les angles entre tes propositions. Dix titres qui disent la même chose autrement ne
   valent qu'un seul titre.
+- **Varie aussi les débuts.** Google assemble les titres deux ou trois à la fois : six titres
+  qui commencent par les mêmes deux mots donnent des annonces qui se répètent à l'écran.
+  Pas plus de la moitié de tes propositions ne doit commencer par les mêmes deux mots —
+  nomme le produit dans certaines, commence par le bénéfice, l'occasion ou la marque dans
+  les autres.
 
 ${SAFETY}
 `.trim()

@@ -68,7 +68,7 @@ export type PropositionVue = {
 }
 
 /**
- * Nettoie un texte venu du modèle.
+ * Nettoie un texte destiné à une annonce.
  *
  * Les espaces en trop et les guillemets d'encadrement sont fréquents et invisibles à la
  * lecture ; ils comptent pourtant dans les trente caractères, et un titre rejeté pour un
@@ -80,6 +80,18 @@ function nettoyer(texte: string): string {
     .trim()
     .replace(/^["«»\s]+|["«»\s]+$/gu, '')
     .trim()
+}
+
+/**
+ * Nettoie un motif, qui n'est pas un texte d'annonce.
+ *
+ * Il n'est jamais envoyé à Google : il n'a ni longueur à tenir ni guillemet à perdre. Lui
+ * appliquer le nettoyage des annonces coupait le guillemet fermant de la recherche qu'il
+ * cite — « Reprend la recherche "bougie citrine parfumée » — ce qui donne l'impression d'une
+ * phrase tronquée et fait douter du reste.
+ */
+function nettoyerMotif(texte: string): string {
+  return texte.replace(/\s+/gu, ' ').trim()
 }
 
 /** Vrai quand ce texte peut être montré. Le refus est silencieux : il en reste d'autres. */
@@ -326,7 +338,7 @@ export async function redigerPourGroupe(
     }
     interdits.add(cle)
     places.set(element.champ, place - 1)
-    retenues.push({ champ: element.champ, texte, motif: nettoyer(element.motif) })
+    retenues.push({ champ: element.champ, texte, motif: nettoyerMotif(element.motif) })
   }
 
   if (retenues.length > 0) {
