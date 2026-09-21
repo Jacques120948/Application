@@ -154,6 +154,26 @@ export type TermeAds = {
   coutMicros: number
 }
 
+/**
+ * Ce que le planificateur de Google dit d'un mot-clé.
+ *
+ * C'est la moitié que Search Console ne peut pas donner. Search Console dit ce que les gens
+ * ont tapé pour trouver **ce site** : une demande réelle, mais vue par le petit bout. Le
+ * planificateur dit ce que le marché tape et ce qu'il en coûterait d'y acheter un clic.
+ * Décider d'un achat sur Search Console seul reviendrait à payer pour des visites qu'on
+ * obtient déjà gratuitement, sans savoir à quel prix.
+ */
+export type IdeeMotCle = {
+  texte: string
+  /** Recherches mensuelles moyennes. 0 : Google n'en donne pas, ce qui arrive et se dit. */
+  volume: number
+  /** LOW | MEDIUM | HIGH, tel que Google le rend. Jamais traduit en note. */
+  concurrence: string
+  /** La fourchette du coût par clic en haut de page, en micros de la devise du compte. */
+  coutBasMicros: number
+  coutHautMicros: number
+}
+
 /** Ce que rend une lecture : des données, ou une raison dite à quelqu'un qui n'est pas développeur. */
 export type Lecture<T> = { ok: true; valeur: T } | { ok: false; raison: string }
 
@@ -220,4 +240,31 @@ export type AdPlatformProvider = {
     acces: AccesAds,
     groupeId: string,
   ) => Promise<Lecture<Record<string, number>>>
+
+  /**
+   * Ce que le marché tape autour de quelques mots, et ce que ça coûterait.
+   *
+   * `marche` et `langue` sont les constantes de la plateforme, jamais devinées ici : une
+   * fourchette de coût par clic n'a de sens que rapportée à un pays et à une langue, et
+   * lire les volumes du monde entier pour une boutique suisse donnerait des chiffres vrais
+   * et inutilisables.
+   */
+  ideesDeMotsCles: (
+    acces: AccesAds,
+    graines: string[],
+    marche: string,
+    langue: string,
+  ) => Promise<Lecture<IdeeMotCle[]>>
+
+  /**
+   * Les mots-clés d'un contenant, relus à l'instant.
+   *
+   * Lus avant d'en déposer un : notre base a une semaine, et la plateforme refuse deux fois
+   * le même mot dans la même correspondance. Un refus qui dit « le critère existe déjà »
+   * n'aide personne ; le dire avant, si.
+   */
+  lireMotsClesDuGroupe: (
+    acces: AccesAds,
+    groupeId: string,
+  ) => Promise<Lecture<Array<{ texte: string; correspondance: string }>>>
 }

@@ -275,6 +275,102 @@ export function autoriseImage(
   return { ok: true }
 }
 
+/**
+ * Les correspondances qu'Evoliia sait déposer.
+ *
+ * « Large » n'en fait pas partie, et c'est la décision la plus conséquente de ce fichier.
+ * Une correspondance large laisse Google choisir les recherches voisines — sur un budget de
+ * quelques francs par jour, il le dépense en un matin sur des requêtes que personne n'a
+ * validées, et la personne découvre dans son rapport qu'elle a payé pour « bougie
+ * anniversaire » en croyant acheter « bougie citrine ». Le jour où quelqu'un veut du large,
+ * il le posera dans Google Ads, en connaissance de cause.
+ */
+export const CORRESPONDANCES = ['phrase', 'exact'] as const
+
+export type Correspondance = (typeof CORRESPONDANCES)[number]
+
+/**
+ * Ce qu'un groupe d'annonces peut porter de mots-clés déposés depuis Evoliia.
+ *
+ * Google en accepte des milliers. La borne n'est donc pas technique : au-delà de quelques
+ * dizaines, un groupe d'annonces cesse d'avoir un thème, et ses annonces ne peuvent plus
+ * répondre à ce que les gens tapent. C'est un choix de produit, et il se discute.
+ */
+export const MOTS_CLES_PAR_GROUPE = 30
+
+/** Ce que Google accepte : quatre-vingts caractères, dix mots. */
+const LONGUEUR_MOT_CLE = 80
+const MOTS_MAX = 10
+
+/**
+ * Les bornes d'un dépôt de mot-clé.
+ *
+ * Un mot-clé ne dépense rien par lui-même : il ouvre une porte. C'est pourquoi il partage le
+ * compteur quotidien des textes plutôt que celui des gestes d'argent — mais c'est aussi
+ * pourquoi la correspondance est bornée ici et nulle part ailleurs : c'est elle, et non le
+ * mot, qui décide de ce que Google s'autorise à acheter.
+ */
+export function autoriseMotCle(
+  demande: Demande & { textesAujourdhui: number },
+  texte: string,
+  correspondance: string,
+  places: number,
+): Verdict {
+  if (demande.mode !== 'assiste') {
+    return {
+      ok: false,
+      raison:
+        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’un mot-clé puisse être envoyé à Google.',
+    }
+  }
+  if (demande.textesAujourdhui >= TEXTES_PAR_JOUR) {
+    return {
+      ok: false,
+      raison: `Vous avez déposé ${TEXTES_PAR_JOUR} éléments aujourd’hui. Reprenez demain.`,
+    }
+  }
+  if (!(CORRESPONDANCES as readonly string[]).includes(correspondance)) {
+    return {
+      ok: false,
+      raison:
+        'Evoliia ne dépose qu’en correspondance exacte ou en expression exacte. La correspondance large laisse Google acheter des recherches voisines que personne n’a validées.',
+    }
+  }
+
+  const propre = texte.trim().replace(/\s+/gu, ' ')
+  if (propre === '' || propre.length > LONGUEUR_MOT_CLE) {
+    return {
+      ok: false,
+      raison: `Google refuse ce mot-clé : ${propre.length} caractères pour ${LONGUEUR_MOT_CLE} au maximum.`,
+    }
+  }
+  if (propre.split(' ').length > MOTS_MAX) {
+    return {
+      ok: false,
+      raison: `Google refuse un mot-clé de plus de ${MOTS_MAX} mots.`,
+    }
+  }
+  /*
+   * Les signes de correspondance sont posés par le connecteur d'écriture, pas tapés dans le
+   * texte. Les laisser passer ferait acheter le mot-clé « "bougie citrine" » guillemets
+   * compris, qui ne correspond à aucune recherche.
+   */
+  if (/["'\[\]+]/u.test(propre)) {
+    return {
+      ok: false,
+      raison:
+        'Un mot-clé ne porte ni guillemets ni crochets : la correspondance se choisit à côté du texte, pas dedans.',
+    }
+  }
+  if (places >= MOTS_CLES_PAR_GROUPE) {
+    return {
+      ok: false,
+      raison: `Ce groupe porte déjà ${places} mots-clés sur ${MOTS_CLES_PAR_GROUPE}. Au-delà, un groupe d’annonces perd son thème et ses annonces ne répondent plus à ce que les gens tapent.`,
+    }
+  }
+  return { ok: true }
+}
+
 /** Les bornes d'un changement de statut. Mettre en pause ne coûte rien ; reprendre, si. */
 export function autoriseStatut(demande: Demande, vers: string): Verdict {
   if (vers !== 'ENABLED' && vers !== 'PAUSED') {

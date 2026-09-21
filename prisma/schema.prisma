@@ -109,6 +109,7 @@ model User {
   adsElements          AdsElement[]
   adsTermes            AdsTerme[]
   adsPropositions      AdsProposition[]
+  adsMotsCles          AdsMotCle[]
   releveRecherches     ReleveRecherche[]
 
   @@index([createdAt])
@@ -1787,6 +1788,7 @@ model AdsAccount {
   elements        AdsElement[]
   termes          AdsTerme[]
   propositions    AdsProposition[]
+  motsCles        AdsMotCle[]
 
   @@unique([userId, plateforme, compteId])
   @@index([userId, actif])
@@ -1876,6 +1878,7 @@ model AdsGroupe {
   campagne     AdsCampagne      @relation(fields: [campagneId], references: [id], onDelete: Cascade)
   elements     AdsElement[]
   propositions AdsProposition[]
+  motsCles     AdsMotCle[]
 
   @@unique([accountId, groupeId])
   @@index([campagneId])
@@ -2066,4 +2069,52 @@ model AdsAction {
   @@index([accountId, createdAt(sort: Desc)])
   @@index([campagneId, quoi])
   @@index([recommandationId])
+}
+
+/// Un mot-clé que Naya propose d'acheter, et ce qu'il coûterait.
+///
+/// Séparé des propositions de texte parce qu'il porte des chiffres qu'un titre n'a pas.
+/// Search Console dit ce que la requête vaut déjà sans payer ; le planificateur de Google dit
+/// ce qu'elle coûterait. Les deux ensemble font une décision ; l'un sans l'autre, une
+/// intuition.
+///
+/// Les chiffres sont figés à la proposition : le planificateur consomme le quota d'API
+/// partagé par tous les utilisateurs d'Evoliia, et rouvrir un écran ne doit pas le rappeler.
+model AdsMotCle {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  accountId String @db.Uuid
+  groupeId  String @db.Uuid
+
+  texte          String
+  /// phrase | exact. Jamais « large » : sur un petit budget, elle dépense ailleurs.
+  correspondance String @default("phrase")
+
+  /// Ce que Search Console sait de la requête sur le site. 0 : elle n'y figure pas.
+  position    Float @default(0)
+  impressions Int   @default(0)
+  clics       Int   @default(0)
+
+  /// Recherches mensuelles moyennes. 0 : le planificateur n'en donne pas, ce qui se dit.
+  volume         Int    @default(0)
+  /// La fourchette du coût par clic en haut de page, en micros de la devise du compte.
+  coutBasMicros  BigInt @default(0)
+  coutHautMicros BigInt @default(0)
+  concurrence    String @default("")
+
+  motif     String @default("")
+  /// proposee | deposee | ecartee
+  etat      String @default("proposee")
+  /// Le critère chez Google, écrit au dépôt. Sans lui, rien à retirer au retour arrière.
+  critereId String @default("")
+
+  createdAt DateTime  @default(now())
+  closedAt  DateTime?
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupe  AdsGroupe  @relation(fields: [groupeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupeId, texte, correspondance])
+  @@index([groupeId, etat])
 }

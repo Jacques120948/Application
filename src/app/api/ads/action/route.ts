@@ -6,6 +6,7 @@ import { getEntitlements } from '@/server/billing/entitlements'
 import {
   appliquerBudget,
   appliquerStatut,
+  deposerMotCle,
   deposerPhoto,
   deposerTexte,
   restaurer,
@@ -52,6 +53,7 @@ const input = z.discriminatedUnion('type', [
     handle: z.string().min(1).max(200),
     format: z.enum(Object.keys(FORMATS) as [string, ...string[]]),
   }),
+  z.object({ type: z.literal('mot-cle'), motCleId: z.string().uuid() }),
   z.object({ type: z.literal('restaurer'), actionId: z.string().uuid() }),
 ])
 
@@ -76,7 +78,9 @@ export async function POST(request: Request) {
                   handle: demande.handle,
                   format: demande.format as keyof typeof FORMATS,
                 })
-              : await restaurer(user.id, demande.actionId)
+              : demande.type === 'mot-cle'
+                ? await deposerMotCle(user.id, demande.motCleId)
+                : await restaurer(user.id, demande.actionId)
 
     /*
      * Un refus de Google ou d'un garde-fou n'est pas une erreur HTTP : c'est une réponse. La

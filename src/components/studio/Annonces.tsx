@@ -21,6 +21,7 @@
  */
 
 import { PhotosAds, type FormatVu, type PhotoVue } from './PhotosAds'
+import { MotsClesAds, type MotCleVue } from './MotsClesAds'
 import { PropositionsAds, type PropositionVue } from './PropositionsAds'
 
 export type ElementVu = {
@@ -149,8 +150,10 @@ export function Annonces({
   termes,
   lu,
   propositions,
+  motsCles,
   photos,
   formats,
+  devise,
   assiste,
 }: {
   groupes: readonly GroupeVu[]
@@ -158,10 +161,14 @@ export function Annonces({
   lu: boolean
   /** Ce que Naya propose, par contenant. Montré à côté de l'existant, jamais mêlé. */
   propositions: Record<string, PropositionVue[]>
+  /** Ce que Naya propose d'acheter, par contenant. Vide hors campagnes Recherche. */
+  motsCles: Record<string, MotCleVue[]>
   /** Les photos de la boutique proposées, par contenant. Vides sans boutique connectée. */
   photos: Record<string, PhotoVue[]>
   /** Les proportions que Google impose, dites avec ce qu'elles coupent. */
   formats: readonly FormatVu[]
+  /** La devise du compte : un prix par clic sans devise ne veut rien dire. */
+  devise: string
   /** Vrai quand le compte est en mode assisté : sans cela, aucun dépôt n'est possible. */
   assiste: boolean
 }) {
@@ -293,6 +300,19 @@ export function Annonces({
                     deposable={assiste}
                   />
                 )}
+
+                <MotsClesAds
+                  groupeId={groupe.id}
+                  initiales={motsCles[groupe.id] ?? []}
+                  devise={devise}
+                  deposable={assiste}
+                  /*
+                    Une Performance Max n'achète pas de mots-clés : elle choisit elle-même
+                    où diffuser à partir de ses éléments. Montrer le bouton donnerait un
+                    geste qui ne peut qu'échouer.
+                  */
+                  achetable={groupe.genre === 'annonces'}
+                />
 
                 <PropositionsAds
                   groupeId={groupe.id}

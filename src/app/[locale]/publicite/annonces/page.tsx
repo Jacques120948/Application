@@ -7,6 +7,7 @@ import { lireCreatifDuCompte } from '@/server/ads/creatif'
 import { compteActif } from '@/server/ads/comptes'
 import { isEnabled } from '@/server/settings/flags'
 import { propositionsDuCompte } from '@/server/ads/redaction'
+import { motsClesDuCompte } from '@/server/ads/ciblage'
 import { FORMATS, photosPourGroupe } from '@/server/ads/images'
 import { Shell } from '@/components/studio/Shell'
 import { Annonces } from '@/components/studio/Annonces'
@@ -43,8 +44,12 @@ export default async function AnnoncesPage({
    * contenant ferait trente-deux allers-retours pour afficher une page.
    */
   const compte = await compteActif(user.id)
-  const parGroupe = compte === null ? new Map() : await propositionsDuCompte(user.id, compte.id)
+  const [parGroupe, parGroupeMots] = await Promise.all([
+    compte === null ? new Map() : propositionsDuCompte(user.id, compte.id),
+    compte === null ? new Map() : motsClesDuCompte(user.id, compte.id),
+  ])
   const propositions = Object.fromEntries(parGroupe)
+  const motsCles = Object.fromEntries(parGroupeMots)
 
   /*
    * Le dépôt a les deux mêmes verrous que les budgets : l'interrupteur d'exploitation, qui
@@ -107,8 +112,10 @@ export default async function AnnoncesPage({
           termes={creatif.termes}
           lu={creatif.lu}
           propositions={propositions}
+          motsCles={motsCles}
           photos={photos}
           formats={formats}
+          devise={compte?.devise ?? ''}
           assiste={assiste}
         />
       </div>

@@ -246,6 +246,57 @@ export async function detacherElement(
 }
 
 /**
+ * Ajoute un mot-clé à un groupe d'annonces.
+ *
+ * Même forme que le rattachement d'un élément — créer, garder la poignée, savoir retirer —
+ * et pour la même raison : rien n'est remplacé, donc rien ne peut être effacé par mégarde.
+ *
+ * La correspondance est posée par le champ `matchType` et non par des guillemets dans le
+ * texte, ce qui n'est pas une coquetterie. Google accepte les deux écritures, et un texte
+ * qui porte déjà ses guillemets se retrouve acheté guillemets compris : un mot-clé qui ne
+ * correspond à aucune recherche, et qui ne dépense rien en paraissant actif. Les garde-fous
+ * refusent d'ailleurs un texte qui en contient.
+ *
+ * `BROAD` n'est volontairement pas atteignable depuis ici : `garde-fous.ts` n'accepte que
+ * l'expression exacte et le mot-clé exact. Sur un petit budget, la correspondance large est
+ * la façon la plus rapide de dépenser un mois en un matin sur des recherches que personne
+ * n'a validées.
+ */
+export async function creerMotCle(
+  acces: AccesAds,
+  groupeId: string,
+  texte: string,
+  correspondance: 'phrase' | 'exact',
+): Promise<{ ok: true; resourceName: string } | { ok: false; raison: string; technique: string }> {
+  const issue = await envoyerEtLire('adGroupCriteria:mutate', acces, {
+    operations: [
+      {
+        create: {
+          adGroup: `customers/${acces.compteId}/adGroups/${groupeId}`,
+          status: 'ENABLED',
+          keyword: {
+            text: texte,
+            matchType: correspondance === 'exact' ? 'EXACT' : 'PHRASE',
+          },
+        },
+      },
+    ],
+  })
+  if (!issue.ok) return issue
+  return { ok: true, resourceName: issue.resourceName }
+}
+
+/** Retire un mot-clé d'un groupe d'annonces. C'est le retour arrière d'un dépôt. */
+export async function retirerMotCle(
+  acces: AccesAds,
+  critereResourceName: string,
+): Promise<Ecriture> {
+  return envoyer('adGroupCriteria:mutate', acces, {
+    operations: [{ remove: critereResourceName }],
+  })
+}
+
+/**
  * Un envoi dont on lit le nom de ressource créé.
  *
  * Séparé de `envoyer` parce que la plupart des écritures n'ont rien à relire : changer un

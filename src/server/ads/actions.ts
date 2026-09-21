@@ -8,16 +8,19 @@ import type { AccesAds, TexteAnnonceAds } from './provider'
 import { googleAds } from './google-ads'
 import {
   creerImageElement,
+  creerMotCle,
   creerTexteElement,
   detacherElement,
   ecrireBudget,
   ecrireStatut,
   ecrireTextesAnnonce,
   rattacherElement,
+  retirerMotCle,
 } from './google-ads-ecriture'
 import {
   autoriseBudget,
   autoriseImage,
+  autoriseMotCle,
   autoriseStatut,
   autoriseTexte,
   type Demande,
@@ -190,7 +193,12 @@ async function textesAujourdhui(userId: string, accountId: string): Promise<numb
         accountId,
         createdAt: { gte: aujourdhui() },
         mode: { not: 'restauration' },
-        quoi: { in: ['titre', 'description'] },
+        /*
+         * Tous les dépôts, et non les seuls titres et descriptions. Le compteur en oubliait
+         * trois — les titres longs, les images, les mots-clés — ce qui rendait la borne
+         * quotidienne franchissable en changeant simplement de type d'élément.
+         */
+        quoi: { in: ['titre', 'titre-long', 'description', 'image', 'mot-cle'] },
       },
     }),
   )
@@ -916,6 +924,143 @@ export async function deposerPhoto(
 }
 
 /**
+ * Dépose un mot-clé dans un groupe d'annonces.
+ *
+ * C'est le premier geste de Naya qui ouvre une dépense plutôt que d'en ajuster une. Un
+ * budget qu'on baisse, une campagne qu'on met en pause, un titre qu'on ajoute : rien de tout
+ * cela ne fait dépenser un franc de plus. Un mot-clé, si — il ouvre une porte par laquelle
+ * Google achètera des clics. D'où trois précautions qui n'existent pas ailleurs.
+ *
+ * **La correspondance est bornée à l'expression et à l'exact.** `garde-fous.ts` refuse la
+ * correspondance large, qui laisse Google choisir les recherches voisines : sur un budget de
+ * quelques francs par jour, c'est la façon la plus rapide de dépenser un mois en un matin
+ * sur des requêtes que personne n'a validées.
+ *
+ * **Le groupe est relu chez Google avant l'écriture.** Pour compter — notre base a une
+ * semaine — et pour le doublon : Google refuse deux fois le même mot dans la même
+ * correspondance, et son refus ne dit pas lequel.
+ *
+ * **Le retour arrière retire le critère**, il ne le met pas en pause. Un mot-clé en pause
+ * reste dans le groupe et réapparaît dans tous les rapports ; retiré, il n'y est plus.
+ */
+export async function deposerMotCle(userId: string, motCleId: string): Promise<Issue> {
+  const ouverture = await ouvrir(userId)
+  if (!ouverture.ok) return ouverture
+  const { compte } = ouverture
+
+  const propose = await withUserScope(userId, (tx) =>
+    tx.adsMotCle.findFirst({
+      where: { id: motCleId, userId, accountId: compte.id, etat: 'proposee' },
+      select: {
+        id: true,
+        texte: true,
+        correspondance: true,
+        groupe: { select: { id: true, nom: true, genre: true, groupeId: true } },
+      },
+    }),
+  )
+  if (propose === null) throw notFound('Ce mot-clé est introuvable.')
+  if (propose.groupe.genre !== 'annonces') {
+    return {
+      ok: false,
+      raison:
+        'Une campagne Performance Max n’achète pas de mots-clés : elle choisit elle-même où diffuser à partir de ses éléments.',
+    }
+  }
+
+  const acces = await accesCompteActif(userId)
+  if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  const existants = await googleAds.lireMotsClesDuGroupe(acces.acces, propose.groupe.groupeId)
+  if (!existants.ok) {
+    return {
+      ok: false,
+      raison: `${existants.raison} Evoliia n’envoie rien tant qu’elle n’a pas pu lire ce que le groupe porte déjà.`,
+    }
+  }
+
+  const cle = (texte: string): string => texte.trim().toLowerCase()
+  if (
+    existants.valeur.some(
+      (mot) => cle(mot.texte) === cle(propose.texte) && mot.correspondance === propose.correspondance,
+    )
+  ) {
+    return { ok: false, raison: 'Ce mot-clé est déjà dans ce groupe, dans la même correspondance.' }
+  }
+
+  const textes = await textesAujourdhui(userId, compte.id)
+  const verdict = autoriseMotCle(
+    { ...ouverture.demande, textesAujourdhui: textes },
+    propose.texte,
+    propose.correspondance,
+    existants.valeur.length,
+  )
+  if (!verdict.ok) return verdict
+
+  const correspondance = propose.correspondance === 'exact' ? 'exact' : 'phrase'
+  let critere = ''
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: 'mot-cle',
+      motif: `Mot-clé « ${propose.texte} » ajouté à « ${propose.groupe.nom} » en ${correspondance === 'exact' ? 'correspondance exacte' : 'expression exacte'}`,
+      campagneId: null,
+      /*
+       * Rien avant, puisque rien n'est remplacé. La poignée du retour arrière — le nom du
+       * critère chez Google — est écrite après coup, une fois que Google l'a rendue.
+       */
+      avant: { champ: 'mot-cle', critere: false },
+      apres: { champ: 'mot-cle', texte: propose.texte, correspondance },
+      mode: 'assiste',
+    },
+    async () => {
+      const issue = await creerMotCle(
+        acces.acces,
+        propose.groupe.groupeId,
+        propose.texte,
+        correspondance,
+      )
+      if (!issue.ok) return issue
+      critere = issue.resourceName
+      return { ok: true }
+    },
+    async (actionId) => {
+      await withUserScope(userId, async (tx) => {
+        await tx.adsMotCle.updateMany({
+          where: { id: propose.id, userId },
+          data: { etat: 'deposee', closedAt: new Date(), critereId: critere },
+        })
+        /*
+         * Le mot rejoint les éléments réels, marqué comme venant d'Evoliia. C'est lui qui
+         * dira à la prochaine rédaction de quoi ce groupe parle : un mot-clé déposé change
+         * le sujet du contenant, et les titres qui suivront doivent y répondre.
+         */
+        await tx.adsElement.createMany({
+          data: [
+            {
+              userId,
+              accountId: compte.id,
+              groupeId: propose.groupe.id,
+              champ: 'mot-cle',
+              texte: propose.texte,
+              elementId: critere,
+              origine: 'evoliia',
+            },
+          ],
+          skipDuplicates: true,
+        })
+        await tx.adsAction.updateMany({
+          where: { id: actionId, userId },
+          data: { avant: { champ: 'mot-cle', critere: true, critereId: critere } },
+        })
+      })
+    },
+  )
+}
+
+/**
  * Remet une action dans l'état d'avant.
  *
  * Elle réutilise les mêmes chemins d'écriture, avec les mêmes garde-fous, et laisse sa
@@ -952,6 +1097,8 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
     textes?: TexteAnnonceAds[]
     rattache?: boolean
     rattachement?: string
+    critere?: boolean
+    critereId?: string
   }
 
   const acces = await accesCompteActif(userId)
@@ -967,6 +1114,35 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
    * liste : l'élément reste chez Google, il ne sert simplement plus ici. C'est le chemin le
    * plus sûr des deux, et il se reconnaît à la poignée conservée au dépôt.
    */
+  /*
+   * Un mot-clé se retire, il ne se met pas en pause. Un critère en pause reste dans le
+   * groupe et continue d'apparaître dans tous les rapports ; retiré, il n'y est plus.
+   */
+  if (origine.quoi === 'mot-cle' && avant.critere === true && typeof avant.critereId === 'string') {
+    const mot = ((origine.apres ?? {}) as { texte?: string }).texte ?? ''
+    return journaliser(
+      userId,
+      compte,
+      {
+        quoi: 'mot-cle',
+        motif: mot === '' ? 'Mot-clé retiré du groupe' : `Retrait du mot-clé « ${mot} »`,
+        campagneId: null,
+        avant: { champ: 'mot-cle', critere: true, critereId: avant.critereId },
+        apres: { champ: 'mot-cle', critere: false },
+        mode: 'restauration',
+        annuleId: origine.id,
+      },
+      () => retirerMotCle(acces.acces, avant.critereId ?? ''),
+      async () => {
+        await withUserScope(userId, (tx) =>
+          tx.adsElement.deleteMany({
+            where: { userId, accountId: compte.id, champ: 'mot-cle', texte: mot },
+          }),
+        )
+      },
+    )
+  }
+
   if (avant.rattache === true && typeof avant.rattachement === 'string') {
     const texte = ((origine.apres ?? {}) as { texte?: string }).texte ?? ''
     return journaliser(

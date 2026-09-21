@@ -10,6 +10,7 @@ import type {
   CompteAds,
   ElementAds,
   GroupeAds,
+  IdeeMotCle,
   JourneeAds,
   Lecture,
   TermeAds,
@@ -51,6 +52,14 @@ import type {
  * refus nommé vaut mieux qu'un 404 sans explication.
  */
 const VERSION = 'v22'
+
+/**
+ * Le nombre de mots que le planificateur accepte comme point de départ.
+ *
+ * Vingt est la limite de Google. La dépasser ne fait pas ignorer les surnuméraires : elle
+ * fait refuser l'appel entier, donc perdre aussi les dix-neuf premiers.
+ */
+const GRAINES_MAX = 20
 
 /*
  * Exportées pour le connecteur d'écriture, qui vit dans un fichier séparé. La séparation
@@ -766,6 +775,126 @@ async function lireTermes(
   }
 }
 
+/**
+ * Les mots-clés d'un groupe d'annonces, relus à l'instant.
+ *
+ * Lus avant d'en déposer un, pour deux raisons. Le compte d'abord : notre base est relue une
+ * fois par semaine, et quelqu'un a pu ajouter vingt mots-clés dans Google Ads entre-temps.
+ * Le doublon ensuite : Google refuse deux fois le même mot dans la même correspondance, et
+ * un refus qui dit « le critère existe déjà » n'aide personne — mieux vaut le dire avant.
+ *
+ * La correspondance est rendue avec le texte : le même mot en expression et en exact sont
+ * deux achats différents, et les confondre ferait refuser un dépôt légitime.
+ */
+async function lireMotsClesDuGroupe(
+  acces: AccesAds,
+  groupeId: string,
+): Promise<Lecture<Array<{ texte: string; correspondance: string }>>> {
+  const identifiant = groupeId.replace(/\D/gu, '')
+  if (identifiant === '') return { ok: false, raison: 'Contenant inconnu.' }
+
+  const lecture = await interroger(
+    acces,
+    `SELECT ad_group_criterion.keyword.text, ad_group_criterion.keyword.match_type
+     FROM ad_group_criterion
+     WHERE ad_group.id = ${identifiant}
+       AND ad_group_criterion.type = 'KEYWORD'
+       AND ad_group_criterion.negative = false
+       AND ad_group_criterion.status != 'REMOVED'`,
+  )
+  if (!lecture.ok) return lecture
+
+  return {
+    ok: true,
+    valeur: lecture.valeur
+      .map((ligne) => {
+        const critere = (ligne.adGroupCriterion ?? {}) as Record<string, unknown>
+        const mot = (critere.keyword ?? {}) as Record<string, unknown>
+        return {
+          texte: texte(mot.text),
+          // PHRASE | EXACT | BROAD, ramenés au vocabulaire d'Evoliia. Un mot large existe
+          // chez Google même si Evoliia n'en dépose pas : il compte dans le groupe.
+          correspondance: texte(mot.matchType).toLowerCase(),
+        }
+      })
+      .filter((mot) => mot.texte !== ''),
+  }
+}
+
+/**
+ * Ce que le marché tape autour de quelques mots, et ce que ça coûterait.
+ *
+ * Le planificateur de mots-clés, et c'est la pièce que Search Console ne peut pas fournir.
+ * Search Console dit ce que les gens ont tapé pour trouver ce site-là : une demande réelle,
+ * mais vue par le petit bout de la lorgnette, et sans aucun prix. Le planificateur dit le
+ * volume du marché et la fourchette de coût par clic. Acheter des mots-clés sur Search
+ * Console seul reviendrait à payer pour des visites déjà obtenues gratuitement, sans savoir
+ * à quel prix — c'est exactement l'erreur que ce croisement existe pour éviter.
+ *
+ * Trois précautions.
+ *
+ * **Le marché et la langue sont obligatoires.** Une fourchette de coût par clic n'a de sens
+ * que rapportée à un pays et à une langue. Les omettre rendrait les chiffres du monde
+ * entier : vrais, et inutilisables pour une boutique suisse.
+ *
+ * **Les graines sont bornées à vingt.** C'est la limite de Google, et la dépasser fait
+ * refuser l'appel entier — donc perdre les dix-neuf autres.
+ *
+ * **Une seule page.** L'appel consomme le quota d'API partagé par tous les utilisateurs
+ * d'Evoliia. La première page porte déjà plus d'idées qu'un groupe d'annonces n'en peut
+ * contenir ; aller chercher la suivante coûterait le quota de quelqu'un d'autre.
+ */
+async function ideesDeMotsCles(
+  acces: AccesAds,
+  graines: string[],
+  marche: string,
+  langue: string,
+): Promise<Lecture<IdeeMotCle[]>> {
+  const compte = acces.compteId.replace(/\D/gu, '')
+  const semences = graines
+    .map((graine) => graine.trim())
+    .filter((graine) => graine !== '')
+    .slice(0, GRAINES_MAX)
+  if (semences.length === 0) return { ok: true, valeur: [] }
+
+  const reponse = await appeler(
+    `${RACINE}/customers/${compte}:generateKeywordIdeas`,
+    acces.accessToken,
+    env.googleAdsLoginCustomerId,
+    {
+      language: langue,
+      geoTargetConstants: [marche],
+      keywordPlanNetwork: 'GOOGLE_SEARCH',
+      includeAdultKeywords: false,
+      keywordSeed: { keywords: semences },
+    },
+  )
+  if (reponse === null) {
+    return { ok: false, raison: 'Google Ads est momentanément injoignable. Réessayez.' }
+  }
+  if (reponse.status !== 200) return { ok: false, raison: refus(reponse.status, reponse.erreur) }
+
+  const resultats = (reponse.corps as { results?: unknown })?.results
+  if (!Array.isArray(resultats)) return { ok: true, valeur: [] }
+
+  return {
+    ok: true,
+    valeur: resultats
+      .map((brut) => {
+        const ligne = (brut ?? {}) as Record<string, unknown>
+        const mesures = (ligne.keywordIdeaMetrics ?? {}) as Record<string, unknown>
+        return {
+          texte: texte(ligne.text),
+          volume: nombre(mesures.avgMonthlySearches),
+          concurrence: texte(mesures.competition),
+          coutBasMicros: nombre(mesures.lowTopOfPageBidMicros),
+          coutHautMicros: nombre(mesures.highTopOfPageBidMicros),
+        }
+      })
+      .filter((idee) => idee.texte !== ''),
+  }
+}
+
 export const googleAds: AdPlatformProvider = {
   id: 'google-ads',
   nom: 'Google Ads',
@@ -780,4 +909,6 @@ export const googleAds: AdPlatformProvider = {
   lireTermes,
   lireAnnoncesDuGroupe,
   compterElementsDuGroupe,
+  ideesDeMotsCles,
+  lireMotsClesDuGroupe,
 }
