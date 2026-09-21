@@ -242,6 +242,7 @@ export default async function PublicitePage({
                   )}
                   <TableauAds
                     base={`/${locale}/publicite`}
+                    assiste={assiste}
                     tableau={{
                       devise: tableau.compte.devise,
                       jours: tableau.jours,

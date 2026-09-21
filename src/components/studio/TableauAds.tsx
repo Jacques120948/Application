@@ -16,6 +16,7 @@
  */
 
 import type { ReactNode } from 'react'
+import { ActionsCampagne } from './ActionsCampagne'
 import { CourbeAds, type JourneeVue } from './CourbeAds'
 
 export type EcartVu = { valeur: number | null; variation: number | null; points: number | null }
@@ -197,7 +198,16 @@ const TRIS: ReadonlyArray<{ cle: string; texte: string }> = [
  * campagnes sur sept consomment quatre-vingts pour cent de la dépense prend une seconde et
  * se lit mal dans une colonne de montants.
  */
-function Campagne({ campagne, devise }: { campagne: CampagneVue; devise: string }) {
+function Campagne({
+  campagne,
+  devise,
+  assiste,
+}: {
+  campagne: CampagneVue
+  devise: string
+  /** Vrai quand le compte est en mode assisté : sans cela, aucune commande d'écriture. */
+  assiste: boolean
+}) {
   return (
     <li className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -271,6 +281,16 @@ function Campagne({ campagne, devise }: { campagne: CampagneVue; devise: string 
           </div>
         ))}
       </div>
+
+      {assiste && campagne.statut !== 'REMOVED' ? (
+        <ActionsCampagne
+          campagneId={campagne.id}
+          nom={campagne.nom}
+          statut={campagne.statut}
+          budget={campagne.budget}
+          devise={devise}
+        />
+      ) : null}
     </li>
   )
 }
@@ -278,10 +298,13 @@ function Campagne({ campagne, devise }: { campagne: CampagneVue; devise: string 
 export function TableauAds({
   tableau,
   base,
+  assiste,
 }: {
   tableau: TableauVu
   /** L'adresse de la page, pour que le choix de période voyage dedans. */
   base: string
+  /** Vrai quand le compte est en mode assisté : les commandes d'écriture apparaissent alors. */
+  assiste: boolean
 }) {
   const { devise, total, ecarts } = tableau
 
@@ -406,7 +429,12 @@ export function TableauAds({
           <>
             <ul className="m-0 grid list-none gap-3 p-0">
               {qui.map((campagne) => (
-                <Campagne key={campagne.id} campagne={campagne} devise={devise} />
+                <Campagne
+                  key={campagne.id}
+                  campagne={campagne}
+                  devise={devise}
+                  assiste={assiste}
+                />
               ))}
             </ul>
 
@@ -424,7 +452,12 @@ export function TableauAds({
                 </summary>
                 <ul className="m-0 mt-3 grid list-none gap-3 p-0">
                   {dormantes.map((campagne) => (
-                    <Campagne key={campagne.id} campagne={campagne} devise={devise} />
+                    <Campagne
+                      key={campagne.id}
+                      campagne={campagne}
+                      devise={devise}
+                      assiste={assiste}
+                    />
                   ))}
                 </ul>
               </details>

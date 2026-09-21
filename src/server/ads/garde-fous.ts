@@ -1,3 +1,4 @@
+import { FACTEUR_MAX, FACTEUR_MIN } from '@/lib/bornes-budget'
 import type { ProfilAds } from './profil'
 
 /**
@@ -11,11 +12,20 @@ import type { ProfilAds } from './profil'
  * Le principe qui les gouverne : **Naya n'a jamais d'autonomie financière illimitée.** Un
  * mode assisté sans plafond est un autopilote qui demande poliment avant chaque virage — et
  * une personne qui confirme dix fois par jour ne lit plus ce qu'elle confirme.
+ *
+ * Ce fichier ne doit acquérir aucune dépendance de code : l'écran importe ses facteurs pour
+ * afficher les bornes autorisées avant la frappe, et un champ qui accepterait ce que le
+ * serveur refuse — ou l'inverse — ferait de ces bornes une devinette. Les redéclarer côté
+ * navigateur créerait deux vérités, et le jour où l'une changerait, l'écran annoncerait une
+ * limite que le serveur ne reconnaîtrait pas.
  */
 
-/** Un budget ne peut pas être multiplié ni divisé d'un coup. */
-export const FACTEUR_MIN = 0.5
-export const FACTEUR_MAX = 1.5
+/*
+ * L'amplitude d'un pas vit dans `@/lib/bornes-budget` : l'écran l'affiche avant la frappe, et
+ * un composant de navigateur ne peut pas importer de valeur depuis le serveur. Réexportée
+ * pour que le reste du module n'ait qu'une porte d'entrée.
+ */
+export { FACTEUR_MAX, FACTEUR_MIN } from '@/lib/bornes-budget'
 
 /**
  * Le plafond absolu, quand un budget mensuel est renseigné.
