@@ -51,18 +51,27 @@ export function CreerCampagne({
   plans,
   devise,
   hote,
+  repere,
   deposable,
 }: {
   plans: readonly PlanVue[]
   devise: string
   /** Le domaine du site suivi : la page d'arrivée doit s'y trouver. */
   hote: string
+  /**
+   * Le coût par clic au-delà duquel l'objectif devient invraisemblable, en micros. Zéro
+   * quand ni l'objectif ni la marge ne sont renseignés — l'écran se tait alors plutôt que
+   * d'afficher une fourchette de marché dont personne ne saurait d'où elle sort.
+   */
+  repere: number
   /** Vrai quand le compte est en mode assisté. Sans cela, rien ne peut être créé. */
   deposable: boolean
 }) {
   const [ouvert, setOuvert] = useState(false)
   const [nom, setNom] = useState('')
   const [budget, setBudget] = useState('')
+  const [enchere, setEnchere] = useState('')
+  const [enchereDuPlan, setEnchereDuPlan] = useState('')
   const [url, setUrl] = useState(hote === '' ? '' : `https://${hote}/`)
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -103,8 +112,15 @@ export function CreerCampagne({
       setErreur('Indiquez un budget quotidien.')
       return
     }
+    const saisie = Number(enchere.replace(',', '.'))
     const lu = await appeler(
-      { action: 'preparer', nom: nom.trim(), budget: montant, urlFinale: url.trim() },
+      {
+        action: 'preparer',
+        nom: nom.trim(),
+        budget: montant,
+        urlFinale: url.trim(),
+        ...(Number.isFinite(saisie) && saisie > 0 ? { enchere: saisie } : {}),
+      },
       'preparer',
     )
     if (lu === null) return
@@ -114,6 +130,17 @@ export function CreerCampagne({
 
   async function creer(planId: string) {
     const lu = await appeler({ action: 'creer', planId }, planId)
+    if (lu === null) return
+    window.location.reload()
+  }
+
+  async function encherir(planId: string) {
+    const montant = Number(enchereDuPlan.replace(',', '.'))
+    if (!Number.isFinite(montant) || montant <= 0) {
+      setErreur('Indiquez un coût par clic.')
+      return
+    }
+    const lu = await appeler({ action: 'encherir', planId, enchere: montant }, `enchere-${planId}`)
     if (lu === null) return
     window.location.reload()
   }
@@ -180,6 +207,23 @@ export function CreerCampagne({
             <span className="text-xs text-[var(--color-ink-faint)]">
               Sur votre domaine{hote === '' ? '' : ` (${hote})`}. Evoliia n’achète pas de trafic
               vers une adresse qui n’est pas la vôtre.
+            </span>
+          </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-[var(--color-ink-soft)]">
+              Coût par clic ({devise}) — facultatif
+            </span>
+            <input
+              value={enchere}
+              onChange={(evenement) => setEnchere(evenement.target.value)}
+              inputMode="decimal"
+              placeholder="laissez vide pour que Naya le calcule"
+              className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2"
+            />
+            <span className="text-xs text-[var(--color-ink-faint)]">
+              {repere === 0
+                ? 'Vide, Naya le calcule sur les prix que Google indique pour ces recherches. Si Google n’en donne aucun, elle vous le redemandera plutôt que d’inventer un chiffre.'
+                : `Vide, Naya le calcule sur les prix de Google. D’après votre marge, au-delà de ${prix(repere, devise)} le clic il faudrait convertir plus de visiteurs qu’une boutique n’en convertit d’ordinaire — ce n’est pas une interdiction, c’est un repère sur vos propres chiffres.`}
             </span>
           </label>
           <div className="flex flex-wrap gap-2">
@@ -257,6 +301,40 @@ export function CreerCampagne({
             ))}
           </ul>
 
+          {plan.enchereMicros === 0 ? (
+            <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-surface)] p-3">
+              <p className="m-0 text-sm font-medium">Il manque le coût par clic.</p>
+              <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                Google n’a donné aucun prix indicatif pour ces recherches. Naya ne le devine
+                pas : un chiffre inventé aurait l’air calculé, et vous le prendriez pour une
+                recommandation.
+                {repere === 0
+                  ? ' Renseignez votre marge ou votre objectif par vente dans le profil publicitaire, et Evoliia pourra au moins vous donner un repère.'
+                  : ` D’après votre marge, au-delà de ${prix(repere, devise)} le clic il faudrait convertir plus de visiteurs qu’une boutique n’en convertit d’ordinaire.`}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  value={enchereDuPlan}
+                  onChange={(evenement) => setEnchereDuPlan(evenement.target.value)}
+                  inputMode="decimal"
+                  placeholder={`0.50 ${devise}`}
+                  className="w-40 rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => void encherir(plan.id)}
+                  disabled={occupe !== null}
+                  className="cursor-pointer rounded-[var(--radius-control)] border border-[var(--color-brand)] bg-transparent px-4 py-2 text-sm text-[var(--color-brand-strong)] disabled:opacity-50"
+                >
+                  {occupe === `enchere-${plan.id}` ? 'Un instant…' : 'Fixer l’enchère'}
+                </button>
+              </div>
+              <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
+                Rien n’est recomposé : ni les mots-clés, ni l’annonce. Seul ce chiffre change.
+              </p>
+            </div>
+          ) : null}
+
           <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-surface)] p-3">
             <p className="m-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
               La campagne sera créée <strong>en pause</strong> : elle ne dépensera rien tant que
@@ -302,7 +380,7 @@ export function CreerCampagne({
                 <button
                   type="button"
                   onClick={() => setAConfirmer(plan.id)}
-                  disabled={occupe !== null}
+                  disabled={occupe !== null || plan.enchereMicros === 0}
                   className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-brand)] bg-transparent px-3 py-1 text-xs text-[var(--color-brand-strong)] disabled:opacity-50"
                 >
                   Créer la campagne…

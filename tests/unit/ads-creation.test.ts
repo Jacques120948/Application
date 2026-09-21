@@ -2,13 +2,14 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   autoriseCreation,
+  autoriseEnchere,
   BUDGET_MAX,
   BUDGET_MIN,
   CAMPAGNES_PAR_JOUR,
   MOTS_CLES_PAR_GROUPE,
   PLACES_CAMPAGNE,
 } from '@/server/ads/garde-fous'
-import { enchereProposee, TAUX_PLAUSIBLE } from '@/server/ads/mots-cles'
+import { enchereProposee, plafondEnchere, TAUX_PLAUSIBLE } from '@/server/ads/mots-cles'
 import { PROFIL_VIDE } from '@/server/ads/profil'
 
 /**
@@ -175,6 +176,40 @@ describe('l’enchère proposée', () => {
   })
 })
 
+describe('l’enchère saisie à la main', () => {
+  it('refuse une enchère qui épuiserait la journée en un clic', () => {
+    /*
+     * La seule borne dure, et elle n'est pas là où on l'attend. Ce n'est pas le rapport à la
+     * marge — la personne connaît son marché mieux qu'un seuil — c'est le rapport au budget :
+     * une enchère au-dessus du budget du jour n'est pas une stratégie, c'est une faute de
+     * frappe.
+     */
+    const verdict = autoriseEnchere(6 * MICROS, 5 * MICROS)
+    expect(verdict.ok).toBe(false)
+    if (!verdict.ok) expect(verdict.raison).toContain('un seul clic')
+    expect(autoriseEnchere(5 * MICROS, 5 * MICROS).ok).toBe(true)
+  })
+
+  it('refuse un montant absent ou absurde', () => {
+    expect(autoriseEnchere(0, 5 * MICROS).ok).toBe(false)
+    expect(autoriseEnchere(-1, 5 * MICROS).ok).toBe(false)
+    expect(autoriseEnchere(Number.NaN, 5 * MICROS).ok).toBe(false)
+  })
+
+  it('ne borne pas sur la marge, qui n’est qu’un repère', () => {
+    // Un mot-clé très qualifié peut convertir bien au-delà de ce qu'une moyenne prévoit.
+    // Le repère s'affiche ; il n'interdit rien.
+    expect(autoriseEnchere(4 * MICROS, 5 * MICROS).ok).toBe(true)
+  })
+
+  it('calcule un repère sur les nombres de la personne', () => {
+    // À 22 CHF par vente et 5 % de conversion plausible, le clic ne peut pas dépasser 1.10.
+    expect(plafondEnchere(22)).toBe(((22 * TAUX_PLAUSIBLE) / 100) * MICROS)
+    // Sans objectif ni marge, on se tait plutôt que d'inventer une fourchette de marché.
+    expect(plafondEnchere(0)).toBe(0)
+  })
+})
+
 describe('la mécanique de la création', () => {
   it('crée les sept objets en un seul envoi indivisible', () => {
     /*
@@ -256,6 +291,21 @@ describe('la mécanique de la création', () => {
     const source = readFileSync('src/server/ads/actions.ts', 'utf8')
     const corps = source.slice(source.indexOf('async function campagnesAujourdhui'))
     expect(corps.slice(0, corps.indexOf('\n}\n'))).toContain("quoi: 'campagne'")
+  })
+
+  it('ne recompose pas un plan pour corriger un seul nombre', () => {
+    /*
+     * Recomposer referait rédiger l'annonce, donc coûterait des crédits pour rien. Fixer
+     * l'enchère ne touche ni aux mots-clés ni aux textes.
+     */
+    const source = readFileSync('src/server/ads/creation.ts', 'utf8')
+    const corps = source.slice(source.indexOf('export async function fixerEnchere'))
+    const fin = corps.indexOf('\n}\n')
+    const fonction = corps.slice(0, fin)
+    expect(fonction).toContain('data: { enchereMicros:')
+    for (const recalcul of ['proposerElementsAds', 'ideesDeMotsCles', 'lireRecherches']) {
+      expect(fonction).not.toContain(recalcul)
+    }
   })
 
   it('ne crée rien depuis le module de préparation', () => {

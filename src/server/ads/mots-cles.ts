@@ -168,6 +168,24 @@ export function tauxNecessaire(coutMicros: number, cpa: number): number | null {
 }
 
 /**
+ * Le coût par clic au-delà duquel l'objectif devient invraisemblable, en micros.
+ *
+ * C'est le même calcul que `tauxNecessaire`, pris dans l'autre sens : à quel prix du clic
+ * faudrait-il convertir plus de visiteurs qu'une boutique n'en convertit ? Zéro quand
+ * l'objectif est inconnu — auquel cas l'écran se tait plutôt que d'afficher un repère qui
+ * n'en est pas un.
+ *
+ * Ce n'est pas une interdiction. La personne connaît son marché mieux que ce seuil, et un
+ * mot-clé très qualifié peut convertir bien au-delà. C'est un repère chiffré sur ses propres
+ * nombres, ce qui vaut mieux qu'une fourchette de marché dont personne ne sait d'où elle
+ * sort.
+ */
+export function plafondEnchere(cpa: number): number {
+  if (cpa <= 0) return 0
+  return Math.round(((cpa * TAUX_PLAUSIBLE) / 100) * MICROS)
+}
+
+/**
  * L'enchère à proposer pour un groupe neuf, en micros.
  *
  * La médiane du bas de fourchette des mots-clés retenus, plafonnée par ce que l'objectif
@@ -206,9 +224,8 @@ export function enchereProposee(
       ? (prix[milieu] ?? 0)
       : ((prix[milieu - 1] ?? 0) + (prix[milieu] ?? 0)) / 2
 
-  if (cpa <= 0) return Math.round(mediane)
-  const plafond = (cpa * TAUX_PLAUSIBLE) / 100 * MICROS
-  return Math.round(Math.min(mediane, plafond))
+  const plafond = plafondEnchere(cpa)
+  return plafond === 0 ? Math.round(mediane) : Math.round(Math.min(mediane, plafond))
 }
 
 /** Une clé de comparaison : les accents et la casse ne font pas deux mots-clés différents. */

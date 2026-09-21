@@ -3,7 +3,7 @@ import { withUserScope } from '@/server/db/scope'
 import { lireRecherches } from '@/server/audit/recherches'
 import { proposerElementsAds } from '@/server/ai/operations'
 import { accesCompteActif, compteActif } from './comptes'
-import { PLACES_CAMPAGNE } from './garde-fous'
+import { autoriseEnchere, PLACES_CAMPAGNE } from './garde-fous'
 import { googleAds } from './google-ads'
 import {
   cpaAcceptable,
@@ -11,6 +11,7 @@ import {
   enchereProposee,
   LANGUES,
   marcheDominant,
+  plafondEnchere,
   type RequeteSite,
 } from './mots-cles'
 import { lireProfil } from './profil'
@@ -121,6 +122,19 @@ const CHAMPS = {
   createdAt: true,
 } as const
 
+/**
+ * Le repère à afficher à côté du champ d'enchère, en micros. Zéro : rien à dire.
+ *
+ * Calculé sur les nombres de la personne — son objectif de coût par vente, ou la marge de
+ * son panier moyen — et non sur une fourchette de marché dont personne ne saurait d'où elle
+ * sort. Un repère qu'on peut vérifier vaut mieux qu'un repère plausible.
+ */
+export async function reperEnchere(userId: string): Promise<number> {
+  const compte = await compteActif(userId)
+  if (compte === null) return 0
+  return plafondEnchere(cpaAcceptable(await lireProfil(userId, compte.id)))
+}
+
 /** Les plans en attente de décision. Un plan créé ou abandonné ne s'affiche plus. */
 export async function lirePlans(userId: string): Promise<PlanVue[]> {
   const compte = await compteActif(userId)
@@ -145,6 +159,38 @@ export async function abandonnerPlan(userId: string, id: string): Promise<void> 
   if (touchees.count === 0) throw notFound('Ce plan est introuvable.')
 }
 
+/**
+ * Fixe l'enchère d'un plan déjà composé.
+ *
+ * Séparé de la préparation, et c'est le point : recomposer un plan pour corriger un seul
+ * nombre referait rédiger l'annonce, donc coûterait des crédits pour rien. Ici, rien n'est
+ * recalculé — ni les mots-clés, ni les textes. Seul le chiffre change.
+ */
+export async function fixerEnchere(
+  userId: string,
+  planId: string,
+  enchereMicros: number,
+): Promise<{ ok: true } | { ok: false; raison: string }> {
+  const ligne = await withUserScope(userId, (tx) =>
+    tx.adsPlanCampagne.findFirst({
+      where: { id: planId, userId, etat: 'prepare' },
+      select: { id: true, budgetMicros: true },
+    }),
+  )
+  if (ligne === null) throw notFound('Ce plan est introuvable.')
+
+  const verdict = autoriseEnchere(enchereMicros, Number(ligne.budgetMicros))
+  if (!verdict.ok) return verdict
+
+  await withUserScope(userId, (tx) =>
+    tx.adsPlanCampagne.updateMany({
+      where: { id: ligne.id, userId, etat: 'prepare' },
+      data: { enchereMicros: BigInt(Math.round(enchereMicros)) },
+    }),
+  )
+  return { ok: true }
+}
+
 export type BilanPreparation = {
   plan: PlanVue
   /** Écartées parce qu'on sort déjà en tête sans payer. Une bonne nouvelle, pas un filtre. */
@@ -163,7 +209,17 @@ export type BilanPreparation = {
  */
 export async function preparerCampagne(
   userId: string,
-  demande: { nom: string; budgetMicros: number; urlFinale: string },
+  demande: {
+    nom: string
+    budgetMicros: number
+    urlFinale: string
+    /**
+     * Le coût par clic, quand la personne le saisit. Zéro : Naya le calcule sur les prix du
+     * planificateur — et reste à zéro si Google n'en donne aucun, auquel cas l'écran le
+     * demande plutôt que d'inventer un chiffre qui aurait l'air calculé.
+     */
+    enchereMicros: number
+  },
   origin: string | null,
   locale: string,
 ): Promise<BilanPreparation> {
@@ -299,7 +355,11 @@ export async function preparerCampagne(
         accountId: compte.id,
         nom: demande.nom.trim(),
         budgetMicros: BigInt(Math.round(demande.budgetMicros)),
-        enchereMicros: BigInt(enchereProposee(motsCles, cpa)),
+        enchereMicros: BigInt(
+          demande.enchereMicros > 0
+            ? Math.round(demande.enchereMicros)
+            : enchereProposee(motsCles, cpa),
+        ),
         urlFinale: demande.urlFinale.trim(),
         marcheGeo: marche.geo,
         marcheNom: marche.nom,

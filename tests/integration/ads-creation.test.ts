@@ -60,7 +60,9 @@ const { prisma } = await import('@/server/db/client')
 const { clearAll } = await import('@/server/auth/rate-limit')
 const { register } = await import('@/server/auth/service')
 const { withUserScope } = await import('@/server/db/scope')
-const { abandonnerPlan, lirePlans, preparerCampagne } = await import('@/server/ads/creation')
+const { abandonnerPlan, fixerEnchere, lirePlans, preparerCampagne } = await import(
+  '@/server/ads/creation',
+)
 const { creerCampagne, restaurer } = await import('@/server/ads/actions')
 const { ensureTestPlan, subscribeToTestPlan } = await import('../helpers/plan')
 
@@ -160,7 +162,12 @@ beforeEach(async () => {
 async function preparer() {
   return preparerCampagne(
     userId,
-    { nom: 'Recherche — Quartz', budgetMicros: 5_000_000, urlFinale: 'https://cap-nature.ch/x' },
+    {
+      nom: 'Recherche — Quartz',
+      budgetMicros: 5_000_000,
+      urlFinale: 'https://cap-nature.ch/x',
+      enchereMicros: 0,
+    },
     'https://cap-nature.ch',
     'fr',
   )
@@ -284,6 +291,72 @@ describe('la création', () => {
       tx.adsPlanCampagne.findFirst({ where: { id: plan.id, userId }, select: { etat: true } }),
     )
     expect(ligne?.etat).toBe('prepare')
+  })
+})
+
+describe('sans les prix de Google', () => {
+  it('compose quand même, sans enchère, et la création refuse', async () => {
+    /*
+     * Le cas d'un compte dont l'application n'a pas encore l'accès au planificateur. La
+     * demande constatée suffit à composer une campagne ; le prix du clic, lui, ne s'invente
+     * pas. Créer avec une enchère nulle ferait une campagne qui ne diffuse sur rien.
+     */
+    ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+
+    const { plan } = await preparer()
+    expect(plan.motsCles.length).toBeGreaterThan(0)
+    expect(plan.enchereMicros).toBe(0)
+    expect(plan.motsCles.every((un) => un.volume === 0)).toBe(true)
+
+    const issue = await creerCampagne(userId, plan.id, HOTES)
+    expect(issue.ok).toBe(false)
+    if (!issue.ok) expect(issue.raison).toContain('coût par clic')
+    expect(creerCampagneComplete).not.toHaveBeenCalled()
+  })
+
+  it('accepte l’enchère saisie, sans rien recomposer', async () => {
+    ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    const { plan } = await preparer()
+    const appelsAvant = proposerElementsAds.mock.calls.length
+
+    expect((await fixerEnchere(userId, plan.id, 800_000)).ok).toBe(true)
+    // Ni l'annonce ni les mots-clés n'ont été redemandés : c'eût été payer pour rien.
+    expect(proposerElementsAds.mock.calls.length).toBe(appelsAvant)
+
+    const [relu] = await lirePlans(userId)
+    expect(relu?.enchereMicros).toBe(800_000)
+    expect(relu?.titres).toEqual(plan.titres)
+
+    const issue = await creerCampagne(userId, plan.id, HOTES)
+    expect(issue.ok).toBe(true)
+    expect(creerCampagneComplete.mock.calls[0]?.[1]).toMatchObject({ enchereMicros: 800_000 })
+  })
+
+  it('refuse une enchère qui épuiserait la journée en un clic', async () => {
+    ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    const { plan } = await preparer()
+    // Le budget du plan est de 5 CHF par jour.
+    const issue = await fixerEnchere(userId, plan.id, 6_000_000)
+    expect(issue.ok).toBe(false)
+
+    const [relu] = await lirePlans(userId)
+    expect(relu?.enchereMicros).toBe(0)
+  })
+
+  it('prend l’enchère saisie dès la composition', async () => {
+    ideesDeMotsCles.mockResolvedValue({ ok: false, raison: 'accès Explorer' })
+    const bilan = await preparerCampagne(
+      userId,
+      {
+        nom: 'Recherche — Quartz',
+        budgetMicros: 5_000_000,
+        urlFinale: 'https://cap-nature.ch/x',
+        enchereMicros: 700_000,
+      },
+      'https://cap-nature.ch',
+      'fr',
+    )
+    expect(bilan.plan.enchereMicros).toBe(700_000)
   })
 })
 

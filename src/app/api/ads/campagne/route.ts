@@ -3,7 +3,7 @@ import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
-import { abandonnerPlan, preparerCampagne } from '@/server/ads/creation'
+import { abandonnerPlan, fixerEnchere, preparerCampagne } from '@/server/ads/creation'
 import { creerCampagne } from '@/server/ads/actions'
 import { readDashboard } from '@/server/audit/service'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
@@ -29,8 +29,18 @@ const input = z.discriminatedUnion('action', [
     /** En unités de la devise du compte, pas en micros : c'est ce que la personne saisit. */
     budget: z.number().positive().max(100_000),
     urlFinale: z.string().url().max(2_000),
+    /**
+     * Le coût par clic, facultatif. Absent, Naya le calcule sur les prix du planificateur ;
+     * quand Google n'en donne aucun, le plan sort sans enchère et l'écran la demande.
+     */
+    enchere: z.number().positive().max(1_000).optional(),
   }),
   z.object({ action: z.literal('creer'), planId: z.string().uuid() }),
+  z.object({
+    action: z.literal('encherir'),
+    planId: z.string().uuid(),
+    enchere: z.number().positive().max(1_000),
+  }),
   z.object({ action: z.literal('abandonner'), planId: z.string().uuid() }),
 ])
 
@@ -48,6 +58,15 @@ export async function POST(request: Request) {
     if (demande.action === 'abandonner') {
       await abandonnerPlan(user.id, demande.planId)
       return ok({ ok: true })
+    }
+
+    if (demande.action === 'encherir') {
+      const issue = await fixerEnchere(
+        user.id,
+        demande.planId,
+        Math.round(demande.enchere * 1_000_000),
+      )
+      return ok(issue.ok ? { ok: true } : { ok: false, raison: issue.raison })
     }
 
     const site = await readDashboard(user.id).catch(() => null)
@@ -70,6 +89,7 @@ export async function POST(request: Request) {
         nom: demande.nom,
         budgetMicros: Math.round(demande.budget * 1_000_000),
         urlFinale: demande.urlFinale,
+        enchereMicros: demande.enchere === undefined ? 0 : Math.round(demande.enchere * 1_000_000),
       },
       origin,
       'fr',

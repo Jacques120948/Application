@@ -8,7 +8,7 @@ import { compteActif } from '@/server/ads/comptes'
 import { isEnabled } from '@/server/settings/flags'
 import { propositionsDuCompte } from '@/server/ads/redaction'
 import { motsClesDuCompte } from '@/server/ads/ciblage'
-import { lirePlans } from '@/server/ads/creation'
+import { lirePlans, reperEnchere } from '@/server/ads/creation'
 import { FORMATS, photosPourGroupe } from '@/server/ads/images'
 import { Shell } from '@/components/studio/Shell'
 import { Annonces } from '@/components/studio/Annonces'
@@ -58,9 +58,10 @@ export default async function AnnoncesPage({
    * Les plans en attente, et le domaine du site. Le second sert à proposer une page
    * d'arrivée plausible ; c'est le serveur qui vérifiera qu'elle s'y trouve, pas l'écran.
    */
-  const [plans, tableau] = await Promise.all([
+  const [plans, tableau, repere] = await Promise.all([
     lirePlans(user.id),
     readDashboard(user.id).catch(() => null),
+    reperEnchere(user.id).catch(() => 0),
   ])
 
   /*
@@ -124,6 +125,7 @@ export default async function AnnoncesPage({
             plans={plans}
             devise={compte?.devise ?? ''}
             hote={tableau?.site.host ?? ''}
+            repere={repere}
             deposable={assiste}
           />
         </div>

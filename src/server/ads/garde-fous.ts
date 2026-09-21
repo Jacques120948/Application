@@ -406,6 +406,34 @@ export const BUDGET_MAX = 500
 const JOURS_DU_MOIS = 30.4
 
 /**
+ * Les bornes d'une enchère au clic saisie à la main.
+ *
+ * Elle est saisie quand Google ne donne pas de prix indicatif — ce qui arrive sur les
+ * recherches rares, et sur les comptes dont l'application n'a pas encore l'accès au
+ * planificateur. Evoliia ne devine pas à la place de la personne : un chiffre inventé aurait
+ * l'air calculé, et elle le prendrait pour une recommandation.
+ *
+ * Une seule borne dure, et elle n'est pas là où on l'attend. Ce n'est pas le rapport à la
+ * marge — la personne connaît son marché mieux qu'un seuil, et un mot-clé très qualifié peut
+ * convertir bien au-delà de ce qu'une moyenne prévoit. C'est le rapport au budget
+ * quotidien : une enchère supérieure au budget du jour signifie qu'un seul clic peut épuiser
+ * la journée entière, ce qui n'est pas une stratégie mais une erreur de saisie.
+ */
+export function autoriseEnchere(enchereMicros: number, budgetMicros: number): Verdict {
+  if (!Number.isFinite(enchereMicros) || enchereMicros <= 0) {
+    return { ok: false, raison: 'Indiquez un coût par clic.' }
+  }
+  if (enchereMicros > budgetMicros) {
+    return {
+      ok: false,
+      raison:
+        'Votre enchère dépasse le budget d’une journée : un seul clic épuiserait la journée entière. Baissez l’enchère, ou montez le budget.',
+    }
+  }
+  return { ok: true }
+}
+
+/**
  * Les bornes de la création d'une campagne.
  *
  * C'est le garde-fou le plus sévère du produit, parce que c'est le seul geste qui parte de
