@@ -167,6 +167,50 @@ export function tauxNecessaire(coutMicros: number, cpa: number): number | null {
   return Math.round((100 * (coutMicros / MICROS)) / cpa * 10) / 10
 }
 
+/**
+ * L'enchère à proposer pour un groupe neuf, en micros.
+ *
+ * La médiane du bas de fourchette des mots-clés retenus, plafonnée par ce que l'objectif
+ * permet. Trois raisons à ces deux choix.
+ *
+ * **La médiane, et non la moyenne** : un seul mot-clé très disputé tirerait la moyenne vers
+ * le haut et ferait payer son prix à tous les autres.
+ *
+ * **Le bas de fourchette, et non le haut** : c'est l'enchère minimale pour apparaître en
+ * haut de page. On peut la monter en voyant les chiffres ; on ne récupère pas ce qu'on a
+ * dépensé en démarrant trop haut.
+ *
+ * **Le plafond de l'objectif** : le prix du clic au-delà duquel il faudrait un taux de
+ * conversion invraisemblable. Sans lui, une campagne pourrait démarrer sur une enchère que
+ * la marge ne peut pas absorber, et les chiffres mettraient trois semaines à le dire.
+ */
+export function enchereProposee(
+  motsCles: ReadonlyArray<{ coutBasMicros: number }>,
+  cpa: number,
+): number {
+  const prix = motsCles
+    .map((mot) => mot.coutBasMicros)
+    .filter((montant) => montant > 0)
+    .sort((une, autre) => une - autre)
+
+  /*
+   * Aucun prix connu — le planificateur n'a rien rendu. On ne devine pas : l'appelant
+   * demandera le montant à la personne plutôt qu'inventer un chiffre qui aurait l'air
+   * calculé.
+   */
+  if (prix.length === 0) return 0
+
+  const milieu = Math.floor(prix.length / 2)
+  const mediane =
+    prix.length % 2 === 1
+      ? (prix[milieu] ?? 0)
+      : ((prix[milieu - 1] ?? 0) + (prix[milieu] ?? 0)) / 2
+
+  if (cpa <= 0) return Math.round(mediane)
+  const plafond = (cpa * TAUX_PLAUSIBLE) / 100 * MICROS
+  return Math.round(Math.min(mediane, plafond))
+}
+
 /** Une clé de comparaison : les accents et la casse ne font pas deux mots-clés différents. */
 function normaliser(texte: string): string {
   return texte

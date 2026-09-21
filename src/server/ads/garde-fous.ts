@@ -484,7 +484,14 @@ export function autoriseCreation(
     return { ok: false, raison: 'La page d’arrivée n’est pas une adresse valide.' }
   }
   const permis = hotes.map((un) => un.toLowerCase().replace(/^www\./u, '')).filter((un) => un !== '')
-  if (!permis.includes(hote)) {
+  /*
+   * Les sous-domaines passent : qui possède cap-nature.ch possède boutique.cap-nature.ch.
+   * La comparaison porte sur le point qui précède, sans quoi « faux-cap-nature.ch » serait
+   * accepté pour « cap-nature.ch » — c'est toute la différence entre un suffixe et un
+   * sous-domaine.
+   */
+  const chezElle = permis.some((un) => hote === un || hote.endsWith(`.${un}`))
+  if (!chezElle) {
     return {
       ok: false,
       raison: `La page d’arrivée doit être sur un de vos domaines${permis.length === 0 ? '' : ` (${permis.join(', ')})`}. Evoliia n’achète pas de trafic vers une adresse qui n’est pas la vôtre.`,

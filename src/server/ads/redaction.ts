@@ -74,7 +74,7 @@ export type PropositionVue = {
  * lecture ; ils comptent pourtant dans les trente caractères, et un titre rejeté pour un
  * espace final serait une mauvaise façon de perdre un appel.
  */
-function nettoyer(texte: string): string {
+export function nettoyer(texte: string): string {
   return texte
     .replace(/\s+/gu, ' ')
     .trim()
@@ -90,12 +90,12 @@ function nettoyer(texte: string): string {
  * cite — « Reprend la recherche "bougie citrine parfumée » — ce qui donne l'impression d'une
  * phrase tronquée et fait douter du reste.
  */
-function nettoyerMotif(texte: string): string {
+export function nettoyerMotif(texte: string): string {
   return texte.replace(/\s+/gu, ' ').trim()
 }
 
 /** Vrai quand ce texte peut être montré. Le refus est silencieux : il en reste d'autres. */
-function acceptable(champ: string, texte: string): boolean {
+export function acceptable(champ: string, texte: string): boolean {
   const maximum = LONGUEURS[champ]
   if (maximum === undefined) return false
   if (texte.length === 0 || texte.length > maximum) return false

@@ -182,6 +182,16 @@ export function entetes(accessToken: string, compteId?: string): Record<string, 
  */
 function refus(status: number, message: string): string {
   const dit = message === '' ? '' : ` Google précise : ${message.slice(0, 250)}`
+  /*
+   * Un refus que Google formule en anglais et que personne ne sait traduire en geste.
+   * « Explorer access » est le niveau d'accès de départ de toute application : il ouvre la
+   * lecture de ses propres campagnes et ferme le planificateur de mots-clés. Le dire en
+   * français, avec l'endroit exact où le demander, vaut mieux qu'un conseil sur des droits
+   * qui, eux, fonctionnent — c'est bien par ce même accès que les campagnes se lisent.
+   */
+  if (/explorer access/iu.test(message)) {
+    return 'Le planificateur de mots-clés de Google n’est pas ouvert à votre application : elle est encore en accès « Explorer », qui permet de lire vos campagnes mais pas d’interroger les volumes de recherche. Demandez l’accès « Basic » depuis Google Ads → Outils → Configuration → API Center. C’est gratuit et généralement accordé en un à deux jours.'
+  }
   if (status === 401) {
     return `Votre autorisation Google a expiré. Reconnectez votre compte Google Ads.${dit}`
   }

@@ -145,6 +145,13 @@ export type BilanCiblage = {
   /** Le marché et la langue sur lesquels les volumes ont été lus, pour que l'écran le dise. */
   marche: string
   langue: string
+  /**
+   * Vide quand le planificateur a répondu ; sinon, la raison de son refus.
+   *
+   * Affichée telle quelle : une liste sans volume ni prix n'est pas une liste ratée, c'est
+   * une liste amputée, et la personne doit savoir de quoi — et comment y remédier.
+   */
+  sansPrix: string
 }
 
 /**
@@ -239,12 +246,21 @@ export async function proposerMotsCles(
 
   const graines = [...presents, ...requetes.map((requete) => requete.texte)].slice(0, GRAINES_MAX)
   const idees = await googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, langue.code)
-  if (!idees.ok) throw validation(idees.raison)
+  /*
+   * Un planificateur muet n'arrête plus la recherche, et ce n'est pas un relâchement.
+   * L'erreur que tout ce module existe pour empêcher — acheter une recherche qu'on gagne
+   * déjà gratuitement — se prévient avec la position organique, que Search Console donne.
+   * Le planificateur ajoute le volume du marché et le prix du clic : précieux pour juger,
+   * pas nécessaire pour écarter. Sans lui, on propose moins et on le dit ; refuser
+   * entièrement ferait perdre à quelqu'un une demande réelle et mesurée au motif que Google
+   * n'ouvre pas son planificateur à son niveau d'accès.
+   */
+  if (!idees.ok && requetes.length === 0) throw validation(idees.raison)
 
   const profil = await lireProfil(userId, compte.id)
   const { candidats, dejaGagnees } = croiser(
     requetes,
-    idees.valeur,
+    idees.ok ? idees.valeur : [],
     presents,
     cpaAcceptable(profil),
     compte.devise,
@@ -285,5 +301,6 @@ export async function proposerMotsCles(
     dejaGagnees,
     marche: marche.nom,
     langue: langue.nom,
+    sansPrix: idees.ok ? '' : idees.raison,
   }
 }

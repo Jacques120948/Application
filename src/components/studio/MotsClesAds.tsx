@@ -85,7 +85,13 @@ export function MotsClesAds({
     const corps = (await reponse?.json().catch(() => null)) as {
       ok?: boolean
       message?: string
-      bilan?: { proposes: number; dejaGagnees: number; marche: string; langue: string }
+      bilan?: {
+        proposes: number
+        dejaGagnees: number
+        marche: string
+        langue: string
+        sansPrix?: string
+      }
     } | null
     setOccupe(null)
 
@@ -101,6 +107,15 @@ export function MotsClesAds({
             bilan.proposes > 1 ? 's' : ''
           } proposé${bilan.proposes > 1 ? 's' : ''} pour ${bilan.marche} en ${bilan.langue}. Rechargez la page.`,
     )
+    /*
+     * Une liste sans volume ni prix n'est pas une liste ratée : c'est une liste amputée. Le
+     * dire, et dire de quoi, vaut mieux que laisser croire que Google ne facture rien pour
+     * ces recherches.
+     */
+    if (bilan?.sansPrix !== undefined && bilan.sansPrix !== '') {
+      setErreur(`Les volumes et les prix manquent. ${bilan.sansPrix}`)
+      return
+    }
     window.location.reload()
   }
 

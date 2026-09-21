@@ -293,6 +293,37 @@ describe('la proposition de mots-clés', () => {
   })
 })
 
+describe('quand Google ferme son planificateur', () => {
+  it('propose quand même, sans prix, et dit pourquoi', async () => {
+    /*
+     * Le cas réel : une application en accès « Explorer » lit ses campagnes mais ne peut
+     * pas interroger les volumes de recherche. Refuser entièrement ferait perdre une
+     * demande réelle et mesurée au motif que Google n'ouvre pas un outil annexe. La
+     * protection qui compte — ne pas acheter ce qu'on gagne déjà gratuitement — vient de la
+     * position organique, que Search Console donne.
+     */
+    ideesDeMotsCles.mockResolvedValue({
+      ok: false,
+      raison: 'Le planificateur de mots-clés de Google n’est pas ouvert à votre application',
+    })
+
+    const bilan = await proposerMotsCles(userId, groupeAnnonces, 'https://cap-nature.ch', 'fr')
+    expect(bilan.proposes).toBeGreaterThan(0)
+    expect(bilan.sansPrix).toContain('planificateur')
+    expect(bilan.dejaGagnees).toBe(1)
+
+    const proposes = await lireMotsCles(userId, groupeAnnonces)
+    const textes = proposes.map((un) => un.texte)
+    // La demande constatée passe ; ce qu'on gagne déjà gratuitement reste écarté.
+    expect(textes).toContain('bougie quartz rose')
+    expect(textes).not.toContain('cap nature bougie')
+    // Et rien n'invente un volume ni un prix que Google n'a pas donnés.
+    const quartz = proposes.find((un) => un.texte === 'bougie quartz rose')
+    expect(quartz?.volume).toBe(0)
+    expect(quartz?.coutHautMicros).toBe(0)
+  })
+})
+
 describe('le cloisonnement', () => {
   it('ne laisse pas une autre personne lire ni écarter ces mots-clés', async () => {
     await proposerMotsCles(userId, groupeAnnonces, 'https://cap-nature.ch', 'fr')
