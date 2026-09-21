@@ -119,9 +119,27 @@ describe('la lecture nocturne', () => {
      * être rattachée à un clic de mardi. Une journée figée le soir même serait fausse le
      * lendemain — et c'est exactement le chiffre sur lequel une recommandation
      * s'appuierait.
+     *
+     * La fenêtre est donc effacée puis réécrite d'un bloc. Ce qui est vérifié ici est
+     * l'effacement : sans lui, `createMany` empilerait des doublons ou, avec
+     * `skipDuplicates`, conserverait les anciens chiffres sans jamais les corriger — ce qui
+     * est pire, parce que ça ressemble à une mise à jour.
      */
     const source = readFileSync('src/server/ads/synchro.ts', 'utf8')
-    expect(source).toContain('tx.adsReleve.upsert')
+    expect(source).toContain('tx.adsReleve.deleteMany')
+    expect(source).toContain('tx.adsReleve.createMany')
     expect(source).not.toContain('tx.adsReleve.create(')
+  })
+
+  it('n’ouvre pas une transaction par ligne écrite', () => {
+    /*
+     * Une transaction cloisonnée ouvre une portée et pose une variable de session : trois
+     * allers-retours pour une case. Quatre-vingt-dix jours par huit campagnes en font des
+     * centaines, et la requête dépasse le temps alloué — ce qui s'est produit en vrai. Le
+     * nombre de journées ne doit pas décider du nombre de transactions.
+     */
+    const source = readFileSync('src/server/ads/synchro.ts', 'utf8')
+    const portees = source.match(/withUserScope\(/gu) ?? []
+    expect(portees.length).toBeLessThanOrEqual(5)
   })
 })

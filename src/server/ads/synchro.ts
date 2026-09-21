@@ -118,7 +118,25 @@ export async function synchroniserCompte(
   const journees = await googleAds.lireJournees(acces, bornes.depuis, bornes.jusqua)
   if (!journees.ok) return journees
 
-  let ecrites = 0
+  /*
+   * Les journées sont préparées en mémoire, puis écrites en deux requêtes : la fenêtre est
+   * effacée, puis réécrite d'un bloc. C'est exactement la même règle qu'avant — Google
+   * corrige ses conversions pendant plusieurs jours, donc une journée relue remplace celle
+   * qu'on avait — mais une transaction cloisonnée par ligne ouvrait une portée et posait
+   * une variable de session pour chaque case d'un tableau de quatre-vingt-dix jours par
+   * huit campagnes. Le nombre de journées ne doit pas décider du nombre de transactions.
+   */
+  const lignes: Array<{
+    userId: string
+    accountId: string
+    campagneId: string
+    jour: Date
+    coutMicros: bigint
+    impressions: bigint
+    clics: bigint
+    conversions: number
+    valeurConversion: number
+  }> = []
   for (const journee of journees.valeur) {
     const campagneId = parIdentifiant.get(journee.campagneId)
     /*
@@ -129,29 +147,33 @@ export async function synchroniserCompte(
     if (campagneId === undefined) continue
     if (!/^\d{4}-\d{2}-\d{2}$/u.test(journee.jour)) continue
 
-    const valeurs = {
+    lignes.push({
+      userId,
+      accountId: compte.id,
+      campagneId,
+      jour: new Date(`${journee.jour}T00:00:00Z`),
       coutMicros: BigInt(Math.round(journee.coutMicros)),
       impressions: BigInt(Math.round(journee.impressions)),
       clics: BigInt(Math.round(journee.clics)),
       conversions: journee.conversions,
       valeurConversion: journee.valeurConversion,
-    }
-    await withUserScope(userId, (tx) =>
-      tx.adsReleve.upsert({
-        where: { campagneId_jour: { campagneId, jour: new Date(`${journee.jour}T00:00:00Z`) } },
-        create: {
-          userId,
-          accountId: compte.id,
-          campagneId,
-          jour: new Date(`${journee.jour}T00:00:00Z`),
-          ...valeurs,
-        },
-        // Réécrite : Google corrige ses conversions pendant plusieurs jours.
-        update: valeurs,
-      }),
-    )
-    ecrites += 1
+    })
   }
+
+  const ecrites = lignes.length
+  await withUserScope(userId, async (tx) => {
+    await tx.adsReleve.deleteMany({
+      where: {
+        userId,
+        accountId: compte.id,
+        jour: {
+          gte: new Date(`${bornes.depuis}T00:00:00Z`),
+          lte: new Date(`${bornes.jusqua}T00:00:00Z`),
+        },
+      },
+    })
+    if (lignes.length > 0) await tx.adsReleve.createMany({ data: lignes, skipDuplicates: true })
+  })
 
   await withUserScope(userId, (tx) =>
     tx.adsAccount.updateMany({ where: { id: compte.id, userId }, data: { synchroAt: new Date() } }),

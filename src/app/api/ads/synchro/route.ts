@@ -17,7 +17,15 @@ import { assertSameOrigin, fail, ok } from '@/server/http/respond'
  *
  * La première lecture remonte quatre-vingt-dix jours et peut prendre une minute.
  */
-export const maxDuration = 120
+/*
+ * Soixante secondes, et non cent vingt : c'est le plafond de l'hébergement, et déclarer
+ * au-delà ne le repousse pas — la requête est coupée à soixante et rend un 504 sans rien
+ * dire. Une valeur qui ment sur ce qu'on obtient fait chercher la panne ailleurs.
+ *
+ * Le travail y tient désormais largement : les écritures se font par lots, et non une
+ * transaction par ligne.
+ */
+export const maxDuration = 60
 
 export async function POST(request: Request) {
   try {

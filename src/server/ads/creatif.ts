@@ -36,6 +36,35 @@ export const FRAICHEUR_CREA_MS = 7 * 24 * 60 * 60 * 1000
 /** La fenêtre des termes de recherche. Trente jours : assez pour que la traîne compte. */
 export const JOURS_TERMES = 30
 
+/** Les termes prêts à écrire. Hors transaction : le classement d'intention est du calcul. */
+function creatifTermes(
+  termes: readonly { campagneId: string; terme: string; impressions: number; clics: number; conversions: number; coutMicros: number }[],
+  parIdentifiant: Map<string, string>,
+  userId: string,
+  accountId: string,
+  maintenant: Date,
+) {
+  const lignes = []
+  for (const terme of termes) {
+    const campagneId = parIdentifiant.get(terme.campagneId)
+    if (campagneId === undefined || terme.terme === '') continue
+    lignes.push({
+      userId,
+      accountId,
+      campagneId,
+      terme: terme.terme,
+      impressions: BigInt(Math.round(terme.impressions)),
+      clics: BigInt(Math.round(terme.clics)),
+      conversions: terme.conversions,
+      coutMicros: BigInt(Math.round(terme.coutMicros)),
+      // Classé par le même code que le référencement : un achat est un achat des deux côtés.
+      intention: classer(terme.terme),
+      vueAt: maintenant,
+    })
+  }
+  return lignes
+}
+
 export type BilanCreatif = {
   groupes: number
   elements: number
@@ -78,19 +107,20 @@ export async function synchroniserCreatif(
   bilan.appels += 2
   if (!creatif.ok) return creatif
 
-  const groupesEnBase = new Map<string, string>()
-  for (const groupe of creatif.valeur.groupes) {
-    const campagneId = parIdentifiant.get(groupe.campagneId)
-    if (campagneId === undefined) continue
-    const ligne = await withUserScope(userId, (tx) =>
-      tx.adsGroupe.upsert({
+  /*
+   * Tout ce qui suit est écrit par lots, et ce n'est pas une optimisation de confort : une
+   * transaction cloisonnée par élément ouvre une portée, pose la variable de session et
+   * ferme — trois allers-retours pour un titre. Une Performance Max en porte des centaines,
+   * et la première lecture réelle a dépassé le temps alloué à la requête. Le nombre de
+   * morceaux ne doit pas décider du nombre de transactions.
+   */
+  const groupesEnBase = await withUserScope(userId, async (tx) => {
+    const carte = new Map<string, string>()
+    for (const groupe of creatif.valeur.groupes) {
+      const campagneId = parIdentifiant.get(groupe.campagneId)
+      if (campagneId === undefined) continue
+      const ligne = await tx.adsGroupe.upsert({
         where: { accountId_groupeId: { accountId: compte.id, groupeId: groupe.groupeId } },
-        /*
-         * `vueAt` est posé explicitement à la création, et non laissé à l'horloge de la
-         * base : le balayage qui suit efface tout ce qui n'a pas été revu à cette lecture,
-         * et une ligne datée par un autre coucou que celui qui décide serait supprimée
-         * l'instant d'après.
-         */
         create: {
           userId,
           accountId: compte.id,
@@ -109,58 +139,91 @@ export async function synchroniserCreatif(
           vueAt: maintenant,
         },
         select: { id: true },
-      }),
-    )
-    groupesEnBase.set(groupe.groupeId, ligne.id)
-    bilan.groupes += 1
-  }
+      })
+      carte.set(groupe.groupeId, ligne.id)
+      bilan.groupes += 1
+    }
+    return carte
+  })
 
+  /*
+   * Les morceaux se comparent en mémoire avant d'écrire : les nouveaux sont créés en une
+   * fois, ceux qui ont disparu sont supprimés en une fois, et les autres ne sont touchés
+   * que si leur note a changé. Trois requêtes au lieu de plusieurs centaines.
+   *
+   * `origine` n'est jamais réécrit : un titre déposé par Evoliia et relu chez Google reste
+   * un titre d'Evoliia. L'écraser effacerait la seule mesure de ce que Naya a apporté.
+   */
+  const attendus = new Map<
+    string,
+    { groupeId: string; champ: string; texte: string; elementId: string; performance: string }
+  >()
   for (const element of creatif.valeur.elements) {
     const groupeId = groupesEnBase.get(element.groupeId)
     if (groupeId === undefined) continue
-    await withUserScope(userId, (tx) =>
-      tx.adsElement.upsert({
-        where: {
-          groupeId_champ_texte: { groupeId, champ: element.champ, texte: element.texte },
-        },
-        create: {
-          userId,
-          accountId: compte.id,
-          groupeId,
-          champ: element.champ,
-          texte: element.texte,
-          elementId: element.elementId,
-          performance: element.performance,
-          vueAt: maintenant,
-        },
-        /*
-         * `origine` n'est pas touché : un titre déposé par Evoliia et relu chez Google
-         * reste un titre d'Evoliia. L'écraser effacerait la seule mesure de ce que Naya a
-         * réellement apporté.
-         */
-        update: {
-          elementId: element.elementId,
-          performance: element.performance,
-          vueAt: maintenant,
-        },
-      }),
-    )
-    bilan.elements += 1
+    attendus.set(`${groupeId}::${element.champ}::${element.texte}`, {
+      groupeId,
+      champ: element.champ,
+      texte: element.texte,
+      elementId: element.elementId,
+      performance: element.performance,
+    })
   }
+  bilan.elements = attendus.size
 
-  /*
-   * Ce qui n'a pas été revu a disparu chez Google. Supprimé plutôt que marqué : un titre
-   * retiré d'une annonce n'a pas d'histoire à raconter, et le garder ferait proposer des
-   * améliorations à un texte qui ne diffuse plus. Les morceaux tombent avec leur contenant.
-   */
   await withUserScope(userId, async (tx) => {
-    await tx.adsElement.deleteMany({
-      where: { userId, accountId: compte.id, vueAt: { lt: debut } },
+    const existants = await tx.adsElement.findMany({
+      where: { userId, accountId: compte.id },
+      select: { id: true, groupeId: true, champ: true, texte: true, performance: true },
     })
-    await tx.adsGroupe.deleteMany({
-      where: { userId, accountId: compte.id, vueAt: { lt: debut } },
-    })
+
+    const connus = new Set<string>()
+    const perimes: string[] = []
+    for (const ligne of existants) {
+      const cle = `${ligne.groupeId}::${ligne.champ}::${ligne.texte}`
+      const attendu = attendus.get(cle)
+      if (attendu === undefined) {
+        perimes.push(ligne.id)
+        continue
+      }
+      connus.add(cle)
+      if (attendu.performance !== ligne.performance) {
+        await tx.adsElement.updateMany({
+          where: { id: ligne.id, userId },
+          data: { performance: attendu.performance, elementId: attendu.elementId, vueAt: maintenant },
+        })
+      }
+    }
+
+    const nouveaux = [...attendus.entries()]
+      .filter(([cle]) => !connus.has(cle))
+      .map(([, element]) => ({
+        userId,
+        accountId: compte.id,
+        groupeId: element.groupeId,
+        champ: element.champ,
+        texte: element.texte,
+        elementId: element.elementId,
+        performance: element.performance,
+        vueAt: maintenant,
+      }))
+    if (nouveaux.length > 0) {
+      await tx.adsElement.createMany({ data: nouveaux, skipDuplicates: true })
+    }
+
+    /*
+     * Supprimé plutôt que marqué : un titre retiré d'une annonce n'a pas d'histoire à
+     * raconter, et le garder ferait proposer des améliorations à un texte qui ne diffuse
+     * plus.
+     */
+    if (perimes.length > 0) {
+      await tx.adsElement.deleteMany({ where: { id: { in: perimes }, userId } })
+    }
   })
+
+  await withUserScope(userId, (tx) =>
+    tx.adsGroupe.deleteMany({ where: { userId, accountId: compte.id, vueAt: { lt: debut } } }),
+  )
 
   const bornes = fenetre(JOURS_TERMES, compte.fuseau, maintenant)
   const termes = await googleAds.lireTermes(acces, bornes.depuis, bornes.jusqua)
@@ -171,36 +234,16 @@ export async function synchroniserCreatif(
    * distinctes, et perdre l'une parce que l'autre a échoué ferait deux pannes d'une seule.
    */
   if (termes.ok) {
-    for (const terme of termes.valeur) {
-      const campagneId = parIdentifiant.get(terme.campagneId)
-      if (campagneId === undefined || terme.terme === '') continue
-      const valeurs = {
-        impressions: BigInt(Math.round(terme.impressions)),
-        clics: BigInt(Math.round(terme.clics)),
-        conversions: terme.conversions,
-        coutMicros: BigInt(Math.round(terme.coutMicros)),
-        // Classé par le même code que le référencement : un achat est un achat des deux côtés.
-        intention: classer(terme.terme),
-      }
-      await withUserScope(userId, (tx) =>
-        tx.adsTerme.upsert({
-          where: { campagneId_terme: { campagneId, terme: terme.terme } },
-          create: {
-            userId,
-            accountId: compte.id,
-            campagneId,
-            terme: terme.terme,
-            vueAt: maintenant,
-            ...valeurs,
-          },
-          update: { ...valeurs, vueAt: maintenant },
-        }),
-      )
-      bilan.termes += 1
-    }
-    await withUserScope(userId, (tx) =>
-      tx.adsTerme.deleteMany({ where: { userId, accountId: compte.id, vueAt: { lt: debut } } }),
-    )
+    /*
+     * Les termes sont une photographie, pas un historique : on remplace tout plutôt que de
+     * rapprocher ligne à ligne. Deux requêtes, quel que soit le nombre de termes.
+     */
+    const lignes = creatifTermes(termes.valeur, parIdentifiant, userId, compte.id, maintenant)
+    bilan.termes = lignes.length
+    await withUserScope(userId, async (tx) => {
+      await tx.adsTerme.deleteMany({ where: { userId, accountId: compte.id } })
+      if (lignes.length > 0) await tx.adsTerme.createMany({ data: lignes, skipDuplicates: true })
+    })
   }
 
   await withUserScope(userId, (tx) =>
