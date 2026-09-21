@@ -499,6 +499,9 @@ export function TableauVisibilite({
             >
               Quoi écrire, et quand
             </LinkButton>
+            <LinkButton href={`/${locale}/publicite`} variant="secondary" size="medium">
+              Vos campagnes
+            </LinkButton>
             <LinkButton
               href={`/${locale}/visibilite/assistants?siteId=${site.id}`}
               variant="secondary"

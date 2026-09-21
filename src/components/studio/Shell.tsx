@@ -46,6 +46,15 @@ export function Shell({
             <a href={`/${locale}/visibilite`} className="text-[var(--color-ink-soft)] no-underline">
               {t('nav.visibility')}
             </a>
+            {/*
+              La publicité a sa propre entrée plutôt qu'un lien enfoui dans la visibilité :
+              on n'y vient pas pour la même raison. La visibilité est ce qu'on gagne en
+              écrivant mieux, la publicité est ce qu'on achète — et on la regarde le matin,
+              parce qu'elle a dépensé pendant la nuit.
+            */}
+            <a href={`/${locale}/publicite`} className="text-[var(--color-ink-soft)] no-underline">
+              Publicité
+            </a>
             <a href={`/${locale}/connexions`} className="text-[var(--color-ink-soft)] no-underline">
               Connexions
             </a>
