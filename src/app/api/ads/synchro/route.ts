@@ -35,7 +35,7 @@ export async function POST(request: Request) {
      * maintenant » vient de changer quelque chose et veut le voir, pas apprendre qu'il
      * faudra attendre mardi.
      */
-    await synchroniserCreatif(user.id).catch(() => null)
+    const creatif = await synchroniserCreatif(user.id).catch(() => null)
 
     /*
      * Les règles enchaînent sur la lecture, et c'est gratuit : aucune requête chez Google,
@@ -44,7 +44,22 @@ export async function POST(request: Request) {
      */
     await evaluerCompte(user.id).catch(() => null)
 
-    return ok({ ok: true, bilan: issue.bilan })
+    /*
+     * L'issue du créatif remonte à l'écran plutôt que d'être avalée. Une requête mal formée
+     * chez Google échouerait en silence, la page resterait identique, et la personne
+     * cliquerait une seconde fois en cherchant ce qu'elle a mal fait. Une lecture des
+     * chiffres réussie et un créatif refusé sont deux réponses, pas une erreur.
+     */
+    return ok({
+      ok: true,
+      bilan: issue.bilan,
+      creatif:
+        creatif === null
+          ? { ok: false, raison: 'Le contenu des campagnes n’a pas pu être lu.' }
+          : creatif.ok
+            ? { ok: true, bilan: creatif.bilan }
+            : { ok: false, raison: creatif.raison },
+    })
   } catch (error) {
     return fail(error)
   }
