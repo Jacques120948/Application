@@ -49,6 +49,7 @@ import {
   NEO_SYSTEM,
   GIA_SYSTEM,
   MILO_SYSTEM,
+  NAYA_SYSTEM,
 } from './prompts'
 import {
   appPlanSchema,
@@ -1529,6 +1530,7 @@ const VISIBILITE_SYSTEMS = {
   seo: NEO_SYSTEM,
   geo: GIA_SYSTEM,
   content: MILO_SYSTEM,
+  ads: NAYA_SYSTEM,
 } as const
 
 /**
@@ -1628,7 +1630,7 @@ export async function writePoint(params: {
 
 export async function askVisibilityAgent(params: {
   userId: string
-  agent: 'audit' | 'seo' | 'geo' | 'content'
+  agent: 'audit' | 'seo' | 'geo' | 'content' | 'ads'
   question: string
   facts: string
   teamMemory: string | null

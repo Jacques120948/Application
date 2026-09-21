@@ -228,6 +228,25 @@ export async function readSiteFacts(
     ].join('\n')
   }
   /*
+   * Naya voit la publicité, et pour l'instant elle ne voit rien du tout : la connexion
+   * Google Ads n'existe pas encore. On le lui dit explicitement plutôt que de lui envoyer
+   * un contexte muet — un modèle à qui l'on ne dit rien suppose, et une supposition sur un
+   * budget publicitaire se paie tout de suite.
+   *
+   * Elle garde le socle : le site, ses pages, ce que les gens y cherchent. C'est déjà
+   * quelque chose — quelqu'un qui paie pour des mots où il sort déjà premier paie pour ce
+   * qu'il a déjà, et c'est une conversation qu'elle peut tenir dès aujourd'hui.
+   */
+  if (agent === 'ads') {
+    return [
+      ...base,
+      ...(await recherches(userId, siteId)),
+      'DONNÉES PUBLICITAIRES : aucune. Aucun compte Google Ads n’est relié à ce site. Tu ne' +
+        ' disposes d’aucune dépense, d’aucun ROAS, d’aucune conversion et d’aucune campagne :' +
+        ' ne cite aucun chiffre publicitaire, et dis-le quand la question en demande.',
+    ].join('\n')
+  }
+  /*
    * Milo écrit. Il voit les deux catalogues — un texte sert au référencement comme aux
    * assistants — mais il voit surtout le texte lui-même, ce que les autres n'ont pas.
    */

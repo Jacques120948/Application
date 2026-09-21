@@ -190,6 +190,22 @@ export const FEATURES: readonly Feature[] = [
     summary: 'L’écriture et la réécriture : descriptions, pages, questions fréquentes, articles.',
     status: 'live',
   },
+  {
+    id: 'visibility_ads_agent',
+    group: 'equipe',
+    label: 'Naya — Publicité',
+    /*
+     * Ce que la fiche promet est ce qui existe aujourd'hui, et rien de plus. Naya répond
+     * déjà ; elle ne lit pas encore de campagnes, parce que la connexion Google Ads n'est
+     * pas construite. Écrire « vos campagnes lues et expliquées » ferait espérer un tableau
+     * de bord à quelqu'un qui trouverait une conversation — la façon la plus sûre de
+     * décevoir quelqu'un qui vient de payer. La phrase s'élargira quand la connexion
+     * existera, pas avant.
+     */
+    summary:
+      'Les questions de publicité en ligne : à quoi servent le ROAS, le CPA ou le CTR, et ce qu’ils disent de votre activité. La lecture de vos campagnes Google Ads arrive ensuite.',
+    status: 'live',
+  },
 ]
 
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)

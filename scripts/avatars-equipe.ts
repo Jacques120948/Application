@@ -166,6 +166,20 @@ const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string 
       ' jumper with a relaxed collar. He is easy to talk to and full of ideas.',
     fond: 'warm amber fading to soft coral',
   },
+  /*
+   * Naya reprend le dernier arrêt de la palette, le jaune, qu'aucun des quatre n'occupait.
+   * Son métier engage de l'argent : le regard est direct et posé, pas enthousiaste — on ne
+   * confie pas un budget à quelqu'un qui a l'air content de le dépenser.
+   */
+  ads: {
+    fichier: 'naya.webp',
+    trait:
+      'A professional woman in her mid thirties, composed and precise. Sleek hair pulled back in a low' +
+      ' sculpted knot, in a vivid gradient from deep gold at the roots to pale champagne at the tips.' +
+      ' Steady direct gaze, fine gold stud earrings, a tailored dark top with clean lines. She is the' +
+      ' one you trust with a budget.',
+    fond: 'deep gold fading to pale champagne',
+  },
 }
 
 function construire(): Portrait[] {

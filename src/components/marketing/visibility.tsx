@@ -26,6 +26,12 @@ const TEINTES: Record<VisibilityAgent['tint'], { fond: string; anneau: string }>
   accent: { fond: 'var(--color-accent-soft)', anneau: 'var(--color-accent)' },
   warm: { fond: '#fff1e8', anneau: 'var(--color-accent-warm)' },
   night: { fond: '#ece4f6', anneau: 'var(--color-night-soft)' },
+  /*
+   * Le jaune de l'icône, le seul arrêt de la palette qui n'était pas encore pris. Comme
+   * les autres : fond tendre, anneau saturé — le jaune saturé ne tient aucun texte, et
+   * c'est précisément pour cela qu'il ne sert ici que de contour.
+   */
+  sun: { fond: '#fffaea', anneau: 'var(--color-accent-sun)' },
 }
 
 /**

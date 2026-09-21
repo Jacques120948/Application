@@ -31,7 +31,7 @@
  * spécialiste ajouté plus tard sans portrait.
  */
 
-export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content'] as const
+export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'ads'] as const
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
 
@@ -53,7 +53,7 @@ export type VisibilityAgent = {
    */
   avatar?: string
   /** Jeton de couleur de sa pastille. Fond tendre, lettre sombre : lisible partout. */
-  tint: 'brand' | 'accent' | 'warm' | 'night'
+  tint: 'brand' | 'accent' | 'warm' | 'night' | 'sun'
   /**
    * Ce que ce spécialiste fait déjà, aujourd'hui, dans le produit livré.
    *
@@ -135,6 +135,43 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Réécris la description de cette page.',
       'Propose une FAQ pour ce service.',
       'Quel article devrais-je écrire ensuite ?',
+    ],
+  },
+  /*
+   * Naya, et la frontière qu'elle franchit.
+   *
+   * Les quatre autres travaillent la visibilité qu'on ne paie pas : ce qu'on gagne en
+   * écrivant mieux et en étant mieux compris. Naya travaille celle qu'on achète. Ce n'est
+   * pas un métier de plus dans le même domaine, c'est un domaine voisin — et c'est
+   * exactement pourquoi elle a sa place ici plutôt qu'ailleurs : quelqu'un qui dépense en
+   * publicité sur des mots où il sort déjà premier paie pour ce qu'il a déjà, et personne
+   * ne le lui dira s'il n'y a pas, dans la même équipe, quelqu'un qui voit les deux.
+   *
+   * Elle porte aussi le seul pouvoir du produit qui engage de l'argent. Les autres
+   * proposent des textes qu'on copie ; elle peut modifier un budget. D'où une règle qui
+   * n'existe pour personne d'autre : elle ne modifie rien sans confirmation explicite, et
+   * ce qu'elle a modifié est journalisé avec son ancienne valeur.
+   */
+  {
+    id: 'ads',
+    name: 'Naya',
+    role: 'Publicité',
+    summary:
+      'Elle lit vos campagnes Google Ads, explique où part votre argent et ce qu’il rapporte, et propose des ajustements. Elle ne modifie rien sans votre accord.',
+    handles: ['Campagnes', 'Budgets', 'ROAS et CPA', 'Mots-clés', 'Termes de recherche'],
+    feature: 'visibility_ads_agent',
+    atWork: null,
+    /*
+     * Pas de portrait tant que le fichier n'existe pas : `AgentAvatar` ne retombe sur la
+     * pastille à initiale que lorsque `avatar` est absent, et une adresse pointant vers un
+     * fichier manquant afficherait une image cassée sur la page d'accueil. Le script
+     * `avatars-equipe.ts` sait déjà la dessiner — cette ligne reviendra avec le fichier.
+     */
+    tint: 'sun',
+    starters: [
+      'Comment vont mes campagnes aujourd’hui ?',
+      'Quelle campagne dépense trop ?',
+      'Où puis-je augmenter le budget ?',
     ],
   },
 ]
