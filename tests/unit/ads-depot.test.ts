@@ -24,12 +24,12 @@ function demande(champs: Partial<Parameters<typeof autoriseTexte>[0]> = {}) {
 
 describe('les bornes d’un dépôt', () => {
   it('refusent un compte en lecture seule', () => {
-    expect(autoriseTexte(demande({ mode: 'lecture' }), 'titre', 'Bougie citrine', 9).ok).toBe(false)
+    expect(autoriseTexte(demande({ mode: 'lecture' }), 'annonces', 'titre', 'Bougie citrine', 9).ok).toBe(false)
   })
 
   it('refusent un texte trop long, avec son compte exact', () => {
     const trop = 'a'.repeat(31)
-    const verdict = autoriseTexte(demande(), 'titre', trop, 9)
+    const verdict = autoriseTexte(demande(), 'annonces', 'titre', trop, 9)
     expect(verdict.ok).toBe(false)
     if (!verdict.ok) expect(verdict.raison).toContain('31')
   })
@@ -40,15 +40,15 @@ describe('les bornes d’un dépôt', () => {
      * existants : un refus emporterait le dépôt et rien d'autre, mais l'erreur serait
      * incompréhensible. Mieux vaut le dire avant.
      */
-    const verdict = autoriseTexte(demande(), 'titre', 'Bougie citrine', 15)
+    const verdict = autoriseTexte(demande(), 'annonces', 'titre', 'Bougie citrine', 15)
     expect(verdict.ok).toBe(false)
     if (!verdict.ok) expect(verdict.raison).toContain('15')
-    expect(autoriseTexte(demande(), 'description', 'Une description.', 4).ok).toBe(false)
+    expect(autoriseTexte(demande(), 'annonces', 'description', 'Une description.', 4).ok).toBe(false)
   })
 
   it('acceptent un texte correct dans une annonce qui a de la place', () => {
-    expect(autoriseTexte(demande(), 'titre', 'Bougie Citrine Suisse', 9).ok).toBe(true)
-    expect(autoriseTexte(demande(), 'description', 'Une description courte.', 2).ok).toBe(true)
+    expect(autoriseTexte(demande(), 'annonces', 'titre', 'Bougie Citrine Suisse', 9).ok).toBe(true)
+    expect(autoriseTexte(demande(), 'annonces', 'description', 'Une description courte.', 2).ok).toBe(true)
   })
 
   it('bornent le nombre de dépôts par jour, mais largement', () => {
@@ -58,14 +58,32 @@ describe('les bornes d’un dépôt', () => {
      * ses annonces un samedi matin.
      */
     expect(TEXTES_PAR_JOUR).toBeGreaterThan(15)
-    expect(autoriseTexte(demande({ textesAujourdhui: TEXTES_PAR_JOUR }), 'titre', 'x', 1).ok).toBe(
+    expect(autoriseTexte(demande({ textesAujourdhui: TEXTES_PAR_JOUR }), 'annonces', 'titre', 'x', 1).ok).toBe(
       false,
     )
   })
 
   it('ne connaissent que les titres et les descriptions', () => {
-    expect(autoriseTexte(demande(), 'image', 'https://exemple.test/x.jpg', 1).ok).toBe(false)
-    expect(autoriseTexte(demande(), 'mot-cle', 'bougie citrine', 1).ok).toBe(false)
+    expect(autoriseTexte(demande(), 'annonces', 'image', 'https://exemple.test/x.jpg', 1).ok).toBe(false)
+    expect(autoriseTexte(demande(), 'annonces', 'mot-cle', 'bougie citrine', 1).ok).toBe(false)
+  })
+})
+
+describe('les deux genres de contenant', () => {
+  it('n’ont pas les mêmes places', () => {
+    /*
+     * Une annonce responsive accepte quatre descriptions, un groupe d'éléments cinq. Prendre
+     * les bornes de l'un pour l'autre ferait refuser un dépôt légitime — ou pire, en
+     * laisserait partir un que Google rejetterait.
+     */
+    expect(autoriseTexte(demande(), 'annonces', 'description', 'Une description.', 4).ok).toBe(false)
+    expect(autoriseTexte(demande(), 'elements', 'description', 'Une description.', 4).ok).toBe(true)
+  })
+
+  it('n’acceptent pas les mêmes champs', () => {
+    // Le titre long n'existe pas dans une annonce responsive.
+    expect(autoriseTexte(demande(), 'annonces', 'titre-long', 'Un titre long.', 0).ok).toBe(false)
+    expect(autoriseTexte(demande(), 'elements', 'titre-long', 'Un titre long.', 0).ok).toBe(true)
   })
 })
 
@@ -93,6 +111,23 @@ describe('la mécanique du dépôt', () => {
      */
     const source = readFileSync('src/server/ads/actions.ts', 'utf8')
     expect(source).toContain('avant: { champ, textes: liste }')
+  })
+
+  it('rattache au lieu de remplacer dans un groupe d’éléments', () => {
+    /*
+     * Le chemin le plus sûr des deux : l'élément est créé seul puis rattaché. Rien n'est
+     * remplacé, donc rien ne peut être effacé par mégarde — et le retour arrière détache au
+     * lieu de réécrire une liste.
+     */
+    const source = readFileSync('src/server/ads/actions.ts', 'utf8')
+    expect(source).toContain('creerTexteElement')
+    expect(source).toContain('rattacherElement')
+    expect(source).toContain('detacherElement')
+  })
+
+  it('garde la poignée du rattachement, sans laquelle on ne peut rien détacher', () => {
+    const source = readFileSync('src/server/ads/actions.ts', 'utf8')
+    expect(source).toContain('rattache: true, rattachement')
   })
 
   it('refuse un contenant qui porte plusieurs annonces', () => {

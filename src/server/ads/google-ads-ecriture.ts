@@ -151,6 +151,119 @@ export async function ecrireTextesAnnonce(
   })
 }
 
+/**
+ * Crée un texte comme élément autonome, puis le rattache à un groupe d'éléments.
+ *
+ * C'est l'autre façon dont Google range les textes d'une annonce, et elle est plus saine que
+ * celle des annonces responsives : un élément existe seul, on le rattache, on le détache.
+ * Rien n'est remplacé, donc rien ne peut être effacé par mégarde — là où ajouter un titre à
+ * une annonce responsive exige de renvoyer les quinze autres.
+ *
+ * Deux appels, et pas un : Google ne sait pas créer et rattacher d'un coup hors d'une
+ * requête groupée. Le second échoue parfois seul, et l'élément reste alors créé sans être
+ * rattaché — inoffensif, invisible, et l'appelant le dit plutôt que de prétendre au succès.
+ */
+export async function creerTexteElement(
+  acces: AccesAds,
+  texte: string,
+): Promise<{ ok: true; resourceName: string } | { ok: false; raison: string; technique: string }> {
+  const issue = await envoyerEtLire('assets:mutate', acces, {
+    operations: [{ create: { textAsset: { text: texte } } }],
+  })
+  if (!issue.ok) return issue
+  if (issue.resourceName === '') {
+    return {
+      ok: false,
+      raison: 'Google a accepté le texte sans dire où il l’a rangé. Rien n’a été rattaché.',
+      technique: 'resourceName manquant',
+    }
+  }
+  return { ok: true, resourceName: issue.resourceName }
+}
+
+/**
+ * Rattache un élément à un groupe d'éléments, dans un champ donné.
+ *
+ * Rend le nom de ressource du rattachement, et non celui de l'élément : c'est lui qu'il
+ * faudra donner pour détacher. Détacher n'efface pas l'élément, il le retire de ce groupe —
+ * ce qui est exactement ce qu'un retour arrière doit faire.
+ */
+export async function rattacherElement(
+  acces: AccesAds,
+  groupeId: string,
+  elementResourceName: string,
+  champGoogle: string,
+): Promise<{ ok: true; resourceName: string } | { ok: false; raison: string; technique: string }> {
+  const issue = await envoyerEtLire('assetGroupAssets:mutate', acces, {
+    operations: [
+      {
+        create: {
+          assetGroup: `customers/${acces.compteId}/assetGroups/${groupeId}`,
+          asset: elementResourceName,
+          fieldType: champGoogle,
+        },
+      },
+    ],
+  })
+  if (!issue.ok) return issue
+  return { ok: true, resourceName: issue.resourceName }
+}
+
+/** Détache un élément d'un groupe. L'élément survit ; il ne sert simplement plus ici. */
+export async function detacherElement(
+  acces: AccesAds,
+  rattachementResourceName: string,
+): Promise<Ecriture> {
+  return envoyer('assetGroupAssets:mutate', acces, {
+    operations: [{ remove: rattachementResourceName }],
+  })
+}
+
+/**
+ * Un envoi dont on lit le nom de ressource créé.
+ *
+ * Séparé de `envoyer` parce que la plupart des écritures n'ont rien à relire : changer un
+ * budget rend l'identifiant qu'on lui a donné. Créer un élément, si — et sans ce nom, on ne
+ * peut ni le rattacher ni le détacher plus tard.
+ */
+async function envoyerEtLire(
+  chemin: string,
+  acces: AccesAds,
+  corps: unknown,
+): Promise<{ ok: true; resourceName: string } | { ok: false; raison: string; technique: string }> {
+  const controle = new AbortController()
+  const minuteur = setTimeout(() => controle.abort(), DELAI_MS)
+  try {
+    const reponse = await fetch(`${RACINE}/customers/${acces.compteId}/${chemin}`, {
+      method: 'POST',
+      headers: entetes(acces.accessToken),
+      body: JSON.stringify(corps),
+      signal: controle.signal,
+    })
+    const charge = (await reponse.json().catch(() => null)) as unknown
+
+    if (reponse.status !== 200) {
+      const message = messageErreur(charge)
+      logger.warn('Google Ads a refusé une création', { status: reponse.status })
+      return { ok: false, raison: refus(reponse.status, message), technique: message.slice(0, 500) }
+    }
+
+    const resultats = (charge as { results?: unknown } | null)?.results
+    const premier = Array.isArray(resultats) ? resultats[0] : undefined
+    const nom = (premier as { resourceName?: unknown } | undefined)?.resourceName
+    return { ok: true, resourceName: typeof nom === 'string' ? nom : '' }
+  } catch {
+    return {
+      ok: false,
+      raison:
+        'La modification n’a pas pu être envoyée à Google. Vérifiez dans Google Ads avant de réessayer : elle a pu partir malgré tout.',
+      technique: 'reseau',
+    }
+  } finally {
+    clearTimeout(minuteur)
+  }
+}
+
 /** Met une campagne en pause, ou la remet en route. */
 export async function ecrireStatut(
   acces: AccesAds,

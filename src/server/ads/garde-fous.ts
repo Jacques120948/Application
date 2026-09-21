@@ -162,10 +162,19 @@ export function autoriseBudget(
 export const TEXTES_PAR_JOUR = 40
 
 /** Ce que Google accepte, en caractères. Un texte plus long est refusé sans être lu. */
-const LONGUEURS_ADS: Record<string, number> = { titre: 30, description: 90 }
+const LONGUEURS_ADS: Record<string, number> = { titre: 30, 'titre-long': 90, description: 90 }
 
-/** Ce que Google accepte par annonce responsive. */
-const PLACES_ADS: Record<string, number> = { titre: 15, description: 4 }
+/**
+ * Ce que Google accepte par contenant, et ce n'est pas la même chose des deux côtés.
+ *
+ * Une annonce responsive accepte quatre descriptions ; un groupe d'éléments en accepte cinq,
+ * et des titres longs en plus. Prendre les bornes de l'un pour l'autre ferait refuser un
+ * dépôt légitime, ou pire, en laisser partir un que Google rejetterait.
+ */
+const PLACES_ADS: Record<string, Record<string, number>> = {
+  annonces: { titre: 15, description: 4 },
+  elements: { titre: 15, 'titre-long': 5, description: 5 },
+}
 
 /**
  * Les bornes d'un dépôt de texte.
@@ -177,6 +186,8 @@ const PLACES_ADS: Record<string, number> = { titre: 15, description: 4 }
  */
 export function autoriseTexte(
   demande: Demande & { textesAujourdhui: number },
+  /** annonces | elements : le genre du contenant, qui décide des places disponibles. */
+  genre: string,
   champ: string,
   texte: string,
   places: number,
@@ -196,9 +207,12 @@ export function autoriseTexte(
   }
 
   const longueur = LONGUEURS_ADS[champ]
-  const maximum = PLACES_ADS[champ]
+  const maximum = (PLACES_ADS[genre] ?? {})[champ]
   if (longueur === undefined || maximum === undefined) {
-    return { ok: false, raison: 'Seuls les titres et les descriptions peuvent être déposés.' }
+    return {
+      ok: false,
+      raison: 'Ce type de texte ne peut pas être déposé dans ce genre de contenant.',
+    }
   }
   if (texte.trim() === '' || texte.length > longueur) {
     return {

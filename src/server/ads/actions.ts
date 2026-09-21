@@ -6,7 +6,14 @@ import { isEnabled } from '@/server/settings/flags'
 import { accesCompteActif, compteActif, type CompteRelie } from './comptes'
 import type { AccesAds, TexteAnnonceAds } from './provider'
 import { googleAds } from './google-ads'
-import { ecrireBudget, ecrireStatut, ecrireTextesAnnonce } from './google-ads-ecriture'
+import {
+  creerTexteElement,
+  detacherElement,
+  ecrireBudget,
+  ecrireStatut,
+  ecrireTextesAnnonce,
+  rattacherElement,
+} from './google-ads-ecriture'
 import { autoriseBudget, autoriseStatut, autoriseTexte, type Demande } from './garde-fous'
 import { lireProfil } from './profil'
 
@@ -264,7 +271,12 @@ async function journaliser(
     recommandationId?: string
   },
   envoi: () => Promise<{ ok: true } | { ok: false; raison: string; technique: string }>,
-  apresSucces: () => Promise<void>,
+  /*
+   * Reçoit l'identifiant de la ligne de journal. Une première version le cherchait par son
+   * état — la seule « prévue » du moment — et ne trouvait rien, parce que l'état passe à
+   * « réussie » juste avant. Une poignée passée vaut mieux qu'une poignée devinée.
+   */
+  apresSucces: (actionId: string) => Promise<void>,
 ): Promise<Issue> {
   const action = await withUserScope(userId, (tx) =>
     tx.adsAction.create({
@@ -304,7 +316,7 @@ async function journaliser(
     return { ok: false, raison: issue.raison, action: journal.find((une) => une.id === action.id) }
   }
 
-  await apresSucces()
+  await apresSucces(action.id)
   logger.info('écriture publicitaire réussie', { quoi: ligne.quoi })
   const journal = await lireJournal(userId, compte.id)
   const vue = journal.find((une) => une.id === action.id)
@@ -509,19 +521,21 @@ export async function deposerTexte(userId: string, propositionId: string): Promi
   )
   if (proposition === null) throw notFound('Cette proposition est introuvable.')
 
-  if (proposition.groupe.genre !== 'annonces') {
-    return {
-      ok: false,
-      raison:
-        'Le dépôt dans un groupe d’éléments Performance Max n’est pas encore construit : il passe par un autre chemin chez Google, celui des éléments, qui arrivera avec les images.',
-    }
-  }
-  if (proposition.champ !== 'titre' && proposition.champ !== 'description') {
-    return { ok: false, raison: 'Seuls les titres et les descriptions peuvent être déposés.' }
-  }
-
   const acces = await accesCompteActif(userId)
   if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  /*
+   * Deux chemins, parce que Google en a deux. Un groupe d'éléments rattache des éléments
+   * autonomes : on ajoute, on retire, rien n'est remplacé. Une annonce responsive porte ses
+   * textes en ligne : y ajouter le dixième exige de renvoyer les neuf autres. Le second est
+   * le plus dangereux, et c'est celui qui existait en premier.
+   */
+  if (proposition.groupe.genre === 'elements') {
+    return deposerDansElements(userId, compte, acces.acces, ouverture.demande, proposition)
+  }
+  if (proposition.champ !== 'titre' && proposition.champ !== 'description') {
+    return { ok: false, raison: 'Une annonce responsive n’accepte que des titres et des descriptions.' }
+  }
 
   /*
    * Relue maintenant, pas reprise de la base. C'est la seule façon de ne pas écraser ce qui
@@ -554,6 +568,7 @@ export async function deposerTexte(userId: string, propositionId: string): Promi
   const textes = await textesAujourdhui(userId, compte.id)
   const verdict = autoriseTexte(
     { ...ouverture.demande, textesAujourdhui: textes },
+    'annonces',
     proposition.champ,
     proposition.texte,
     liste.length,
@@ -609,6 +624,134 @@ export async function deposerTexte(userId: string, propositionId: string): Promi
   )
 }
 
+/** Les champs d'Evoliia vers ceux de Google, pour un groupe d'éléments. */
+const CHAMPS_GOOGLE: Record<string, string> = {
+  titre: 'HEADLINE',
+  'titre-long': 'LONG_HEADLINE',
+  description: 'DESCRIPTION',
+}
+
+/**
+ * Le dépôt dans un groupe d'éléments.
+ *
+ * Plus sûr que celui d'une annonce responsive : l'élément est créé seul, puis rattaché. Rien
+ * n'est remplacé, donc rien ne peut être effacé par mégarde — et le retour arrière détache
+ * au lieu de réécrire une liste.
+ *
+ * Le comptage se fait sur notre base et non sur une relecture chez Google, et c'est une
+ * différence assumée : ici, se tromper de quelques unités fait refuser un rattachement par
+ * Google, rien de plus. Dans une annonce responsive, la même erreur effacerait les autres
+ * textes — d'où la relecture là-bas, et pas ici.
+ */
+async function deposerDansElements(
+  userId: string,
+  compte: CompteRelie,
+  acces: AccesAds,
+  demande: Demande,
+  proposition: {
+    id: string
+    champ: string
+    texte: string
+    groupe: { id: string; nom: string; genre: string; groupeId: string }
+  },
+): Promise<Issue> {
+  const champGoogle = CHAMPS_GOOGLE[proposition.champ]
+  if (champGoogle === undefined) {
+    return { ok: false, raison: 'Ce type de texte ne peut pas être déposé.' }
+  }
+
+  const places = await withUserScope(userId, (tx) =>
+    tx.adsElement.count({
+      where: { userId, groupeId: proposition.groupe.id, champ: proposition.champ },
+    }),
+  )
+
+  const textes = await textesAujourdhui(userId, compte.id)
+  const verdict = autoriseTexte(
+    { ...demande, textesAujourdhui: textes },
+    'elements',
+    proposition.champ,
+    proposition.texte,
+    places,
+  )
+  if (!verdict.ok) return verdict
+
+  const champ = proposition.champ
+  let rattachement = ''
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: champ,
+      motif: `${champ === 'description' ? 'Description ajoutée' : 'Titre ajouté'} à « ${proposition.groupe.nom} » : ${proposition.texte}`,
+      campagneId: null,
+      /*
+       * Rien avant, puisque rien n'est remplacé. Ce qu'il faut garder pour revenir en
+       * arrière n'est pas un état mais une poignée : le nom du rattachement, écrit après
+       * coup par la fermeture ci-dessous.
+       */
+      avant: { champ, rattache: false },
+      apres: { champ, texte: proposition.texte },
+      mode: 'assiste',
+    },
+    async () => {
+      const element = await creerTexteElement(acces, proposition.texte)
+      if (!element.ok) return element
+
+      const lien = await rattacherElement(
+        acces,
+        proposition.groupe.groupeId,
+        element.resourceName,
+        champGoogle,
+      )
+      if (!lien.ok) {
+        /*
+         * L'élément existe et n'est rattaché à rien. Inoffensif — il ne diffuse pas — mais
+         * il faut le dire plutôt que de laisser croire que rien n'est parti.
+         */
+        return {
+          ok: false,
+          raison: `${lien.raison} Le texte a été créé chez Google mais n’a pas été rattaché à ce groupe : il ne diffusera pas.`,
+          technique: lien.technique,
+        }
+      }
+      rattachement = lien.resourceName
+      return { ok: true }
+    },
+    async (actionId) => {
+      await withUserScope(userId, async (tx) => {
+        await tx.adsProposition.updateMany({
+          where: { id: proposition.id, userId },
+          data: { etat: 'deposee', closedAt: new Date() },
+        })
+        await tx.adsElement.createMany({
+          data: [
+            {
+              userId,
+              accountId: compte.id,
+              groupeId: proposition.groupe.id,
+              champ,
+              texte: proposition.texte,
+              elementId: rattachement,
+              origine: 'evoliia',
+            },
+          ],
+          skipDuplicates: true,
+        })
+        /*
+         * La poignée du retour arrière, écrite une fois le rattachement connu. Sans elle,
+         * « revenir en arrière » n'aurait rien à détacher.
+         */
+        await tx.adsAction.updateMany({
+          where: { id: actionId, userId },
+          data: { avant: { champ, rattache: true, rattachement } },
+        })
+      })
+    },
+  )
+}
+
 /**
  * Remet une action dans l'état d'avant.
  *
@@ -644,6 +787,8 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
     statut?: string
     champ?: string
     textes?: TexteAnnonceAds[]
+    rattache?: boolean
+    rattachement?: string
   }
 
   const acces = await accesCompteActif(userId)
@@ -654,6 +799,36 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
    * simplement le dernier élément de la liste actuelle serait faux dès que quelqu'un a
    * modifié l'annonce entre-temps : on enlèverait son texte à lui.
    */
+  /*
+   * Un texte rattaché à un groupe d'éléments se retire en détachant, pas en réécrivant une
+   * liste : l'élément reste chez Google, il ne sert simplement plus ici. C'est le chemin le
+   * plus sûr des deux, et il se reconnaît à la poignée conservée au dépôt.
+   */
+  if (avant.rattache === true && typeof avant.rattachement === 'string') {
+    const texte = ((origine.apres ?? {}) as { texte?: string }).texte ?? ''
+    return journaliser(
+      userId,
+      compte,
+      {
+        quoi: origine.quoi,
+        motif: texte === '' ? 'Texte retiré du groupe' : `Retrait de « ${texte} »`,
+        campagneId: null,
+        avant: { champ: origine.quoi, rattache: true, rattachement: avant.rattachement },
+        apres: { champ: origine.quoi, rattache: false },
+        mode: 'restauration',
+        annuleId: origine.id,
+      },
+      () => detacherElement(acces.acces, avant.rattachement ?? ''),
+      async () => {
+        await withUserScope(userId, (tx) =>
+          tx.adsElement.deleteMany({
+            where: { userId, accountId: compte.id, champ: origine.quoi, texte },
+          }),
+        )
+      },
+    )
+  }
+
   if (
     (origine.quoi === 'titre' || origine.quoi === 'description') &&
     Array.isArray(avant.textes)
