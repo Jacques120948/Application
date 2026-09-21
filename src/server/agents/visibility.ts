@@ -161,12 +161,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
     handles: ['Campagnes', 'Budgets', 'ROAS et CPA', 'Mots-clés', 'Termes de recherche'],
     feature: 'visibility_ads_agent',
     atWork: null,
-    /*
-     * Pas de portrait tant que le fichier n'existe pas : `AgentAvatar` ne retombe sur la
-     * pastille à initiale que lorsque `avatar` est absent, et une adresse pointant vers un
-     * fichier manquant afficherait une image cassée sur la page d'accueil. Le script
-     * `avatars-equipe.ts` sait déjà la dessiner — cette ligne reviendra avec le fichier.
-     */
+    avatar: '/equipe/naya.webp',
     tint: 'sun',
     starters: [
       'Comment vont mes campagnes aujourd’hui ?',
