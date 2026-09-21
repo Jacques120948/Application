@@ -140,6 +140,40 @@ export const LANGUES: Record<string, { code: string; nom: string }> = {
 }
 
 /**
+ * La langue dans laquelle une campagne doit être faite, choisie sur la demande.
+ *
+ * Celle qui rassemble le plus d'affichages, et non celle de l'écran. Un site suisse en sert
+ * trois : décider sur la langue de l'interface ferait une campagne française pour une
+ * demande italienne — des annonces que personne du bon public ne comprend, et des
+ * impressions dépensées quand même.
+ *
+ * Une campagne ne peut en porter qu'une. Mélanger les langues dans un seul groupe
+ * d'annonces revient à montrer le même texte à tout le monde : les uns le lisent, les autres
+ * passent, et la moitié du budget part en affichages sans clic. Le jour où le trafic d'une
+ * seconde langue le justifie, elle mérite sa propre campagne — pas une place dans celle-ci.
+ *
+ * `null` quand aucune requête ne porte de langue connue : l'appelant retient alors celle de
+ * l'écran, ce qui est un repli et non une déduction.
+ */
+export function langueDominante(requetes: ReadonlyArray<RequeteSite>): string | null {
+  const poids = new Map<string, number>()
+  for (const requete of requetes) {
+    if (requete.langue === '') continue
+    poids.set(requete.langue, (poids.get(requete.langue) ?? 0) + requete.impressions)
+  }
+
+  let meilleure: string | null = null
+  let sommet = 0
+  for (const [langue, total] of poids) {
+    if (total > sommet) {
+      sommet = total
+      meilleure = langue
+    }
+  }
+  return meilleure
+}
+
+/**
  * Le marché à viser, choisi sur les chiffres et non sur une préférence.
  *
  * C'est le pays d'où viennent le plus d'affichages dans Search Console : le seul fait

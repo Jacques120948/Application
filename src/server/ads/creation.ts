@@ -10,6 +10,7 @@ import {
   croiser,
   enchereProposee,
   LANGUES,
+  langueDominante,
   marcheDominant,
   plafondEnchere,
   type RequeteSite,
@@ -245,9 +246,6 @@ export async function preparerCampagne(
       'Naya ne reconnaît pas le pays d’où viennent vos visiteurs, et une campagne sans pays diffuserait dans le monde entier.',
     )
   }
-  const langue = LANGUES[locale] ?? LANGUES.fr
-  if (langue === undefined) throw validation('Langue inconnue.')
-
   const acces = await accesCompteActif(userId)
   if (!acces.ok) throw validation(acces.raison)
 
@@ -262,8 +260,31 @@ export async function preparerCampagne(
     langue: lecture.vue.langues[ligne.cle] ?? '',
   }))
 
-  const graines = requetes.map((requete) => requete.texte)
-  const idees = await googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, langue.code)
+  /*
+   * Une campagne, une langue. C'est la contrainte qui décide de tout ce qui suit, et elle
+   * n'est pas technique : mélanger les langues dans un groupe d'annonces revient à montrer
+   * le même texte à tout le monde — les uns le lisent, les autres passent, et les
+   * impressions sont dépensées dans les deux cas. La langue retenue est celle qui rassemble
+   * le plus d'affichages, faute de quoi celle de l'écran.
+   */
+  const dominante = langueDominante(requetes) ?? locale
+  const langue = LANGUES[dominante] ?? LANGUES[locale] ?? LANGUES.fr
+  if (langue === undefined) throw validation('Langue inconnue.')
+  const codeLangue = LANGUES[dominante] === undefined ? locale : dominante
+
+  /*
+   * Seules les requêtes de cette langue-là servent de graines, et l'appel est fait dans
+   * cette langue. Demander les volumes italiens en français rendrait des nombres vrais qui
+   * ne décrivent rien.
+   */
+  const dansLaLangue = requetes.filter(
+    (requete) => requete.langue === codeLangue || requete.langue === '',
+  )
+  const graines = dansLaLangue.map((requete) => requete.texte)
+  const [idees, mesures] = await Promise.all([
+    googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, langue.code),
+    googleAds.metriquesDeMotsCles(acces.acces, graines, marche.geo, langue.code),
+  ])
   /*
    * Un planificateur muet n'arrête pas la préparation, contrairement à l'écran des mots-clés
    * d'un groupe existant. La différence n'est pas un relâchement : ici, la protection qui
@@ -272,15 +293,27 @@ export async function preparerCampagne(
    */
   const profil = await lireProfil(userId, compte.id)
   const cpa = cpaAcceptable(profil)
+  const chiffres = [
+    ...(idees.ok ? idees.valeur : []),
+    ...(mesures.ok ? mesures.valeur : []),
+  ]
   const { candidats, dejaGagnees } = croiser(
-    requetes,
-    idees.ok ? idees.valeur : [],
+    dansLaLangue,
+    chiffres,
     [],
     cpa,
     compte.devise,
   )
 
-  const retenus = candidats.slice(0, MOTS_CLES_DU_PLAN)
+  /*
+   * Les idées du planificateur n'ont pas de langue — elles ne viennent d'aucune page du
+   * site — mais elles ont été demandées dans celle-ci : c'est donc la leur. L'écrire plutôt
+   * que de laisser un champ vide évite qu'un mot-clé sans langue se retrouve plus tard dans
+   * une campagne d'une autre.
+   */
+  const retenus = candidats
+    .slice(0, MOTS_CLES_DU_PLAN)
+    .map((un) => ({ ...un, langue: un.langue === '' ? codeLangue : un.langue }))
   if (retenus.length === 0) {
     throw validation(
       'Aucune recherche ne justifie une campagne pour l’instant : celles où vous apparaissez, vous les gagnez déjà sans payer, et les autres sont trop rares pour diffuser. Revenez quand votre site aura plus d’affichages.',
@@ -296,6 +329,7 @@ export async function preparerCampagne(
     produits: profil.produits,
     pays: profil.pays,
     cible: retenus.map((un) => un.texte),
+    langue: langue.nom,
     existants: [],
     recherches: retenus.map((un) => ({
       requete: un.texte,

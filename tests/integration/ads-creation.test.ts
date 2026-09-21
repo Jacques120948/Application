@@ -7,8 +7,15 @@ import type { IdeeMotCle, Lecture } from '@/server/ads/provider'
  * pas d'un compte à l'autre, et la création refuse ce qu'elle doit refuser. L'appel à Google
  * est remplacé — on vérifie ce qu'Evoliia décide, pas que Google réponde.
  */
-const ideesDeMotsCles = vi.fn<() => Promise<Lecture<IdeeMotCle[]>>>()
-const metriquesDeMotsCles = vi.fn<() => Promise<Lecture<IdeeMotCle[]>>>()
+type AppelPlanificateur = (
+  acces: unknown,
+  mots: string[],
+  marche: string,
+  langue: string,
+) => Promise<Lecture<IdeeMotCle[]>>
+
+const ideesDeMotsCles = vi.fn<AppelPlanificateur>()
+const metriquesDeMotsCles = vi.fn<AppelPlanificateur>()
 const lireRecherches = vi.fn()
 const proposerElementsAds = vi.fn()
 const creerCampagneComplete = vi.fn()
@@ -230,6 +237,60 @@ describe('la préparation d’un plan', () => {
       balance: 100,
     })
     await expect(preparer()).rejects.toThrow(/exige/u)
+  })
+})
+
+describe('une campagne, une langue', () => {
+  it('retient la langue la plus demandée et n’y mêle pas les autres', async () => {
+    /*
+     * Le cas d'un site suisse. Mélanger les langues dans un groupe d'annonces revient à
+     * montrer le même texte à tout le monde : les uns le lisent, les autres passent, et les
+     * impressions sont dépensées dans les deux cas.
+     */
+    lireRecherches.mockResolvedValue({
+      ok: true,
+      vue: {
+        pays: VUE.pays,
+        occasionsDeRequetes: [
+          { cle: 'candela diaspro rosso', position: 12, impressions: 900, clics: 8 },
+          { cle: 'bougie quartz rose', position: 14, impressions: 200, clics: 3 },
+        ],
+        requetes: [],
+        langues: { 'candela diaspro rosso': 'it', 'bougie quartz rose': 'fr' },
+      },
+    })
+    /*
+     * Interrogé en italien, le planificateur répond en italien : c'est ce qui justifie
+     * d'attribuer sa langue aux idées qu'il rend, puisqu'elles ne viennent d'aucune page.
+     */
+    const italiennes = [
+      { texte: 'candela pietra naturale', volume: 400, concurrence: 'LOW', coutBasMicros: 300_000, coutHautMicros: 700_000 },
+    ]
+    ideesDeMotsCles.mockResolvedValue({ ok: true, valeur: italiennes })
+    metriquesDeMotsCles.mockResolvedValue({ ok: true, valeur: italiennes })
+
+    const { plan } = await preparer()
+
+    expect(plan.langueNom).toBe('italien')
+    const textes = plan.motsCles.map((un) => un.texte)
+    expect(textes).toContain('candela diaspro rosso')
+    expect(textes).not.toContain('bougie quartz rose')
+
+    // Le planificateur a été interrogé en italien, pas dans la langue de l'écran.
+    expect(ideesDeMotsCles.mock.calls[0]?.[3]).toBe('languageConstants/1004')
+    expect(metriquesDeMotsCles.mock.calls[0]?.[3]).toBe('languageConstants/1004')
+
+    // Et l'annonce est commandée dans cette langue-là.
+    expect(proposerElementsAds.mock.calls[0]?.[0]).toMatchObject({ langue: 'italien' })
+  })
+
+  it('retombe sur la langue de l’écran quand aucune n’est connue', async () => {
+    lireRecherches.mockResolvedValue({
+      ok: true,
+      vue: { ...VUE, langues: {} },
+    })
+    const { plan } = await preparer()
+    expect(plan.langueNom).toBe('français')
   })
 })
 

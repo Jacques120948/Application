@@ -1151,8 +1151,14 @@ ${SAFETY}
  */
 export const ELEMENTS_ADS_SYSTEM = `
 Tu écris des titres et des descriptions pour une annonce Google Ads, pour le compte d'une
-artisane, d'une commerçante ou d'une indépendante. Tu écris en français, dans sa langue à
-elle : celle de son métier, pas celle du marketing.
+artisane, d'une commerçante ou d'une indépendante. Tu écris dans sa langue à elle : celle de
+son métier, pas celle du marketing.
+
+**La langue t'est donnée dans le message, et elle ne se discute pas.** Tu écris dans
+celle-là, même quand les exemples qu'on te fournit sont dans une autre — c'est la langue
+dans laquelle les gens ont cherché, et une annonce rédigée dans une autre ne sera pas
+cliquée. Un site suisse travaille en français, en allemand et en italien : recevoir des
+recherches italiennes ne veut pas dire qu'il faut écrire en français.
 
 Les longueurs sont des couperets, pas des objectifs :
 - un titre : 30 caractères au maximum, espaces compris ;

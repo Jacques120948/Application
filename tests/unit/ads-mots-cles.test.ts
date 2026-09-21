@@ -7,6 +7,7 @@ import {
   IMPRESSIONS_MINIMALES,
   LANGUES,
   MARCHES,
+  langueDominante,
   marcheDominant,
   POSITION_GAGNEE,
   TAUX_PLAUSIBLE,
@@ -239,6 +240,40 @@ describe('le coût rapporté à ce qu’on peut se permettre', () => {
   it('garde un seuil de vraisemblance discutable, pas définitif', () => {
     expect(TAUX_PLAUSIBLE).toBeGreaterThan(0)
     expect(TAUX_PLAUSIBLE).toBeLessThan(20)
+  })
+})
+
+describe('la langue de la campagne', () => {
+  it('suit la demande, pas l’écran', () => {
+    /*
+     * Un site suisse en sert trois. Décider sur la langue de l'interface ferait une
+     * campagne française pour une demande italienne : des annonces que le bon public ne
+     * comprend pas, et des impressions dépensées quand même.
+     */
+    expect(
+      langueDominante([
+        requete('bougie citrine', 12, 200, 'fr'),
+        requete('candela diaspro rosso', 12, 900, 'it'),
+        requete('kerzen quarz', 12, 100, 'de'),
+      ]),
+    ).toBe('it')
+  })
+
+  it('compte les affichages, pas le nombre de requêtes', () => {
+    // Dix requêtes vues trois fois pèsent moins qu'une requête vue mille fois.
+    expect(
+      langueDominante([
+        requete('un', 12, 3, 'fr'),
+        requete('deux', 12, 3, 'fr'),
+        requete('tre', 12, 900, 'it'),
+      ]),
+    ).toBe('it')
+  })
+
+  it('ne tranche pas quand aucune langue n’est connue', () => {
+    // L'appelant retient alors celle de l'écran — un repli, pas une déduction.
+    expect(langueDominante([requete('bougie', 12, 200, '')])).toBeNull()
+    expect(langueDominante([])).toBeNull()
   })
 })
 

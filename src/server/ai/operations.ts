@@ -1628,12 +1628,24 @@ export async function proposerElementsAds(params: {
   fiches: string[]
   /** Combien il en manque, par champ, pour atteindre le maximum que Google accepte. */
   manques: { champ: string; combien: number }[]
+  /**
+   * La langue de l'annonce, en toutes lettres : « français », « italien », « allemand ».
+   *
+   * Donnée et non devinée. Un site suisse reçoit des recherches dans trois langues, et
+   * écrire en français une annonce qui répond à une recherche italienne fait voir aux gens
+   * un texte qu'ils n'ont pas cherché : ils ne cliquent pas, et les impressions sont
+   * dépensées quand même.
+   */
+  langue?: string
 }): Promise<RunResult<ElementsProposes>> {
   return runSingleCall({
     accounting: { userId: params.userId, operation: 'adsElements' },
     system: ELEMENTS_ADS_SYSTEM,
     schema: elementsProposesSchema,
     userContent: [
+      `Écris en ${params.langue ?? 'français'}. Tous les titres et toutes les descriptions` +
+        ' doivent être rédigés dans cette langue, quelle que soit celle des exemples' +
+        ' ci-dessous.',
       `Contenant : « ${params.nomGroupe} », dans la campagne « ${params.campagne} ».`,
       params.genre === 'elements'
         ? 'C’est un groupe d’éléments Performance Max : les champs possibles sont titre,' +
