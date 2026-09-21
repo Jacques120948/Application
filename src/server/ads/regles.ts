@@ -91,7 +91,7 @@ const JOURS_AVANT_PROJECTION = 5
 const DERIVE_CPA = 1.25
 
 /** L'augmentation proposée quand une campagne rentable est bridée par son budget. */
-const HAUSSE_BUDGET = 1.2
+export const HAUSSE_BUDGET = 1.2
 
 const MICROS = 1_000_000
 

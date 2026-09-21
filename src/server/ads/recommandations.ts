@@ -6,7 +6,7 @@ import { logger } from '@/server/observability/logger'
 import { compteActif, type CompteRelie } from './comptes'
 import { objectifsDuCompte } from './profil'
 import { lireTableauAds, type CampagneVue } from './tableau'
-import { evaluer, type Constat, type Priorite, type Risque } from './regles'
+import { evaluer, HAUSSE_BUDGET, type Constat, type Priorite, type Risque } from './regles'
 
 /**
  * Les recommandations : leur vie, et pourquoi elles en ont une.
@@ -162,10 +162,14 @@ export function proposerAction(
     `${valeur.toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${devise}`
 
   if (action.type === 'budget') {
-    const propose = typeof recommandation.donnees.propose === 'number'
-      ? recommandation.donnees.propose
-      : null
-    if (propose === null || campagne.budget <= 0) return null
+    if (campagne.budget <= 0) return null
+    /*
+     * La marche est recalculée sur le budget d'aujourd'hui, pas sur celui que la règle avait
+     * vu. Reprendre le chiffre du constat ferait proposer une valeur qui ne s'accorde plus
+     * avec la valeur d'avant envoyée juste à côté — et le serveur refuserait une action
+     * qu'il aurait fallu simplement recalculer.
+     */
+    const propose = Math.round(campagne.budget * HAUSSE_BUDGET * 100) / 100
     return {
       type: 'budget',
       campagneId,
