@@ -10,6 +10,8 @@ import {
   estConfigure,
   listerProprietes,
 } from '@/server/integrations/providers/google-search-console'
+import { googleAds } from '@/server/ads/google-ads'
+import { enregistrerComptes } from '@/server/ads/comptes'
 
 /**
  * Retour de l'écran de consentement Google.
@@ -33,7 +35,14 @@ export async function GET(request: Request) {
   const locale = resolveLocale('fr')
   const versConnexions = (issue: string) => `/${locale}/connexions?google=${issue}`
 
-  if (!estConfigure()) redirect(`/${locale}/connexions`)
+  /*
+   * Une seule adresse de retour pour deux connexions Google, et c'est voulu : chaque
+   * adresse déclarée chez Google doit l'être à la main, et une de plus est une occasion de
+   * plus de se tromper le jour d'un déploiement. C'est l'état signé qui dit laquelle des
+   * deux revient — il porte déjà l'identifiant du fournisseur, et il est signé, donc ce
+   * n'est pas le navigateur qui en décide.
+   */
+  if (!estConfigure() && !googleAds.estConfigure()) redirect(`/${locale}/connexions`)
 
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
@@ -51,10 +60,44 @@ export async function GET(request: Request) {
   const provider = findProvider(etat.providerId)
   if (provider === undefined) redirect(versConnexions('etat'))
 
-  const echange = await echangerCode(code)
+  /*
+   * L'échange passe par le fournisseur qui a lancé l'autorisation. Les deux emploient le
+   * même point d'échange chez Google, mais pas la même adresse de retour déclarée ni les
+   * mêmes portées : mélanger les deux produirait un refus que rien n'expliquerait.
+   */
+  const versAds = etat.providerId === googleAds.id
+  const echange = versAds ? await googleAds.echangerCode(code) : await echangerCode(code)
   if (!echange.ok) {
     logger.warn('retour Google refusé : échange impossible')
     redirect(versConnexions('echec'))
+  }
+
+  if (versAds) {
+    /*
+     * La connexion est enregistrée AVANT la lecture des comptes, contrairement à Search
+     * Console. La raison est la portée : `adwords` ouvre l'écriture, donc l'autorisation
+     * vient d'être accordée pour de bon chez Google. Ne pas la conserver parce qu'une
+     * lecture a échoué laisserait une autorisation vivante côté Google sans trace côté
+     * Evoliia — ni révocable depuis ici, ni visible.
+     */
+    await storeConnection(user.id, provider, {
+      kind: 'OAUTH',
+      secret: echange.jetons.accessToken,
+      ...(echange.jetons.refreshToken === undefined
+        ? {}
+        : { refreshSecret: echange.jetons.refreshToken }),
+      accountLabel: null,
+      expiresAt: echange.jetons.expiresAt,
+    })
+
+    const comptes = await enregistrerComptes(user.id, echange.jetons.accessToken)
+    if (!comptes.ok) {
+      logger.warn('retour Google Ads : aucun compte lisible')
+      redirect(versConnexions('ads-sans-compte'))
+    }
+
+    logger.info('Google Ads relié', { comptes: comptes.comptes.length })
+    redirect(`/${locale}/publicite`)
   }
 
   const proprietes = await listerProprietes(echange.jetons.accessToken)

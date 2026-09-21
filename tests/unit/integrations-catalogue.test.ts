@@ -14,9 +14,46 @@ import { DEFAULT_PLANS } from '@/server/billing/plans'
 describe('catalogue des intégrations', () => {
   const open = INTEGRATION_PROVIDERS.filter((provider) => provider.status === 'available')
 
-  it('n’ouvre que des services dont le coût pour Evoliia est nul', () => {
+  /**
+   * Les rares services adossés à une ressource d'Evoliia, nommés un par un.
+   *
+   * `quota-partage` ne veut pas dire « facturé » : il veut dire qu'un utilisateur de plus
+   * consomme un plafond commun. Aucune facture ne tombe, mais la capacité, elle, se divise
+   * — et c'est une limite qui se découvre le jour où elle est atteinte, par tout le monde
+   * en même temps.
+   *
+   * Cette liste existe pour que chacun soit une décision et non une dérive. Y ajouter une
+   * ligne demande d'écrire le plafond en clair dans `freeQuota`, ce que le test suivant
+   * vérifie.
+   */
+  const PARTAGE_ASSUME: readonly string[] = ['google-ads']
+
+  it('n’ouvre aucun service dont la facture retomberait sur Evoliia', () => {
+    /*
+     * La règle qui ne souffre aucune exception : un utilisateur de plus ne doit jamais
+     * créer un coût de plus. `facture` est interdit à l'ouverture, quelle que soit la
+     * bonne raison du moment.
+     */
     for (const provider of open) {
-      expect(provider.costToEvoliia, provider.id).toBe('aucun')
+      expect(provider.costToEvoliia, provider.id).not.toBe('facture')
+    }
+  })
+
+  it('n’adosse un service ouvert à une ressource d’Evoliia que si c’est assumé', () => {
+    const partages = open
+      .filter((provider) => provider.costToEvoliia === 'quota-partage')
+      .map((provider) => provider.id)
+    expect(partages.sort()).toEqual([...PARTAGE_ASSUME].sort())
+  })
+
+  it('écrit le plafond en clair pour tout service adossé à Evoliia', () => {
+    /*
+     * Un plafond partagé qu'on n'a pas écrit est un plafond qu'on découvre en le
+     * franchissant. La fiche doit dire ce qui se partage, et à quel rythme il se consomme.
+     */
+    for (const id of PARTAGE_ASSUME) {
+      const provider = findProvider(id)
+      expect(provider?.freeQuota, id).toMatch(/partage|plafond/iu)
     }
   })
 

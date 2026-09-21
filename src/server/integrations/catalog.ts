@@ -138,6 +138,57 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     reviewedOn: '2026-09-19',
   },
   {
+    id: 'google-ads',
+    name: 'Google Ads',
+    category: 'google',
+    summary: 'Vos campagnes publicitaires : ce que vous dépensez, et ce que ça rapporte.',
+    usage:
+      'Lire vos campagnes, vos budgets et vos résultats, pour que Naya vous dise où part votre argent et ce qu’il faut ajuster. Aucune modification n’est faite sans votre accord explicite.',
+    status: 'available',
+    credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
+    /*
+     * Une seule portée, et Google n'en propose pas de version en lecture seule : demander à
+     * lire, c'est obtenir le droit de modifier. On ne peut donc pas compter sur Google pour
+     * empêcher une écriture accidentelle, et c'est dit ici plutôt que caché. La garantie
+     * vient du code : le connecteur ne contient aucune fonction d'écriture, et n'en
+     * contiendra qu'avec ses confirmations.
+     */
+    scopes: ['https://www.googleapis.com/auth/adwords'],
+    costToEvoliia: 'quota-partage',
+    costToCreator: 'gratuit',
+    costNotice:
+      'L’API Google Ads est gratuite, et c’est votre compte qui est interrogé. Evoliia ne paie rien, vous non plus — vous continuez de payer vos campagnes à Google, comme avant.',
+    /*
+     * Le plafond appartient au projet Google Cloud d'Evoliia, donc à l'exploitant, et il est
+     * partagé par tous les utilisateurs. C'est la seule intégration du produit dans ce cas :
+     * un utilisateur de plus consomme une ressource commune, ce qui est la raison même de
+     * la fiche économique. Au palier Explorateur, 2 880 opérations par jour sur les comptes
+     * de production — largement de quoi une synchronisation nocturne par compte, et à
+     * surveiller quand le nombre de comptes reliés grandira.
+     */
+    freeQuota:
+      'Sans frais. Le plafond quotidien est celui du projet Evoliia et se partage entre tous les comptes reliés : une synchronisation par nuit et par compte, jamais une par campagne.',
+    webhooks: false,
+    providerReview:
+      'La portée `adwords` est sensible chez Google et devra être justifiée à la vérification, comme celle de Search Console. Elle couvre la lecture et l’écriture : Google n’en publie pas de version restreinte.',
+    risk:
+      'L’autorisation que Google vous montre dit « voir, modifier, créer et supprimer » : c’est la seule qui existe pour cette API. Evoliia ne s’en sert que pour lire, et toute modification future demandera votre confirmation, avec la valeur d’avant conservée pour pouvoir revenir en arrière. Vous pouvez révoquer l’accès à tout moment depuis votre compte Google.',
+    guide: {
+      url: 'https://ads.google.com',
+      urlLabel: 'Ouvrir Google Ads',
+      steps: [
+        'Vous devez avoir un compte Google Ads avec des campagnes, et vous y connecter avec le compte Google qui y a accès.',
+        'Revenez ici et cliquez « Connecter Google Ads ».',
+        'Google vous demande d’autoriser l’accès. C’est chez Google que vous vous identifiez : Evoliia ne voit jamais votre mot de passe.',
+        'Si vous avez plusieurs comptes publicitaires, choisissez celui que Naya doit suivre.',
+      ],
+      caution:
+        'Les chiffres de Google Ads bougent pendant quelques jours : une conversion peut être comptée après coup. C’est le délai de Google, pas celui d’Evoliia.',
+    },
+    reviewedOn: '2026-09-21',
+  },
+  {
     id: 'google-drive',
     name: 'Google Drive',
     category: 'google',
