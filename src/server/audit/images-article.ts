@@ -60,6 +60,29 @@ export type EtatImages = {
   creditsParImage: number
 }
 
+/**
+ * L'adresse publique d'Evoliia est-elle utilisable pour servir une image ?
+ *
+ * Une image créée n'a de valeur que si deux tiers peuvent aller la chercher : le navigateur
+ * d'un lecteur, et Shopify lorsqu'il la copie dans la boutique. Si `APP_URL` pointait sur
+ * `localhost` — une variable oubliée au déploiement —, l'image serait bel et bien créée,
+ * facturée, et inaccessible : l'article partirait avec une image cassée et le téléversement
+ * échouerait sans que rien ne dise pourquoi.
+ *
+ * Mieux vaut alors ne pas créer d'image du tout. Une section sans photo se lit très bien ;
+ * une section à l'image brisée fait douter de tout l'article, et elle aura coûté des
+ * crédits pour cela.
+ */
+export function adressePubliqueUtilisable(): boolean {
+  try {
+    const url = new URL(env.appUrl)
+    if (url.protocol !== 'https:') return false
+    return url.hostname !== 'localhost' && url.hostname !== '127.0.0.1'
+  } catch {
+    return false
+  }
+}
+
 /** Evoliia peut-elle créer des images elle-même ? Sans clé, la fonction est simplement éteinte. */
 export function cleImagesPresente(): boolean {
   return env.geminiApiKey !== undefined
@@ -80,6 +103,14 @@ export async function etatImages(userId: string): Promise<EtatImages> {
     creditsParImage: 0,
   }
   if (!cleImagesPresente()) return ferme
+  if (!adressePubliqueUtilisable()) {
+    /*
+     * Tracé plutôt que tu : c'est une erreur de déploiement, pas un choix de l'exploitant,
+     * et elle éteint silencieusement une fonction qu'il croit allumée.
+     */
+    logger.warn('images article : APP_URL inutilisable, création désactivée')
+    return ferme
+  }
   if (!(await isEnabled('imagesArticlesIA'))) return ferme
 
   const plan = await getEffectivePlan(userId)

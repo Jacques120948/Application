@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { consigneImage, IMAGES_PAR_JOUR } from '@/server/audit/images-article'
+import { afterEach, describe, expect, it } from 'vitest'
+import { adressePubliqueUtilisable, consigneImage, IMAGES_PAR_JOUR } from '@/server/audit/images-article'
 
 /**
  * La consigne envoyée au modèle, et les bornes de l'emballement.
@@ -54,5 +54,46 @@ describe('le plafond journalier', () => {
   it('laisse passer plusieurs articles par jour, jamais une boucle', () => {
     expect(IMAGES_PAR_JOUR).toBeGreaterThanOrEqual(6)
     expect(IMAGES_PAR_JOUR).toBeLessThanOrEqual(20)
+  })
+})
+
+/**
+ * L'adresse à laquelle l'image sera servie.
+ *
+ * Une image créée n'a de valeur que si deux tiers peuvent aller la chercher : le lecteur du
+ * blog, et Shopify quand il la copie dans la boutique. Une variable d'environnement oubliée
+ * au déploiement produirait des images bel et bien facturées et parfaitement inaccessibles,
+ * sans que rien ne dise pourquoi — la pire forme de panne, celle qui coûte et se tait.
+ */
+describe('l’adresse publique', () => {
+  const initial = process.env.APP_URL
+
+  afterEach(() => {
+    if (initial === undefined) delete process.env.APP_URL
+    else process.env.APP_URL = initial
+  })
+
+  it('refuse localhost, qu’aucun tiers ne sait joindre', () => {
+    process.env.APP_URL = 'http://localhost:3000'
+    expect(adressePubliqueUtilisable()).toBe(false)
+    process.env.APP_URL = 'https://127.0.0.1'
+    expect(adressePubliqueUtilisable()).toBe(false)
+  })
+
+  it('refuse une adresse en clair : Shopify n’ira pas la chercher', () => {
+    process.env.APP_URL = 'http://evoliia.com'
+    expect(adressePubliqueUtilisable()).toBe(false)
+  })
+
+  it('refuse une variable absente ou illisible', () => {
+    process.env.APP_URL = ''
+    expect(adressePubliqueUtilisable()).toBe(false)
+    process.env.APP_URL = 'pas-une-adresse'
+    expect(adressePubliqueUtilisable()).toBe(false)
+  })
+
+  it('accepte l’adresse de production', () => {
+    process.env.APP_URL = 'https://evoliia.com'
+    expect(adressePubliqueUtilisable()).toBe(true)
   })
 })
