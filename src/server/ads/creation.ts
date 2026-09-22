@@ -290,6 +290,23 @@ export async function preparerCampagne(
      * demande plutôt que d'inventer un chiffre qui aurait l'air calculé.
      */
     enchereMicros: number
+    /**
+     * Les mots-clés de départ, quand la personne les donne.
+     *
+     * Ils changent la nature du plan. Sans eux, Naya sème le planificateur avec les requêtes
+     * de Search Console — ce que le site capte **déjà**. Avec eux, elle sème avec ce que la
+     * personne **veut vendre**, ce qui est souvent plus large et parfois tout autre chose.
+     * Les deux sont légitimes ; seule la personne sait laquelle des deux questions elle pose.
+     */
+    graines: string[]
+    /**
+     * La langue de la campagne, quand la personne la choisit.
+     *
+     * Dès qu'elle écrit ses propres mots-clés, la déduire des affichages n'a plus de sens :
+     * elle vient de les taper dans une langue précise. Vide, on retombe sur la langue
+     * dominante de Search Console, comme avant.
+     */
+    langue: string
   },
   origin: string | null,
   locale: string,
@@ -355,7 +372,8 @@ export async function preparerCampagne(
    * impressions sont dépensées dans les deux cas. La langue retenue est celle qui rassemble
    * le plus d'affichages, faute de quoi celle de l'écran.
    */
-  const dominante = langueDominante(requetes) ?? locale
+  const choisie = LANGUES[demande.langue] === undefined ? '' : demande.langue
+  const dominante = choisie === '' ? (langueDominante(requetes) ?? locale) : choisie
   const langue = LANGUES[dominante] ?? LANGUES[locale] ?? LANGUES.fr
   if (langue === undefined) throw validation('Langue inconnue.')
   const codeLangue = LANGUES[dominante] === undefined ? locale : dominante
@@ -368,7 +386,17 @@ export async function preparerCampagne(
   // Strictement cette langue. Un mot d'une autre langue dans un groupe d'annonces montre
   // aux gens un texte qu'ils n'ont pas cherché, et consomme l'impression quand même.
   const dansLaLangue = requetes.filter((requete) => requete.langue === codeLangue)
-  const graines = dansLaLangue.map((requete) => requete.texte)
+
+  /*
+   * Les mots de la personne d'abord, s'il y en a. Le planificateur rend un champ sémantique
+   * autour de ce qu'on lui donne : le semer avec les requêtes du site répond à « qu'est-ce
+   * qui m'amène du monde ? », le semer avec ses mots répond à « qu'est-ce que je veux
+   * vendre ? ». La seconde question est la sienne, et elle ne se devine pas.
+   */
+  const choisies = demande.graines
+    .map((mot) => mot.trim().replace(/\s+/gu, ' '))
+    .filter((mot) => mot !== '')
+  const graines = choisies.length > 0 ? choisies : dansLaLangue.map((requete) => requete.texte)
   const [idees, mesures] = await Promise.all([
     googleAds.ideesDeMotsCles(acces.acces, graines, marche.geo, langue.code),
     googleAds.metriquesDeMotsCles(acces.acces, graines, marche.geo, langue.code),
@@ -398,7 +426,38 @@ export async function preparerCampagne(
    * que de laisser un champ vide évite qu'un mot-clé sans langue se retrouve plus tard dans
    * une campagne d'une autre.
    */
-  const retenus = candidats
+  /*
+   * Les mots demandés sont retenus quoi qu'il arrive, et en tête. Les filtres du croisement
+   * existent pour trier des propositions ; ils n'ont pas à écarter un mot que la personne a
+   * écrit elle-même. Elle le verra avec ses chiffres, y compris mauvais, et décidera.
+   */
+  const parTexte = new Map(candidats.map((un) => [un.texte.trim().toLowerCase(), un]))
+  const demandes = choisies.map((texte) => {
+    const trouve = parTexte.get(texte.toLowerCase())
+    const mesure = chiffres.find((un) => un.texte.trim().toLowerCase() === texte.toLowerCase())
+    return (
+      trouve ?? {
+        texte,
+        langue: codeLangue,
+        intention: 'achat' as const,
+        position: 0,
+        impressions: 0,
+        clics: 0,
+        volume: mesure?.volume ?? 0,
+        coutBasMicros: mesure?.coutBasMicros ?? 0,
+        coutHautMicros: mesure?.coutHautMicros ?? 0,
+        concurrence: mesure?.concurrence ?? '',
+        verdict: 'a-tester' as const,
+        motif: 'Mot-clé que vous avez choisi.',
+      }
+    )
+  })
+
+  const dejaDemandes = new Set(demandes.map((un) => un.texte.trim().toLowerCase()))
+  const retenus = [
+    ...demandes,
+    ...candidats.filter((un) => !dejaDemandes.has(un.texte.trim().toLowerCase())),
+  ]
     .slice(0, MOTS_CLES_DU_PLAN)
     .map((un) => ({ ...un, langue: un.langue === '' ? codeLangue : un.langue }))
   if (retenus.length === 0) {

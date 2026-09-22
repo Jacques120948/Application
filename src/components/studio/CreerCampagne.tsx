@@ -80,6 +80,8 @@ export function CreerCampagne({
   const [nom, setNom] = useState('')
   const [budget, setBudget] = useState('')
   const [enchere, setEnchere] = useState('')
+  const [motsChoisis, setMotsChoisis] = useState('')
+  const [langue, setLangue] = useState('')
   const [enchereDuPlan, setEnchereDuPlan] = useState('')
   const [url, setUrl] = useState(hote === '' ? '' : `https://${hote}/`)
   const [occupe, setOccupe] = useState<string | null>(null)
@@ -123,6 +125,16 @@ export function CreerCampagne({
       return
     }
     const saisie = Number(enchere.replace(',', '.'))
+    /*
+     * Une ligne ou une virgule : les gens écrivent des listes des deux façons, et refuser
+     * l'une des deux pour la propreté du code serait leur faire recommencer.
+     */
+    const graines = motsChoisis
+      .split(/[\n,;]+/u)
+      .map((mot) => mot.trim())
+      .filter((mot) => mot !== '')
+      .slice(0, 20)
+
     const lu = await appeler(
       {
         action: 'preparer',
@@ -130,6 +142,8 @@ export function CreerCampagne({
         budget: montant,
         urlFinale: url.trim(),
         ...(Number.isFinite(saisie) && saisie > 0 ? { enchere: saisie } : {}),
+        ...(graines.length > 0 ? { graines } : {}),
+        ...(langue === '' ? {} : { langue }),
       },
       'preparer',
     )
@@ -247,6 +261,47 @@ export function CreerCampagne({
               vers une adresse qui n’est pas la vôtre.
             </span>
           </label>
+          <label className="grid gap-1 text-sm">
+            <span className="text-[var(--color-ink-soft)]">
+              Vos mots-clés de départ — facultatif
+            </span>
+            <textarea
+              value={motsChoisis}
+              onChange={(evenement) => setMotsChoisis(evenement.target.value)}
+              rows={3}
+              placeholder={'bougie citrine\nquartz rose\naméthyste'}
+              className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2"
+            />
+            <span className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
+              Un par ligne, ou séparés par des virgules. Naya cherchera autour d’eux et les
+              gardera tous, même ceux qu’elle n’aurait pas choisis — avec leurs chiffres, bons
+              ou mauvais, pour que vous jugiez. Laissez vide et elle partira de ce que les gens
+              tapent déjà pour trouver votre site : ce n’est pas la même question, et vous êtes
+              seul à savoir laquelle vous posez.
+            </span>
+          </label>
+
+          <label className="grid gap-1 text-sm">
+            <span className="text-[var(--color-ink-soft)]">Langue de la campagne</span>
+            <select
+              value={langue}
+              onChange={(evenement) => setLangue(evenement.target.value)}
+              className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-3 py-2"
+            >
+              <option value="">Celle de vos visiteurs</option>
+              <option value="fr">Français</option>
+              <option value="de">Allemand</option>
+              <option value="it">Italien</option>
+              <option value="en">Anglais</option>
+              <option value="es">Espagnol</option>
+            </select>
+            <span className="text-xs leading-relaxed text-[var(--color-ink-faint)]">
+              Une campagne ne porte qu’une langue : ses annonces sont écrites dedans. Par
+              défaut, Naya prend celle qui vous amène le plus d’affichages — mais si vous
+              écrivez vos propres mots-clés, choisissez la leur.
+            </span>
+          </label>
+
           <label className="grid gap-1 text-sm">
             <span className="text-[var(--color-ink-soft)]">
               Coût par clic ({devise}) — facultatif

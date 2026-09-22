@@ -187,6 +187,8 @@ async function preparer() {
       budgetMicros: 5_000_000,
       urlFinale: 'https://cap-nature.ch/x',
       enchereMicros: 0,
+      graines: [],
+      langue: '',
     },
     'https://cap-nature.ch',
     'fr',
@@ -319,6 +321,72 @@ describe('retirer un mot-clé du plan', () => {
     } finally {
       await prisma.user.deleteMany({ where: { email: autreEmail } })
     }
+  })
+})
+
+describe('les mots-clés choisis', () => {
+  async function avecGraines(graines: string[], langue = '') {
+    return preparerCampagne(
+      userId,
+      {
+        nom: 'Recherche — Choisis',
+        budgetMicros: 5_000_000,
+        urlFinale: 'https://cap-nature.ch/x',
+        enchereMicros: 0,
+        graines,
+        langue,
+      },
+      'https://cap-nature.ch',
+      'fr',
+    )
+  }
+
+  it('sème le planificateur avec les mots de la personne, pas ceux du site', async () => {
+    /*
+     * Sans graines, Naya répond à « qu'est-ce qui m'amène du monde ? ». Avec elles, à
+     * « qu'est-ce que je veux vendre ? ». Ce n'est pas la même question, et seule la
+     * personne sait laquelle elle pose.
+     */
+    await avecGraines(['bougie ambre', 'bougie lavande'])
+    const envoyees = ideesDeMotsCles.mock.calls[0]?.[1]
+    expect(envoyees).toEqual(['bougie ambre', 'bougie lavande'])
+    expect(envoyees).not.toContain('bougie quartz rose')
+  })
+
+  it('les garde tous, même ceux qu’elle n’aurait pas choisis', async () => {
+    /*
+     * Les filtres du croisement existent pour trier des propositions ; ils n'ont pas à
+     * écarter un mot que la personne a écrit elle-même. Elle le verra avec ses chiffres,
+     * y compris mauvais, et décidera.
+     */
+    const { plan } = await avecGraines(['bougie introuvable', 'bougie ambre'])
+    const textes = plan.motsCles.map((un) => un.texte)
+    expect(textes).toContain('bougie introuvable')
+    expect(textes).toContain('bougie ambre')
+    // Et en tête : ce sont les siens.
+    expect(textes.slice(0, 2)).toEqual(['bougie introuvable', 'bougie ambre'])
+  })
+
+  it('ne les duplique pas quand le croisement les propose aussi', async () => {
+    const { plan } = await avecGraines(['bougie quartz rose'])
+    const occurrences = plan.motsCles.filter((un) => un.texte === 'bougie quartz rose')
+    expect(occurrences).toHaveLength(1)
+  })
+
+  it('suit la langue choisie plutôt que celle des affichages', async () => {
+    /*
+     * Dès que la personne écrit ses propres mots-clés, déduire la langue des affichages n'a
+     * plus de sens : elle vient de les taper dans une langue précise.
+     */
+    const { plan } = await avecGraines(['candela ametista'], 'it')
+    expect(plan.langueNom).toBe('italien')
+    expect(ideesDeMotsCles.mock.calls[0]?.[3]).toBe('languageConstants/1004')
+  })
+
+  it('retombe sur les requêtes du site quand rien n’est choisi', async () => {
+    await avecGraines([])
+    const envoyees = ideesDeMotsCles.mock.calls[0]?.[1] ?? []
+    expect(envoyees).toContain('bougie quartz rose')
   })
 })
 
@@ -534,6 +602,8 @@ describe('sans les prix de Google', () => {
         budgetMicros: 5_000_000,
         urlFinale: 'https://cap-nature.ch/x',
         enchereMicros: 700_000,
+        graines: [],
+        langue: '',
       },
       'https://cap-nature.ch',
       'fr',

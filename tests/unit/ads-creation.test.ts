@@ -356,6 +356,22 @@ describe('la mécanique de la création', () => {
     }
   })
 
+  it('arrondit les montants là où ils naissent, pas seulement à l’envoi', () => {
+    /*
+     * Le connecteur d'écriture arrondit aussi, mais c'est un filet. S'y fier laisserait un
+     * plan afficher 5,555 CHF pour une campagne créée à 5,56 — et ce que la personne relit
+     * doit être exactement ce qui part chez Google.
+     *
+     * Ce test existe parce qu'une édition de cette règle avait silencieusement échoué : elle
+     * était écrite dans le commit, absente du code, et tout marchait quand même grâce au
+     * filet.
+     */
+    const route = readFileSync('src/app/api/ads/campagne/route.ts', 'utf8')
+    expect(route).toContain('budgetMicros: auPasFacturable(')
+    expect(route).not.toContain('budgetMicros: Math.round(')
+    expect(route).not.toContain('enchere * 1_000_000)\n')
+  })
+
   it('calcule les domaines permis côté serveur', () => {
     // Les demander au navigateur reviendrait à faire valider l'adresse d'arrivée par la
     // page qui la propose.

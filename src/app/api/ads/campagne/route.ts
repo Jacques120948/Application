@@ -40,6 +40,15 @@ const input = z.discriminatedUnion('action', [
      * quand Google n'en donne aucun, le plan sort sans enchère et l'écran la demande.
      */
     enchere: z.number().positive().max(1_000).optional(),
+    /**
+     * Les mots-clés de départ, quand la personne les donne.
+     *
+     * Bornés ici par prudence ordinaire : le planificateur de Google n'accepte que vingt
+     * graines, et un envoi plus long ferait refuser l'appel entier plutôt que d'ignorer le
+     * surplus.
+     */
+    graines: z.array(z.string().min(1).max(80)).max(20).optional(),
+    langue: z.enum(['fr', 'de', 'it', 'en', 'es']).optional(),
   }),
   z.object({ action: z.literal('creer'), planId: z.string().uuid() }),
   z.object({
@@ -108,9 +117,18 @@ export async function POST(request: Request) {
       user.id,
       {
         nom: demande.nom,
-        budgetMicros: Math.round(demande.budget * 1_000_000),
+        /*
+         * Arrondis au centime ici, et non au moment de l'envoi : ce que la personne relit
+         * sur son plan doit être exactement ce qui partira chez Google. Le connecteur
+         * d'écriture arrondit aussi, mais c'est un filet — s'y fier laisserait un plan
+         * afficher 5,555 CHF pour une campagne créée à 5,56.
+         */
+        budgetMicros: auPasFacturable(demande.budget * 1_000_000),
         urlFinale: demande.urlFinale,
-        enchereMicros: demande.enchere === undefined ? 0 : Math.round(demande.enchere * 1_000_000),
+        enchereMicros:
+          demande.enchere === undefined ? 0 : auPasFacturable(demande.enchere * 1_000_000),
+        graines: demande.graines ?? [],
+        langue: demande.langue ?? '',
       },
       origin,
       'fr',
