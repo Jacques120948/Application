@@ -827,3 +827,123 @@ export async function lireArticles(
     max,
   )
 }
+
+// ───────────────────────── Téléversement d'une image ─────────────────────────
+
+const MUTATION_FICHIERS = `mutation($files: [FileCreateInput!]!) {
+  fileCreate(files: $files) {
+    files { id fileStatus ... on MediaImage { image { url } } }
+    userErrors { field message }
+  }
+}`
+
+const REQUETE_FICHIER = `query($id: ID!) {
+  node(id: $id) {
+    ... on MediaImage { fileStatus image { url } fileErrors { message } }
+  }
+}`
+
+/** Combien de temps attendre que Shopify ait fini de ranger l'image, et à quel rythme. */
+const ATTENTE_MAX_MS = 20_000
+const ATTENTE_PAS_MS = 1_000
+
+type FichierDepose = { id: string; url: string | null }
+
+/**
+ * Confie une image à Shopify, qui la range dans les fichiers de la boutique.
+ *
+ * Pourquoi la lui confier plutôt que de la servir depuis Evoliia : une image créée pour un
+ * article est hébergée chez nous le temps de l'écrire, et l'article part ensuite chez le
+ * marchand. Sans ce téléversement, son blog pointerait indéfiniment vers une adresse
+ * d'Evoliia — une dépendance qu'il n'a pas demandée, une bande passante que nous servirions
+ * sans fin, et des images qui casseraient le jour où le compte serait fermé. Une image qui
+ * illustre le blog d'un marchand doit vivre chez le marchand.
+ *
+ * Shopify va chercher l'image à l'adresse qu'on lui donne, ce qui suppose que cette adresse
+ * soit publique — elle l'est, et c'est précisément pour cela.
+ *
+ * Le rangement est asynchrone chez Shopify : le fichier est créé « en cours de traitement »
+ * et son adresse définitive n'existe qu'ensuite. On attend, mais pas indéfiniment — au-delà,
+ * l'appelant garde l'adresse d'origine, ce qui donne un article correct plutôt qu'un dépôt
+ * en échec.
+ */
+export async function televerserImages(
+  acces: AccesShopify,
+  jeton: string,
+  images: readonly { url: string; alt: string }[],
+): Promise<{ ok: true; adresses: Map<string, string> } | { ok: false; raison: string }> {
+  if (images.length === 0) return { ok: true, adresses: new Map() }
+
+  const reponse = await appeler(acces.boutique, jeton, acces.version, MUTATION_FICHIERS, {
+    files: images.map((image) => ({
+      originalSource: image.url,
+      alt: image.alt.slice(0, 512),
+      contentType: 'IMAGE',
+    })),
+  })
+  if (reponse.status !== 200 || reponse.data === null || reponse.erreurs.length > 0) {
+    return { ok: false, raison: refus(reponse.status, reponse.erreurs) }
+  }
+
+  const charge = (
+    reponse.data as {
+      fileCreate?: {
+        files?: { id?: string; fileStatus?: string; image?: { url?: string } }[]
+        userErrors?: { message?: string; field?: string[] }[]
+      }
+    }
+  ).fileCreate
+
+  const reproches = charge?.userErrors ?? []
+  if (reproches.length > 0) {
+    const dit = reproches
+      .map((erreur) => `${(erreur.field ?? []).join('.')} ${erreur.message ?? ''}`.trim())
+      .filter((texte) => texte !== '')
+      .join(' · ')
+    return { ok: false, raison: dit === '' ? 'Shopify a refusé les images.' : `Shopify : ${dit}` }
+  }
+
+  /*
+   * L'ordre rendu par Shopify suit celui de la demande. C'est ce qui permet de rattacher
+   * chaque fichier à l'adresse d'origine — le fichier lui-même ne la porte plus.
+   */
+  const deposes: FichierDepose[] = (charge?.files ?? []).map((fichier) => ({
+    id: fichier.id ?? '',
+    url: fichier.image?.url ?? null,
+  }))
+
+  const adresses = new Map<string, string>()
+  const attente: { rang: number; id: string }[] = []
+  deposes.forEach((fichier, rang) => {
+    const origine = images[rang]?.url
+    if (origine === undefined) return
+    if (fichier.url !== null && fichier.url !== '') adresses.set(origine, fichier.url)
+    else if (fichier.id !== '') attente.push({ rang, id: fichier.id })
+  })
+
+  const limite = Date.now() + ATTENTE_MAX_MS
+  let restants = attente
+  while (restants.length > 0 && Date.now() < limite) {
+    await new Promise((suite) => setTimeout(suite, ATTENTE_PAS_MS))
+    const encore: typeof restants = []
+    for (const fichier of restants) {
+      const lu = await appeler(acces.boutique, jeton, acces.version, REQUETE_FICHIER, {
+        id: fichier.id,
+      }).catch(() => null)
+      const noeud = (lu?.data as { node?: { fileStatus?: string; image?: { url?: string } } } | null)
+        ?.node
+      const adresse = noeud?.image?.url
+      if (adresse !== undefined && adresse !== '') {
+        const origine = images[fichier.rang]?.url
+        if (origine !== undefined) adresses.set(origine, adresse)
+        continue
+      }
+      // Un fichier que Shopify déclare en échec ne deviendra jamais prêt : on cesse d'attendre.
+      if (noeud?.fileStatus === 'FAILED') continue
+      encore.push(fichier)
+    }
+    restants = encore
+  }
+
+  return { ok: true, adresses }
+}

@@ -129,14 +129,59 @@ describe('ce que le connecteur ne fait jamais', () => {
     expect(source).not.toMatch(/isPublished:\s*(true|brouillon|params)/u)
   })
 
-  it('n’expose aucune autre écriture que le dépôt d’article', () => {
+  /**
+   * Le connecteur ne doit gagner un pouvoir d'écriture que délibérément.
+   *
+   * Le test comptait les mutations et en exigeait une seule. Il a fait son travail le jour
+   * où une seconde est apparue — le téléversement d'une image créée dans les fichiers de la
+   * boutique. Elle est légitime : sans elle, le blog du marchand pointerait indéfiniment
+   * vers une adresse d'Evoliia. Mais elle devait être vue, discutée, et nommée ici.
+   *
+   * La liste remplace donc le compte. Un simple relèvement du nombre aurait laissé passer
+   * la troisième sans que personne ne la remarque, et c'est exactement ce qu'un garde-fou
+   * ne doit jamais permettre : la prochaine échouera encore, et il faudra encore l'écrire.
+   */
+  it('n’expose que les deux écritures nommées ici', () => {
     const source = readFileSync('src/server/integrations/providers/shopify.ts', 'utf8')
+    const AUTORISEES = ['articleCreate', 'fileCreate']
+
     const mutations = source.match(/mutation\s*\(/gu) ?? []
-    expect(mutations).toHaveLength(1)
-    expect(source).toContain('articleCreate')
-    for (const interdite of ['productUpdate', 'productDelete', 'articleDelete', 'articleUpdate']) {
-      expect(source).not.toContain(interdite)
-    }
+    expect(mutations).toHaveLength(AUTORISEES.length)
+    for (const permise of AUTORISEES) expect(source).toContain(permise)
+
+    /*
+     * Les interdites, nommées une à une. Tout ce qui modifie ou supprime ce que le marchand
+     * a écrit lui-même est hors de portée du connecteur : Evoliia ajoute un brouillon et
+     * une image, elle ne touche à rien d'existant.
+     */
+    const INTERDITES = [
+      'productUpdate',
+      'productDelete',
+      'productCreate',
+      'articleDelete',
+      'articleUpdate',
+      'blogCreate',
+      'blogDelete',
+      'fileDelete',
+      'fileUpdate',
+      'publishablePublish',
+    ]
+    for (const interdite of INTERDITES) expect(source).not.toContain(interdite)
+  })
+
+  /**
+   * Le téléversement copie, il ne remplace rien.
+   *
+   * Une image créée pour un article part chez le marchand pour que son blog cesse de
+   * dépendre d'Evoliia. Ce geste ne doit jamais devenir une porte d'entrée vers ses
+   * fichiers existants : on en crée, on n'en relit pas, on n'en efface pas.
+   */
+  it('ne fait qu’ajouter des fichiers, jamais en toucher d’autres', () => {
+    const source = readFileSync('src/server/integrations/providers/shopify.ts', 'utf8')
+    expect(source).toContain('fileCreate')
+    // La relecture d'un fichier se limite à celui qu'on vient de créer, par son identifiant.
+    expect(source).toContain('query($id: ID!)')
+    expect(source).not.toMatch(/files\s*\(\s*query:/u)
   })
 })
 

@@ -300,6 +300,11 @@ export function ArticlesRediges({
    * répondu, et expliqué pourquoi.
    */
   const [erreurDepot, setErreurDepot] = useState<string | null>(null)
+  /** Images créées restées chez Evoliia faute d'avoir pu être copiées dans la boutique. */
+  const [imagesRestees, setImagesRestees] = useState<{
+    combien: number
+    raison: string | null
+  } | null>(null)
   /*
    * Les blogs de la boutique, et celui qui recevra l'article.
    *
@@ -419,13 +424,31 @@ export function ArticlesRediges({
       body: JSON.stringify({ blogId: blogChoisi }),
     }).catch(() => null)
     const body = (await response?.json().catch(() => null)) as
-      | { lien?: string; blog?: string; message?: string }
+      | {
+          lien?: string
+          blog?: string
+          message?: string
+          imagesNonCopiees?: number
+          raisonImages?: string | null
+        }
       | null
     setEnvoi(false)
     if (response === null || !response.ok || body?.lien === undefined) {
       setErreurDepot(body?.message ?? 'Le dépôt dans Shopify n’a pas abouti.')
       return
     }
+    /*
+     * Le dépôt a réussi, et pourtant on signale quelque chose. C'est voulu : des images
+     * créées sont restées hébergées par Evoliia, ce qui marche mais crée une dépendance
+     * que le marchand n'a pas choisie. Il vaut mieux qu'il l'apprenne maintenant, quand la
+     * cause est presque toujours une portée manquante qui se corrige en une minute, que le
+     * jour où ces images cesseront de s'afficher.
+     */
+    setImagesRestees(
+      (body.imagesNonCopiees ?? 0) > 0
+        ? { combien: body.imagesNonCopiees ?? 0, raison: body.raisonImages ?? null }
+        : null,
+    )
     setDepot({ articleId: article.id, lien: body.lien })
   }
 
@@ -751,6 +774,32 @@ export function ArticlesRediges({
                             </p>
                           )}
                         </>
+                      )}
+
+                      {/*
+                        Le dépôt a réussi, et pourtant on signale quelque chose.
+
+                        Les images créées sont normalement copiées dans la boutique au
+                        moment du dépôt, pour que le blog n'ait plus besoin d'Evoliia. Quand
+                        cette copie échoue — presque toujours une portée manquante sur la
+                        clé Shopify —, l'article est complet et ses images s'affichent, mais
+                        elles sont servies par Evoliia. Mieux vaut l'apprendre maintenant,
+                        quand cela se corrige en une minute, que le jour où elles cesseront
+                        de s'afficher.
+                      */}
+                      {imagesRestees === null ? null : (
+                        <p className="m-0 rounded-[var(--radius-control)] bg-[var(--color-caution-soft,#fffaeb)] px-3 py-2 text-xs leading-relaxed">
+                          {imagesRestees.combien === 1
+                            ? 'Une image créée n’a pas pu être copiée dans votre boutique'
+                            : `${imagesRestees.combien} images créées n’ont pas pu être copiées dans votre boutique`}{' '}
+                          : elle{imagesRestees.combien === 1 ? '' : 's'} reste
+                          {imagesRestees.combien === 1 ? '' : 'nt'} hébergée
+                          {imagesRestees.combien === 1 ? '' : 's'} par Evoliia. L’article
+                          s’affiche normalement, mais votre blog en dépend. Ajoutez la portée{' '}
+                          <code>write_files</code> à votre clé Shopify, puis redéposez un
+                          prochain article.
+                          {imagesRestees.raison === null ? '' : ` (${imagesRestees.raison})`}
+                        </p>
                       )}
                     </div>
                   </div>

@@ -9,6 +9,7 @@ import {
   frapperJeton,
   lireAcces,
   lireBlogs,
+  televerserImages,
   type AccesShopify,
 } from '@/server/integrations/providers/shopify'
 import { readArticle } from '@/server/audit/articles'
@@ -223,6 +224,16 @@ export type Depot = {
   /** L'adresse de l'écran Shopify où le relire et le publier. */
   lien: string
   blog: string
+  /**
+   * Images créées qui n'ont pas pu être copiées dans la boutique, et pourquoi.
+   *
+   * Zéro dans le cas normal. Au-dessus, l'article est déposé et complet — ces images-là
+   * restent servies par Evoliia — mais la personne doit le savoir : c'est une dépendance
+   * qu'elle n'a pas choisie, et la cause est presque toujours une portée manquante sur sa
+   * clé Shopify, qui se corrige en une minute.
+   */
+  imagesNonCopiees: number
+  raisonImages: string | null
 }
 
 /**
@@ -275,7 +286,38 @@ export async function deposerDansShopify(
    * C'est le seul endroit où cette distinction existe : l'écran d'Evoliia et la copie en
    * Markdown gardent toutes les photos dans le texte, faute d'un « à la une » où la mettre.
    */
-  const rangees = [...article.illustrations].sort((une, autre) => une.section - autre.section)
+  /*
+   * Les images créées passent chez le marchand avant l'article.
+   *
+   * Une image créée pour illustrer une section est hébergée chez Evoliia le temps de
+   * l'écrire. Si on la laissait là, le blog du marchand pointerait indéfiniment vers une
+   * adresse d'Evoliia : une dépendance qu'il n'a pas demandée, une bande passante servie
+   * sans fin, et des images qui casseraient le jour où son compte serait fermé. Une image
+   * qui illustre son blog doit vivre chez lui.
+   *
+   * Les photos de ses produits, elles, ne bougent pas : elles sont déjà dans sa boutique,
+   * les téléverser une seconde fois y créerait des doublons.
+   *
+   * Un échec ne fait pas échouer le dépôt. L'article part avec les adresses d'Evoliia, qui
+   * fonctionnent, et la personne est prévenue de ce qui n'a pas abouti — c'est infiniment
+   * mieux qu'un article perdu pour une portée manquante.
+   */
+  const creees = article.illustrations.filter((photo) => photo.genere === true)
+  const televerse = await televerserImages(
+    acces,
+    jeton,
+    creees.map((photo) => ({ url: photo.image, alt: photo.alt })),
+  ).catch(() => ({ ok: false as const, raison: 'Le téléversement des images a échoué.' }))
+
+  const adresses = televerse.ok ? televerse.adresses : new Map<string, string>()
+  const restees = creees.filter((photo) => !adresses.has(photo.image)).length
+
+  const rangees = [...article.illustrations]
+    .sort((une, autre) => une.section - autre.section)
+    .map((photo) => {
+      const chezLeMarchand = adresses.get(photo.image)
+      return chezLeMarchand === undefined ? photo : { ...photo, image: chezLeMarchand }
+    })
   const [vedette, ...dansLeCorps] = rangees
 
   const depot = await deposerBrouillon(acces, jeton, {
@@ -313,6 +355,17 @@ export async function deposerDansShopify(
     }),
   )
 
-  logger.info('article déposé dans Shopify', { blog: numeroBlog, brouillon: true })
-  return { shopifyId: depot.article.id, lien, blog: blog.titre }
+  logger.info('article déposé dans Shopify', {
+    blog: numeroBlog,
+    brouillon: true,
+    imagesCopiees: adresses.size,
+    imagesRestees: restees,
+  })
+  return {
+    shopifyId: depot.article.id,
+    lien,
+    blog: blog.titre,
+    imagesNonCopiees: restees,
+    raisonImages: televerse.ok ? null : televerse.raison,
+  }
 }
