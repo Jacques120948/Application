@@ -59,12 +59,18 @@ export type PlanDefaults = {
    */
   alertsPerMonth: number
   /**
-   * Images créées par l'IA sur le compte d'Evoliia.
+   * Images créées par l'IA sur le compte d'Evoliia, pour illustrer un article.
    *
-   * Zéro par défaut, et c'est délibéré : chaque image est une dépense réelle pour la
-   * plateforme — environ quatre centimes — là où le reste des quotas ne borne que du calcul
-   * déjà payé. La fonction s'ouvre offre par offre depuis le back-office. Le créateur qui
-   * connecte sa propre clé n'est pas concerné : sa voie ne coûte rien à Evoliia.
+   * C'est le seul quota derrière lequel il y a de l'argent qui sort à chaque usage —
+   * environ quatre centimes l'image — là où le reste ne borne que du calcul déjà payé. Il
+   * ne s'ouvre donc que sur les deux offres hautes, et la fonction reste éteinte tant que
+   * l'exploitant n'a pas levé l'interrupteur qui la commande : les deux bornes se cumulent
+   * au lieu de se remplacer.
+   *
+   * Soixante images sur Business représentent environ deux francs quarante de dépense
+   * mensuelle par abonné, contre cent soixante-dix-neuf francs encaissés. Vingt sur Pro,
+   * quatre-vingts centimes contre soixante-dix-neuf francs. La proportion est ce qui permet
+   * d'ouvrir la fonction sans la surveiller.
    */
   imagesPerMonth: number
   /**
@@ -193,7 +199,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     liaAnswersPerMonth: 0,
     liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
-    imagesPerMonth: 0,
+    imagesPerMonth: 20,
     allowBuild: false,
     allowExport: false,
     allowCustomDomain: false,
@@ -223,7 +229,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     liaAnswersPerMonth: 0,
     liaConversationsPerMonth: 0,
     alertsPerMonth: 0,
-    imagesPerMonth: 0,
+    imagesPerMonth: 60,
     allowBuild: false,
     allowExport: true,
     allowCustomDomain: false,

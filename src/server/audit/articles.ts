@@ -3,6 +3,8 @@ import { writeArticle, type ConstatPourArticle, type PageDuSite } from '@/server
 import { recherchesPourArticle } from './recherches'
 import { lireVitrinePourArticle } from '@/server/commerce/boutique'
 import { choisirIllustrations, type Illustration } from '@/server/commerce/illustrations'
+import { adresseImage, creerImageArticle, etatImages } from './images-article'
+import { env } from '@/lib/env'
 import { actionCost } from '@/server/billing/action-costs'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
@@ -308,6 +310,25 @@ export async function redigerArticle(
     vitrine,
   )
 
+  /*
+   * Ce que la boutique n'a pas su montrer, on peut le faire créer — et seulement cela.
+   *
+   * L'ordre est celui qui compte : la photo réelle d'un produit passe toujours devant, parce
+   * qu'elle montre ce qui est vendu et qu'elle mène à une fiche. Une image inventée ne
+   * remplace jamais une fiche ; elle illustre un propos qu'aucun produit n'illustre — un
+   * atelier, une flamme de près, un geste. Tout ce qui s'y oppose — l'interrupteur éteint,
+   * le quota de l'offre à zéro, un solde trop court, une panne — laisse simplement la
+   * section sans image, ce qui se lit très bien.
+   */
+  const illustrees = new Set(illustrations.map((photo) => photo.section))
+  const creees = await completerIllustrations(
+    userId,
+    siteId,
+    article.sections.map((section) => section.illustration),
+    illustrees,
+  )
+  illustrations.push(...creees)
+
   const corps = article.sections
     .map((section) => `## ${section.titre}\n\n${section.corps.trim()}`)
     .join('\n\n')
@@ -398,6 +419,9 @@ function lireIllustrations(brut: unknown): Illustration[] {
       image: ligne.image,
       alt: typeof ligne.alt === 'string' ? ligne.alt : '',
       lien: typeof ligne.lien === 'string' ? ligne.lien : null,
+      // Relu, sinon l'écran cesserait de distinguer une vraie photo d'une image créée dès
+      // le second chargement de l'article — c'est-à-dire tout le temps.
+      ...(ligne.genere === true ? { genere: true as const } : {}),
     })
   }
   return retenues
@@ -407,4 +431,53 @@ function lireIllustrations(brut: unknown): Illustration[] {
 function compterMots(texte: string): number {
   const mots = texte.trim().split(/\s+/u).filter((mot) => mot !== '')
   return mots.length
+}
+
+/**
+ * Fait créer une image pour chaque section qu'aucune fiche n'a su illustrer.
+ *
+ * Séquentiel, et non en parallèle : chaque image est une dépense, et les bornes se lisent
+ * entre deux appels. Lancer quatre requêtes d'un coup ferait passer quatre images là où le
+ * quota n'en accordait plus qu'une — la réservation de crédits l'attraperait, pas le quota.
+ *
+ * Aucune exception ne remonte d'ici : un article déjà payé ne doit pas échouer parce qu'une
+ * illustration n'a pas abouti.
+ */
+async function completerIllustrations(
+  userId: string,
+  siteId: string,
+  souhaits: readonly (string | undefined)[],
+  dejaIllustrees: ReadonlySet<number>,
+): Promise<Illustration[]> {
+  const etat = await etatImages(userId).catch(() => null)
+  if (etat === null || !etat.possible) return []
+
+  const creees: Illustration[] = []
+  let restantMois = etat.restantMois
+  let restantJour = etat.restantJour
+
+  for (const [section, souhait] of souhaits.entries()) {
+    if (restantMois <= 0 || restantJour <= 0) break
+    if (dejaIllustrees.has(section)) continue
+    if (souhait === undefined || souhait.trim() === '') continue
+
+    const image = await creerImageArticle(userId, siteId, souhait, {
+      ...etat,
+      restantMois,
+      restantJour,
+    })
+    if (image === null) continue
+
+    restantMois -= 1
+    restantJour -= 1
+    creees.push({
+      section,
+      titre: image.alt,
+      image: adresseImage(env.appUrl, image.id),
+      alt: image.alt,
+      lien: null,
+      genere: true,
+    })
+  }
+  return creees
 }

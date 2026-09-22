@@ -118,6 +118,15 @@ export type Illustration = {
   image: string
   alt: string
   lien: string | null
+  /**
+   * Vrai quand l'image a été créée faute de fiche correspondante.
+   *
+   * Dit, et non déduit de l'adresse : l'écran doit pouvoir l'annoncer, et personne ne doit
+   * avoir à reconnaître un domaine pour savoir ce qu'il regarde. Une photo de produit et
+   * une illustration inventée ne s'emploient pas de la même façon — la première montre ce
+   * qu'on vend, la seconde décore un propos.
+   */
+  genere?: true
 }
 
 /**

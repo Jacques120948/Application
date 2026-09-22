@@ -48,6 +48,7 @@ const PROTECTED_TABLES = [
   'AuditCorrection',
   'VisibilityNote',
   'SiteArticle',
+  'SiteImage',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',

@@ -45,6 +45,8 @@ export type IllustrationVue = {
   image: string
   alt: string
   lien: string | null
+  /** Vrai quand l'image a été créée faute de fiche correspondante. L'écran doit le dire. */
+  genere?: true
 }
 
 export type ArticleResumeVu = {
@@ -120,7 +122,22 @@ function Photo({ photo }: { photo: IllustrationVue }) {
         lien-image se réduit à son texte alternatif.
       */}
       <figcaption className="mt-1 text-xs text-[var(--color-ink-faint)]">
-        {photo.lien === null ? (
+        {photo.genere === true ? (
+          /*
+            Dit, et dit à chaque fois. Une image créée ressemble à une photo, et c'est bien
+            là le problème : rien ne distingue à l'œil une bougie inventée d'une bougie que
+            le client a en stock. Publier la première à côté d'un texte qui parle de la
+            seconde reviendrait à montrer une marchandise qui n'existe pas — et c'est le
+            client, pas Evoliia, qui répondrait de cette image devant les siens.
+          */
+          <>
+            <span className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-1.5 py-0.5">
+              Image créée
+            </span>{' '}
+            {photo.titre} — aucune de vos photos ne correspondait à cette section. Ce n’est
+            pas la photo d’un de vos produits.
+          </>
+        ) : photo.lien === null ? (
           photo.titre
         ) : (
           <a href={photo.lien} target="_blank" rel="noopener noreferrer" className="underline">

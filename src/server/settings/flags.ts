@@ -133,6 +133,20 @@ export const FLAGS = {
     help: "Autorise MIRA à mettre en pause un ensemble ou une publicité et à changer un budget quotidien chez Meta, après confirmation de la personne et avec un retour arrière. Chaque compte reste en lecture seule tant que son propriétaire ne l'a pas changé lui-même. Aucun crédit consommé.",
     fallback: false,
   },
+  /**
+   * Création d'images pour illustrer un article, aux frais d'Evoliia.
+   *
+   * C'est le seul interrupteur du produit derrière lequel il y a de l'argent qui sort à
+   * chaque usage, et non du calcul déjà payé. Éteint par défaut, et il resterait sans effet
+   * même allumé tant qu'aucune offre n'accorde d'images : le quota mensuel est à zéro
+   * partout au départ, et les deux bornes se cumulent au lieu de se remplacer.
+   */
+  imagesArticlesIA: {
+    key: 'flag.images.articles',
+    label: 'Images créées pour les articles',
+    help: "Autorise Milo à faire créer une image quand la boutique n'a aucune photo qui corresponde à une section. Payée par Evoliia chez Google, refacturée en crédits, et bornée par le quota mensuel de chaque offre — à zéro par défaut. La photo réelle d'un produit passe toujours en premier.",
+    fallback: false,
+  },
 } as const
 
 export type FlagName = keyof typeof FLAGS

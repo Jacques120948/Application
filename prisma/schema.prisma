@@ -94,6 +94,7 @@ model User {
   auditCorrections     AuditCorrection[]
   visibilityNotes      VisibilityNote[]
   siteArticles         SiteArticle[]
+  siteImages           SiteImage[]
   siteWatches          SiteWatch[]
   siteAutomatisations  SiteAutomatisation[]
   promptsIa            PromptIA[]
@@ -1258,6 +1259,7 @@ model Site {
   corrections    AuditCorrection[]
   notes          VisibilityNote[]
   articles       SiteArticle[]
+  images         SiteImage[]
   watches        SiteWatch[]
   automatisation SiteAutomatisation?
   promptsIa      PromptIA[]
@@ -1664,6 +1666,36 @@ model PointHebdo {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([siteId, createdAt(sort: Desc)])
+}
+
+/// Une image créée pour illustrer un article, faute de fiche qui corresponde.
+///
+/// Elle ne contient rien qui décrive le travail en cours — ni la demande envoyée au modèle,
+/// ni le sujet — parce que sa lecture est publique : elle est faite pour être servie au
+/// visiteur d'un blog. Voir la migration pour le détail du cloisonnement.
+model SiteImage {
+  id     String @id @default(uuid()) @db.Uuid
+  siteId String @db.Uuid
+  userId String @db.Uuid
+
+  /// Toujours image/webp : c'est ce que le ré-encodage produit, quoi que le fournisseur rende.
+  mime   String
+  width  Int
+  height Int
+  bytes  Int
+  data   Bytes
+  /// Le texte de remplacement, qui part tel quel dans le blog.
+  alt    String @default("")
+  /// Crédits réellement débités, au coût constaté.
+  creditsSpent Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([siteId])
 }
 
 model SiteArticle {
