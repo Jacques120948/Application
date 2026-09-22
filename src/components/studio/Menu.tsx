@@ -262,6 +262,18 @@ export function ContenuMenu({
       href: `/${locale}/visibilite/recherches${site}`,
       ecran: 'recherches',
     },
+    /*
+     * Le calendrier existait sans figurer nulle part : la réorganisation du menu l'a laissé
+     * en chemin, et un écran qu'aucun lien n'atteint n'existe pas. Il est ici plutôt que
+     * chez Milo parce qu'il ne dit pas « écrivez » mais « voilà ce qu'il y a à écrire, et
+     * ce qui l'a déjà été » — un résultat, pas une conversation.
+     */
+    {
+      nom: 'Calendrier',
+      quoi: 'Ce qu’il y a à écrire, et quand',
+      href: `/${locale}/visibilite/calendrier${site}`,
+      ecran: 'calendrier',
+    },
     {
       nom: 'Historique',
       quoi: 'Ce qui a changé depuis',

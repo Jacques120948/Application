@@ -108,6 +108,38 @@ export type Creneau = {
   intention: Intention
 }
 
+/**
+ * Un article déjà écrit, tel que le calendrier le montre.
+ *
+ * Le plan ne regardait que devant, et c'était un demi-calendrier : quelqu'un qui demande
+ * « ce qui est planifié » veut aussi savoir ce qui a été fait, ne serait-ce que pour juger
+ * si le rythme qu'il s'est donné tient. Sans le passé, l'écran répétait chaque semaine des
+ * propositions sans jamais rien porter au crédit de personne.
+ */
+export type ArticleEcrit = {
+  id: string
+  titre: string
+  date: Date
+  mots: number
+  /** Déposé en brouillon dans la boutique. Jamais publié par Evoliia. */
+  depose: boolean
+}
+
+/**
+ * Ce que la personne a laissé tourner seul pour la rédaction.
+ *
+ * `null` quand rien n'est réglé pour ce site. Montré sur le calendrier parce que c'est le
+ * seul endroit où la question se pose vraiment : un plan de huit semaines ne veut pas dire
+ * la même chose selon que Milo l'écrira tout seul ou qu'il attend qu'on le lui demande.
+ */
+export type RythmeAutomatique = {
+  active: boolean
+  parPeriode: number
+  periode: string
+  /** Dernière rédaction automatique, ou `null` s'il n'y en a jamais eu. */
+  dernier: Date | null
+}
+
 export type VueCalendrier = {
   site: { id: string; host: string }
   propriete: string | null
@@ -115,6 +147,9 @@ export type VueCalendrier = {
   creneaux: Creneau[]
   /** Sujets écartés parce qu'un article les couvre déjà. */
   dejaEcrits: number
+  /** Les derniers articles écrits, du plus récent au plus ancien. */
+  ecrits: ArticleEcrit[]
+  redaction: RythmeAutomatique | null
 }
 
 /**
@@ -220,20 +255,62 @@ export async function lireCalendrier(
   )
   if (site === null) throw notFound('Ce site est introuvable.')
 
-  const articles = await withUserScope(userId, (tx) =>
-    tx.siteArticle.findMany({
+  const [articles, automatisation] = await withUserScope(userId, async (tx) => [
+    await tx.siteArticle.findMany({
       where: { siteId, userId },
-      select: { sujet: true, titre: true },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        sujet: true,
+        titre: true,
+        createdAt: true,
+        wordCount: true,
+        shopifyId: true,
+      },
     }),
-  )
+    await tx.siteAutomatisation.findUnique({
+      where: { siteId },
+      select: { redaction: true, parPeriode: true, periode: true, redigeAt: true },
+    }),
+  ])
   const dejaEcrits = articles.map((article) => `${article.sujet} ${article.titre}`)
 
+  /*
+   * Le passé ne se tronque pas au hasard : douze lignes couvrent un trimestre au rythme
+   * d'un article par semaine, c'est-à-dire l'horizon que le plus long des rythmes propose
+   * devant. Au-delà, c'est l'écran de Milo qui garde tout.
+   */
+  const ecrits: ArticleEcrit[] = articles.slice(0, 12).map((article) => ({
+    id: article.id,
+    titre: article.titre,
+    date: article.createdAt,
+    mots: article.wordCount,
+    depose: article.shopifyId !== null && article.shopifyId !== '',
+  }))
+
+  const redaction: RythmeAutomatique | null =
+    automatisation === null
+      ? null
+      : {
+          active: automatisation.redaction,
+          parPeriode: automatisation.parPeriode,
+          periode: automatisation.periode,
+          dernier: automatisation.redigeAt,
+        }
+
+  /*
+   * Sans Search Console il n'y a rien à proposer, mais il y a toujours quelque chose à
+   * montrer : ce qui a déjà été écrit. L'écran vide renvoyait la personne à une connexion
+   * manquante en taisant son propre travail.
+   */
   const vide = {
     site: { id: site.id, host: site.host },
     propriete: null,
     jours: JOURS_CALENDRIER,
     creneaux: [],
     dejaEcrits: 0,
+    ecrits,
+    redaction,
   }
 
   const acces = await useOAuthAccess(userId, 'google-search-console', rafraichir)
@@ -268,5 +345,7 @@ export async function lireCalendrier(
     jours: JOURS_CALENDRIER,
     creneaux: plan.creneaux,
     dejaEcrits: plan.ecartes,
+    ecrits,
+    redaction,
   }
 }

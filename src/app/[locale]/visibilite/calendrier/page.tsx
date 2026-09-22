@@ -3,7 +3,7 @@ import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
-import { lireCalendrier, type Creneau } from '@/server/audit/calendrier'
+import { lireCalendrier, type ArticleEcrit, type Creneau } from '@/server/audit/calendrier'
 import { INTENTIONS } from '@/server/audit/intentions'
 import { Shell } from '@/components/studio/Shell'
 import { LinkButton } from '@/components/ui'
@@ -126,6 +126,26 @@ function Ligne({ creneau, locale, siteId }: { creneau: Creneau; locale: string; 
   )
 }
 
+/**
+ * Ce qui a déjà été écrit.
+ *
+ * Volontairement plus discret que ce qui reste à faire : c'est un repère, pas une action.
+ * Le dépôt dans la boutique est dit quand il a eu lieu, parce que c'est la seule question
+ * qu'on se pose en relisant la liste — « celui-là, je l'ai mis en ligne ou pas ? » — et
+ * parce qu'Evoliia dépose en brouillon sans jamais publier.
+ */
+function Ecrit({ article, locale }: { article: ArticleEcrit; locale: string }) {
+  return (
+    <li className="flex flex-wrap items-baseline justify-between gap-2 border-b border-[var(--color-line)] py-2 last:border-b-0">
+      <span className="min-w-0 text-sm">{article.titre}</span>
+      <span className="text-xs text-[var(--color-ink-faint)]">
+        {jour(article.date, locale)} · {article.mots} mots
+        {article.depose ? ' · déposé en brouillon' : ''}
+      </span>
+    </li>
+  )
+}
+
 export default async function CalendrierPage({
   params,
   searchParams,
@@ -181,6 +201,21 @@ export default async function CalendrierPage({
           près de la première page passent devant.
         </p>
 
+        {vue.redaction?.active === true ? (
+          /*
+            Dit ici parce que c'est ici qu'on lit le plan : sans cette phrase, on croit
+            devoir cliquer huit fois sur « faire écrire », alors que Milo s'en charge.
+          */
+          <p className="mt-0 mb-6 rounded-[var(--radius-control)] bg-[var(--color-brand-soft)] px-3 py-2 text-xs leading-relaxed text-[var(--color-brand-strong)]">
+            Milo écrit {vue.redaction.parPeriode} article
+            {vue.redaction.parPeriode > 1 ? 's' : ''} par {vue.redaction.periode} sans que
+            vous le demandiez, en partant du haut de ce plan.
+            {vue.redaction.dernier === null
+              ? ' Aucun n’a encore été écrit de cette façon.'
+              : ` Le dernier date du ${jour(vue.redaction.dernier, locale)}.`}
+          </p>
+        ) : null}
+
         <ChoixDuRythme actuel={cle} locale={locale} siteId={tableau.site.id} />
 
         {vue.propriete === null ? (
@@ -224,6 +259,29 @@ export default async function CalendrierPage({
               garantit ni position ni visite — personne ne peut le promettre.
             </p>
           </>
+        )}
+
+        {vue.ecrits.length === 0 ? null : (
+          <section className="mt-10">
+            <h2 className="m-0 text-sm font-semibold">Déjà écrit</h2>
+            <p className="mt-1 mb-3 text-xs text-[var(--color-ink-soft)]">
+              Les {vue.ecrits.length} derniers articles de ce site. Ils se relisent et se
+              déposent depuis l’écran de Milo.
+            </p>
+            <ul className="m-0 list-none p-0">
+              {vue.ecrits.map((article) => (
+                <Ecrit key={article.id} article={article} locale={locale} />
+              ))}
+            </ul>
+            <LinkButton
+              href={`/${locale}/visibilite/articles?siteId=${tableau.site.id}`}
+              variant="secondary"
+              size="medium"
+              className="mt-3"
+            >
+              Ouvrir l’écran de Milo
+            </LinkButton>
+          </section>
         )}
       </div>
     </Shell>
