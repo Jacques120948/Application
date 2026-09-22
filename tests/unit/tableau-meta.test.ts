@@ -203,13 +203,11 @@ describe('ce que MIRA dit en une phrase', () => {
   })
 
   it('annonce le nombre de lignes à traiter et à surveiller', () => {
-    const priorites = [
-      { jugement: { verdict: 'agir' } },
-      { jugement: { verdict: 'agir' } },
-      { jugement: { verdict: 'surveiller' } },
-    ] as Parameters<typeof synthese>[1]
-
-    const dit = synthese(vue(), priorites)
+    const dit = synthese(vue(), [
+      { priorite: 'urgent' },
+      { priorite: 'urgent' },
+      { priorite: 'surveiller' },
+    ])
 
     expect(dit).toContain('2 demandent une décision')
     expect(dit).toContain('1 est à surveiller')

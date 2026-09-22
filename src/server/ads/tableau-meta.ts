@@ -267,44 +267,6 @@ export type VueMeta = {
   annonces: LigneMeta[]
 }
 
-/** Une ligne qui réclame quelque chose, avec l'étage d'où elle vient. */
-export type APriorite = LigneMeta & { niveau: 'Campagne' | 'Ensemble' | 'Annonce' }
-
-/** Ce qu'on met devant. Au-delà, ce n'est plus une liste de priorités, c'est un inventaire. */
-const PRIORITES_MONTREES = 6
-
-/**
- * Ce qu'il faut faire, tous étages confondus.
- *
- * L'écran de MIRA répondait à « combien » avant de répondre à « et alors ? » : trois
- * tableaux à lire de haut en bas, et la ligne qui compte quelque part dedans. Cette fonction
- * remonte ce qui réclame une décision, et le reste descend.
- *
- * L'ordre est celui de l'urgence, puis de l'argent. Deux campagnes également en difficulté
- * ne le sont pas également : celle qui dépense trois cents francs par semaine mérite le
- * regard avant celle qui en dépense douze.
- *
- * Les doublons d'étage sont assumés. Une campagne en difficulté à cause d'une seule de ses
- * annonces apparaîtra deux fois, et c'est une information : elle dit où agir précisément.
- */
-export function aFaire(vue: VueMeta): APriorite[] {
-  const toutes: APriorite[] = [
-    ...vue.campagnes.map((une) => ({ ...une, niveau: 'Campagne' as const })),
-    ...vue.ensembles.map((un) => ({ ...un, niveau: 'Ensemble' as const })),
-    ...vue.annonces.map((une) => ({ ...une, niveau: 'Annonce' as const })),
-  ]
-
-  const rang = { agir: 0, surveiller: 1, bon: 2, insuffisant: 3 }
-  return toutes
-    .filter((une) => une.jugement.verdict === 'agir' || une.jugement.verdict === 'surveiller')
-    .sort(
-      (une, autre) =>
-        rang[une.jugement.verdict] - rang[autre.jugement.verdict] ||
-        autre.actuel.cout - une.actuel.cout,
-    )
-    .slice(0, PRIORITES_MONTREES)
-}
-
 /**
  * Ce que MIRA dit en une phrase, avant tout tableau.
  *
@@ -317,7 +279,14 @@ export function aFaire(vue: VueMeta): APriorite[] {
  * Aucun chiffre n'y est inventé, aucun jugement n'y est porté que ceux déjà rendus ligne
  * par ligne. C'est une lecture à voix haute, pas une opinion de plus.
  */
-export function synthese(vue: VueMeta, priorites: readonly APriorite[]): string {
+export function synthese(
+  vue: VueMeta,
+  /*
+   * La forme est décrite ici plutôt qu'importée du moteur de règles : ce module n'a pas à
+   * dépendre de celui qui le lit. Seule la priorité compte pour compter.
+   */
+  constats: readonly { priorite: 'urgent' | 'surveiller' | 'opportunite' | 'information' }[],
+): string {
   const quand =
     vue.jours === 1 ? 'Hier' : `Sur les ${vue.jours} derniers jours`
   const devise = vue.compte.devise === '' ? '' : ` ${vue.compte.devise}`
@@ -341,10 +310,11 @@ export function synthese(vue: VueMeta, priorites: readonly APriorite[]): string 
     return `${depense}${rendement} Je ne peux pas dire si c’est bon : sans votre marge ni votre coût par vente acceptable, ces chiffres ne se comparent à rien.`
   }
 
-  const aTraiter = priorites.filter((une) => une.jugement.verdict === 'agir').length
-  const aSurveiller = priorites.length - aTraiter
+  const aTraiter = constats.filter((un) => un.priorite === 'urgent').length
+  const aSurveiller = constats.filter((un) => un.priorite === 'surveiller').length
+  const occasions = constats.filter((un) => un.priorite === 'opportunite').length
 
-  if (priorites.length === 0) {
+  if (aTraiter + aSurveiller + occasions === 0) {
     return `${depense}${rendement} Rien ne s’écarte de vos objectifs : il n’y a pas de geste à faire aujourd’hui.`
   }
 
@@ -354,6 +324,13 @@ export function synthese(vue: VueMeta, priorites: readonly APriorite[]): string 
   }
   if (aSurveiller > 0) {
     morceaux.push(`${aSurveiller} ${aSurveiller > 1 ? 'sont' : 'est'} à surveiller`)
+  }
+  if (occasions > 0) {
+    morceaux.push(
+      `${occasions} ${occasions > 1 ? 'méritent' : 'mérite'} d’être ${
+        occasions > 1 ? 'reprises' : 'reprise'
+      }`,
+    )
   }
 
   return `${depense}${rendement} ${morceaux.join(', et ')} — la liste est juste en dessous.`

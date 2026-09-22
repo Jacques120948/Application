@@ -10,12 +10,12 @@ import { findVisibilityAgent } from '@/server/agents/visibility'
 import { withUserScope } from '@/server/db/scope'
 import { NIVEAU_CAMPAGNE } from '@/server/ads/niveaux'
 import {
-  aFaire,
   lireTableauMeta,
   periodeMetaValide,
   PERIODES_META,
   synthese,
 } from '@/server/ads/tableau-meta'
+import { evaluerMeta } from '@/server/ads/regles-meta'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
@@ -162,6 +162,21 @@ export default async function ComptesMetaPage({
       ? null
       : await lireTableauMeta(user.id, jours).catch(() => null)
 
+  /*
+   * Les constats sont calculés à l'affichage et non conservés : ce sont des comparaisons de
+   * nombres sur ce qui est déjà en base, sans appel chez Meta ni crédit dépensé. Les ranger
+   * demanderait de les fermer, de les rouvrir et de les périmer — la mécanique de Naya, qui
+   * a son sens quand on peut les écarter, et qui n'en a pas encore ici.
+   */
+  const constats =
+    tableau === null
+      ? []
+      : evaluerMeta({
+          devise: tableau.compte.devise,
+          profil: tableau.profil,
+          vue: tableau,
+        })
+
   const objectifsPoses =
     tableau !== null && (tableau.profil.roasCible > 0 || tableau.profil.cpaCible > 0)
 
@@ -200,7 +215,7 @@ export default async function ComptesMetaPage({
             <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
               {tableau === null
                 ? 'Reliez votre compte Meta et lisez vos campagnes : je vous dirai alors où va votre budget, ce qui fonctionne, et ce qu’on peut améliorer.'
-                : synthese(tableau, aFaire(tableau))}
+                : synthese(tableau, constats)}
             </p>
             {actif?.synchroAt === undefined || actif.synchroAt === null ? null : (
               <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
@@ -297,7 +312,7 @@ export default async function ComptesMetaPage({
                   </div>
                 )}
 
-                <TableauMeta vue={tableau} priorites={aFaire(tableau)} />
+                <TableauMeta vue={tableau} constats={constats} />
               </>
             )}
 
