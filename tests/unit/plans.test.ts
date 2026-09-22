@@ -110,3 +110,50 @@ describe('héritage du constructeur d’applications', () => {
     expect(LEGACY_FEATURE_IDS.length).toBeGreaterThan(0)
   })
 })
+
+/**
+ * Le prix annuel, et ce qui doit rester vrai quels que soient les montants réglés.
+ *
+ * Une grille tarifaire se change souvent, et chaque changement est l'occasion d'une
+ * incohérence qui ne se voit pas en la relisant : une offre supérieure dont le crédit
+ * revient plus cher, un prix annuel plus élevé que douze mensualités. Ni l'un ni l'autre
+ * ne fait planter quoi que ce soit — ils font juste perdre de l'argent ou de la crédibilité.
+ */
+describe('la cohérence de la grille tarifaire', () => {
+  const payantes = DEFAULT_PLANS.filter((plan) => plan.priceCents > 0)
+
+  it('ne demande jamais plus à l’année que douze mensualités', () => {
+    const offenders = payantes
+      .filter((plan) => plan.priceYearCents > 0 && plan.priceYearCents > plan.priceCents * 12)
+      .map((plan) => plan.id)
+    expect(offenders).toEqual([])
+  })
+
+  it('offre bien deux mois sur l’année', () => {
+    const offenders = payantes
+      .filter((plan) => plan.priceYearCents !== plan.priceCents * 10)
+      .map((plan) => `${plan.id} : ${plan.priceYearCents} au lieu de ${plan.priceCents * 10}`)
+    expect(offenders).toEqual([])
+  })
+
+  it('ne facture jamais l’offre gratuite à l’année', () => {
+    const gratuites = DEFAULT_PLANS.filter((plan) => plan.priceCents === 0)
+    expect(gratuites.filter((plan) => plan.priceYearCents > 0)).toEqual([])
+  })
+
+  /*
+   * La seule contrainte structurelle de l'échelle. Une offre supérieure dont le crédit
+   * coûte plus cher donne à quelqu'un une raison de rester en dessous — et il la trouve,
+   * parce que c'est la première division que fait celui qui hésite.
+   */
+  it('fait baisser le prix du crédit à mesure que l’offre monte', () => {
+    const regressions = payantes.flatMap((plan, index) => {
+      if (index === 0) return []
+      const precedent = payantes[index - 1]!
+      const ici = plan.priceCents / plan.monthlyCredits
+      const avant = precedent.priceCents / precedent.monthlyCredits
+      return ici >= avant ? [`${plan.id} vend le crédit plus cher que ${precedent.id}`] : []
+    })
+    expect(regressions).toEqual([])
+  })
+})

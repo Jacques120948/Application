@@ -37,6 +37,7 @@ async function main(): Promise<void> {
         name: plan.name,
         description: plan.description,
         priceCents: plan.priceCents,
+        priceYearCents: plan.priceYearCents,
         currency: plan.currency,
         sitesMax: plan.sitesMax,
         pagesPerAudit: plan.pagesPerAudit,

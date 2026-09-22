@@ -14,6 +14,19 @@ export type PlanDefaults = {
   name: string
   description: string
   priceCents: number
+  /**
+   * Douze mois payés d'avance, en centimes. Zéro : l'offre ne se prend pas à l'année.
+   *
+   * Réglé à dix mensualités — « deux mois offerts ». La formule est choisie plutôt que le
+   * pourcentage rond parce qu'elle se comprend sans calculer : « 20 % » demande une
+   * multiplication pour savoir ce qu'on économise, « deux mois offerts » se lit. Elle coûte
+   * d'ailleurs moins cher — 16 % au lieu de 20 — et c'est la remise annuelle la plus
+   * répandue, donc celle qu'on reconnaît.
+   *
+   * Comme le reste, ce n'est qu'une valeur de départ : l'exploitant la règle depuis le
+   * back-office, et le pourcentage annoncé se déduit des deux prix. Aucun taux n'est stocké.
+   */
+  priceYearCents: number
   maxProjects: number
   /**
    * Services externes connectables. Un seul connecteur est ouvert à ce jour, la clé
@@ -76,11 +89,27 @@ export type PlanDefaults = {
 }
 
 /**
- * Valeurs de départ, calées sur le coût réel mesuré (voir docs/09-recentrage.md).
+ * Valeurs de départ. La table `Plan` fait foi : l'exploitant les règle sans redéploiement.
  *
- * L'offre gratuite va volontairement jusqu'au bout de la réflexion — objectif, idées,
- * validation — mais s'arrête avant la construction. C'est là que se situe la décision
- * d'abonnement, au moment où l'utilisateur veut concrétiser une idée qui l'intéresse.
+ * Les prix ne sont pas calés sur le coût d'Evoliia, et c'est volontaire. Ils le seraient
+ * qu'ils vaudraient quelques francs : à cinq millièmes de dollar le crédit, la plus grosse
+ * offre coûte moins de sept francs d'API par mois quand elle est entièrement consommée. Un
+ * prix calé sur ce coût ne dirait rien de ce qu'on reçoit — il dirait seulement que le
+ * calcul est bon marché, ce que personne n'achète.
+ *
+ * Ils sont donc calés sur ce que l'abonné obtient, et l'échelle suit ce qui change d'une
+ * offre à l'autre : le nombre de sites, la profondeur de l'analyse, le nombre d'audits, la
+ * réserve de crédits, et surtout les fonctions ouvertes. La plus haute ouvre Naya et MIRA,
+ * c'est-à-dire la lecture **et** la modification de comptes Google Ads et Meta — un travail
+ * qu'une agence facture plusieurs centaines de francs par mois. C'est ce qui justifie
+ * l'écart avec l'offre du milieu, pas une règle de trois sur les crédits.
+ *
+ * Le prix par crédit décroît quand l'offre monte — 0,19 puis 0,13 puis 0,12 franc — ce qui
+ * est la seule contrainte structurelle à tenir : une offre supérieure dont le crédit
+ * coûterait plus cher donnerait à quelqu'un une raison de rester en dessous.
+ *
+ * L'offre gratuite montre ce que le produit trouve chez vous et s'arrête là : un audit, sa
+ * note, ses priorités. C'est là que se situe la décision d'abonnement.
  */
 export const DEFAULT_PLANS: readonly PlanDefaults[] = [
   {
@@ -89,6 +118,7 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     description:
       'Un audit complet de votre site, ses deux notes et vos premières priorités. De quoi savoir ce qui vous manque avant de payer quoi que ce soit.',
     priceCents: 0,
+    priceYearCents: 0,
     currency: 'CHF',
     /*
      * Un seul audit, et c'est tout l'objet de cette offre : montrer ce que le produit
@@ -120,7 +150,8 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     name: 'Starter',
     description:
       'Pour les indépendants, artisans et petites entreprises qui veulent commencer à améliorer leur visibilité.',
-    priceCents: 1900,
+    priceCents: 2900,
+    priceYearCents: 29_000,
     currency: 'CHF',
     sitesMax: 1,
     pagesPerAudit: 50,
@@ -147,7 +178,8 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     name: 'Pro',
     description:
       'Pour les e-commerçants et les entreprises qui travaillent leur visibilité régulièrement.',
-    priceCents: 4900,
+    priceCents: 7900,
+    priceYearCents: 79_000,
     currency: 'CHF',
     sitesMax: 3,
     pagesPerAudit: 250,
@@ -176,7 +208,8 @@ export const DEFAULT_PLANS: readonly PlanDefaults[] = [
     name: 'Business',
     description:
       'Pour les entreprises, les petites agences et ceux qui suivent plusieurs sites ou produisent beaucoup de contenu.',
-    priceCents: 9900,
+    priceCents: 17_900,
+    priceYearCents: 179_000,
     currency: 'CHF',
     sitesMax: 10,
     pagesPerAudit: 1000,
