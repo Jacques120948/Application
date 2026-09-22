@@ -10,12 +10,18 @@ import { env } from '@/lib/env'
  *
  * Trois décisions, et la première est celle qui coûte des plateformes.
  *
- * **On ne mesure que ce qu'on interroge vraiment.** ChatGPT n'a pas d'API qui reproduise ce
- * que voit son utilisateur : ni le même modèle, ni la même recherche, ni la même mémoire.
- * Les encadrés IA de Google et son mode conversationnel n'ont aucune API du tout. Les
- * afficher demanderait de racler des pages de résultats, ce qui est contraire aux
- * conditions de Google et expose le produit. Ils sont donc absents, et l'écran dit
- * pourquoi. Trois plateformes mesurées valent mieux que cinq annoncées.
+ * **On ne mesure que ce qu'on interroge vraiment.** Les encadrés IA de Google et son mode
+ * conversationnel n'ont aucune API. Les afficher demanderait de racler des pages de
+ * résultats, ce qui est contraire aux conditions de Google — et Evoliia détient déjà les
+ * jetons Google de ses clients pour Search Console et la publicité. Ils sont donc absents,
+ * et l'écran dit pourquoi. Quatre plateformes mesurées valent mieux que six annoncées.
+ *
+ * ChatGPT y figurait pour la même raison, et n'y figure plus : l'argument était qu'aucune
+ * API ne reproduit ce que voit son utilisateur. C'est vrai — ni la mémoire, ni exactement
+ * le même modèle — mais cela vaut tout autant pour Gemini et pour Claude, que nous
+ * mesurions déjà. L'exclure sur ce motif était une incohérence, pas une prudence. Ce qu'on
+ * mesure est partout la même chose : ce que répond le modèle de la plateforme quand il
+ * cherche sur le web, avec ses limites dites à l'écran.
  *
  * **La recherche est obligatoire.** Un assistant qui répond sans chercher répond de
  * mémoire, et sa mémoire a des mois. Ce qu'on veut mesurer, c'est ce que voit un client
@@ -25,7 +31,7 @@ import { env } from '@/lib/env'
  * cité ne dit rien, savoir qui l'est à sa place dit quoi faire.
  */
 
-export type Plateforme = 'gemini' | 'claude' | 'perplexity'
+export type Plateforme = 'chatgpt' | 'gemini' | 'claude' | 'perplexity'
 
 /** Ce que rend une interrogation, quelle que soit la plateforme. */
 export type Reponse =
@@ -45,6 +51,74 @@ async function appeler(url: string, init: RequestInit): Promise<Response | null>
   } finally {
     clearTimeout(minuteur)
   }
+}
+
+// ─────────────────────────────── ChatGPT ─────────────────────────────────────
+
+const OPENAI_API = 'https://api.openai.com/v1/responses'
+const OPENAI_MODELE = 'gpt-4.1-mini'
+
+type ChargeOpenAI = {
+  output?: {
+    type?: string
+    content?: { type?: string; text?: string; annotations?: { type?: string; url?: string }[] }[]
+  }[]
+  error?: { message?: string }
+}
+
+/**
+ * ChatGPT, par l'API des réponses, avec l'outil de recherche web.
+ *
+ * `web_search` est l'équivalent de l'ancrage de Gemini et de la recherche de Claude : sans
+ * lui, le modèle répond de mémoire, et une mémoire d'entraînement ne dit rien de ce que
+ * voit un client aujourd'hui. OpenAI facture l'appel de l'outil en plus des jetons — c'est
+ * la part variable du coût, et c'est pourquoi le relevé est facturé au forfait.
+ *
+ * Le petit modèle suffit, comme chez Claude : on ne lui demande pas de raisonner, on lui
+ * demande de répondre à une question de client comme il le ferait.
+ *
+ * Les sources arrivent en annotations du texte, et non dans un bloc à part. On les lit
+ * défensivement : une forme inattendue doit coûter les sources, jamais le relevé.
+ */
+async function demanderChatGpt(question: string): Promise<Reponse> {
+  const cle = env.openaiApiKey
+  if (cle === undefined) return { ok: false, raison: 'ChatGPT n’est pas configuré.' }
+
+  const reponse = await appeler(OPENAI_API, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${cle}` },
+    body: JSON.stringify({
+      model: OPENAI_MODELE,
+      tools: [{ type: 'web_search' }],
+      input: question,
+    }),
+  })
+  if (reponse === null) return { ok: false, raison: 'ChatGPT est momentanément injoignable.' }
+
+  const charge = (await reponse.json().catch(() => null)) as ChargeOpenAI | null
+  if (reponse.status !== 200 || charge === null) {
+    return { ok: false, raison: charge?.error?.message?.slice(0, 150) ?? 'ChatGPT a refusé.' }
+  }
+
+  const morceaux: string[] = []
+  const sources: string[] = []
+  for (const bloc of charge.output ?? []) {
+    if (bloc.type !== 'message') continue
+    for (const partie of bloc.content ?? []) {
+      if (partie.type !== 'output_text') continue
+      if (typeof partie.text === 'string' && partie.text !== '') morceaux.push(partie.text)
+      for (const note of partie.annotations ?? []) {
+        if (note.type === 'url_citation' && typeof note.url === 'string' && note.url !== '') {
+          sources.push(note.url)
+        }
+      }
+    }
+  }
+
+  const texte = morceaux.join('\n').trim()
+  if (texte === '') return { ok: false, raison: 'ChatGPT n’a rien répondu.' }
+
+  return { ok: true, texte, sources: [...new Set(sources)] }
 }
 
 // ──────────────────────────────── Gemini ─────────────────────────────────────
@@ -247,6 +321,7 @@ async function demanderPerplexity(question: string): Promise<Reponse> {
 // ─────────────────────────────── Le choix ────────────────────────────────────
 
 const INTERROGATEURS: Record<Plateforme, (question: string) => Promise<Reponse>> = {
+  chatgpt: demanderChatGpt,
   gemini: demanderGemini,
   claude: demanderClaude,
   perplexity: demanderPerplexity,
@@ -255,6 +330,7 @@ const INTERROGATEURS: Record<Plateforme, (question: string) => Promise<Reponse>>
 /** Les plateformes réellement interrogeables, c'est-à-dire celles dont la clé est posée. */
 export function plateformesDisponibles(): Plateforme[] {
   const disponibles: Plateforme[] = []
+  if (env.openaiApiKey !== undefined) disponibles.push('chatgpt')
   if (env.geminiApiKey !== undefined) disponibles.push('gemini')
   if (env.anthropicApiKey !== undefined && env.anthropicApiKey !== '') disponibles.push('claude')
   if (env.perplexityApiKey !== undefined) disponibles.push('perplexity')

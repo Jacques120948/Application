@@ -141,6 +141,19 @@ export const env = {
     return read('PERPLEXITY_API_KEY')
   },
   /**
+   * Clé OpenAI, pour mesurer ce que ChatGPT répond.
+   *
+   * Même règle que Perplexity, et pour la même raison : absente, ChatGPT disparaît de la
+   * liste des plateformes interrogeables et le suivi tourne sur les autres. Une clé
+   * manquante retire une colonne d'un tableau, elle ne casse pas une fonctionnalité.
+   *
+   * Elle ne quitte jamais le serveur : aucune route ne la renvoie, aucun composant ne la
+   * lit, elle n'entre dans aucun prompt et dans aucun journal.
+   */
+  get openaiApiKey(): string | undefined {
+    return read('OPENAI_API_KEY')
+  },
+  /**
    * L'application Meta d'Evoliia, pour Facebook et Instagram.
    *
    * Facultatives toutes les deux : sans elles, le connecteur Meta se présente comme à venir

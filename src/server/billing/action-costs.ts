@@ -59,15 +59,21 @@ export const DEFAULT_ACTION_COSTS: readonly ActionCost[] = [
   { id: 'page', label: 'Améliorer une page entière', min: 5, max: 10 },
   { id: 'article', label: 'Écrire un article', min: 8, max: 20 },
   /*
-   * Le relevé de visibilité dans les assistants, facturé à la question posée.
+   * Le relevé de visibilité, facturé à la question **et par assistant interrogé**.
    *
-   * Ce coût n'est pas fait de jetons mais d'appels payants à des plateformes extérieures :
-   * une question est posée plusieurs fois, sur plusieurs assistants, et chaque interrogation
-   * a un prix. La fourchette est fixe parce que le nombre d'interrogations l'est aussi — le
-   * nombre de plateformes et de répétitions est une décision d'Evoliia, pas de la personne,
-   * et lui facturer nos réglages serait malhonnête.
+   * Il l'était au forfait, toutes plateformes confondues, au motif que leur nombre était
+   * une décision d'Evoliia et non de la personne. C'était vrai tant que la liste était fixe.
+   * Elle ne l'est plus : chacun choisit désormais les assistants qu'il veut suivre, donc il
+   * doit en voir le prix — et Evoliia doit cesser d'absorber chaque plateforme ajoutée, ce
+   * qui revenait à faire croître une facture d'API sans que rien ne la compense.
+   *
+   * L'identifiant a changé avec l'unité, et c'est volontaire : reprendre l'ancien aurait
+   * appliqué par plateforme un prix réglé pour une question entière, et triplé la note d'un
+   * exploitant sans que personne ne l'ait décidé.
+   *
+   * Un crédit : trois assistants suivis coûtent exactement ce que coûtait le forfait.
    */
-  { id: 'visibilite-ia', label: 'Mesurer une question dans les assistants', min: 3, max: 3 },
+  { id: 'visibilite-ia-plateforme', label: 'Mesurer une question dans un assistant', min: 1, max: 1 },
   /*
    * Le point hebdomadaire : un long contexte lu, une réponse courte. Son coût est celui de
    * la lecture, pas de l'écriture — d'où une fourchette étroite malgré la portée.

@@ -40,6 +40,7 @@ const TONS: Record<string, { texte: string; couleur: string }> = {
 }
 
 const PLATEFORMES: Record<string, string> = {
+  chatgpt: 'ChatGPT',
   gemini: 'Gemini',
   claude: 'Claude',
   perplexity: 'Perplexity',
@@ -123,6 +124,7 @@ export function VisibiliteIA({
   host,
   initiales,
   plateformes,
+  suivies,
   cout,
   jours,
   locale,
@@ -134,12 +136,21 @@ export function VisibiliteIA({
   initiales: readonly FrequenceVue[]
   /** Les plateformes réellement interrogeables : celles dont la clé est posée. */
   plateformes: readonly string[]
+  /** Celles que ce site suit, parmi les précédentes. C'est elles qui décident du prix. */
+  suivies: readonly string[]
+  /** Le prix d'une question chez **un** assistant. */
   cout: number
   jours: number
   /** L'état du passage à l'ouverture de la page : il a pu avancer sans nous. */
   passage: EtatVu
 }) {
   const [liste, setListe] = useState<FrequenceVue[]>([...initiales])
+  /*
+   * Les assistants suivis, tenus côté navigateur pour que le prix annoncé suive la case
+   * qu'on vient de cocher. Le serveur refiltre et refuse la liste vide : ce qui est ici
+   * affiche, il n'autorise pas.
+   */
+  const [choisies, setChoisies] = useState<string[]>([...suivies])
   const [texte, setTexte] = useState('')
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -178,6 +189,31 @@ export function VisibiliteIA({
       return null
     }
     return charge
+  }
+
+  /**
+   * Coche ou décoche un assistant, et l'enregistre.
+   *
+   * La dernière case ne se décoche pas : vide veut dire « tous » côté serveur, et laisser
+   * décocher la dernière ferait tripler la note de quelqu'un qui cherchait à la réduire.
+   * Pour ne plus rien interroger, on éteint ses questions ou le relevé automatique.
+   */
+  async function basculerPlateforme(nom: string, actif: boolean) {
+    const voulues = actif ? [...choisies, nom] : choisies.filter((une) => une !== nom)
+    if (voulues.length === 0) {
+      setErreur('Gardez au moins un assistant, ou éteignez vos questions.')
+      return
+    }
+    // Optimiste : le prix annoncé doit suivre la case, pas l'aller-retour.
+    setChoisies(voulues)
+    const charge = (await appeler({ geste: 'plateformes', plateformes: voulues })) as
+      | { plateformes?: string[] }
+      | null
+    if (charge?.plateformes === undefined) {
+      setChoisies([...choisies])
+      return
+    }
+    setChoisies(charge.plateformes)
   }
 
   async function ajouter() {
@@ -267,21 +303,65 @@ export function VisibiliteIA({
     <div className="grid gap-6">
       <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
         <p className="m-0 text-sm leading-relaxed">
-          Evoliia pose vos questions à{' '}
-          <strong>{plateformes.map((nom) => PLATEFORMES[nom] ?? nom).join(', ')}</strong> comme le
-          ferait un client, et regarde si <strong>{host}</strong> apparaît dans la réponse.
+          Evoliia pose vos questions à des assistants comme le ferait un client, et regarde
+          si <strong>{host}</strong> apparaît dans la réponse.
         </p>
+
+        {/*
+          Le choix des assistants est ici, et le prix est écrit à côté de chaque case.
+          
+          Il y était absent tant que la liste était fixe : on facturait au forfait, toutes
+          plateformes confondues, et personne n'avait rien à décider. Ce forfait faisait
+          payer pareil un suivi sur deux assistants et un suivi sur quatre — et faisait
+          absorber la différence à Evoliia, sur une facture qui ne se voit qu'à la banque.
+        */}
+        <fieldset className="mt-4 mb-0 border-0 p-0">
+          <legend className="mb-2 p-0 text-sm font-medium">
+            Les assistants que vous suivez
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {plateformes.map((nom) => {
+              const actif = choisies.includes(nom)
+              return (
+                <label
+                  key={nom}
+                  className={`flex cursor-pointer items-center gap-2 rounded-[var(--radius-pill)] border px-3 py-1.5 text-sm ${
+                    actif
+                      ? 'border-[var(--color-brand)] bg-[var(--color-brand-soft)]'
+                      : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={actif}
+                    onChange={(evenement) =>
+                      void basculerPlateforme(nom, evenement.target.checked)
+                    }
+                    className="cursor-pointer"
+                  />
+                  {PLATEFORMES[nom] ?? nom}
+                </label>
+              )
+            })}
+          </div>
+          <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+            Chaque assistant suivi coûte {cout} crédit{cout > 1 ? 's' : ''} par question et
+            par passage. En suivre moins coûte moins cher ; en suivre plus mesure mieux,
+            parce qu’une marque très citée par l’un peut être absente d’un autre.
+          </p>
+        </fieldset>
+
         {/*
           La limite, dite avant qu'on la découvre. Ces deux-là ne sont pas mesurables
           honnêtement, et les afficher en mesurant autre chose serait exactement ce que ce
           produit refuse de faire.
         */}
-        <p className="mt-3 mb-0 rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3 text-xs leading-relaxed text-[var(--color-ink-soft)]">
-          <strong>ChatGPT et les encadrés IA de Google ne sont pas mesurés.</strong> ChatGPT
-          n’expose aucune interface qui reproduise ce que voit son utilisateur, et les
-          encadrés de Google n’en ont aucune du tout : les afficher demanderait d’aspirer des
-          pages de résultats, ce qu’Evoliia ne fera pas. Trois plateformes mesurées valent
-          mieux que cinq annoncées.
+        <p className="mt-4 mb-0 rounded-[var(--radius-control)] bg-[var(--color-canvas)] px-4 py-3 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+          <strong>Les encadrés IA de Google ne sont pas mesurés</strong>, ni son mode
+          conversationnel : Google n’expose aucune interface pour les lire, et les afficher
+          demanderait d’aspirer des pages de résultats — ce qu’Evoliia ne fera pas. Pour les
+          assistants mesurés, c’est leur modèle qui est interrogé, avec la recherche web
+          activée : proche de ce que voit un client, sans sa mémoire ni son historique.
         </p>
       </section>
 
@@ -424,14 +504,17 @@ export function VisibiliteIA({
           >
             {occupe
               ? 'Evoliia démarre…'
-              : `Poser les ${actives} question${actives > 1 ? 's' : ''} (${actives * cout} crédits)`}
+              : `Poser les ${actives} question${actives > 1 ? 's' : ''} à ${choisies.length} assistant${
+                  choisies.length > 1 ? 's' : ''
+                } (${actives * choisies.length * cout} crédits)`}
           </button>
         )}
         <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
           Chaque question est posée plusieurs fois à chaque assistant : leurs réponses ne sont
           pas identiques d’une fois sur l’autre, et une seule lecture ne prouverait rien — ni
-          la présence, ni l’absence. Vous n’êtes facturé qu’une fois par question, quel que
-          soit le nombre d’interrogations. Un assistant injoignable n’est pas facturé.
+          la présence, ni l’absence. Ces répétitions ne sont pas facturées : vous payez une
+          fois par question et par assistant suivi, quel que soit le nombre
+          d’interrogations. Un assistant injoignable n’est pas facturé.
         </p>
         {bilan === null ? null : (
           <p className="mt-3 mb-0 text-sm text-[var(--color-ink-soft)]">{bilan}</p>

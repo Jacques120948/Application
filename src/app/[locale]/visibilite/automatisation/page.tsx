@@ -5,7 +5,7 @@ import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
 import { estimerArticle } from '@/server/audit/articles'
 import { lireReglages } from '@/server/audit/automatisation'
-import { listerPrompts } from '@/server/audit/visibilite-ia'
+import { listerPrompts, plateformesSuivies } from '@/server/audit/visibilite-ia'
 import { actionCosts, type ActionCost } from '@/server/billing/action-costs'
 import { hasConnection } from '@/server/integrations/service'
 import { Shell } from '@/components/studio/Shell'
@@ -45,7 +45,14 @@ export default async function AutomatisationPage({
     listerPrompts(user.id, tableau.site.id),
     actionCosts(),
   ])
-  const coutIa = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia')?.max ?? 3
+  /*
+   * Le coût hebdomadaire annoncé suit les assistants réellement suivis : le tarif se compte
+   * par question et par assistant depuis que chacun choisit les siens.
+   */
+  const assistants = await plateformesSuivies(user.id, tableau.site.id)
+  const coutIa =
+    (couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia-plateforme')?.max ?? 1) *
+    assistants.length
   const coutPoint = couts.find((ligne: ActionCost) => ligne.id === 'point')?.max ?? 5
 
   return (

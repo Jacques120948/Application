@@ -5,6 +5,7 @@ import { after } from 'next/server'
 import {
   ajouterPrompt,
   basculerPrompt,
+  choisirPlateformes,
   etatPassage,
   ouvrirPassage,
   poursuivrePassage,
@@ -37,6 +38,12 @@ const input = z.discriminatedUnion('geste', [
   z.object({ geste: z.literal('relever') }),
   z.object({ geste: z.literal('proposer'), locale: z.string().max(5).optional() }),
   z.object({ geste: z.literal('reprendre') }),
+  /*
+   * Les assistants suivis. Bornés à huit noms courts : ce qui arrive ici ne sert qu'à
+   * désigner, et le serveur refiltre sur la liste du code — un nom inconnu est ignoré, pas
+   * rattrapé.
+   */
+  z.object({ geste: z.literal('plateformes'), plateformes: z.array(z.string().max(20)).max(8) }),
 ])
 
 export async function POST(request: Request, context: { params: Promise<{ siteId: string }> }) {
@@ -84,6 +91,9 @@ export async function POST(request: Request, context: { params: Promise<{ siteId
     }
 
     consume(`visibilite-ia:prompts:${user.id}`, RULES.aiOperation)
+    if (demande.geste === 'plateformes') {
+      return ok({ plateformes: await choisirPlateformes(user.id, siteId, demande.plateformes) })
+    }
     if (demande.geste === 'ajouter') {
       return ok({
         prompt: await ajouterPrompt(user.id, siteId, demande.texte, demande.theme ?? ''),

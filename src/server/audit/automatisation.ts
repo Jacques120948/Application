@@ -10,7 +10,12 @@ import { lireCalendrier } from './calendrier'
 import { inspecter, lireIndexation } from './indexation'
 import { lireRecherches } from './recherches'
 import { aRafraichir, lireVolumes, rafraichirVolumes } from './volumes'
-import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
+import {
+  ouvrirPassage,
+  plateformesSuivies,
+  poursuivrePassage,
+  soldeCouvre,
+} from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
 import { fairePoint } from './point'
 import { synchroniserTous } from '@/server/ads/synchro'
@@ -544,7 +549,14 @@ export async function tournerQuotidien(
           const questions = await withUserScope(candidat.userId, (tx) =>
             tx.promptIA.count({ where: { siteId: candidat.siteId, userId: candidat.userId, actif: true } }),
           )
-          if (questions > 0 && (await soldeCouvre(candidat.userId, questions))) {
+          /*
+           * Les assistants suivis, et non tous ceux qui sont disponibles : le prix se compte
+           * par question et par assistant depuis que chacun choisit les siens, et vérifier
+           * le solde sur une liste plus large ferait renoncer à un passage qu'on pouvait
+           * s'offrir.
+           */
+          const assistants = await plateformesSuivies(candidat.userId, candidat.siteId)
+          if (questions > 0 && (await soldeCouvre(candidat.userId, questions, assistants.length))) {
             /*
              * La nuit ouvre le passage et le mène à bout dans la foulée : personne ne
              * regarde, et rien ne presse. Si la tournée est coupée, le passage reste

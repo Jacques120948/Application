@@ -37,19 +37,29 @@ import { recherchesPourArticle } from './recherches'
  * **Le sentiment n'est demandé que si la marque est citée.** Classer le ton d'une réponse
  * qui ne parle pas de vous n'a aucun sens, et le facturer serait indéfendable.
  *
- * **Le coût est réservé avant d'être engagé.** Chaque relevé est un appel payant à une
- * plateforme extérieure. Le tarif vient du catalogue administrable, jamais du code : un
- * exploitant qui ajuste son prix ne doit pas attendre un déploiement.
+ * **Le coût est réservé avant d'être engagé, et il suit les plateformes.** Chaque relevé
+ * est un appel payant à une plateforme extérieure, et chacun choisit les siennes : le prix
+ * se compte donc par question **et par assistant**. Le forfait d'avant, toutes plateformes
+ * confondues, faisait payer pareil un suivi sur trois assistants et un suivi sur six — et
+ * faisait absorber la différence à Evoliia, sur une facture qui ne se voit qu'à la banque.
+ * Le tarif vient du catalogue administrable, jamais du code.
  *
- * **On ne mesure que ce qu'on interroge vraiment.** Voir `assistants.ts` : ni ChatGPT, ni
- * les encadrés IA de Google, parce qu'aucun des deux n'expose ce que voit son utilisateur.
+ * **On ne mesure que ce qu'on interroge vraiment.** Voir `assistants.ts` : pas les encadrés
+ * IA de Google ni son mode conversationnel, faute d'API — les lire demanderait de racler
+ * des pages de résultats, et Evoliia détient déjà les jetons Google de ses clients.
  */
 
 /** L'action facturée, telle qu'elle apparaît dans le catalogue de l'exploitant. */
-export const ACTION_RELEVE = 'visibilite-ia'
+export const ACTION_RELEVE = 'visibilite-ia-plateforme'
 
-/** Le tarif de repli, employé seulement si le catalogue ne dit rien. */
-const COUT_PAR_DEFAUT = 3
+/**
+ * Le tarif de repli, employé seulement si le catalogue ne dit rien.
+ *
+ * Un crédit par question **et par assistant** : à trois assistants suivis, c'est exactement
+ * ce que coûtait l'ancien forfait. Le changement d'unité ne devait renchérir le relevé de
+ * personne — il devait seulement cesser de faire payer à Evoliia les plateformes ajoutées.
+ */
+const COUT_PAR_DEFAUT = 1
 
 /**
  * Combien de fois la même question est posée à une même plateforme, par passage.
@@ -180,6 +190,73 @@ async function coutDuReleve(): Promise<number> {
   const couts = await actionCosts()
   const ligne = couts.find((cout: ActionCost) => cout.id === ACTION_RELEVE)
   return ligne === undefined ? COUT_PAR_DEFAUT : Math.max(1, ligne.max)
+}
+
+/**
+ * Les assistants réellement interrogés pour ce site.
+ *
+ * Deux filtres, et l'ordre compte. Le choix de la personne d'abord ; la disponibilité
+ * ensuite. Une plateforme choisie dont la clé n'est pas posée ne doit pas être interrogée —
+ * elle échouerait à chaque tour — et surtout pas facturée : on ne fait pas payer une colonne
+ * vide.
+ *
+ * Liste vide : toutes celles qui sont disponibles. C'est l'état de tous les sites existants
+ * au moment où cette colonne apparaît, et c'est exactement ce qu'ils faisaient avant.
+ *
+ * Une valeur inconnue est ignorée plutôt que rattrapée. Un nom de plateforme retiré du code
+ * resterait sinon en base pour toujours, et ferait facturer un assistant qui n'existe plus.
+ */
+export async function plateformesSuivies(
+  userId: string,
+  siteId: string,
+): Promise<Plateforme[]> {
+  const disponibles = plateformesDisponibles()
+  const reglages = await withUserScope(userId, (tx) =>
+    tx.siteAutomatisation.findFirst({
+      where: { siteId, userId },
+      select: { plateformesIA: true },
+    }),
+  )
+
+  const choisies = reglages?.plateformesIA ?? []
+  if (choisies.length === 0) return disponibles
+  return disponibles.filter((une) => choisies.includes(une))
+}
+
+/**
+ * Enregistre les assistants suivis pour ce site.
+ *
+ * Refuse la liste vide, et ce refus est le garde-fou : vide veut dire « toutes », donc
+ * décocher la dernière case reviendrait à toutes les rallumer et à tripler la note de
+ * quelqu'un qui cherchait à la réduire. Pour ne plus rien interroger, on éteint le relevé
+ * automatique ou on éteint ses questions — deux gestes qui disent ce qu'ils font.
+ *
+ * Ce qui arrive du navigateur est filtré sur la liste du code, jamais repris tel quel.
+ */
+export async function choisirPlateformes(
+  userId: string,
+  siteId: string,
+  demandees: readonly string[],
+): Promise<Plateforme[]> {
+  const site = await withUserScope(userId, (tx) =>
+    tx.site.findFirst({ where: { id: siteId, userId, deletedAt: null }, select: { id: true } }),
+  )
+  if (site === null) throw notFound('Ce site est introuvable.')
+
+  const disponibles = plateformesDisponibles()
+  const retenues = disponibles.filter((une) => demandees.includes(une))
+  if (retenues.length === 0) {
+    throw validation('Gardez au moins un assistant, ou éteignez le relevé automatique.')
+  }
+
+  await withUserScope(userId, (tx) =>
+    tx.siteAutomatisation.upsert({
+      where: { siteId },
+      create: { siteId, userId, plateformesIA: retenues },
+      update: { plateformesIA: retenues },
+    }),
+  )
+  return retenues
 }
 
 /** Les questions suivies pour un site. */
@@ -349,12 +426,12 @@ export async function ouvrirPassage(userId: string, siteId: string): Promise<Eta
     await withUserScope(userId, (tx) =>
       tx.promptIA.count({ where: { siteId, userId, actif: true } }),
     ),
-    plateformesDisponibles(),
+    await plateformesSuivies(userId, siteId),
   ]
   if (questions === 0 || plateformes.length === 0) {
     return { enCours: false, attendu: 0, fait: 0 }
   }
-  if (!(await soldeCouvre(userId, questions))) {
+  if (!(await soldeCouvre(userId, questions, plateformes.length))) {
     throw validation(
       'Votre solde ne couvre pas ce relevé. Éteignez des questions, ou attendez le renouvellement.',
     )
@@ -400,7 +477,7 @@ export async function poursuivrePassage(
       select: { passageAt: true },
     }),
   )
-  const plateformes = plateformesDisponibles()
+  const plateformes = await plateformesSuivies(userId, siteId)
   if (reglages?.passageAt == null || plateformes.length === 0) {
     return { questions: 0, releves: 0, mentions: 0, credits: 0, plateformes }
   }
@@ -411,7 +488,12 @@ export async function poursuivrePassage(
   }
 
   const tarif = await coutDuReleve()
-  const plafond = prompts.length * tarif
+  /*
+   * Le plafond couvre ce que le passage peut coûter au pire : chaque question posée à
+   * chaque assistant suivi. Les répétitions n'y entrent pas — poser deux fois la même
+   * question est notre façon de mesurer une réponse qui varie, pas un service de plus.
+   */
+  const plafond = prompts.length * plateformes.length * tarif
   const reservation = await reserveCredits({
     userId,
     operation: ACTION_RELEVE,
@@ -463,12 +545,18 @@ export async function poursuivrePassage(
   }
 
   /*
-   * Facturé à la question aboutie, pas au relevé : la personne a demandé à savoir si elle
-   * sort sur cette question-là. Le nombre de plateformes et de répétitions est une décision
-   * d'Evoliia, pas la sienne, et lui en faire porter le compte reviendrait à lui facturer
-   * nos réglages.
+   * Facturé à la question aboutie et par assistant suivi.
+   *
+   * Les répétitions restent hors du compte : elles sont notre façon de mesurer une réponse
+   * qui varie, et les facturer reviendrait à faire payer nos réglages. Le nombre
+   * d'assistants, lui, est un choix de la personne depuis qu'elle peut le faire — et il
+   * décide directement de ce qu'Evoliia paie dehors.
+   *
+   * Compté sur les assistants suivis et non sur les relevés réellement écrits : une
+   * plateforme momentanément injoignable ne doit pas faire baisser la note d'un centime de
+   * plus que ce qu'elle a coûté, mais une question aboutie ailleurs a bien été mesurée.
    */
-  const credits = questionsAbouties.size * tarif
+  const credits = questionsAbouties.size * plateformes.length * tarif
   if (credits > 0) await spendCredits(userId, credits, `ia:${ACTION_RELEVE}`)
 
   logger.info('visibilité IA relevée', {
@@ -528,9 +616,13 @@ export async function lireFrequences(
 }
 
 /** Le solde suffit-il pour un passage complet ? Sert à ne pas lancer ce qui finira à sec. */
-export async function soldeCouvre(userId: string, questions: number): Promise<boolean> {
-  if (questions === 0) return false
-  return (await availableCredits(userId)) >= questions * (await coutDuReleve())
+export async function soldeCouvre(
+  userId: string,
+  questions: number,
+  plateformes: number,
+): Promise<boolean> {
+  if (questions === 0 || plateformes === 0) return false
+  return (await availableCredits(userId)) >= questions * plateformes * (await coutDuReleve())
 }
 
 /** Une question proposée, pas encore suivie. Rien n'est enregistré tant qu'on n'a pas choisi. */

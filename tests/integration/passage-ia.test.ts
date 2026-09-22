@@ -60,6 +60,7 @@ describe('un passage de relevé', () => {
     vi.stubEnv('GEMINI_API_KEY', '')
     vi.stubEnv('ANTHROPIC_API_KEY', '')
     vi.stubEnv('PERPLEXITY_API_KEY', '')
+    vi.stubEnv('OPENAI_API_KEY', '')
 
     const etat = await ouvrirPassage(userId, siteId)
     expect(etat.enCours).toBe(false)

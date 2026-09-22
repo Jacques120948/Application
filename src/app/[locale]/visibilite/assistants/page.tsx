@@ -3,7 +3,12 @@ import { resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { availableCredits } from '@/server/billing/credits'
 import { readDashboard } from '@/server/audit/service'
-import { etatPassage, lireFrequences, tableauIA } from '@/server/audit/visibilite-ia'
+import {
+  etatPassage,
+  lireFrequences,
+  plateformesSuivies,
+  tableauIA,
+} from '@/server/audit/visibilite-ia'
 import { actionCosts, type ActionCost } from '@/server/billing/action-costs'
 import { plateformesDisponibles } from '@/server/integrations/providers/assistants'
 import { Shell } from '@/components/studio/Shell'
@@ -45,13 +50,19 @@ export default async function AssistantsPage({
    * et survit au rafraîchissement, comme le filtre par pays et le rythme du calendrier.
    */
   const surLesQuestions = demande.vue === 'questions'
-  const [frequences, couts, bord, passage] = await Promise.all([
+  const [frequences, couts, bord, passage, suivies] = await Promise.all([
     lireFrequences(user.id, tableau.site.id, JOURS),
     actionCosts(),
     tableauIA(user.id, tableau.site.id, JOURS),
     etatPassage(user.id, tableau.site.id),
+    plateformesSuivies(user.id, tableau.site.id),
   ])
-  const cout = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia')?.max ?? 3
+  /*
+   * Le prix d'une question chez **un** assistant : le total se compte à l'écran, en
+   * multipliant par les assistants réellement suivis. Le repli à 1 crédit reproduit
+   * l'ancien forfait à trois assistants, pour qu'un catalogue muet ne renchérisse rien.
+   */
+  const cout = couts.find((ligne: ActionCost) => ligne.id === 'visibilite-ia-plateforme')?.max ?? 1
   const plateformes = plateformesDisponibles()
 
   return (
@@ -115,6 +126,7 @@ export default async function AssistantsPage({
             host={tableau.site.host}
             initiales={frequences}
             plateformes={plateformes}
+            suivies={suivies}
             cout={cout}
             jours={JOURS}
             locale={locale}

@@ -1472,6 +1472,9 @@ model SiteAutomatisation {
   depot      Boolean @default(false)
   /// Poser chaque semaine les questions suivies aux assistants. Dépense des crédits.
   assistants Boolean @default(false)
+  /// Les assistants réellement interrogés pour ce site. Vide : tous ceux qui sont
+  /// disponibles. Le prix suit cette liste — on ne facture que ce qu'on interroge.
+  plateformesIA String[] @default([])
   /// Le point hebdomadaire de Léa sur l'ensemble du site. Dépense des crédits.
   point      Boolean @default(false)
 
