@@ -50,9 +50,52 @@ const RESULTATS: Record<string, Ton> = {
   prevu: INCONNU,
 }
 
-export function JournalMeta({ initiales }: { initiales: readonly ActionVue[] }) {
+export function JournalMeta({
+  initiales,
+  total,
+  encore,
+}: {
+  initiales: readonly ActionVue[]
+  /** Le nombre réel de modifications sur ce compte, et non celui des lignes affichées. */
+  total: number
+  /** Reste-t-il des lignes plus anciennes à demander ? */
+  encore: boolean
+}) {
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
+  const [lignes, setLignes] = useState<ActionVue[]>([...initiales])
+  const [reste, setReste] = useState(encore)
+  const [chargement, setChargement] = useState(false)
+
+  /**
+   * Va chercher les lignes plus anciennes, à partir de la dernière reçue.
+   *
+   * La date de la dernière ligne sert de repère plutôt qu'un numéro de page : un décalage
+   * se déplacerait à chaque modification écrite pendant la lecture, et on sauterait une
+   * ligne ou on la verrait deux fois. Sur un journal, c'est ce qu'on ne peut pas se
+   * permettre.
+   */
+  async function plusAnciennes() {
+    const derniere = lignes.at(-1)
+    if (derniere === undefined) return
+    setChargement(true)
+    setErreur(null)
+    const reponse = await fetch('/api/ads/meta/journal', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ avant: derniere.createdAt }),
+    }).catch(() => null)
+    const corps = (await reponse?.json().catch(() => null)) as
+      | { lignes?: ActionVue[]; encore?: boolean; message?: string }
+      | null
+    setChargement(false)
+    if (reponse === null || !reponse.ok || corps?.lignes === undefined) {
+      setErreur(corps?.message ?? 'Les modifications plus anciennes n’ont pas pu être lues.')
+      return
+    }
+    setLignes((actuelles) => [...actuelles, ...(corps.lignes ?? [])])
+    setReste(corps.encore === true)
+  }
 
   async function restaurer(id: string) {
     setOccupe(id)
@@ -79,14 +122,22 @@ export function JournalMeta({ initiales }: { initiales: readonly ActionVue[] }) 
     window.location.reload()
   }
 
-  if (initiales.length === 0) return null
+  if (total === 0) return null
 
   return (
     <details className="min-w-0 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
       <summary className="cursor-pointer list-none">
         <span className="text-base font-semibold">Ce que MIRA a modifié</span>
+        {/*
+          Le total réel, et non le nombre de lignes affichées.
+
+          L'écran annonçait « 20 modifications » là où il y en avait cinquante, parce qu'il
+          comptait ce qu'il montrait. Dans un journal, dont toute la raison d'être est de
+          répondre « qu'est-ce qui a été changé sur mon compte », une réponse partielle
+          présentée comme entière est pire qu'une absence de réponse : on cesse de chercher.
+        */}
         <span className="ml-2 text-sm text-[var(--color-ink-soft)]">
-          {initiales.length} modification{initiales.length > 1 ? 's' : ''}
+          {total} modification{total > 1 ? 's' : ''}
         </span>
       </summary>
 
@@ -100,7 +151,7 @@ export function JournalMeta({ initiales }: { initiales: readonly ActionVue[] }) 
       )}
 
       <ul className="mt-4 mb-0 grid list-none gap-3 p-0">
-        {initiales.map((action) => {
+        {lignes.map((action) => {
           const ton = RESULTATS[action.resultat] ?? INCONNU
           return (
             <li
@@ -136,6 +187,17 @@ export function JournalMeta({ initiales }: { initiales: readonly ActionVue[] }) 
           )
         })}
       </ul>
+
+      {!reste ? null : (
+        <button
+          type="button"
+          onClick={() => void plusAnciennes()}
+          disabled={chargement}
+          className="mt-4 cursor-pointer rounded-[var(--radius-control)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm text-[var(--color-ink-soft)] disabled:opacity-50"
+        >
+          {chargement ? 'Lecture…' : `Voir les plus anciennes (${total - lignes.length} restantes)`}
+        </button>
+      )}
 
       <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
         Chaque ligne conserve la valeur d’avant : c’est elle qui est renvoyée chez Meta quand

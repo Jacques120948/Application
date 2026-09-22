@@ -300,16 +300,51 @@ export async function restaurerActionMeta(userId: string, actionId: string): Pro
   }
 }
 
-/** Au-delà, le journal cesse d'être un journal et devient une archive. */
-const JOURNAL_MAX = 20
+/** Combien de lignes par page. L'écran en montre une ; le reste se demande. */
+const JOURNAL_PAGE = 20
 
-/** Ce que MIRA a modifié sur ce compte, du plus récent au plus ancien. */
-export async function journalMeta(userId: string, accountId: string): Promise<ActionVue[]> {
+export type PageJournal = {
+  lignes: ActionVue[]
+  /** Le nombre réel de modifications sur ce compte, toutes pages confondues. */
+  total: number
+  /** Reste-t-il des lignes plus anciennes à demander ? */
+  encore: boolean
+}
+
+/**
+ * Ce que MIRA a modifié sur ce compte, du plus récent au plus ancien.
+ *
+ * Paginé, et le total est rendu à part. Le journal s'arrêtait à vingt lignes sans rien dire :
+ * au-delà, l'écran annonçait « 20 modifications » alors qu'il y en avait cinquante, et les
+ * trente autres n'étaient atteignables par aucun chemin. C'est une faute particulière dans
+ * un journal — sa raison d'être est de répondre « qu'est-ce qui a été changé sur mon compte »,
+ * et un journal qui répond à moitié en affirmant répondre entièrement est pire qu'un journal
+ * absent : on cesse de chercher.
+ *
+ * `avant` prend la date de la dernière ligne reçue plutôt qu'un numéro de page. Un décalage
+ * se déplacerait à chaque modification écrite pendant la lecture, et on sauterait une ligne
+ * ou on la verrait deux fois — sur un journal, c'est précisément ce qu'on ne peut pas se
+ * permettre.
+ */
+export async function journalMeta(
+  userId: string,
+  accountId: string,
+  options: { avant?: Date } = {},
+): Promise<PageJournal> {
+  const total = await withUserScope(userId, (tx) =>
+    tx.adsAction.count({ where: { userId, accountId } }),
+  )
+
   const lignes = await withUserScope(userId, (tx) =>
     tx.adsAction.findMany({
-      where: { userId, accountId },
+      where: {
+        userId,
+        accountId,
+        ...(options.avant === undefined ? {} : { createdAt: { lt: options.avant } }),
+      },
       orderBy: { createdAt: 'desc' },
-      take: JOURNAL_MAX,
+      // Une de plus que la page : c'est ainsi qu'on sait s'il en reste, sans second comptage.
+      take: JOURNAL_PAGE + 1,
       select: {
         id: true,
         quoi: true,
@@ -325,17 +360,45 @@ export async function journalMeta(userId: string, accountId: string): Promise<Ac
     }),
   )
 
+  const encore = lignes.length > JOURNAL_PAGE
+  const page = encore ? lignes.slice(0, JOURNAL_PAGE) : lignes
+
+  /*
+   * Les retours arrière sont cherchés sur tout le compte, et non dans la page lue.
+   *
+   * Une modification défaite il y a deux mois se lirait sinon comme encore active dès qu'on
+   * remonte assez loin, et son bouton « remettre comme avant » reparaîtrait — proposant de
+   * défaire ce qui l'est déjà. Un comptage séparé coûte une requête ; se tromper sur l'état
+   * d'une modification de budget coûte davantage.
+   */
+  const contre = await withUserScope(userId, (tx) =>
+    tx.adsAction.findMany({
+      where: { userId, accountId, annuleId: { not: null } },
+      select: { annuleId: true },
+    }),
+  )
   const defaites = new Set(
-    lignes.map((une) => une.annuleId).filter((un): un is string => un !== null),
+    contre.map((une) => une.annuleId).filter((un): un is string => un !== null),
   )
 
-  return lignes.map((ligne) => {
+  const vues = page.map((ligne) => {
     const avant = (ligne.avant ?? {}) as Record<string, unknown>
     const apres = (ligne.apres ?? {}) as Record<string, unknown>
+    /*
+     * Nommé geste par geste, sans branche fourre-tout.
+     *
+     * La forme précédente disait « pause » ou, dans tous les autres cas, « budget ». Elle
+     * était juste tant qu'il n'existait que ces deux gestes, et elle aurait décrit le
+     * troisième comme un changement de budget sans que rien ne le signale — une ligne fausse
+     * dans le seul endroit qui dit ce qui a été fait sur l'argent de quelqu'un. Un geste
+     * inconnu se nomme donc par son identifiant, ce qui est laid et vrai.
+     */
     const resume =
       ligne.quoi === 'pause'
         ? `${apres.statut === 'ACTIVE' ? 'Diffusion relancée' : 'Mise en pause'} (${apres.niveau ?? 'élément'})`
-        : `Budget quotidien : ${montant(avant.budgetMicros)} → ${montant(apres.budgetMicros)}`
+        : ligne.quoi === 'budget'
+          ? `Budget quotidien : ${montant(avant.budgetMicros)} → ${montant(apres.budgetMicros)}`
+          : `Modification « ${ligne.quoi} »`
 
     return {
       id: ligne.id,
@@ -350,6 +413,8 @@ export async function journalMeta(userId: string, accountId: string): Promise<Ac
         ligne.resultat === 'reussi' && ligne.mode !== 'restauration' && !defaites.has(ligne.id),
     }
   })
+
+  return { lignes: vues, total, encore }
 }
 
 function montant(micros: unknown): string {
@@ -358,4 +423,28 @@ function montant(micros: unknown): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })
+}
+
+/**
+ * Le journal du compte Meta que la personne suit, sans qu'elle ait à le désigner.
+ *
+ * L'identifiant du compte ne vient jamais du navigateur : il est retrouvé ici, à partir de
+ * la personne connectée. C'est la même règle que partout ailleurs sur ce chemin — ce qui
+ * arrive du navigateur désigne une ligne parmi les siennes, il ne choisit pas le compte.
+ *
+ * Aucun compte suivi rend un journal vide plutôt qu'une erreur : demander l'historique quand
+ * on n'a rien connecté n'est pas une faute, c'est une page qu'on ouvre.
+ */
+export async function journalMetaSuivi(
+  userId: string,
+  options: { avant?: Date } = {},
+): Promise<PageJournal> {
+  const compte = await withUserScope(userId, (tx) =>
+    tx.adsAccount.findFirst({
+      where: { userId, plateforme: 'meta-ads', actif: true },
+      select: { id: true },
+    }),
+  )
+  if (compte === null) return { lignes: [], total: 0, encore: false }
+  return journalMeta(userId, compte.id, options)
 }

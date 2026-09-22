@@ -126,8 +126,13 @@ describe('ce que Bruno ne peut pas lire chez Anne', () => {
   })
 
   it('ne voit aucune ligne du journal d’Anne', async () => {
-    expect(await journalMeta(bruno, compteAnne)).toEqual([])
-    expect((await journalMeta(anne, compteAnne)).map((une) => une.id)).toContain(actionAnne)
+    const chezBruno = await journalMeta(bruno, compteAnne)
+    expect(chezBruno.lignes).toEqual([])
+    // Le total lui-même ne fuit pas : il compterait sinon les modifications d'Anne.
+    expect(chezBruno.total).toBe(0)
+
+    const chezAnne = await journalMeta(anne, compteAnne)
+    expect(chezAnne.lignes.map((une) => une.id)).toContain(actionAnne)
   })
 
   it('n’obtient pas le tableau de bord d’Anne', async () => {

@@ -109,6 +109,10 @@ describe('le mode d’un compte', () => {
 
 describe('le journal', () => {
   it('est vide tant que rien n’a été envoyé, et ne lève pas', async () => {
-    expect(await journalMeta(userId, accountId)).toEqual([])
+    expect(await journalMeta(userId, accountId)).toEqual({
+      lignes: [],
+      total: 0,
+      encore: false,
+    })
   })
 })

@@ -244,7 +244,13 @@ export default async function ComptesMetaPage({
         : autoriseMeta({ ...cadre })
 
   const journal =
-    tableau === null ? [] : await journalMeta(user.id, tableau.compte.id).catch(() => [])
+    tableau === null
+      ? { lignes: [], total: 0, encore: false }
+      : await journalMeta(user.id, tableau.compte.id).catch(() => ({
+          lignes: [],
+          total: 0,
+          encore: false,
+        }))
 
   const propositions =
     cadre === null || contexte === null
@@ -373,10 +379,12 @@ export default async function ComptesMetaPage({
                   faire, et avant les chiffres qui en portent déjà l'effet.
                 */}
                 <JournalMeta
-                  initiales={journal.map((une) => ({
+                  initiales={journal.lignes.map((une) => ({
                     ...une,
                     createdAt: une.createdAt.toISOString(),
                   }))}
+                  total={journal.total}
+                  encore={journal.encore}
                 />
 
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
