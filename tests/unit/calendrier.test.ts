@@ -195,7 +195,32 @@ describe('le rythme de publication', () => {
       depuis: JEUDI,
     })
     expect(creneaux).toHaveLength(12)
-    expect(creneaux[0]?.date.getTime()).toBe(creneaux[1]?.date.getTime())
+    /*
+     * Deux articles dans le même mois ne tombent pas le même jour : ils sont espacés de
+     * deux semaines. Ils l'étaient, et c'est ce qui rendait la grille fausse — deux
+     * articles empilés sur une case, le reste du mois vide. Personne n'écrit deux articles
+     * le même jour puis plus rien pendant quatre semaines.
+     */
+    expect(ecart(creneaux.map((c) => c.date.getTime()), 0, 1)).toBe(14)
+    // La période suivante commence bien quatre semaines après la précédente.
+    expect(ecart(creneaux.map((c) => c.date.getTime()), 0, 2)).toBe(28)
+  })
+
+  /**
+   * Le rythme hebdomadaire vu depuis la grille : trois articles par semaine occupent trois
+   * cases distinctes, et toutes tombent dans la même semaine.
+   */
+  it('étale les articles d’une semaine sur des jours différents', () => {
+    const { creneaux } = planifier(beaucoup, [], {
+      parPeriode: 3,
+      periode: 'semaine',
+      periodes: 2,
+      depuis: JEUDI,
+    })
+    const premiere = creneaux.slice(0, 3).map((c) => c.date.getDate())
+    expect(new Set(premiere).size).toBe(3)
+    // Lundi 21, mercredi 23, samedi 26 : trois jours de la même semaine.
+    expect(premiere).toEqual([21, 23, 26])
   })
 
   it('garde les semaines collées quand on publie à la semaine', () => {

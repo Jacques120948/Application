@@ -90,7 +90,15 @@ export type Creneau = {
    * deux cas on ne sait pas, et on ne prétend pas savoir.
    */
   langue: string | null
-  /** Le lundi de cette semaine-là. */
+  /**
+   * Le jour prévu pour cet article.
+   *
+   * Les créneaux d'une même période sont étalés sur ses jours plutôt que posés tous au
+   * lundi : trois articles par semaine empilés sur la même case rendaient le calendrier
+   * illisible, et surtout faux — personne n'écrit trois articles le même lundi. Un par
+   * semaine tombe le lundi, deux le lundi et le vendredi, trois le lundi, le mercredi et
+   * le samedi.
+   */
   date: Date
   requete: string
   impressions: number
@@ -184,6 +192,20 @@ function lundi(depuis: Date, rang: number): Date {
 }
 
 /**
+ * Le décalage, en jours, du n-ième article d'une période.
+ *
+ * Les articles d'une même période étaient tous datés de son premier jour. Sur une liste
+ * cela se voyait à peine ; sur une grille, trois articles s'empilaient dans la case du
+ * lundi et les six autres jours restaient vides — un calendrier qui dit le contraire de ce
+ * qu'on en attend. La division répartit : trois par semaine tombent le lundi, le mercredi
+ * et le samedi, deux par mois le premier jour et deux semaines plus tard.
+ */
+export function decalageDansLaPeriode(rang: number, parPeriode: number, joursPeriode: number): number {
+  if (parPeriode <= 1) return 0
+  return Math.round((rang * joursPeriode) / parPeriode)
+}
+
+/**
  * Le plan de rédaction, à partir des requêtes mesurées.
  *
  * Séparée de la lecture pour être vérifiable sans réseau : c'est ici que se joue l'ordre,
@@ -219,14 +241,21 @@ export function planifier(
     .slice(0, options.parPeriode * options.periodes)
 
   const semainesParPeriode = options.periode === 'mois' ? 4 : 1
+  const joursPeriode = semainesParPeriode * 7
   const creneaux = candidates.map((ligne, rang) => {
     const semaine = Math.floor(rang / options.parPeriode) + 1
     const proche = ligne.position < PAGE_DEUX.bas
     const page = options.pages?.get(ligne.cle)
+    const debut = lundi(depuis, (semaine - 1) * semainesParPeriode + 1)
+    const date = new Date(debut)
+    date.setDate(
+      date.getDate() +
+        decalageDansLaPeriode(rang % options.parPeriode, options.parPeriode, joursPeriode),
+    )
     return {
       semaine,
       langue: page === undefined ? null : langueDuChemin(page),
-      date: lundi(depuis, (semaine - 1) * semainesParPeriode + 1),
+      date,
       requete: ligne.cle,
       intention: classer(ligne.cle),
       impressions: ligne.impressions,
@@ -348,4 +377,106 @@ export async function lireCalendrier(
     ecrits,
     redaction,
   }
+}
+
+// ─────────────────────────── La grille d'un mois ─────────────────────────────
+
+/**
+ * Une case du calendrier : un jour, et ce qui s'y trouve.
+ *
+ * `dansLeMois` est faux pour les jours des mois voisins qui complètent la première et la
+ * dernière semaine. Ils sont affichés plutôt qu'omis : une grille à trous se lit mal, et
+ * un lundi qui commence au milieu de la ligne fait chercher où l'on est.
+ */
+export type CaseCalendrier = {
+  date: Date
+  dansLeMois: boolean
+  /** Les articles écrits ce jour-là. */
+  ecrits: ArticleEcrit[]
+  /** Les sujets prévus ce jour-là. */
+  prevus: Creneau[]
+}
+
+/** Le même jour, au sens du calendrier : on compare des dates, pas des instants. */
+function memeJour(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+/** Le lundi de la semaine qui contient cette date. */
+function lundiDe(date: Date): Date {
+  const jour = new Date(date)
+  jour.setHours(0, 0, 0, 0)
+  // getDay() rend 0 pour dimanche, qui en Suisse termine la semaine et ne la commence pas.
+  const recul = jour.getDay() === 0 ? 6 : jour.getDay() - 1
+  jour.setDate(jour.getDate() - recul)
+  return jour
+}
+
+/**
+ * La grille d'un mois, semaine par semaine, du lundi au dimanche.
+ *
+ * Pure, et c'est ce qui permet de l'éprouver sans base ni réseau. Un calendrier est une
+ * affaire de découpage et de bornes — le mois qui commence un dimanche, celui qui tient
+ * sur six semaines, le changement d'heure — et aucune de ces erreurs ne se voit sur une
+ * capture d'écran : on lit une grille plausible, avec un article sur la mauvaise case.
+ *
+ * La semaine commence le lundi parce que c'est ainsi qu'on lit une semaine ici, et parce
+ * que le plan de rédaction pose son premier article ce jour-là.
+ */
+export function grilleDuMois(
+  mois: Date,
+  ecrits: readonly ArticleEcrit[],
+  creneaux: readonly Creneau[],
+): CaseCalendrier[][] {
+  const premier = new Date(mois.getFullYear(), mois.getMonth(), 1)
+  const dernier = new Date(mois.getFullYear(), mois.getMonth() + 1, 0)
+
+  const semaines: CaseCalendrier[][] = []
+  const curseur = lundiDe(premier)
+  /*
+   * On avance jusqu'à avoir dépassé le dernier jour du mois, puis on termine la semaine
+   * en cours. Un mois qui commence un dimanche et en compte trente et un occupe six
+   * lignes : compter les semaines à l'avance se trompe une fois par an, et la case perdue
+   * est un article qui disparaît.
+   */
+  while (curseur <= dernier || curseur.getDay() !== 1) {
+    const semaine: CaseCalendrier[] = []
+    for (let index = 0; index < 7; index += 1) {
+      const date = new Date(curseur)
+      semaine.push({
+        date,
+        dansLeMois: date.getMonth() === mois.getMonth(),
+        ecrits: ecrits.filter((article) => memeJour(article.date, date)),
+        prevus: creneaux.filter((creneau) => memeJour(creneau.date, date)),
+      })
+      curseur.setDate(curseur.getDate() + 1)
+    }
+    semaines.push(semaine)
+    if (semaines.length >= 6) break
+  }
+  return semaines
+}
+
+/**
+ * Les mois qu'il y a lieu de pouvoir ouvrir, du plus ancien au plus récent.
+ *
+ * Ni plus ni moins : proposer un mois vide donne une flèche qui mène à rien, et n'en
+ * proposer aucun enferme dans le mois courant alors qu'un article a été écrit le mois
+ * dernier. Le mois courant y figure toujours, même vide — c'est celui qu'on ouvre.
+ */
+export function moisDisponibles(
+  ecrits: readonly ArticleEcrit[],
+  creneaux: readonly Creneau[],
+  maintenant: Date = new Date(),
+): string[] {
+  const cle = (date: Date): string =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+  const tous = new Set<string>([cle(maintenant)])
+  for (const article of ecrits) tous.add(cle(article.date))
+  for (const creneau of creneaux) tous.add(cle(creneau.date))
+  return [...tous].sort()
 }
