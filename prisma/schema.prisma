@@ -2154,10 +2154,28 @@ model AdsRecommandation {
   explication String @default("")
   /// L'action proposée, sous une forme que le serveur sait exécuter. Jamais du texte libre.
   action      Json   @default("{}")
+
+  /// campagne | ensemble | annonce — l'étage réellement visé.
+  ///
+  /// Chez Google, une recommandation porte sur une campagne. Chez Meta, le budget vit sur
+  /// l'ensemble et la fatigue sur l'annonce : proposer une pause de campagne quand une seule
+  /// annonce s'essouffle éteindrait aussi ce qui marche.
+  niveau         String @default("campagne")
+  /// Le nom de l'objet visé, tel qu'il s'affiche. Rafraîchi avec le reste du constat : le
+  /// titre le porte déjà, et le figer ici ferait dire deux noms différents à la même ligne.
+  cible          String @default("")
+  /// Son identifiant interne. C'est lui que portera l'action, jamais le nom.
+  cibleId        String @default("")
+  /// Le mécanisme : pourquoi cela se produit. Écrit par le code, pas par un modèle.
+  pourquoi       String @default("")
+  /// Ce qu'il arrive si l'on ne fait rien. Jamais une promesse chiffrée.
+  consequence    String @default("")
+  /// Ce qu'on propose, en français. L'action exécutable reste dans `action`.
+  recommandation String @default("")
   /// faible | moyen | eleve
-  risque      String @default("faible")
+  risque         String @default("faible")
   /// ouverte | appliquee | ignoree | perimee
-  etat        String @default("ouverte")
+  etat           String @default("ouverte")
 
   createdAt DateTime  @default(now())
   closedAt  DateTime?

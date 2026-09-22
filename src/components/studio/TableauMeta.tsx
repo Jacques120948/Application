@@ -1,4 +1,3 @@
-import type { ConstatMeta, Priorite } from '@/server/ads/regles-meta'
 import type { IndicateursMeta, LigneMeta, Verdict, VueMeta } from '@/server/ads/tableau-meta'
 
 /**
@@ -201,126 +200,6 @@ function Niveau({
   )
 }
 
-/** La couleur d'une priorité. Même vocabulaire que les pastilles, autre échelle. */
-const PRIORITES: Record<Priorite, { point: string; fond: string; nom: string }> = {
-  urgent: {
-    point: 'var(--color-critical)',
-    fond: 'var(--color-critical-soft)',
-    nom: 'À traiter',
-  },
-  surveiller: {
-    point: 'var(--color-caution)',
-    fond: 'var(--color-caution-soft)',
-    nom: 'À surveiller',
-  },
-  opportunite: {
-    point: 'var(--color-positive)',
-    fond: 'var(--color-positive-soft)',
-    nom: 'Opportunité',
-  },
-  information: {
-    point: 'var(--color-brand)',
-    fond: 'var(--color-brand-soft)',
-    nom: 'Pour information',
-  },
-}
-
-/**
- * Ce que MIRA a trouvé, avant tout le reste.
- *
- * C'est la seule chose qu'on doit voir sans chercher. Un tableau de bord qui commence par
- * des totaux répond à « combien » ; celui-ci répond à « et alors ? », qui est la question
- * qu'on se pose en l'ouvrant.
- *
- * Chaque constat tient en quatre temps, et la séparation vient de l'usage. « Votre fréquence
- * est à 4,2 » ne fait agir personne ; « votre fréquence est à 4,2, donc les mêmes personnes
- * voient la même image quatre fois, donc votre coût par vente va monter, donc changez de
- * visuel » fait agir. Les deux temps du milieu sont repliés : on les ouvre quand on doute,
- * pas quand on a déjà compris.
- *
- * Le silence est dit en toutes lettres : un bloc absent se prend pour un écran qui n'a pas
- * fini de charger.
- */
-function AFaire({ constats }: { constats: ConstatMeta[] }) {
-  if (constats.length === 0) {
-    return (
-      <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-positive-soft)] p-5">
-        <h2 className="m-0 text-base font-semibold">Rien ne réclame votre attention</h2>
-        <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-          Sur cette période, aucune de vos campagnes, de vos ensembles ni de vos annonces ne
-          déclenche l’une des règles de MIRA. Les chiffres détaillés restent en dessous.
-        </p>
-      </section>
-    )
-  }
-
-  const urgents = constats.filter((un) => un.priorite === 'urgent').length
-
-  return (
-    <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="m-0 text-base font-semibold">Ce que MIRA a trouvé</h2>
-        <span className="text-xs text-[var(--color-ink-faint)]">
-          {constats.length} constat{constats.length > 1 ? 's' : ''}
-          {urgents === 0 ? '' : ` · ${urgents} à traiter`}
-        </span>
-      </div>
-
-      <ul className="mt-4 mb-0 grid list-none gap-3 p-0">
-        {constats.map((constat) => (
-          <li
-            key={`${constat.regle}-${constat.cibleId}`}
-            className="rounded-[var(--radius-card)] border border-[var(--color-line)] p-4"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className="rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-medium"
-                style={{
-                  backgroundColor: PRIORITES[constat.priorite].fond,
-                  color: PRIORITES[constat.priorite].point,
-                }}
-              >
-                {PRIORITES[constat.priorite].nom}
-              </span>
-              <span className="text-xs text-[var(--color-ink-faint)] capitalize">
-                {constat.niveau}
-              </span>
-            </div>
-
-            <p className="mt-2 mb-0 text-sm font-medium break-words">{constat.titre}</p>
-            <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {constat.observation}
-            </p>
-
-            <p className="mt-3 mb-0 text-sm leading-relaxed">
-              <span className="font-medium">Ce que je propose : </span>
-              {constat.recommandation}
-            </p>
-
-            <details className="mt-2">
-              <summary className="cursor-pointer list-none text-xs text-[var(--color-ink-soft)]">
-                <span className="underline underline-offset-4">Pourquoi, et ce qui arrive sinon</span>
-              </summary>
-              <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                {constat.pourquoi}
-              </p>
-              <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                {constat.consequence}
-              </p>
-            </details>
-          </li>
-        ))}
-      </ul>
-
-      <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-        Ces constats sont produits par des règles écrites, pas par un modèle : chacun porte
-        les chiffres qui l’ont déclenché, et se vérifie. Aucun n’est appliqué — MIRA propose,
-        c’est vous qui décidez.
-      </p>
-    </section>
-  )
-}
-
 function Chiffres({ total, ecarts, devise }: {
   total: IndicateursMeta
   ecarts: VueMeta['ecarts']
@@ -392,18 +271,11 @@ function Chiffres({ total, ecarts, devise }: {
  * L'ordre inverse — trois tableaux à lire de haut en bas, la ligne qui compte quelque part
  * dedans — est celui de la première version, et c'est ce qu'on lui a reproché à raison.
  */
-export function TableauMeta({ vue, constats }: { vue: VueMeta; constats: ConstatMeta[] }) {
-  /*
-   * Les constats arrivent calculés, ils ne sont pas déduits ici. Un composant ne peut pas
-   * appeler le serveur — il n'en importe que des types — et c'est une bonne barrière : des
-   * règles qui décident d'une dépense se testent sans monter d'écran.
-   */
+export function TableauMeta({ vue }: { vue: VueMeta }) {
   const devise = vue.compte.devise === '' ? '' : vue.compte.devise
 
   return (
     <div className="grid min-w-0 gap-8">
-      <AFaire constats={constats} />
-
       <div className="min-w-0">
         <h2 className="m-0 mb-3 text-base font-semibold">Où vous en êtes</h2>
         <Chiffres total={vue.total} ecarts={vue.ecarts} devise={devise} />

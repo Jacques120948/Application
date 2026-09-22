@@ -1,6 +1,6 @@
 import { compteActif } from './comptes'
 import { metaAds } from './meta-ads'
-import { evaluerMeta } from './regles-meta'
+import { lireRecommandationsMeta } from './recommandations-meta'
 import { lireTableauMeta, type LigneMeta } from './tableau-meta'
 import type { ProfilAds } from './profil'
 
@@ -138,26 +138,38 @@ export async function contexteMeta(userId: string): Promise<string | null> {
   ]
 
   /*
-   * Les constats, tels que les règles les ont écrits. MIRA les explique et les met en
-   * phrases ; elle n'en invente pas d'autres, et la consigne le dit en toutes lettres — un
-   * modèle à qui l'on montre une liste de diagnostics en ajoute volontiers un neuvième, qui
-   * aura l'air des huit premiers sans reposer sur quoi que ce soit.
+   * Les constats sont relus, pas recalculés — et c'est la même liste que celle de l'écran.
+   *
+   * Les recalculer ici donnerait à MIRA une liste à elle : elle parlerait d'un problème que
+   * la page ne montre pas, ou rappellerait celui que la personne a écarté la veille. Or ce
+   * qu'on attend d'elle est justement de commenter ce qu'on a sous les yeux.
+   *
+   * Elle les explique et les met en phrases ; elle n'en invente pas d'autres, et la consigne
+   * le dit en toutes lettres — un modèle à qui l'on montre une liste de diagnostics en
+   * ajoute volontiers un neuvième, qui aura l'air des huit premiers sans reposer sur quoi
+   * que ce soit.
    */
-  const constats = evaluerMeta({ devise, profil: vue.profil, vue }).slice(0, CONSTATS_MAX)
+  const constats = (await lireRecommandationsMeta(userId, compte.id)).slice(0, CONSTATS_MAX)
   if (constats.length === 0) {
     lignes.push(
-      'CONSTATS D’EVOLIIA : aucun. Aucune règle ne s’est déclenchée sur cette période. Ne' +
-        ' fabrique pas de problème pour avoir quelque chose à dire.',
+      'CONSTATS D’EVOLIIA : aucun. Aucune règle ne s’est déclenchée.' +
+        ' Ne fabrique pas de problème pour avoir quelque chose à dire.',
     )
   } else {
     lignes.push(
       'CONSTATS D’EVOLIIA (produits par des règles écrites, pas par un modèle — tu les' +
-        ' expliques, tu n’en ajoutes aucun) :',
+        ' expliques, tu n’en ajoutes aucun). Ils sont jugés sur 14 jours, et non sur la' +
+        ' période des chiffres ci-dessus : ne rapporte pas les uns aux autres. Ceux que la' +
+        ' personne a écartés n’y figurent pas, et tu ne dois pas les remettre sur la table :',
     )
     for (const constat of constats) {
+      const age =
+        constat.age === 0
+          ? 'repéré aujourd’hui'
+          : `ouvert depuis ${constat.age} jour${constat.age > 1 ? 's' : ''}`
       lignes.push(
-        `- [${constat.priorite}] ${constat.niveau} « ${constat.cible} » : ${constat.observation}` +
-          ` Proposition d’Evoliia : ${constat.recommandation}`,
+        `- [${constat.priorite}] ${constat.niveau} « ${constat.cible} » (${age}) :` +
+          ` ${constat.observation} Proposition d’Evoliia : ${constat.recommandation}`,
       )
     }
   }

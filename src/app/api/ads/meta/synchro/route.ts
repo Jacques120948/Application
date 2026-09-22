@@ -3,6 +3,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import { requireFeature } from '@/server/billing/features'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { synchroniserCompteMeta } from '@/server/ads/synchro-meta'
+import { evaluerCompteMeta } from '@/server/ads/recommandations-meta'
 import { assertSameOrigin, fail, ok } from '@/server/http/respond'
 
 /**
@@ -35,6 +36,13 @@ export async function POST(request: Request) {
     requireFeature(await getEntitlements(user.id), 'visibility_ads_agent')
 
     const issue = await synchroniserCompteMeta(user.id)
+    /*
+     * Les règles repassent dans la foulée, sinon l'écran s'ouvrirait sur les constats
+     * d'avant la lecture — ou sur aucun, la toute première fois. Gratuit : des comparaisons
+     * de nombres sur ce qui vient d'être écrit. Et sans conséquence si cela échoue : la
+     * lecture, elle, a bien eu lieu, et c'est ce que la personne a demandé.
+     */
+    if (issue.ok) await evaluerCompteMeta(user.id).catch(() => null)
     return ok(issue.ok ? { ok: true, bilan: issue.bilan } : { ok: false, raison: issue.raison })
   } catch (error) {
     return fail(error)

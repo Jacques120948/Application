@@ -17,6 +17,7 @@ import { synchroniserTous } from '@/server/ads/synchro'
 import { synchroniserTousMeta } from '@/server/ads/synchro-meta'
 import { synchroniserCreatifs } from '@/server/ads/creatif'
 import { evaluerTous } from '@/server/ads/recommandations'
+import { evaluerTousMeta } from '@/server/ads/recommandations-meta'
 import { recompterConnecteurs } from '@/server/admin/compteurs'
 
 /**
@@ -651,6 +652,17 @@ export async function tournerQuotidien(
     if (regles !== null) {
       bilan.recommandationsAds = regles.ouvertes
       bilan.echecsAds += regles.echecs
+    }
+
+    /*
+     * Celles de MIRA, dans le même compteur et pour la même raison que la lecture : un
+     * constat publicitaire est un constat publicitaire. Elles passent après la tournée Meta,
+     * sur les chiffres qui viennent d'être écrits, et ne coûtent rien de plus.
+     */
+    const reglesMeta = await evaluerTousMeta().catch(() => null)
+    if (reglesMeta !== null) {
+      bilan.recommandationsAds += reglesMeta.ouvertes
+      bilan.echecsAds += reglesMeta.echecs
     }
 
     /*

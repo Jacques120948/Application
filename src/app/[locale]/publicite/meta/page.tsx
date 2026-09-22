@@ -15,11 +15,12 @@ import {
   PERIODES_META,
   synthese,
 } from '@/server/ads/tableau-meta'
-import { evaluerMeta } from '@/server/ads/regles-meta'
+import { lireRecommandationsMeta } from '@/server/ads/recommandations-meta'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
 import { LireMeta } from '@/components/studio/LireMeta'
+import { ConstatsMeta } from '@/components/studio/ConstatsMeta'
 import { TableauMeta } from '@/components/studio/TableauMeta'
 import { LinkButton } from '@/components/ui'
 
@@ -163,19 +164,13 @@ export default async function ComptesMetaPage({
       : await lireTableauMeta(user.id, jours).catch(() => null)
 
   /*
-   * Les constats sont calculés à l'affichage et non conservés : ce sont des comparaisons de
-   * nombres sur ce qui est déjà en base, sans appel chez Meta ni crédit dépensé. Les ranger
-   * demanderait de les fermer, de les rouvrir et de les périmer — la mécanique de Naya, qui
-   * a son sens quand on peut les écarter, et qui n'en a pas encore ici.
+   * Les constats sont relus, pas recalculés. Ils ont été rangés par la lecture des chiffres
+   * et par la tournée nocturne, ce qui leur donne trois choses qu'un calcul à l'affichage ne
+   * peut pas avoir : un âge, une mémoire de ce qui a été écarté, et une indépendance vis-à-vis
+   * de la période cochée plus bas — les règles jugent sur quatorze jours, toujours les mêmes.
    */
   const constats =
-    tableau === null
-      ? []
-      : evaluerMeta({
-          devise: tableau.compte.devise,
-          profil: tableau.profil,
-          vue: tableau,
-        })
+    tableau === null ? [] : await lireRecommandationsMeta(user.id, tableau.compte.id)
 
   const objectifsPoses =
     tableau !== null && (tableau.profil.roasCible > 0 || tableau.profil.cpaCible > 0)
@@ -270,6 +265,14 @@ export default async function ComptesMetaPage({
 
             {tableau === null ? null : (
               <>
+                {/*
+                  Ce qu'il faut faire avant l'état des lieux : c'est la question qu'on se pose
+                  en ouvrant la page, pas celle qu'on se pose après avoir lu trois tableaux.
+                  Le sélecteur de période est plus bas parce qu'il ne commande que le tableau —
+                  les constats, eux, sont jugés sur une fenêtre fixe.
+                */}
+                <ConstatsMeta initiaux={constats} />
+
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <p className="m-0 text-sm text-[var(--color-ink-soft)]">
                     {actif?.nom} · {NOM_PERIODE[jours] ?? `${jours} jours`}
@@ -312,7 +315,7 @@ export default async function ComptesMetaPage({
                   </div>
                 )}
 
-                <TableauMeta vue={tableau} constats={constats} />
+                <TableauMeta vue={tableau} />
               </>
             )}
 
