@@ -295,7 +295,15 @@ export async function evaluerCompte(
    */
   const termes = await termesDuCompte(userId, compte.id)
 
-  const constats = evaluer({ devise: compte.devise, profil, lecture, longue, courte, termes })
+  const constats = evaluer({
+    devise: compte.devise,
+    profil,
+    lecture,
+    longue,
+    courte,
+    termes,
+    conversionsActives: compte.conversionsActives,
+  })
   const attendus = new Map(constats.map((constat) => [cle(constat.regle, constat.campagneId), constat]))
 
   const existantes = await withUserScope(userId, (tx) =>

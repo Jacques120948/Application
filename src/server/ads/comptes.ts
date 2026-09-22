@@ -47,6 +47,13 @@ export type CompteRelie = {
   /** Dernière lecture du créatif. Séparée : elle n'a pas le rythme des dépenses. */
   creaAt: Date | null
   /**
+   * Combien d'actions de conversion comptent réellement : activées ET comptées.
+   *
+   * -1 quand rien n'a encore été lu, ce qui n'est pas 0. La distinction porte une règle
+   * entière : sur -1 elle se tait, sur 0 elle alerte.
+   */
+  conversionsActives: number
+  /**
    * Le détail du compte a pu être lu chez Google.
    *
    * Dérivé de la devise plutôt que conservé : Google la rend toujours pour un compte
@@ -77,6 +84,7 @@ function vue(ligne: {
   mode: string
   synchroAt: Date | null
   creaAt: Date | null
+  conversionsActives: number
 }): CompteRelie {
   return {
     id: ligne.id,
@@ -86,6 +94,7 @@ function vue(ligne: {
     fuseau: ligne.fuseau,
     gestionnaire: ligne.gestionnaire,
     actif: ligne.actif,
+    conversionsActives: ligne.conversionsActives,
     mode: ligne.mode,
     synchroAt: ligne.synchroAt,
     creaAt: ligne.creaAt,

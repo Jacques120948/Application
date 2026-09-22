@@ -1087,6 +1087,36 @@ async function lireLanguesDesCampagnes(
   return { ok: true, valeur: langues }
 }
 
+/**
+ * Combien d'actions de conversion comptent réellement dans ce compte.
+ *
+ * Deux conditions, et c'est toute la subtilité : activée **et** comptée dans la colonne
+ * « Conversions ». Un compte peut porter cent actions activées mais secondaires — les restes
+ * d'un outil tiers branché puis abandonné — et n'avoir aucune vente comptée. Ne regarder que
+ * le statut dirait alors que le suivi fonctionne, ce qui est précisément l'erreur qui laisse
+ * quelqu'un dépenser à l'aveugle pendant des mois.
+ *
+ * `primary_for_goal` est le champ qui fait la différence. C'est lui que Google coche quand
+ * une action alimente les objectifs du compte, donc les chiffres sur lesquels Naya se
+ * prononce.
+ */
+async function lireActionsConversion(acces: AccesAds): Promise<Lecture<number>> {
+  const lecture = await interroger(
+    acces,
+    `SELECT conversion_action.id, conversion_action.status, conversion_action.primary_for_goal
+     FROM conversion_action
+     WHERE conversion_action.status = 'ENABLED'`,
+  )
+  if (!lecture.ok) return lecture
+
+  let comptees = 0
+  for (const ligne of lecture.valeur) {
+    const action = (ligne.conversionAction ?? {}) as Record<string, unknown>
+    if (action.primaryForGoal === true) comptees += 1
+  }
+  return { ok: true, valeur: comptees }
+}
+
 export const googleAds: AdPlatformProvider = {
   id: 'google-ads',
   nom: 'Google Ads',
@@ -1105,4 +1135,5 @@ export const googleAds: AdPlatformProvider = {
   metriquesDeMotsCles,
   lireMotsClesDuGroupe,
   lireLanguesDesCampagnes,
+  lireActionsConversion,
 }

@@ -299,4 +299,13 @@ export type AdPlatformProvider = {
    * exactement la faute qu'on cherche à éviter.
    */
   lireLanguesDesCampagnes: (acces: AccesAds) => Promise<Lecture<Record<string, string>>>
+
+  /**
+   * Combien d'actions de conversion comptent réellement — activées **et** comptées.
+   *
+   * La nuance décide de tout : un compte peut porter cent actions activées mais secondaires,
+   * restes d'un outil tiers, et n'avoir aucune vente comptée. Ne regarder que le statut
+   * ferait croire que le suivi fonctionne, ce qui laisse dépenser à l'aveugle.
+   */
+  lireActionsConversion: (acces: AccesAds) => Promise<Lecture<number>>
 }

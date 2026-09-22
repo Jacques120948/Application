@@ -59,6 +59,7 @@ function tableau(jours: number, campagnes: CampagneVue[], total?: Indicateurs): 
       nom: 'Cap Nature',
       devise: DEVISE,
       fuseau: 'Europe/Zurich',
+      conversionsActives: -1,
       gestionnaire: false,
       actif: true,
       mode: 'lecture',
@@ -94,6 +95,11 @@ function contexte(
     longue,
     courte: tableau(14, courtes ?? campagnes),
     termes,
+    /*
+     * -1 par défaut : « jamais lu ». La règle des conversions muettes se tait alors, ce qui
+     * évite qu'elle vienne parasiter tous les autres tests du fichier.
+     */
+    conversionsActives: -1,
   }
 }
 
@@ -364,5 +370,65 @@ describe('les termes qui coûtent sans vendre', () => {
     const profil = { panierMoyen: 70, margePourcent: 60 }
     expect(parasites([terme('bougie ikea', 50)], profil)).toHaveLength(1)
     expect(parasites([terme('bougie ikea', 30)], profil)).toHaveLength(0)
+  })
+})
+
+describe('les conversions muettes', () => {
+  /** Une campagne qui dépense et n'enregistre rien. */
+  const DEPENSE = campagne({ id: 'c1', nom: 'Recherche', actuel: chiffres(300, 0, 0) })
+
+  function muettes(conversionsActives: number, campagnes = [DEPENSE]) {
+    const base = contexte(campagnes)
+    return evaluer({ ...base, conversionsActives }).filter(
+      (constat) => constat.regle === 'ads.conversions.muettes',
+    )
+  }
+
+  it('se tait tant que rien n’a été lu', () => {
+    /*
+     * -1 n'est pas 0. Une alerte fondée sur une lecture qui n'a pas eu lieu est pire qu'un
+     * silence : elle envoie chercher une panne qui n'existe peut-être pas.
+     */
+    expect(muettes(-1)).toHaveLength(0)
+  })
+
+  it('alerte quand aucune action n’est comptée', () => {
+    const constats = muettes(0)
+    expect(constats).toHaveLength(1)
+    expect(constats[0]?.priorite).toBe('urgent')
+    expect(constats[0]?.titre).toContain('Aucune vente')
+    expect(constats[0]?.observation).toContain('action principale')
+  })
+
+  it('distingue le suivi absent du suivi qui ne remonte rien', () => {
+    /*
+     * Deux causes, deux gestes. Sans action comptée, il faut en désigner une dans Google
+     * Ads. Avec des actions comptées mais zéro vente, la balise ne se déclenche pas sur la
+     * boutique — ce n'est plus un problème de compte publicitaire.
+     */
+    const constats = muettes(2)
+    expect(constats).toHaveLength(1)
+    expect(constats[0]?.titre).toContain('rien ne remonte')
+    expect(constats[0]?.observation).toContain('confirmation de commande')
+    expect(constats[0]?.donnees.actionsComptees).toBe(2)
+  })
+
+  it('se tait dès qu’une vente est comptée', () => {
+    const vend = campagne({ id: 'c1', nom: 'Recherche', actuel: chiffres(300, 900, 6) })
+    expect(muettes(0, [vend])).toHaveLength(0)
+  })
+
+  it('se tait quand rien n’a été dépensé', () => {
+    // Un compte à l'arrêt n'a pas de problème de mesure : il n'a rien à mesurer.
+    const dort = campagne({ id: 'c1', nom: 'Recherche', actuel: chiffres(0, 0, 0) })
+    expect(muettes(0, [dort])).toHaveLength(0)
+  })
+
+  it('ne propose aucun geste automatique', () => {
+    /*
+     * Poser une balise sur la boutique de quelqu'un, ou désigner l'action qui mesure tout
+     * son compte : deux décisions qui lui appartiennent.
+     */
+    expect(muettes(0)[0]?.action).toEqual({})
   })
 })

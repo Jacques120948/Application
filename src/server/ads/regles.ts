@@ -70,6 +70,13 @@ export type ContexteRegles = {
    * l'argent fuit — une seule requête hors sujet mange la moitié d'une journée.
    */
   termes: TermeVu[]
+  /**
+   * Combien d'actions de conversion comptent réellement dans ce compte.
+   *
+   * -1 : jamais lu. La distinction avec 0 porte une règle entière — sur -1 elle se tait,
+   * parce qu'une alerte fondée sur une lecture qui n'a pas eu lieu est pire qu'un silence.
+   */
+  conversionsActives: number
 }
 
 /** Un terme tapé par quelqu'un, rapporté à la campagne qui l'a payé. */
@@ -467,6 +474,7 @@ const REGLES: ReadonlyArray<(contexte: ContexteRegles) => Constat[]> = [
   deriveCpa,
   dormante,
   termeParasite,
+  conversionsMuettes,
 ]
 
 const RANG: Record<Priorite, number> = {
@@ -474,6 +482,78 @@ const RANG: Record<Priorite, number> = {
   opportunite: 1,
   surveiller: 2,
   information: 3,
+}
+
+/**
+ * Le compte dépense et rien n'est mesuré.
+ *
+ * La règle qui manquait sous toutes les autres. Six des neuf règles de ce fichier se
+ * prononcent sur la rentabilité, et toutes lisent le même chiffre : les conversions. Quand
+ * ce chiffre est zéro parce que rien ne le remonte, elles ne se trompent pas — elles se
+ * taisent, faute de matière — et leur silence ressemble à s'y méprendre à « tout va bien ».
+ * Quelqu'un peut dépenser des mois ainsi, en regardant un tableau qui n'alerte sur rien.
+ *
+ * Deux cas, et ils n'appellent pas le même geste.
+ *
+ * **Aucune action comptée** : le suivi n'existe pas, ou il a été remplacé par des actions
+ * secondaires — les restes d'un outil tiers, typiquement. Il faut en désigner une comme
+ * principale dans Google Ads.
+ *
+ * **Des actions comptées, mais zéro conversion** : le suivi est déclaré et rien ne remonte.
+ * La balise ne se déclenche pas sur la page de confirmation de commande, ou elle a été
+ * retirée du thème. C'est un problème de boutique, pas de compte publicitaire.
+ *
+ * Aucune action proposée : Evoliia ne peut pas créer une action de conversion à la place de
+ * quelqu'un — cela suppose de poser une balise sur son site, ce qu'elle ne fera jamais sans
+ * qu'il l'ait fait lui-même.
+ */
+function conversionsMuettes(contexte: ContexteRegles): Constat[] {
+  // Jamais lu : on se tait. Un zéro qui n'a pas été constaté n'est pas un zéro.
+  if (contexte.conversionsActives < 0) return []
+
+  const total = contexte.longue.total
+  if (total.cout <= 0 || total.conversions > 0) return []
+
+  const absentes = contexte.conversionsActives === 0
+  return [
+    {
+      regle: 'ads.conversions.muettes',
+      campagneId: null,
+      priorite: 'urgent' as const,
+      titre: absentes
+        ? 'Aucune vente n’est comptée dans ce compte'
+        : 'Le suivi est en place, mais rien ne remonte',
+      observation:
+        `Sur ${contexte.longue.jours} jours, ce compte a dépensé` +
+        ` ${argent(total.cout, contexte.devise)} et aucune vente n’a été enregistrée.` +
+        (absentes
+          ? ' Aucune action de conversion n’est comptée dans vos objectifs : les ventes ne' +
+            ' peuvent donc pas remonter, même si elles ont lieu. Dans Google Ads, section' +
+            ' Objectifs, désignez l’action qui suit vos achats comme action principale.' +
+            ' Attention aux actions héritées d’un ancien outil : activées, elles peuvent' +
+            ' rester secondaires et ne rien compter.'
+          : ` ${contexte.conversionsActives} action${contexte.conversionsActives > 1 ? 's' : ''}` +
+            ' de conversion est pourtant comptée dans vos objectifs. Le problème est donc en' +
+            ' amont : la balise ne se déclenche pas sur la page de confirmation de commande.' +
+            ' Vérifiez-la dans votre boutique avant de juger la moindre campagne.') +
+        ' Tant que ce point n’est pas réglé, ni vous ni Naya ne pouvez dire si cette dépense' +
+        ' rapporte quelque chose.',
+      jours: contexte.longue.jours,
+      donnees: {
+        depense: total.cout,
+        clics: total.clics,
+        conversions: 0,
+        actionsComptees: contexte.conversionsActives,
+      },
+      /*
+       * Rien à proposer. Poser une balise sur la boutique de quelqu'un n'est pas un geste
+       * qu'Evoliia fera, et désigner une action principale change la façon dont tout le
+       * compte est mesuré : ce sont deux décisions qui lui appartiennent.
+       */
+      action: {},
+      risque: 'eleve' as const,
+    },
+  ]
 }
 
 /**

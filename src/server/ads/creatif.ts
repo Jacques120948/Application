@@ -257,6 +257,24 @@ export async function synchroniserCreatif(
     })
   }
 
+  /*
+   * Les actions de conversion, lues au même rythme que le reste du créatif : elles changent
+   * rarement, et c'est la donnée sur laquelle repose tout ce que Naya sait dire de la
+   * rentabilité. Son échec laisse le compteur à sa valeur précédente plutôt que de le
+   * remettre à zéro — un zéro faux ferait crier au suivi cassé alors que c'est la lecture
+   * qui a échoué.
+   */
+  const conversions = await googleAds.lireActionsConversion(acces)
+  bilan.appels += 1
+  if (conversions.ok) {
+    await withUserScope(userId, (tx) =>
+      tx.adsAccount.updateMany({
+        where: { id: compte.id, userId },
+        data: { conversionsActives: conversions.valeur },
+      }),
+    )
+  }
+
   const bornes = fenetre(JOURS_TERMES, compte.fuseau, maintenant)
   const termes = await googleAds.lireTermes(acces, bornes.depuis, bornes.jusqua)
   bilan.appels += 1

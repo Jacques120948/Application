@@ -1755,26 +1755,30 @@ model AdsAccount {
   userId String @db.Uuid
 
   /// « google-ads » aujourd'hui ; Meta et Microsoft s'y rangeront.
-  plateforme   String    @default("google-ads")
+  plateforme         String    @default("google-ads")
   /// L'identifiant du compte chez la plateforme. Chez Google : le customer ID sans tirets.
-  compteId     String
-  nom          String    @default("")
+  compteId           String
+  nom                String    @default("")
   /// CHF, EUR, USD… telle que la plateforme la déclare. Jamais déduite.
-  devise       String    @default("")
+  devise             String    @default("")
   /// Le fuseau du compte : c'est lui qui décide où commence une journée de dépense.
-  fuseau       String    @default("")
+  fuseau             String    @default("")
   /// Un compte administrateur ne diffuse pas de publicité : il en gère d'autres.
-  gestionnaire Boolean   @default(false)
+  gestionnaire       Boolean   @default(false)
   /// Celui que Naya lit. On peut en relier plusieurs et n'en suivre qu'un.
-  actif        Boolean   @default(false)
+  actif              Boolean   @default(false)
   /// lecture | assiste. Ce que Naya a le droit de faire ici. « lecture » par défaut : une
   /// autorisation Google donne le droit d'écrire, elle ne dit pas qu'on le souhaite.
-  mode         String    @default("lecture")
+  mode               String    @default("lecture")
   /// Dernière synchronisation réussie, affichée telle quelle.
-  synchroAt    DateTime?
+  synchroAt          DateTime?
+  /// Combien d'actions de conversion sont activées ET comptées dans « Conversions ».
+  /// -1 : jamais lu, ce qui n'est pas 0. Un compte peut porter cent actions activées mais
+  /// secondaires — des restes d'un outil tiers — et n'avoir aucune vente comptée.
+  conversionsActives Int       @default(-1)
   /// Dernière lecture du créatif : annonces, éléments, termes de recherche. Séparée parce
   /// qu'elle n'a pas le même rythme — les dépenses changent chaque nuit, les titres non.
-  creaAt       DateTime?
+  creaAt             DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
