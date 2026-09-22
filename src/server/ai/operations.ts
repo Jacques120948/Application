@@ -19,6 +19,7 @@ import type { PatchOperation } from '@/server/spec/patch'
 import { assembleSpec } from '@/server/spec/assemble'
 import type Anthropic from '@anthropic-ai/sdk'
 import { classer } from '@/server/audit/intentions'
+import type { VisibilityAgentId } from '@/server/agents/visibility'
 import { getAnthropic, getAnthropicWithKey, isAiAvailable } from './client'
 import { documentBlocks, type AttachedDocument } from './documents'
 import { GENERATION_STEPS, OPERATION_PROFILES, type ModelId, type TokenUsage } from './routing'
@@ -50,6 +51,7 @@ import {
   NEO_SYSTEM,
   GIA_SYSTEM,
   MILO_SYSTEM,
+  MIRA_SYSTEM,
   NAYA_SYSTEM,
 } from './prompts'
 import {
@@ -1534,6 +1536,7 @@ const VISIBILITE_SYSTEMS = {
   geo: GIA_SYSTEM,
   content: MILO_SYSTEM,
   ads: NAYA_SYSTEM,
+  meta: MIRA_SYSTEM,
 } as const
 
 /**
@@ -1729,7 +1732,7 @@ export async function writePoint(params: {
 
 export async function askVisibilityAgent(params: {
   userId: string
-  agent: 'audit' | 'seo' | 'geo' | 'content' | 'ads'
+  agent: VisibilityAgentId
   question: string
   facts: string
   teamMemory: string | null

@@ -206,6 +206,22 @@ export const FEATURES: readonly Feature[] = [
       'Les questions de publicité en ligne : à quoi servent le ROAS, le CPA ou le CTR, et ce qu’ils disent de votre activité. La lecture de vos campagnes Google Ads arrive ensuite.',
     status: 'live',
   },
+  {
+    id: 'visibility_meta_agent',
+    group: 'equipe',
+    label: 'MIRA — Meta Ads',
+    /*
+     * Même discipline que pour Naya : la fiche promet ce qui existe, et rien de plus. La
+     * connexion Meta n'est pas construite, et les colonnes qui l'accueilleront viennent
+     * seulement d'être posées. Annoncer « vos campagnes Facebook lues et expliquées »
+     * ferait espérer un tableau de bord à quelqu'un qui trouverait une conversation — la
+     * façon la plus sûre de décevoir quelqu'un qui vient de payer. La phrase s'élargira
+     * quand la connexion existera, pas avant.
+     */
+    summary:
+      'Les questions de publicité Facebook et Instagram : ce que veulent dire le ROAS, le CPM ou la fréquence, et ce qu’ils disent de vos campagnes. La lecture de vos comptes Meta arrive ensuite.',
+    status: 'prevu',
+  },
 ]
 
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)

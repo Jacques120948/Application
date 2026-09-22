@@ -31,7 +31,7 @@
  * spécialiste ajouté plus tard sans portrait.
  */
 
-export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'ads'] as const
+export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'ads', 'meta'] as const
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
 
@@ -53,7 +53,7 @@ export type VisibilityAgent = {
    */
   avatar?: string
   /** Jeton de couleur de sa pastille. Fond tendre, lettre sombre : lisible partout. */
-  tint: 'brand' | 'accent' | 'warm' | 'night' | 'sun'
+  tint: 'brand' | 'accent' | 'warm' | 'night' | 'sun' | 'sea'
   /**
    * Ce que ce spécialiste fait déjà, aujourd'hui, dans le produit livré.
    *
@@ -167,6 +167,45 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Comment vont mes campagnes aujourd’hui ?',
       'Quelle campagne dépense trop ?',
       'Où puis-je augmenter le budget ?',
+    ],
+  },
+  /*
+   * MIRA, et pourquoi elle est distincte de Naya plutôt que d'être son second onglet.
+   *
+   * Les deux achètent de l'audience, et là s'arrête la ressemblance. Chez Google, on paie
+   * une intention déjà formée : quelqu'un a tapé « bougie citrine », il cherche. Chez Meta,
+   * on paie une interruption : personne ne cherchait rien, et c'est la créative qui doit
+   * créer l'envie. D'où des métiers différents — Naya raisonne en mots-clés et en termes de
+   * recherche, MIRA en visuels, en audiences et en fatigue publicitaire, une notion qui
+   * n'existe pas chez Google parce qu'une requête ne se lasse pas.
+   *
+   * Les fondre en un seul « agent publicité » aurait donné un généraliste qui conseille la
+   * moyenne de deux métiers, c'est-à-dire le mauvais conseil deux fois.
+   *
+   * Elle hérite en revanche de tout ce que Naya a coûté à construire : les mêmes garde-fous,
+   * le même journal avec sa valeur d'avant, le même refus de confier un calcul d'argent à un
+   * modèle. Ce sont les règles du produit, pas celles de Google.
+   */
+  {
+    id: 'meta',
+    name: 'MIRA',
+    role: 'Meta Ads',
+    summary:
+      'Elle analyse vos campagnes Facebook et Instagram, détecte les opportunités et vous aide à améliorer vos performances publicitaires.',
+    handles: ['Campagnes', 'Ensembles', 'Créatives', 'Audiences', 'ROAS et CPA'],
+    feature: 'visibility_meta_agent',
+    atWork: null,
+    /*
+     * Aucun portrait déclaré, et c'est volontaire tant que le fichier n'existe pas : une
+     * adresse qui pointe vers un fichier manquant n'affiche pas un repli, elle affiche une
+     * image cassée. La pastille à initiale prend le relais, et la ligne `avatar` s'ajoutera
+     * le jour où `scripts/avatars-equipe.ts` aura produit `mira.webp` comme pour les autres.
+     */
+    tint: 'sea',
+    starters: [
+      'Pourquoi mon ROAS baisse ?',
+      'Quelle publicité fonctionne le mieux ?',
+      'Où est-ce que je perds de l’argent ?',
     ],
   },
 ]

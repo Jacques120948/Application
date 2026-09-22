@@ -106,6 +106,7 @@ model User {
   adsRecommandations   AdsRecommandation[]
   adsActions           AdsAction[]
   adsGroupes           AdsGroupe[]
+  adsAnnonces          AdsAnnonce[]
   adsElements          AdsElement[]
   adsTermes            AdsTerme[]
   adsPropositions      AdsProposition[]
@@ -1835,6 +1836,7 @@ model AdsAccount {
   recommandations AdsRecommandation[]
   actions         AdsAction[]
   groupes         AdsGroupe[]
+  annonces        AdsAnnonce[]
   elements        AdsElement[]
   termes          AdsTerme[]
   propositions    AdsProposition[]
@@ -1864,6 +1866,34 @@ model AdsProfil {
   budgetMensuelMicros BigInt @default(0)
   /// conversions | valeur | roas | cpa
   objectif            String @default("conversions")
+
+  /// Les bornes du pilote automatique, posées avant le mode lui-même et toutes fermées.
+  ///
+  /// Un pilote sans plafond est exactement ce que le produit s'interdit depuis le premier
+  /// jour : « Naya n'a jamais d'autonomie financière illimitée ». Elles sont distinctes des
+  /// objectifs ci-dessus, et la nuance décide de tout — le CPA cible dit ce qu'on vise, le
+  /// CPA maximum dit à partir de quand une machine doit cesser de dépenser. Les confondre
+  /// laisserait un agent s'autoriser tout ce qui n'a pas encore atteint la cible.
+  ///
+  /// Faux tant que la personne ne l'a pas explicitement armé : le mode du compte ne suffit
+  /// pas, deux interrupteurs valent mieux qu'un pour ce qui engage de l'argent seul.
+  piloteActif               Boolean @default(false)
+  /// En pourcentage entier. 0 : aucune hausse autorisée, ce qui est le défaut.
+  piloteHausseMaxPourcent   Int     @default(0)
+  piloteBaisseMaxPourcent   Int     @default(0)
+  /// Le budget quotidien qu'aucune hausse automatique ne peut franchir.
+  piloteBudgetJourMaxMicros BigInt  @default(0)
+  /// La dépense mensuelle au-delà de laquelle le pilote se tait.
+  piloteDepenseMaxMicros    BigInt  @default(0)
+  /// La limite, pas la cible. Au-delà, une machine ne monte plus un budget.
+  piloteCpaMaxMicros        BigInt  @default(0)
+  /// En pourcentage entier : 250 veut dire 250 %. En deçà, le pilote ne monte rien.
+  piloteRoasMin             Int     @default(0)
+  /// Les campagnes où le pilote a le droit d'agir. Une liste blanche, jamais une liste
+  /// noire : l'oubli doit fermer, pas ouvrir.
+  piloteCampagnes           Json    @default("[]")
+  /// Les types d'action autorisés : budget, pause, reprise. Vide : aucun.
+  piloteActions             Json    @default("[]")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1924,6 +1954,13 @@ model AdsGroupe {
   genre    String @default("annonces")
   statut   String @default("")
 
+  /// Le budget quotidien, quand il vit à ce niveau. Chez Google il est sur la campagne et
+  /// partagé ; chez Meta il est sur l'ensemble, sauf quand la campagne le pilote. 0 veut
+  /// dire « pas ici », donc « ne touchez pas à ce niveau ».
+  budgetMicros BigInt  @default(0)
+  budgetId     String  @default("")
+  budgetLimite Boolean @default(false)
+
   vueAt     DateTime @default(now())
   createdAt DateTime @default(now())
 
@@ -1933,9 +1970,44 @@ model AdsGroupe {
   elements     AdsElement[]
   propositions AdsProposition[]
   motsCles     AdsMotCle[]
+  annonces     AdsAnnonce[]
 
   @@unique([accountId, groupeId])
   @@index([campagneId])
+}
+
+/// Une annonce, telle que Meta l'entend : une chose, pas une collection de morceaux.
+///
+/// Chez Google, une annonce responsive est un assemblage de titres et de descriptions, et
+/// AdsElement les porte déjà. Chez Meta, l'annonce a un visuel, un identifiant et des
+/// chiffres à elle. Sans cette table, l'onglet Créatives n'aurait rien à montrer et MIRA ne
+/// saurait pas dire « cette publicité-ci consomme sans vendre ».
+model AdsAnnonce {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  accountId String @db.Uuid
+  groupeId  String @db.Uuid
+
+  /// L'identifiant chez la plateforme : c'est lui qu'on renvoie pour mettre en pause.
+  annonceId String @default("")
+  nom       String @default("")
+  /// ACTIVE | PAUSED | ARCHIVED… le vocabulaire de la plateforme, repris tel quel.
+  statut    String @default("")
+  /// IMAGE | VIDEO | CAROUSEL… vide quand la plateforme ne le dit pas.
+  format    String @default("")
+  /// L'adresse de l'aperçu chez la plateforme. Jamais l'image elle-même : la recopier
+  /// ferait d'Evoliia un hébergeur de créatives, avec la conservation que cela suppose.
+  apercu    String @default("")
+
+  vueAt     DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user    User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  groupe  AdsGroupe  @relation(fields: [groupeId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, annonceId])
+  @@index([groupeId])
 }
 
 /// Un morceau d'annonce : un titre, une description, une image.
@@ -2029,11 +2101,23 @@ model AdsReleve {
   accountId  String @db.Uuid
   campagneId String @db.Uuid
 
+  /// L'ensemble de publicités, quand la ligne le concerne. Chaîne vide : ligne de campagne.
+  /// Meta se lit en trois niveaux là où Google s'arrêtait à la campagne. Chaîne vide plutôt
+  /// que NULL : Postgres tient deux NULL pour distincts dans un index unique, et le doublon
+  /// se serait vu des semaines plus tard, dans une dépense comptée deux fois.
+  groupeId  String @default("")
+  /// L'annonce, même règle. Chaîne vide : la ligne porte sur le niveau au-dessus.
+  annonceId String @default("")
+
   /// Le jour, dans le fuseau du compte.
   jour             DateTime @db.Date
   coutMicros       BigInt   @default(0)
   impressions      BigInt   @default(0)
   clics            BigInt   @default(0)
+  /// Personnes distinctes atteintes. Meta le donne, Google non : 0 veut dire « la
+  /// plateforme ne le dit pas ». La fréquence s'en déduit et n'est pas stockée — une valeur
+  /// dérivée conservée finit par contredire celles dont elle vient.
+  portee           BigInt   @default(0)
   /// Fractionnaire : Google compte au dixième quand les conversions sont pondérées.
   conversions      Float    @default(0)
   valeurConversion Float    @default(0)
@@ -2044,7 +2128,7 @@ model AdsReleve {
   account  AdsAccount  @relation(fields: [accountId], references: [id], onDelete: Cascade)
   campagne AdsCampagne @relation(fields: [campagneId], references: [id], onDelete: Cascade)
 
-  @@unique([campagneId, jour])
+  @@unique([campagneId, groupeId, annonceId, jour], map: "AdsReleve_campagneId_groupeId_annonceId_jour_key")
   @@index([accountId, jour(sort: Desc)])
 }
 

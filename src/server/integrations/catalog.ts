@@ -189,6 +189,67 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     reviewedOn: '2026-09-21',
   },
   {
+    id: 'meta-ads',
+    name: 'Meta Ads',
+    category: 'social',
+    summary: 'Vos campagnes Facebook et Instagram : ce que vous dépensez, et ce que ça rapporte.',
+    usage:
+      'Lire vos campagnes, vos ensembles de publicités et vos résultats, pour que MIRA vous dise où part votre argent et ce qu’il faut ajuster. Aucune modification n’est faite sans votre accord explicite.',
+    /*
+     * `planned` tant que l'aller-retour OAuth n'est pas écrit. La fiche existe déjà parce
+     * qu'elle sert à autre chose qu'à brancher : elle dit à l'avance ce que la connexion
+     * coûtera, ce qu'elle exigera de Meta, et ce qui peut mal tourner. Une fiche écrite
+     * après coup est une fiche écrite pour justifier un choix déjà fait.
+     */
+    status: 'planned',
+    credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
+    /*
+     * Deux portées, et Meta ne propose pas mieux. `ads_read` seule suffirait à tout lire —
+     * c'est d'ailleurs le mode Observateur — mais aucune modification ne serait possible,
+     * pas même après confirmation. `ads_management` couvre la lecture et l'écriture : Meta
+     * n'en publie pas de version intermédiaire. La garantie vient donc du code, pas de la
+     * portée : le mode par défaut est la lecture, et rien ne part sans confirmation.
+     *
+     * `business_management` n'est demandée que pour lister les comptes atteints à travers
+     * un Business Manager — le cas de toute agence, et de tout client qui a délégué son
+     * compte. Sans elle, une personne dont le compte appartient à son entreprise ne verrait
+     * aucun compte à choisir et ne comprendrait pas pourquoi.
+     */
+    scopes: ['ads_read', 'ads_management', 'business_management'],
+    costToEvoliia: 'quota-partage',
+    costToCreator: 'gratuit',
+    costNotice:
+      'L’API Marketing de Meta est gratuite, et c’est votre compte qui est interrogé. Evoliia ne paie rien, vous non plus — vous continuez de payer vos publicités à Meta, comme avant.',
+    /*
+     * Meta compte ses appels par application ET par compte publicitaire, avec un budget qui
+     * se reconstitue à l'heure. Le plafond appartient donc à l'application d'Evoliia et se
+     * partage entre tous les comptes reliés — même situation que Google Ads, et même
+     * discipline : une synchronisation par nuit et par compte, des chiffres gardés en base,
+     * jamais un appel par affichage d'écran.
+     */
+    freeQuota:
+      'Sans frais. Le plafond horaire est celui de l’application Evoliia et se partage entre tous les comptes reliés : les chiffres sont gardés et rafraîchis une fois par nuit, jamais à chaque ouverture d’écran.',
+    webhooks: false,
+    providerReview:
+      'Meta exige une vérification d’entreprise et une revue de l’application avant d’autoriser `ads_read` et `ads_management` sur les comptes d’autrui, avec démonstration filmée du produit en fonctionnement. Comptez plusieurs semaines. Sans cette revue, la connexion ne fonctionne que sur les comptes dont vous êtes vous-même administrateur.',
+    risk:
+      'L’autorisation que Meta vous montre couvre la lecture et la gestion de vos publicités : c’est la seule qui existe pour cette API. Evoliia s’en sert pour lire, et toute modification demande votre confirmation, avec la valeur d’avant conservée pour pouvoir revenir en arrière. Vous pouvez révoquer l’accès à tout moment depuis les réglages de votre compte Facebook.',
+    guide: {
+      url: 'https://business.facebook.com',
+      urlLabel: 'Ouvrir le gestionnaire Meta',
+      steps: [
+        'Vous devez avoir un compte publicitaire Meta avec des campagnes, et vous connecter avec le compte Facebook qui y a accès.',
+        'Revenez ici et cliquez « Connecter Meta Ads ».',
+        'Meta vous demande d’autoriser l’accès. C’est chez Meta que vous vous identifiez : Evoliia ne voit jamais votre mot de passe.',
+        'Si vous avez plusieurs comptes publicitaires, choisissez celui que MIRA doit suivre.',
+      ],
+      caution:
+        'Les chiffres de Meta bougent pendant quelques jours : un achat peut être attribué après coup, et la fenêtre d’attribution du compte décide de ce qui est compté. C’est le délai de Meta, pas celui d’Evoliia.',
+    },
+    reviewedOn: '2026-09-23',
+  },
+  {
     id: 'google-drive',
     name: 'Google Drive',
     category: 'google',

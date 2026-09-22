@@ -141,6 +141,38 @@ export const env = {
     return read('PERPLEXITY_API_KEY')
   },
   /**
+   * L'application Meta d'Evoliia, pour Facebook et Instagram.
+   *
+   * Facultatives toutes les deux : sans elles, le connecteur Meta se présente comme à venir
+   * plutôt que d'offrir un bouton qui mènerait à une page d'erreur de Meta. Même règle que
+   * pour Google — une intégration à moitié configurée doit se taire, pas échouer.
+   *
+   * Le secret n'est jamais lu ailleurs que côté serveur, au moment d'échanger un code
+   * contre un jeton. Il n'a aucune raison d'atteindre le navigateur, et aucune variable
+   * `NEXT_PUBLIC_` ne le porte.
+   */
+  get metaAppId(): string | undefined {
+    return read('META_APP_ID')
+  },
+  get metaAppSecret(): string | undefined {
+    return read('META_APP_SECRET')
+  },
+  /**
+   * La version de l'API Marketing visée, par exemple `v23.0`.
+   *
+   * Lisible plutôt que figée dans le code, et c'est une leçon payée chez Google : une
+   * version d'API codée en dur devient une dette silencieuse le jour où la plateforme la
+   * retire — le produit cesse de fonctionner sans qu'une ligne ait changé. Ici, la relever
+   * est une variable d'environnement, pas un déploiement.
+   *
+   * Meta maintient chaque version environ deux ans. La valeur par défaut est celle en
+   * service au moment d'écrire ; elle se remplace sans toucher au code.
+   */
+  get metaApiVersion(): string {
+    const value = read('META_API_VERSION')
+    return value === undefined || !/^v\d+\.\d+$/u.test(value) ? 'v23.0' : value
+  },
+  /**
    * Jeton développeur Google Ads. Facultatif, et voué à disparaître.
    *
    * Google a supprimé les jetons développeur le 9 septembre 2026 : le niveau d'accès

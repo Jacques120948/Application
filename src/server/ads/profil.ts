@@ -3,6 +3,7 @@ import { withUserScope } from '@/server/db/scope'
 import { seuilRentabilite } from '@/lib/rentabilite'
 import { compteActif, type CompteRelie } from './comptes'
 import { MICROS, moisCourant, type Indicateurs } from './metriques'
+import { NIVEAU_CAMPAGNE } from './niveaux'
 
 /**
  * Ce que la personne vise, et ce que ses chiffres valent au regard de ce qu'elle vise.
@@ -320,6 +321,9 @@ export async function depenseDuMois(
       where: {
         userId,
         accountId,
+        // Les lignes de campagne seules : voir niveaux.ts. Sans cela, la dépense du mois
+        // compterait la campagne, ses ensembles et ses annonces — trois fois la même.
+        ...NIVEAU_CAMPAGNE,
         jour: {
           gte: new Date(`${mois.premier}T00:00:00Z`),
           lte: new Date(`${mois.hier}T00:00:00Z`),

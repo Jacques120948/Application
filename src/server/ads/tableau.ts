@@ -1,6 +1,7 @@
 import { notFound } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import { compteActif, type CompteRelie } from './comptes'
+import { NIVEAU_CAMPAGNE } from './niveaux'
 import {
   CUMUL_VIDE,
   cumuler,
@@ -200,6 +201,12 @@ export async function lireTableauAds(
       where: {
         userId,
         accountId: actif.id,
+        /*
+         * Les lignes de campagne seules. Sans ce filtre, la même dépense serait additionnée
+         * trois fois dès qu'un compte Meta écrit ses ensembles et ses annonces dans la même
+         * table — un total plausible, aucune erreur, et un budget qui paraît dépassé.
+         */
+        ...NIVEAU_CAMPAGNE,
         jour: {
           gte: new Date(`${precedentes.depuis}T00:00:00Z`),
           lte: new Date(`${bornes.jusqua}T00:00:00Z`),

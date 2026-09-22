@@ -32,6 +32,12 @@ const TEINTES: Record<VisibilityAgent['tint'], { fond: string; anneau: string }>
    * c'est précisément pour cela qu'il ne sert ici que de contour.
    */
   sun: { fond: '#fffaea', anneau: 'var(--color-accent-sun)' },
+  /*
+   * Le bleu, ajouté pour le sixième spécialiste. Les jetons positif, prudence et critique
+   * étaient les seuls arrêts restants de la palette, et aucun ne convenait : ils portent
+   * des verdicts. Un agent vert ressemble à une bonne nouvelle, un agent rouge à une alerte.
+   */
+  sea: { fond: '#e8f5fa', anneau: 'var(--color-accent-sea)' },
 }
 
 /**

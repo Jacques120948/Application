@@ -41,6 +41,11 @@
   /* Les deux extrémités chaudes, pour les touches lumineuses. Même règle. */
   --color-accent-warm: #fc7a3b;
   --color-accent-sun: #fddd30;
+  /* Le bleu de l'équipe : la seule famille que la palette n'avait pas, et donc la seule
+     qui distingue un sixième spécialiste sans se confondre avec un état. Les jetons
+     positif, prudence et critique sont réservés aux verdicts — un agent vert ressemblerait
+     à une bonne nouvelle, et un agent rouge à une alerte. */
+  --color-accent-sea: #0b7ea8;
 
   --color-night: #17062f;
   --color-night-soft: #2c0a56;

@@ -1,4 +1,5 @@
 import { FACTEUR_MAX, FACTEUR_MIN } from '@/lib/bornes-budget'
+import { AUTOPILOTE_OUVERT, modeValide, peutEcrire } from '@/lib/modes-ads'
 import { PAS_FACTURABLE } from '@/lib/pas-facturable'
 import type { ProfilAds } from './profil'
 
@@ -72,11 +73,26 @@ function argent(micros: number, devise: string): string {
 
 /** Les conditions communes à toute écriture, quel qu'en soit le type. */
 export function autorise(demande: Demande): Verdict {
-  if (demande.mode !== 'assiste') {
+  /*
+   * Le mode passe par la liste partagée plutôt que d'être comparé à une chaîne écrite ici.
+   * Une valeur inconnue en base — un mode retiré, une donnée abîmée — retombe alors sur
+   * « lecture », c'est-à-dire sur le refus. Comparer à `'assiste'` en dur laissait la porte
+   * ouverte au sens inverse : tout ce qui n'est pas reconnu devient un mode qui n'écrit pas,
+   * et c'est bien ce qu'on veut, mais il faut que ce soit écrit une seule fois.
+   */
+  const mode = modeValide(demande.mode)
+  if (!peutEcrire(mode)) {
+    if (mode === 'autopilote' && !AUTOPILOTE_OUVERT) {
+      return {
+        ok: false,
+        raison:
+          'Le pilote automatique n’est pas encore ouvert. Repassez ce compte en mode assisté : les modifications vous seront proposées et vous les confirmerez une par une.',
+      }
+    }
     return {
       ok: false,
       raison:
-        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’une modification puisse être envoyée à Google.',
+        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’une modification puisse être envoyée à la plateforme.',
     }
   }
   if (demande.faitesAujourdhui >= ACTIONS_PAR_JOUR) {
