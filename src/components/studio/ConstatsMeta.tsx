@@ -94,8 +94,48 @@ export function ConstatsMeta({
   blocage: string
 }) {
   const [liste, setListe] = useState<ConstatVue[]>([...initiaux])
+  /*
+   * La confirmation est un état de la page, pas une fenêtre du navigateur.
+   *
+   * `confirm()` ne permet pas d'écrire la phrase exacte de ce qui va partir, et c'est
+   * précisément cette phrase qui fait la différence entre confirmer et cliquer.
+   */
+  const [aConfirmer, setAConfirmer] = useState<string | null>(null)
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
+
+  /**
+   * Envoie la modification chez Meta.
+   *
+   * La page est rendue côté serveur : après un envoi réussi, tout change — le constat se
+   * ferme, le statut de l'objet bouge, le journal gagne une ligne. On recharge plutôt que
+   * de recoudre huit morceaux d'état à la main, chacun étant une occasion d'afficher une
+   * chose et d'en avoir fait une autre.
+   */
+  async function appliquer(id: string) {
+    setOccupe(id)
+    setErreur(null)
+    const reponse = await fetch('/api/ads/meta/action', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ geste: 'appliquer', recommandationId: id }),
+    }).catch(() => null)
+    const corps = (await reponse?.json().catch(() => null)) as
+      | { ok?: boolean; raison?: string; message?: string }
+      | null
+    setOccupe(null)
+
+    if (reponse === null || !reponse.ok) {
+      setErreur(corps?.message ?? `L’envoi n’a pas abouti (code ${reponse?.status ?? 0}).`)
+      return
+    }
+    if (corps?.ok !== true) {
+      setErreur(corps?.raison ?? 'Meta n’a pas accepté la modification.')
+      setAConfirmer(null)
+      return
+    }
+    window.location.reload()
+  }
 
   async function ecarter(id: string) {
     setOccupe(id)
@@ -214,6 +254,47 @@ export function ConstatsMeta({
                         {proposition.raison}
                       </p>
                     )}
+
+                    {/*
+                      Le bouton n'existe que si la modification est réellement possible : ni
+                      constat refusé, ni compte en lecture, ni écriture fermée. Un bouton
+                      grisé en permanence ferait chercher ce qu'on a mal fait.
+                    */}
+                    {proposition.etat !== 'possible' || blocage !== '' ? null : aConfirmer ===
+                      constat.id ? (
+                      <div className="mt-3">
+                        <p className="m-0 text-sm leading-relaxed">
+                          La modification part chez Meta immédiatement. Sa valeur d’avant est
+                          conservée, et vous pourrez la remettre d’un clic.
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void appliquer(constat.id)}
+                            disabled={occupe === constat.id}
+                            className="cursor-pointer rounded-[var(--radius-pill)] border-0 bg-[var(--color-brand)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                          >
+                            {occupe === constat.id ? 'Envoi…' : 'Confirmer et envoyer'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAConfirmer(null)}
+                            disabled={occupe === constat.id}
+                            className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-4 py-2 text-sm text-[var(--color-ink-soft)]"
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAConfirmer(constat.id)}
+                        className="mt-3 cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-brand)] bg-transparent px-4 py-1.5 text-sm font-medium text-[var(--color-brand)]"
+                      >
+                        Appliquer
+                      </button>
+                    )}
                   </div>
                 )
               })()}
@@ -251,13 +332,10 @@ export function ConstatsMeta({
         quelle que soit la période affichée plus bas. « Ce n’est pas un problème » écarte le
         constat pour un mois.
         {' '}
-        <strong>
-          Aucune de ces modifications n’est envoyée à Meta : il n’y a pas encore de bouton
-          pour les appliquer.
-        </strong>{' '}
-        Ce que vous lisez ci-dessus est la phrase exacte qui partira le jour où il existera,
-        recalculée sur vos chiffres du jour — et déjà passée par les garde-fous, ce qui
-        explique les refus affichés en orange.
+        Aucune modification ne part sans votre confirmation, et la phrase que vous confirmez
+        est exactement celle qui sera envoyée — recalculée sur vos chiffres du jour et déjà
+        passée par les garde-fous, ce qui explique les refus affichés en orange. Chaque envoi
+        conserve sa valeur d’avant et se défait d’un clic.
       </p>
     </section>
   )

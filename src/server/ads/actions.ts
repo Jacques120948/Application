@@ -4,7 +4,7 @@ import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { isEnabled } from '@/server/settings/flags'
 import { accesCompteActif, compteActif, type CompteRelie } from './comptes'
-import type { AccesAds, TexteAnnonceAds } from './provider'
+import type { AccesAds, PlateformeAds, TexteAnnonceAds } from './provider'
 import { googleAds } from './google-ads'
 import {
   creerCampagneComplete,
@@ -134,18 +134,31 @@ export async function lireJournal(userId: string, accountId: string): Promise<Ac
   }))
 }
 
-/** Change ce que Naya a le droit de faire sur le compte suivi. */
-export async function changerMode(userId: string, mode: Mode): Promise<CompteRelie> {
-  const compte = await compteActif(userId)
+/**
+ * Change ce que l'agent a le droit de faire sur le compte suivi.
+ *
+ * La plateforme est un paramètre parce qu'un mode appartient à un compte, pas à une
+ * personne. Sans elle, le bouton de l'écran de MIRA changeait le mode du compte Google : on
+ * croyait avoir ouvert l'écriture chez Meta, et il ne s'y passait rien. Chaque plateforme a
+ * en outre son propre interrupteur d'exploitation — ouvrir Google n'ouvre pas Meta, et c'est
+ * volontaire : ce sont deux API, deux jeux de bornes, deux niveaux de confiance.
+ */
+export async function changerMode(
+  userId: string,
+  mode: Mode,
+  plateforme: PlateformeAds = 'google-ads',
+): Promise<CompteRelie> {
+  const compte = await compteActif(userId, plateforme)
   if (compte === null) throw notFound('Aucun compte publicitaire n’est suivi.')
 
-  if (mode === 'assiste' && !(await isEnabled('publiciteEcriture'))) {
+  const drapeau = plateforme === 'meta-ads' ? 'publiciteEcritureMeta' : 'publiciteEcriture'
+  if (mode === 'assiste' && !(await isEnabled(drapeau))) {
     /*
      * Refusé plutôt que accepté sans effet : un réglage qui s'enregistre et ne change rien
      * est pire qu'un refus, parce qu'on croit ensuite que le produit peut écrire.
      */
     throw validation(
-      'Le mode assisté n’est pas ouvert sur cette installation d’Evoliia. Rien ne peut être envoyé à Google pour l’instant.',
+      `Le mode assisté n’est pas ouvert sur cette installation d’Evoliia. Rien ne peut être envoyé à ${plateforme === 'meta-ads' ? 'Meta' : 'Google'} pour l’instant.`,
     )
   }
 

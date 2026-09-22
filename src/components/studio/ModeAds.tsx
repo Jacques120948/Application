@@ -16,7 +16,25 @@ import { useState } from 'react'
  * indisponible ferait croire à une fonction qui existe.
  */
 
-export function ModeAds({ initial, ouvert }: { initial: string; ouvert: boolean }) {
+export function ModeAds({
+  initial,
+  ouvert,
+  /*
+   * Le compte concerné. Sans lui, le commutateur de l'écran de MIRA changeait le mode du
+   * compte Google : on croyait avoir ouvert l'écriture chez Meta, et il ne s'y passait rien.
+   */
+  plateforme = 'google-ads',
+  agent = 'Naya',
+  chez = 'Google',
+}: {
+  initial: string
+  ouvert: boolean
+  plateforme?: 'google-ads' | 'meta-ads'
+  /** Le nom de l'agent concerné, pour que la phrase parle de qui agit. */
+  agent?: string
+  /** La plateforme, telle qu'on la nomme à l'écran. */
+  chez?: string
+}) {
   const [mode, setMode] = useState(initial)
   const [occupe, setOccupe] = useState(false)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -27,7 +45,7 @@ export function ModeAds({ initial, ouvert }: { initial: string; ouvert: boolean 
     const reponse = await fetch('/api/ads/mode', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ mode: vers }),
+      body: JSON.stringify({ mode: vers, plateforme }),
     }).catch(() => null)
     const corps = (await reponse?.json().catch(() => null)) as { message?: string } | null
     setOccupe(false)
@@ -51,8 +69,8 @@ export function ModeAds({ initial, ouvert }: { initial: string; ouvert: boolean 
           </p>
           <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
             {assiste
-              ? 'Naya peut vous proposer d’appliquer une modification. Chacune demande votre confirmation, conserve sa valeur d’avant, et peut être annulée.'
-              : 'Evoliia lit vos campagnes et ne modifie rien. Aucune écriture n’est envoyée à Google.'}
+              ? `${agent} peut vous proposer d’appliquer une modification. Chacune demande votre confirmation, conserve sa valeur d’avant, et peut être annulée.`
+              : `Evoliia lit vos campagnes et ne modifie rien. Aucune écriture n’est envoyée à ${chez}.`}
           </p>
         </div>
 

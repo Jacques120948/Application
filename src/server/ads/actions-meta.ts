@@ -39,6 +39,9 @@ export type ActionMetaProposee =
       type: 'pause'
       niveau: 'ensemble' | 'annonce'
       cibleId: string
+      /** L'identifiant chez Meta : c'est lui qui part, jamais le nôtre. */
+      objetId: string
+      campagneId: string
       /** Le statut attendu au moment de l'envoi. Une dernière vérification avant d'écrire. */
       attendu: string
       resume: string
@@ -46,6 +49,8 @@ export type ActionMetaProposee =
   | {
       type: 'budget'
       cibleId: string
+      objetId: string
+      campagneId: string
       versMicros: number
       /** Le budget attendu au moment de l'envoi : s'il a bougé, on ne l'écrase pas. */
       attenduMicros: number
@@ -69,6 +74,10 @@ export type ContexteActions = {
   ensembles: Map<
     string,
     {
+      /** L'identifiant chez Meta : c'est lui qu'on envoie, jamais le nôtre. */
+      objetId: string
+      /** La campagne à laquelle rattacher le journal. */
+      campagneId: string
       nom: string
       statut: string
       budgetMicros: number
@@ -81,7 +90,14 @@ export type ContexteActions = {
   >
   annonces: Map<
     string,
-    { nom: string; statut: string; ensembleNom: string; voisinsActifs: number }
+    {
+      objetId: string
+      campagneId: string
+      nom: string
+      statut: string
+      ensembleNom: string
+      voisinsActifs: number
+    }
   >
 }
 
@@ -113,13 +129,20 @@ export async function contexteActionsMeta(
     withUserScope(userId, (tx) =>
       tx.adsGroupe.findMany({
         where: { accountId },
-        select: { id: true, nom: true, statut: true, budgetMicros: true, campagneId: true },
+        select: {
+          id: true,
+          groupeId: true,
+          nom: true,
+          statut: true,
+          budgetMicros: true,
+          campagneId: true,
+        },
       }),
     ),
     withUserScope(userId, (tx) =>
       tx.adsAnnonce.findMany({
         where: { accountId },
-        select: { id: true, nom: true, statut: true, groupeId: true },
+        select: { id: true, annonceId: true, nom: true, statut: true, groupeId: true },
       }),
     ),
   ])
@@ -144,6 +167,8 @@ export async function contexteActionsMeta(
     const campagne = parCampagne.get(groupe.campagneId)
     const sien = Number(groupe.budgetMicros)
     contexte.ensembles.set(groupe.id, {
+      objetId: groupe.groupeId,
+      campagneId: groupe.campagneId,
       nom: groupe.nom,
       statut: groupe.statut,
       budgetMicros: sien,
@@ -163,6 +188,8 @@ export async function contexteActionsMeta(
 
   for (const annonce of annonces) {
     contexte.annonces.set(annonce.id, {
+      objetId: annonce.annonceId,
+      campagneId: contexte.ensembles.get(annonce.groupeId)?.campagneId ?? '',
       nom: annonce.nom,
       statut: annonce.statut,
       ensembleNom: contexte.ensembles.get(annonce.groupeId)?.nom ?? '',
@@ -224,6 +251,8 @@ export function proposerActionMeta(
       type: 'pause',
       niveau: 'annonce',
       cibleId,
+      objetId: annonce.objetId,
+      campagneId: annonce.campagneId,
       attendu: annonce.statut,
       resume: `Mettre en pause la publicité « ${annonce.nom} ». Elle cessera d’être diffusée ; les autres publicités de « ${annonce.ensembleNom} » continuent.`,
     }
@@ -244,6 +273,8 @@ export function proposerActionMeta(
       type: 'pause',
       niveau: 'ensemble',
       cibleId,
+      objetId: ensemble.objetId,
+      campagneId: ensemble.campagneId,
       attendu: ensemble.statut,
       resume: `Mettre en pause l’ensemble « ${ensemble.nom} ». Il cessera de diffuser et de dépenser ; le reste de « ${ensemble.campagneNom} » continue.`,
     }
@@ -269,6 +300,8 @@ export function proposerActionMeta(
     const action: ActionMetaProposee = {
       type: 'budget',
       cibleId,
+      objetId: ensemble.objetId,
+      campagneId: ensemble.campagneId,
       versMicros: vers,
       attenduMicros: ensemble.budgetMicros,
       resume: `Baisser le budget quotidien de « ${ensemble.nom} » de ${argent(ensemble.budgetMicros, cadre.devise)} à ${argent(vers, cadre.devise)}.`,

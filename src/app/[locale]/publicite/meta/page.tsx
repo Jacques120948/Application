@@ -19,10 +19,14 @@ import { lireRecommandationsMeta } from '@/server/ads/recommandations-meta'
 import { droitsMeta } from '@/server/ads/droits-meta'
 import { autoriseMeta } from '@/server/ads/garde-fous-meta'
 import { contexteActionsMeta, proposerActionMeta } from '@/server/ads/actions-meta'
+import { journalMeta } from '@/server/ads/envoi-meta'
+import { isEnabled } from '@/server/settings/flags'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
 import { ProfilAds } from '@/components/studio/ProfilAds'
+import { ModeAds } from '@/components/studio/ModeAds'
+import { JournalMeta } from '@/components/studio/JournalMeta'
 import { LireMeta } from '@/components/studio/LireMeta'
 import { ConstatsMeta } from '@/components/studio/ConstatsMeta'
 import { TableauMeta } from '@/components/studio/TableauMeta'
@@ -222,7 +226,25 @@ export default async function ComptesMetaPage({
    * de la même façon — le dire huit fois de suite ferait de la page un mur de rouge pour un
    * seul problème, et on cesserait de lire les refus qui, eux, sont propres à un objet.
    */
-  const blocage = cadre === null ? null : autoriseMeta({ ...cadre })
+  /*
+   * L'interrupteur d'exploitation passe avant tout le reste : quand l'écriture Meta est
+   * fermée pour tout le monde, il n'y a pas lieu d'expliquer à quelqu'un que son compte est
+   * en lecture — il changerait un réglage qui n'y changerait rien.
+   */
+  const ecritureOuverte = await isEnabled('publiciteEcritureMeta')
+  const blocage =
+    cadre === null
+      ? null
+      : !ecritureOuverte
+        ? {
+            ok: false as const,
+            raison:
+              'L’envoi de modifications vers Meta n’est pas encore ouvert sur cette installation d’Evoliia. MIRA lit et propose ; rien ne part.',
+          }
+        : autoriseMeta({ ...cadre })
+
+  const journal =
+    tableau === null ? [] : await journalMeta(user.id, tableau.compte.id).catch(() => [])
 
   const propositions =
     cadre === null || contexte === null
@@ -345,6 +367,17 @@ export default async function ComptesMetaPage({
                   blocage={blocage !== null && !blocage.ok ? blocage.raison : ''}
                 />
 
+                {/*
+                  Le journal sous les constats : ce qu'on a fait se lit après ce qu'il reste à
+                  faire, et avant les chiffres qui en portent déjà l'effet.
+                */}
+                <JournalMeta
+                  initiales={journal.map((une) => ({
+                    ...une,
+                    createdAt: une.createdAt.toISOString(),
+                  }))}
+                />
+
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <p className="m-0 text-sm text-[var(--color-ink-soft)]">
                     {actif?.nom} · {NOM_PERIODE[jours] ?? `${jours} jours`}
@@ -454,6 +487,19 @@ export default async function ComptesMetaPage({
                     </p>
                     <ComptesAds initiaux={comptes} agent="MIRA" plateforme="Meta" />
                   </div>
+
+                  {actif === null ? null : (
+                    <div className="min-w-0 border-t border-[var(--color-line)] pt-5">
+                      <p className="m-0 mb-3 text-sm font-medium">Ce que MIRA a le droit de faire</p>
+                      <ModeAds
+                        initial={actif.mode}
+                        ouvert={ecritureOuverte}
+                        plateforme="meta-ads"
+                        agent="MIRA"
+                        chez="Meta"
+                      />
+                    </div>
+                  )}
 
                   {actif === null || lu === null ? null : (
                     <div className="min-w-0 border-t border-[var(--color-line)] pt-5">

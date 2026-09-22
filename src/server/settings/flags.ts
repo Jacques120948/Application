@@ -112,8 +112,25 @@ export const FLAGS = {
    */
   publiciteEcriture: {
     key: 'flag.publicite.ecriture',
-    label: 'Publicité — mode assisté',
+    label: 'Publicité — mode assisté (Google Ads)',
     help: "Autorise Evoliia à envoyer des modifications de budget et de statut vers Google Ads, après confirmation de la personne et avec un journal réversible. Chaque compte reste en lecture seule tant que son propriétaire ne l'a pas changé lui-même. Aucun crédit consommé.",
+    fallback: false,
+  },
+  /**
+   * Le même interrupteur pour Meta, et séparé à dessein.
+   *
+   * Un seul drapeau pour les deux plateformes ferait qu'ouvrir l'écriture chez Google
+   * ouvrirait aussi celle chez Meta, le même jour, sans que personne l'ait décidé. Ce sont
+   * deux API différentes, deux jeux de bornes et deux niveaux de confiance ; elles
+   * s'ouvrent l'une après l'autre, quand chacune a fait ses preuves.
+   *
+   * Éteint par défaut, comme son voisin : l'éteindre arrête toute écriture Meta, pour tout
+   * le monde, sans déployer — et laisse la lecture, les indicateurs et les constats intacts.
+   */
+  publiciteEcritureMeta: {
+    key: 'flag.publicite.ecriture.meta',
+    label: 'Publicité — mode assisté (Meta Ads)',
+    help: "Autorise MIRA à mettre en pause un ensemble ou une publicité et à changer un budget quotidien chez Meta, après confirmation de la personne et avec un retour arrière. Chaque compte reste en lecture seule tant que son propriétaire ne l'a pas changé lui-même. Aucun crédit consommé.",
     fallback: false,
   },
 } as const

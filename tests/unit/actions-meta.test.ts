@@ -83,6 +83,8 @@ function contexte(sur: {
       [
         'g1',
         {
+          objetId: '23851234567890123',
+          campagneId: 'c1',
           nom: 'Suisse romande',
           statut: sur.ensembleStatut ?? 'ACTIVE',
           budgetMicros: sur.budgetMicros ?? 20_000_000,
@@ -96,6 +98,8 @@ function contexte(sur: {
       [
         'a1',
         {
+          objetId: '23859876543210987',
+          campagneId: 'c1',
           nom: 'Visuel bougie bleue',
           statut: sur.annonceStatut ?? 'ACTIVE',
           ensembleNom: 'Suisse romande',
