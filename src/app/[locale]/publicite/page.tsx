@@ -6,6 +6,7 @@ import { getEntitlements } from '@/server/billing/entitlements'
 import { hasConnection } from '@/server/integrations/service'
 import { listerComptesRelies } from '@/server/ads/comptes'
 import { googleAds } from '@/server/ads/google-ads'
+import { metaAds } from '@/server/ads/meta-ads'
 import { findVisibilityAgent } from '@/server/agents/visibility'
 import { readDashboard } from '@/server/audit/service'
 import { Shell } from '@/components/studio/Shell'
@@ -54,9 +55,18 @@ export default async function PublicitePage({
 
   const naya = findVisibilityAgent('ads')
   const ouvert = entitlements.granted.includes('visibility_ads_agent')
-  const [relie, comptes] = ouvert
-    ? await Promise.all([hasConnection(user.id, googleAds.id), listerComptesRelies(user.id)])
-    : [false, []]
+  const [relie, comptes, metaRelie] = ouvert
+    ? await Promise.all([
+        hasConnection(user.id, googleAds.id),
+        listerComptesRelies(user.id),
+        /*
+         * Meta est lu ici pour une seule raison : décider s'il faut montrer le passage vers
+         * l'écran de MIRA. Un lien vers un écran vide fait chercher une fonction qui
+         * n'existe pas.
+         */
+        hasConnection(user.id, metaAds.id),
+      ])
+    : [false, [], false]
   const actif = comptes.find((compte) => compte.actif) ?? null
 
   /*
@@ -187,6 +197,29 @@ export default async function PublicitePage({
                   <ComptesAds initiaux={comptes} />
                 )}
               </section>
+
+              {/*
+                Le passage vers MIRA. Discret, parce que son écran ne fait encore qu'une
+                chose — désigner un compte — et qu'annoncer davantage décevrait au clic.
+                Montré seulement quand Meta est relié : un lien vers un écran vide fait
+                chercher une fonction qui n'existe pas.
+              */}
+              {metaRelie ? (
+                <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+                  <div className="flex flex-wrap items-baseline justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="m-0 text-base font-semibold">Meta Ads — MIRA</h2>
+                      <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                        Votre compte Meta est relié. Désignez celui que MIRA doit suivre —
+                        tant qu’aucun ne l’est, aucun n’est lu.
+                      </p>
+                    </div>
+                    <LinkButton href={`/${locale}/publicite/meta`} variant="secondary">
+                      Choisir le compte
+                    </LinkButton>
+                  </div>
+                </section>
+              ) : null}
 
               {actif === null || tableau === null ? null : (
                 <>

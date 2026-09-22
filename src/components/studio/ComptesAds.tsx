@@ -3,7 +3,7 @@
 import { useState } from 'react'
 
 /**
- * Le choix du compte publicitaire que Naya suit.
+ * Le choix du compte publicitaire qu'un agent suit.
  *
  * Un seul à la fois, et l'écran doit dire pourquoi. Additionner deux comptes donnerait un
  * ROAS moyen qui ne décrit aucune réalité, et proposer un budget sur une moyenne est la
@@ -33,7 +33,21 @@ function enClair(compteId: string): string {
   return `${chiffres.slice(0, 3)}-${chiffres.slice(3, 6)}-${chiffres.slice(6)}`
 }
 
-export function ComptesAds({ initiaux }: { initiaux: readonly CompteVu[] }) {
+export function ComptesAds({
+  initiaux,
+  agent = 'Naya',
+  plateforme = 'Google',
+}: {
+  initiaux: readonly CompteVu[]
+  /*
+   * Le prénom de celui qui suivra le compte, et le nom de la plateforme. Paramétrés plutôt
+   * que codés en dur depuis que MIRA existe : un écran Meta qui dirait « suivi par Naya »
+   * ferait douter de ce qu'on est en train de régler, et c'est exactement le moment où il
+   * ne faut pas douter — on désigne le compte sur lequel de l'argent sera engagé.
+   */
+  agent?: string
+  plateforme?: string
+}) {
   const [comptes, setComptes] = useState<CompteVu[]>([...initiaux])
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -70,7 +84,7 @@ export function ComptesAds({ initiaux }: { initiaux: readonly CompteVu[] }) {
             <p className="m-0 text-sm font-medium">{compte.nom}</p>
             {compte.actif ? (
               <span className="rounded-[var(--radius-pill)] bg-[var(--color-brand-soft)] px-2 py-0.5 text-xs text-[var(--color-brand-strong)]">
-                Suivi par Naya
+                Suivi par {agent}
               </span>
             ) : null}
           </div>
@@ -86,8 +100,8 @@ export function ComptesAds({ initiaux }: { initiaux: readonly CompteVu[] }) {
              * posséder. Mais pas choisissable — le suivre donnerait un écran vide.
              */
             <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
-              Evoliia n’a pas pu lire ce compte chez Google : il est peut-être fermé,
-              suspendu, ou votre compte Google n’y a plus accès. Il ne peut pas être suivi.
+              Evoliia n’a pas pu lire ce compte chez {plateforme} : il est peut-être fermé,
+              suspendu, ou votre compte n’y a plus accès. Il ne peut pas être suivi.
             </p>
           ) : compte.gestionnaire ? (
             <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
@@ -109,7 +123,7 @@ export function ComptesAds({ initiaux }: { initiaux: readonly CompteVu[] }) {
 
       {diffusants.length > 1 ? (
         <p className="m-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-          Naya ne suit qu’un compte à la fois. Additionner deux comptes donnerait un ROAS
+          {agent} ne suit qu’un compte à la fois. Additionner deux comptes donnerait un ROAS
           moyen qui ne décrit aucune réalité — et un budget proposé sur une moyenne se trompe
           deux fois.
         </p>
