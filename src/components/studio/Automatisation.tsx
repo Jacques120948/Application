@@ -20,11 +20,26 @@ export type ReglagesVus = {
   redaction: boolean
   depot: boolean
   assistants: boolean
+  assistantsJours: number
   point: boolean
   blogId: string
   parPeriode: number
   periode: 'semaine' | 'mois'
 }
+
+/**
+ * Les cadences du relevé dans les assistants, dites en clair et avec leur prix.
+ *
+ * La durée seule ne dit rien : « tous les 30 jours » ne se compare pas à « toutes les
+ * semaines » tant qu'on n'a pas fait la division soi-même. Or c'est exactement cette
+ * division qui décide — passer au mois divise par quatre la dépense la plus lourde du
+ * produit. L'écran la fait donc, avec les questions réellement suivies.
+ */
+const CADENCES: { jours: number; label: string; parAn: number }[] = [
+  { jours: 7, label: 'Chaque semaine', parAn: 52 },
+  { jours: 14, label: 'Toutes les deux semaines', parAn: 26 },
+  { jours: 30, label: 'Une fois par mois', parAn: 12 },
+]
 
 const RYTHMES: { parPeriode: number; periode: 'semaine' | 'mois'; label: string }[] = [
   { parPeriode: 1, periode: 'semaine', label: '1 par semaine' },
@@ -166,15 +181,44 @@ export function Automatisation({
             onChange={(point) => changer({ point })}
           />
           <Interrupteur
-            titre="Poser vos questions aux assistants chaque semaine"
+            titre="Poser vos questions aux assistants"
             detail={
               questionsIa === 0
                 ? 'Vous ne suivez aucune question pour l’instant. Ajoutez-en depuis « Votre marque dans les IA ».'
-                : `${questionsIa} question${questionsIa > 1 ? 's' : ''} suivie${questionsIa > 1 ? 's' : ''}, soit ${questionsIa * coutIa} crédits par semaine. Une fois par semaine, pas chaque nuit : une réponse d’assistant ne change pas d’un jour à l’autre.`
+                : `${questionsIa} question${questionsIa > 1 ? 's' : ''} suivie${questionsIa > 1 ? 's' : ''}, soit ${questionsIa * coutIa} crédits par relevé. Jamais chaque nuit : une réponse d’assistant ne change pas d’un jour à l’autre.`
             }
             actif={reglages.assistants}
             onChange={(assistants) => changer({ assistants })}
           />
+          {!reglages.assistants ? null : (
+            /*
+             * Sous l'interrupteur, et seulement quand il est allumé : une cadence pour
+             * quelque chose d'éteint est un réglage sans objet, et il occupe la place au
+             * moment précis où l'on décide d'allumer.
+             */
+            <label className="block px-4 pt-2">
+              <span className="text-sm font-medium">Tous les combien ?</span>
+              <select
+                value={reglages.assistantsJours}
+                onChange={(event) => changer({ assistantsJours: Number(event.target.value) })}
+                className="mt-1.5 w-full rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-canvas)] px-4 py-2.5 text-sm"
+              >
+                {CADENCES.map((cadence) => (
+                  <option key={cadence.jours} value={cadence.jours}>
+                    {cadence.label}
+                    {questionsIa === 0
+                      ? ''
+                      : ` — environ ${Math.round((questionsIa * coutIa * cadence.parAn) / 12)} crédits par mois`}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1.5 block text-xs leading-relaxed text-[var(--color-ink-faint)]">
+                C’est de loin la dépense la plus lourde du produit, et la seule qui se
+                divise sans rien perdre : ce qu’un assistant répond bouge au mois, pas à la
+                semaine. Douze mesures par an et par question suffisent à voir une tendance.
+              </span>
+            </label>
+          )}
           {!reglages.redaction ? null : (
             <>
               <label className="block px-4 pt-2">

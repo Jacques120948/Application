@@ -63,8 +63,10 @@ export type Reglages = {
   releve: boolean
   redaction: boolean
   depot: boolean
-  /** Poser chaque semaine les questions suivies aux assistants. Dépense des crédits. */
+  /** Poser régulièrement les questions suivies aux assistants. Dépense des crédits. */
   assistants: boolean
+  /** Tous les combien, en jours. Voir `CADENCES_ASSISTANTS`. */
+  assistantsJours: number
   /** Le point hebdomadaire de Léa sur l'ensemble du site. Dépense des crédits. */
   point: boolean
   blogId: string
@@ -84,6 +86,7 @@ const AU_DEPART: Reglages = {
   redaction: false,
   depot: false,
   assistants: false,
+  assistantsJours: 7,
   point: false,
   blogId: '',
   parPeriode: 1,
@@ -97,6 +100,29 @@ const AU_DEPART: Reglages = {
 
 /** Les rythmes acceptés. Au-delà, ce n'est plus un calendrier éditorial. */
 const PAR_PERIODE_MAX = 3
+
+/**
+ * Les cadences proposées pour le relevé dans les assistants, en jours.
+ *
+ * Trois, pas davantage : une liste de durées libres inviterait à régler « tous les 3
+ * jours », ce qui triplerait la facture pour une information qui n'a pas bougé. Chacune
+ * divise franchement la dépense par rapport à la précédente, et c'est le seul intérêt
+ * qu'il y a à choisir.
+ *
+ * Elles sont exportées parce que l'écran les propose et que le serveur les vérifie : deux
+ * listes écrites séparément finissent par diverger, et c'est alors l'écran qui gagne — ce
+ * qui revient à laisser le navigateur décider d'une dépense.
+ */
+export const CADENCES_ASSISTANTS = [7, 14, 30] as const
+
+export type CadenceAssistants = (typeof CADENCES_ASSISTANTS)[number]
+
+/** La cadence la plus proche de ce qui est demandé. Sept jours si rien ne correspond. */
+export function cadenceValide(valeur: number): CadenceAssistants {
+  return CADENCES_ASSISTANTS.includes(valeur as CadenceAssistants)
+    ? (valeur as CadenceAssistants)
+    : 7
+}
 
 /** Pages demandées à Google par site et par nuit. Bien moins qu'au clic : la nuit est longue. */
 const PAGES_PAR_NUIT = 10
@@ -126,6 +152,7 @@ export async function lireReglages(userId: string, siteId: string): Promise<Regl
     redaction: ligne.redaction,
     depot: ligne.depot,
     assistants: ligne.assistants,
+    assistantsJours: cadenceValide(ligne.assistantsJours),
     point: ligne.point,
     blogId: ligne.blogId,
     parPeriode: ligne.parPeriode,
@@ -161,6 +188,11 @@ export async function ecrireReglages(
     redaction: patch.redaction ?? actuel.redaction,
     depot: patch.depot ?? actuel.depot,
     assistants: patch.assistants ?? actuel.assistants,
+    /*
+     * Bornée ici comme le reste : la cadence décide d'une dépense, et une valeur venue du
+     * navigateur n'est jamais une borne. « Tous les jours » arriverait sinon par l'API.
+     */
+    assistantsJours: cadenceValide(patch.assistantsJours ?? actuel.assistantsJours),
     point: patch.point ?? actuel.point,
     blogId: (patch.blogId ?? actuel.blogId).slice(0, 200),
     parPeriode: Math.min(PAR_PERIODE_MAX, Math.max(1, Math.trunc(patch.parPeriode ?? actuel.parPeriode))),
@@ -195,18 +227,28 @@ export function redactionDue(reglages: Reglages, maintenant: Date): boolean {
 /**
  * Le relevé dans les assistants est-il dû ?
  *
- * Hebdomadaire, et non quotidien. Ce qu'un assistant répond lundi et mardi est la même
- * chose, à son aléa près : payer sept fois pour une information qui change au mois est une
- * dépense sans contrepartie. Deux relevés par question et par semaine font vingt-six mesures
- * par trimestre, largement de quoi voir une tendance.
+ * Jamais quotidien. Ce qu'un assistant répond lundi et mardi est la même chose, à son aléa
+ * près : payer sept fois pour une information qui change au mois est une dépense sans
+ * contrepartie.
  *
- * Comme pour la rédaction, le retard ne se rattrape pas : trois semaines sans tournée
+ * La cadence se choisit désormais, et c'est le seul réglage du produit qui divise
+ * franchement une facture sans rien retirer. C'est la dépense la plus lourde : un site qui
+ * suit vingt questions auprès de trois assistants dépense soixante crédits par semaine,
+ * deux cent soixante par mois — davantage que tout le reste réuni. Au mois, la même
+ * surveillance en coûte soixante, et douze mesures par question et par an suffisent
+ * largement à voir une tendance qui, elle, se mesure en mois.
+ *
+ * Sept jours reste la valeur de départ : un réglage qui existe ne se déclenche pas tout
+ * seul, et personne ne doit voir son rythme changer sans l'avoir demandé.
+ *
+ * Comme pour la rédaction, le retard ne se rattrape pas : trois périodes sans tournée
  * donnent un relevé, pas trois.
  */
 export function assistantsDus(reglages: Reglages, maintenant: Date): boolean {
   if (!reglages.assistants) return false
   if (reglages.assistantsAt === null) return true
-  return maintenant.getTime() - reglages.assistantsAt.getTime() >= 7 * 24 * 60 * 60 * 1000
+  const intervalle = cadenceValide(reglages.assistantsJours) * 24 * 60 * 60 * 1000
+  return maintenant.getTime() - reglages.assistantsAt.getTime() >= intervalle
 }
 
 /**

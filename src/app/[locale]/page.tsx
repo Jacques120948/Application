@@ -8,6 +8,8 @@ import { creditPacks } from '@/server/billing/packs'
 import { DEFAULT_ACTION_COSTS, FREE_ACTIONS } from '@/server/billing/action-costs'
 import { auditsLabel } from '@/server/billing/plan-details'
 import { listPublicPlans } from '@/server/billing/plans'
+import { actionCosts } from '@/server/billing/action-costs'
+import { phraseVolumes } from '@/server/billing/volumes-offre'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { formatAmount } from '@/server/business/economics'
 import { jsonLd } from '@/server/seo/visibility'
@@ -169,9 +171,15 @@ export default async function LandingPage({
   const user = await getCurrentUser().catch(() => null)
   if (user !== null) redirect(`/${locale}/visibilite`)
 
-  const [plans, packs] = await Promise.all([
+  const [plans, packs, couts] = await Promise.all([
     listPublicPlans().catch(() => manque('offres')),
     creditPacks().catch(() => manque('recharges')),
+    /*
+     * Les fourchettes servent à traduire les crédits en choses reconnaissables. Illisibles,
+     * on se tait : la ligne des volumes disparaît, le prix reste. Une page de tarifs ne
+     * tombe pas parce qu'un réglage secondaire est en panne.
+     */
+    actionCosts().catch(() => []),
   ])
   // Les trois offres payantes forment la grille ; la gratuite a sa propre section, parce
   // qu'un essai ne se compare pas à un abonnement.
@@ -288,6 +296,15 @@ export default async function LandingPage({
       t('vis.plansPages', { count: plan.pagesPerAudit }),
       auditsLabel(plan, locale),
       t('vis.plansCredits', { count: plan.monthlyCredits }),
+      /*
+       * Les crédits, puis ce qu'ils permettent. Dans cet ordre, et pas l'inverse : le
+       * crédit reste l'unité de facturation, le volume n'en est que la lecture. Inverser
+       * laisserait croire qu'on achète trente articles, alors qu'on achète une réserve
+       * qu'on dépense comme on veut.
+       */
+      ...(phraseVolumes(plan.monthlyCredits, couts) === ''
+        ? []
+        : [phraseVolumes(plan.monthlyCredits, couts)]),
       t('vis.plansTeam'),
       t('vis.plansHistory'),
       ...(boutiqueOuverte(plan) ? [t('vis.plansShop')] : []),

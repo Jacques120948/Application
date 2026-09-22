@@ -1470,8 +1470,11 @@ model SiteAutomatisation {
   redaction  Boolean @default(false)
   /// Déposer l'article écrit en brouillon dans Shopify. Jamais publié.
   depot      Boolean @default(false)
-  /// Poser chaque semaine les questions suivies aux assistants. Dépense des crédits.
+  /// Poser régulièrement les questions suivies aux assistants. Dépense des crédits.
   assistants Boolean @default(false)
+  /// Tous les combien, en jours : 7, 14 ou 30. C'est la borne de la dépense la plus lourde
+  /// du produit, et elle se règle parce que ce qu'un assistant répond bouge au mois.
+  assistantsJours Int @default(7)
   /// Les assistants réellement interrogés pour ce site. Vide : tous ceux qui sont
   /// disponibles. Le prix suit cette liste — on ne facture que ce qu'on interroge.
   plateformesIA String[] @default([])

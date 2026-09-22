@@ -2,6 +2,8 @@ import type { Plan } from '@prisma/client'
 import { getTranslator, type Locale } from '@/i18n'
 import { FEATURES, type FeatureGroup } from '@/server/billing/features'
 import { IMPLEMENTED_PLAN_CAPABILITIES } from '@/server/billing/plans'
+import type { ActionCost } from '@/server/billing/action-costs'
+import { phraseVolumes } from '@/server/billing/volumes-offre'
 
 /**
  * Le contenu exact d'une offre, en toutes lettres.
@@ -140,8 +142,19 @@ function ouverte(plan: Plan, featureId: string): boolean {
   return has(plan, featureId)
 }
 
-/** Ce que l'offre contient, groupé par thème. Les groupes vides sont omis. */
-export function planDetails(plan: Plan, locale: Locale): PlanDetailGroup[] {
+/**
+ * Ce que l'offre contient, groupé par thème. Les groupes vides sont omis.
+ *
+ * Les fourchettes de coûts sont facultatives : elles traduisent les crédits en choses
+ * reconnaissables, et leur absence enlève une ligne sans rien casser. Elles arrivent en
+ * paramètre plutôt que d'être lues ici parce qu'elles viennent d'un réglage — cette
+ * fonction, elle, doit rester calculable sans rien attendre.
+ */
+export function planDetails(
+  plan: Plan,
+  locale: Locale,
+  couts: readonly ActionCost[] = [],
+): PlanDetailGroup[] {
   const t = getTranslator(locale)
   /*
    * Le vocabulaire est celui de la page d'accueil, volontairement : quelqu'un qui compare
@@ -161,7 +174,15 @@ export function planDetails(plan: Plan, locale: Locale): PlanDetailGroup[] {
 
   const groups: PlanDetailGroup[] = [
     { title: t('subscription.groupVisibility'), items: visibilite },
-    { title: t('subscription.groupCredits'), items: [t('subscription.credits', { count: plan.monthlyCredits })] },
+    {
+      title: t('subscription.groupCredits'),
+      items: [
+        t('subscription.credits', { count: plan.monthlyCredits }),
+        ...(phraseVolumes(plan.monthlyCredits, couts) === ''
+          ? []
+          : [phraseVolumes(plan.monthlyCredits, couts)]),
+      ],
+    },
   ]
 
   // Le constructeur ne s'annonce que là où il est ouvert. Ailleurs, il n'existe pas.

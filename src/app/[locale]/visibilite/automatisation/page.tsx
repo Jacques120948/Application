@@ -89,6 +89,7 @@ export default async function AutomatisationPage({
             redaction: reglages.redaction,
             depot: reglages.depot,
             assistants: reglages.assistants,
+            assistantsJours: reglages.assistantsJours,
             point: reglages.point,
             blogId: reglages.blogId,
             parPeriode: reglages.parPeriode,

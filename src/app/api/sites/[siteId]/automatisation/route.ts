@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
-import { ecrireReglages } from '@/server/audit/automatisation'
+import { CADENCES_ASSISTANTS, ecrireReglages } from '@/server/audit/automatisation'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -16,6 +16,17 @@ const input = z.object({
   redaction: z.boolean().optional(),
   depot: z.boolean().optional(),
   assistants: z.boolean().optional(),
+  /*
+   * La cadence du relevé. Bornée à la liste proposée, et revalidée derrière : c'est le
+   * réglage qui pèse le plus lourd sur la facture, donc le dernier qu'on laisserait libre.
+   */
+  assistantsJours: z
+    .number()
+    .int()
+    .refine((valeur) => CADENCES_ASSISTANTS.some((cadence) => cadence === valeur), {
+      message: 'Cadence inconnue.',
+    })
+    .optional(),
   point: z.boolean().optional(),
   blogId: z.string().max(200).optional(),
   parPeriode: z.number().int().min(1).max(3).optional(),

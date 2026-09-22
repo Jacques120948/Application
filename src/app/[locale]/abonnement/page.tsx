@@ -3,6 +3,7 @@ import { getTranslator, resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
 import { getWallet } from '@/server/billing/credits'
 import { comparePlans, planDetails } from '@/server/billing/plan-details'
+import { actionCosts } from '@/server/billing/action-costs'
 import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { getSubscriptionView } from '@/server/billing/stripe/subscriptions'
@@ -28,10 +29,12 @@ export default async function SubscriptionPage({
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
 
-  const [plans, subscription, wallet] = await Promise.all([
+  const [plans, subscription, wallet, couts] = await Promise.all([
     listPublicPlans(),
     getSubscriptionView(user.id),
     getWallet(user.id),
+    // Pour traduire la réserve en articles, pages et foires aux questions. Voir volumes-offre.
+    actionCosts(),
   ])
   const t = getTranslator(locale)
 
@@ -46,7 +49,7 @@ export default async function SubscriptionPage({
     maxProjects: plan.maxProjects,
     allowBuild: plan.allowBuild,
     isRecommended: plan.isRecommended,
-    details: planDetails(plan, locale),
+    details: planDetails(plan, locale, couts),
   }))
   const comparison = comparePlans(plans, locale)
 

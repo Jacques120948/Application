@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { assistantsDus, pointDu, redactionDue } from '@/server/audit/automatisation'
+import { assistantsDus, cadenceValide, pointDu, redactionDue } from '@/server/audit/automatisation'
 
 /**
  * Ce qui décide qu'un article automatique part, ou ne part pas.
@@ -17,6 +17,7 @@ const ETEINT = {
   redaction: false,
   depot: false,
   assistants: false,
+  assistantsJours: 7,
   point: false,
   blogId: '',
   parPeriode: 1,
@@ -127,5 +128,62 @@ describe('le point hebdomadaire', () => {
     const base = { ...ETEINT, point: true, pointAt: new Date('2026-06-01T03:00:00Z') }
     expect(pointDu(base, LE_20)).toBe(true)
     expect(pointDu({ ...base, pointAt: LE_20 }, LE_20)).toBe(false)
+  })
+})
+
+/**
+ * La cadence du relevé dans les assistants.
+ *
+ * C'est la dépense la plus lourde du produit, et le seul réglage qui la divise sans rien
+ * retirer : au mois plutôt qu'à la semaine, vingt questions suivies auprès de trois
+ * assistants coûtent soixante crédits au lieu de deux cent soixante. La règle du retard
+ * qui ne se rattrape pas vaut ici comme ailleurs — sinon un mois d'arrêt déclencherait
+ * quatre relevés d'un coup, exactement la facture qu'une cadence est censée borner.
+ */
+describe('la cadence du relevé dans les assistants', () => {
+  const LE_20_PLUS = (jours: number) => new Date(LE_20.getTime() + jours * 24 * 60 * 60 * 1000)
+
+  it('attend sept jours par défaut', () => {
+    const reglages = { ...ETEINT, assistants: true, assistantsAt: LE_20 }
+    expect(assistantsDus(reglages, LE_20_PLUS(6))).toBe(false)
+    expect(assistantsDus(reglages, LE_20_PLUS(7))).toBe(true)
+  })
+
+  it('attend la quinzaine quand la quinzaine est choisie', () => {
+    const reglages = { ...ETEINT, assistants: true, assistantsJours: 14, assistantsAt: LE_20 }
+    expect(assistantsDus(reglages, LE_20_PLUS(7))).toBe(false)
+    expect(assistantsDus(reglages, LE_20_PLUS(14))).toBe(true)
+  })
+
+  it('attend le mois quand le mois est choisi', () => {
+    const reglages = { ...ETEINT, assistants: true, assistantsJours: 30, assistantsAt: LE_20 }
+    expect(assistantsDus(reglages, LE_20_PLUS(29))).toBe(false)
+    expect(assistantsDus(reglages, LE_20_PLUS(30))).toBe(true)
+  })
+
+  it('ne rattrape pas le retard : un mois d’arrêt donne un relevé, pas quatre', () => {
+    const reglages = { ...ETEINT, assistants: true, assistantsAt: LE_20 }
+    /*
+     * La fonction rend un booléen, pas un nombre : c'est précisément ce qui empêche le
+     * rattrapage. Le test le fige, parce qu'un jour quelqu'un voudra « juste » rendre le
+     * nombre de périodes écoulées.
+     */
+    expect(assistantsDus(reglages, LE_20_PLUS(60))).toBe(true)
+  })
+
+  /*
+   * Ce qui vient du navigateur décide d'une dépense. « Tous les jours » ne doit pas
+   * pouvoir entrer par l'API sous prétexte que le menu ne le propose pas.
+   */
+  it('retombe sur sept jours devant une cadence inventée', () => {
+    expect(cadenceValide(1)).toBe(7)
+    expect(cadenceValide(0)).toBe(7)
+    expect(cadenceValide(-14)).toBe(7)
+    expect(cadenceValide(365)).toBe(7)
+    expect(cadenceValide(30)).toBe(30)
+  })
+
+  it('n’est jamais dû quand le relevé est éteint, quelle que soit la cadence', () => {
+    expect(assistantsDus({ ...ETEINT, assistantsJours: 30 }, LE_20_PLUS(365))).toBe(false)
   })
 })
