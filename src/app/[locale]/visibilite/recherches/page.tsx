@@ -10,10 +10,13 @@ import {
   type VueRecherches,
 } from '@/server/audit/recherches'
 import {
+  compterTranches,
   lireOrganique,
   periodeValide,
   PERIODES_ORGANIQUE,
   type Mouvement,
+  type Rang,
+  type Tranche,
   type VueOrganique,
 } from '@/server/audit/organique'
 import { nomDuPays } from '@/lib/pays'
@@ -134,6 +137,160 @@ function Occasions({ occasions }: { occasions: Occasion[] }) {
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+/**
+ * Les quatre endroits où l'on peut être, nommés comme on en parle.
+ *
+ * « Position moyenne 14,2 » ne dit rien à personne. « Deuxième page » dit tout, parce que
+ * c'est la seule frontière qui change quelque chose : au-dessus on est vu, en dessous on ne
+ * l'est pas. Le nombre reste affiché à côté pour qui veut le détail.
+ */
+const TRANCHES: { cle: Tranche; titre: string; note: string; teinte: string; fond: string }[] = [
+  {
+    cle: 'podium',
+    titre: 'Sur le podium',
+    note: 'Les trois premiers résultats. C’est là que se font presque tous les clics.',
+    teinte: 'var(--color-positive)',
+    fond: 'var(--color-positive-soft)',
+  },
+  {
+    cle: 'page-1',
+    titre: 'En première page',
+    note: 'Places 4 à 10 : on vous voit sans faire défiler jusqu’en bas.',
+    teinte: 'var(--color-brand)',
+    fond: 'var(--color-brand-soft)',
+  },
+  {
+    cle: 'page-2',
+    titre: 'En deuxième page',
+    note: 'Places 11 à 20 : Google vous montre, presque personne ne descend jusque-là.',
+    teinte: 'var(--color-caution)',
+    fond: 'var(--color-caution-soft)',
+  },
+  {
+    cle: 'loin',
+    titre: 'Au-delà',
+    note: 'Au-delà de la vingtième place : en pratique, vous n’êtes pas trouvé sur ces mots.',
+    teinte: 'var(--color-critical)',
+    fond: 'var(--color-critical-soft)',
+  },
+]
+
+/** Le mouvement d'une recherche, ou le silence honnête quand on ne le connaît pas. */
+function Deplacement({ gain }: { gain: number | null }) {
+  if (gain === null) {
+    return (
+      <span
+        className="text-[var(--color-ink-faint)]"
+        title="Cette recherche ne figurait pas dans notre relevé le plus ancien de la période. Cela ne veut pas dire qu’elle est nouvelle : nous ne relevons que les vingt-cinq recherches les plus cliquées de chaque nuit."
+      >
+        —
+      </span>
+    )
+  }
+  if (gain === 0) return <span className="text-[var(--color-ink-faint)]">=</span>
+  const monte = gain > 0
+  return (
+    <span
+      className="font-medium"
+      style={{ color: monte ? 'var(--color-positive)' : 'var(--color-critical)' }}
+    >
+      {monte ? '▲' : '▼'} {Math.abs(gain).toFixed(1)}
+    </span>
+  )
+}
+
+/**
+ * Le classement : où vous sortez, recherche par recherche.
+ *
+ * Trié par place et non par clics, et c'est tout l'intérêt. La liste par clics répond à
+ * « qu'est-ce qui marche » ; celle-ci répond à « où j'en suis ». Une recherche en deuxième
+ * position à trois clics par mois est un mot que personne ne tape, pas un échec ; une
+ * recherche en quinzième position à quarante clics est un travail qui reste à faire.
+ */
+function Classement({ rangs, jours }: { rangs: Rang[]; jours: number }) {
+  if (rangs.length === 0) return null
+
+  const compte = compterTranches(rangs)
+
+  return (
+    <section className="mt-8">
+      <h2 className="m-0 text-base font-semibold">Où vous sortez</h2>
+      <p className="mt-1 mb-4 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+        Vos recherches classées par place, la meilleure d’abord. C’est une moyenne sur les{' '}
+        {jours} derniers jours, pas votre position en direct : une recherche qui sort 3
+        <sup>e</sup> certains jours et 30<sup>e</sup> d’autres s’affiche autour de la 16
+        <sup>e</sup>. Google la calcule ainsi, et c’est bien la bonne façon de la lire.
+      </p>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {TRANCHES.map((tranche) => (
+          <div
+            key={tranche.cle}
+            className="rounded-[var(--radius-card)] p-4"
+            style={{ backgroundColor: tranche.fond }}
+          >
+            <p
+              className="m-0 text-2xl font-semibold tabular-nums"
+              style={{ color: tranche.teinte }}
+            >
+              {compte[tranche.cle]}
+            </p>
+            <p className="mt-1 mb-0 text-xs font-medium">{tranche.titre}</p>
+            <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              {tranche.note}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-line)]">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="text-left text-xs text-[var(--color-ink-faint)]">
+              <th className="px-4 py-2 text-right font-medium">Place</th>
+              <th className="px-4 py-2 font-medium">Recherche</th>
+              <th className="px-4 py-2 text-right font-medium">Évolution</th>
+              <th className="px-4 py-2 text-right font-medium">Clics</th>
+              <th className="px-4 py-2 text-right font-medium">Vues</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rangs.map((rang) => {
+              const tranche = TRANCHES.find((une) => une.cle === rang.tranche)
+              return (
+                <tr key={rang.requete} className="border-t border-[var(--color-line)]">
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    <span
+                      className="inline-flex min-w-9 justify-center rounded-[var(--radius-pill)] px-2 py-0.5 font-medium"
+                      style={{ backgroundColor: tranche?.fond, color: tranche?.teinte }}
+                    >
+                      {rang.position.toFixed(1)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 break-words">{rang.requete}</td>
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">
+                    <Deplacement gain={rang.gain} />
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums">{nombre(rang.clics)}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {nombre(rang.impressions)}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+        L’évolution se lit contre notre relevé le plus ancien de la période choisie plus bas.
+        Un tiret veut dire que la recherche n’y figurait pas — et non qu’elle est nouvelle :
+        Evoliia ne note chaque nuit que vos vingt-cinq recherches les plus cliquées.
+      </p>
     </section>
   )
 }
@@ -488,12 +645,19 @@ export default async function RecherchesPage({
           <>
             <Chiffres vue={lecture.vue} locale={locale} siteId={tableau.site.id} />
             {organique.ok ? (
-              <Evolution
-                vue={organique.vue}
-                locale={locale}
-                siteId={tableau.site.id}
-                pays={lecture.vue.paysRetenu}
-              />
+              <>
+                {/*
+                  Où l'on est d'abord, comment cela bouge ensuite. L'ordre inverse ferait
+                  commencer l'écran par une dérivée avant d'avoir donné la valeur.
+                */}
+                <Classement rangs={organique.vue.classement} jours={lecture.vue.jours} />
+                <Evolution
+                  vue={organique.vue}
+                  locale={locale}
+                  siteId={tableau.site.id}
+                  pays={lecture.vue.paysRetenu}
+                />
+              </>
             ) : null}
           </>
         ) : lecture.etat === 'non-connecte' ? (

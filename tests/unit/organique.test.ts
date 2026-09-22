@@ -2,9 +2,12 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import {
+  classement,
+  compterTranches,
   mouvements,
   periodeValide,
   PERIODES_ORGANIQUE,
+  trancheDe,
 } from '@/server/audit/organique'
 import {
   CourbeOrganique,
@@ -190,5 +193,81 @@ describe('la courbe du trafic naturel', () => {
     const html = rendre(serie(30, (index) => index % 7))
 
     expect(html).toContain('Les deux échelles sont différentes')
+  })
+})
+
+function ligne(cle: string, position: number, clics = 10, impressions = 200) {
+  return { cle, position, clics, impressions }
+}
+
+describe('le classement des recherches', () => {
+  it('trie par place et non par clics : c’est toute la différence avec l’autre liste', () => {
+    const rangs = classement(
+      [ligne('beaucoup de clics', 14, 400), ligne('peu de clics', 2, 3)],
+      new Map(),
+    )
+
+    expect(rangs.map((rang) => rang.requete)).toEqual(['peu de clics', 'beaucoup de clics'])
+  })
+
+  it('nomme la tranche plutôt que de laisser lire un nombre', () => {
+    expect(trancheDe(1)).toBe('podium')
+    expect(trancheDe(3.5)).toBe('podium')
+    expect(trancheDe(3.6)).toBe('page-1')
+    expect(trancheDe(10.5)).toBe('page-1')
+    expect(trancheDe(11)).toBe('page-2')
+    expect(trancheDe(20.5)).toBe('page-2')
+    expect(trancheDe(21)).toBe('loin')
+  })
+
+  it('compte une remontée comme un gain positif, ici aussi', () => {
+    const rangs = classement([ligne('bougie citrine', 4)], new Map([['bougie citrine', 18]]))
+
+    expect(rangs[0]?.gain).toBe(14)
+    expect(rangs[0]?.positionAvant).toBe(18)
+  })
+
+  it('compte une descente comme un gain négatif', () => {
+    const rangs = classement([ligne('bougie', 11)], new Map([['bougie', 3]]))
+
+    expect(rangs[0]?.gain).toBe(-8)
+  })
+
+  it('dit « on ne sait pas » et jamais « c’est nouveau » sans repère', () => {
+    /*
+     * Nos relevés ne gardent que vingt-cinq requêtes par nuit : une recherche absente du
+     * relevé ancien peut exister depuis des mois. L'affirmer neuve serait un mensonge.
+     */
+    const rangs = classement([ligne('inconnue', 6)], new Map())
+
+    expect(rangs[0]?.gain).toBeNull()
+    expect(rangs[0]?.positionAvant).toBeNull()
+  })
+
+  it('écarte les recherches trop peu vues pour qu’une place veuille dire quelque chose', () => {
+    const rangs = classement([ligne('fantôme', 1, 1, 2), ligne('réelle', 9, 1, 40)], new Map())
+
+    expect(rangs.map((rang) => rang.requete)).toEqual(['réelle'])
+  })
+
+  it('écarte une position nulle : Google n’a rien classé, ce n’est pas la première place', () => {
+    expect(classement([ligne('vide', 0)], new Map())).toHaveLength(0)
+  })
+
+  it('compte chaque tranche, et le total retombe sur ses pieds', () => {
+    const rangs = classement(
+      [ligne('a', 1), ligne('b', 3), ligne('c', 7), ligne('d', 15), ligne('e', 44)],
+      new Map(),
+    )
+    const compte = compterTranches(rangs)
+
+    expect(compte).toEqual({ podium: 2, 'page-1': 1, 'page-2': 1, loin: 1 })
+    expect(Object.values(compte).reduce((somme, un) => somme + un, 0)).toBe(rangs.length)
+  })
+
+  it('borne la liste : un classement de cent lignes est un export', () => {
+    const lignes = Array.from({ length: 100 }, (_, index) => ligne(`mot ${index}`, index + 1))
+
+    expect(classement(lignes, new Map()).length).toBeLessThanOrEqual(50)
   })
 })

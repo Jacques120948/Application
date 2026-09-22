@@ -7,9 +7,11 @@ import {
   listerProprietes,
   parJour,
   rafraichir,
+  requetes,
   type JourRecherche,
+  type Ligne,
 } from '@/server/integrations/providers/google-search-console'
-import { choisirPropriete, SEARCH_CONSOLE_FEATURE } from './recherches'
+import { choisirPropriete, JOURS_LUS, SEARCH_CONSOLE_FEATURE } from './recherches'
 
 /**
  * Le trafic naturel dans le temps, et ce qui a bougé dedans.
@@ -126,11 +128,102 @@ export function mouvements(
   }
 }
 
+/**
+ * Où une recherche tombe chez Google, en langage de personne et non en nombres.
+ *
+ * Les bornes portent un demi-point parce que la position rendue est une moyenne : une
+ * recherche à 3,4 est sortie tantôt deuxième, tantôt quatrième, et l'arrondir vers le bas la
+ * ferait passer pour un podium permanent. Le demi-point coupe là où la moyenne cesse d'être
+ * défendable.
+ */
+export type Tranche = 'podium' | 'page-1' | 'page-2' | 'loin'
+
+const BORNES = { podium: 3.5, page1: 10.5, page2: 20.5 }
+
+export function trancheDe(position: number): Tranche {
+  if (position <= BORNES.podium) return 'podium'
+  if (position <= BORNES.page1) return 'page-1'
+  if (position <= BORNES.page2) return 'page-2'
+  return 'loin'
+}
+
+/** Une recherche dans le classement, avec sa place et son mouvement. */
+export type Rang = {
+  requete: string
+  /** La position moyenne sur la fenêtre lue. Plus petit est meilleur. */
+  position: number
+  clics: number
+  impressions: number
+  /**
+   * La place au relevé le plus ancien, ou `null` quand on ne l'a pas.
+   *
+   * `null` ne veut pas dire « nouvelle recherche » : nos relevés ne gardent que les
+   * vingt-cinq requêtes les plus cliquées de chaque nuit, et une recherche peut très bien
+   * exister depuis des mois sans y avoir jamais figuré. L'écran doit dire « on ne sait pas »,
+   * jamais « c'est nouveau » — la seconde phrase serait une affirmation, et elle serait fausse.
+   */
+  positionAvant: number | null
+  /** Positif quand des places ont été gagnées. `null` quand il n'y a rien à comparer. */
+  gain: number | null
+  tranche: Tranche
+}
+
+/**
+ * Sous ce nombre d'affichages, une place n'est pas une place.
+ *
+ * Plus bas que le seuil des mouvements, et c'est volontaire : une recherche affichée huit
+ * fois en première position est une information réelle, là où un **écart** de position sur
+ * huit affichages n'en est pas une. Constater où l'on est demande moins de matière que
+ * mesurer un déplacement.
+ */
+const IMPRESSIONS_CLASSEES = 5
+
+/** Ce qu'on classe. Au-delà, ce n'est plus un classement, c'est un export. */
+const RANGS_MONTRES = 50
+
+/**
+ * Le classement des recherches, de la meilleure place à la moins bonne.
+ *
+ * Le tri par place, et non par clics, est tout l'intérêt. La liste triée par clics répond à
+ * « qu'est-ce qui marche » ; celle-ci répond à « où j'en suis », et ce n'est pas la même
+ * question. Une recherche en deuxième position qui ne fait que trois clics par mois est un
+ * mot que personne ne tape, pas un échec ; une recherche en quinzième position qui en fait
+ * quarante est un travail qui reste à faire.
+ */
+export function classement(lignes: readonly Ligne[], reperes: Map<string, number>): Rang[] {
+  return lignes
+    .filter((ligne) => ligne.position > 0 && ligne.impressions >= IMPRESSIONS_CLASSEES)
+    .map((ligne) => {
+      const avant = reperes.get(ligne.cle)
+      return {
+        requete: ligne.cle,
+        position: ligne.position,
+        clics: ligne.clics,
+        impressions: ligne.impressions,
+        positionAvant: avant ?? null,
+        // Position plus petite = meilleure. Un gain est une diminution.
+        gain: avant === undefined ? null : Math.round((avant - ligne.position) * 10) / 10,
+        tranche: trancheDe(ligne.position),
+      }
+    })
+    .sort((une, autre) => une.position - autre.position || autre.clics - une.clics)
+    .slice(0, RANGS_MONTRES)
+}
+
+/** Combien de recherches dans chaque tranche. Le classement d'un coup d'œil. */
+export function compterTranches(rangs: readonly Rang[]): Record<Tranche, number> {
+  const compte: Record<Tranche, number> = { podium: 0, 'page-1': 0, 'page-2': 0, loin: 0 }
+  for (const rang of rangs) compte[rang.tranche] += 1
+  return compte
+}
+
 export type VueOrganique = {
   jours: number
   serie: JourRecherche[]
   gagnees: Mouvement[]
   perdues: Mouvement[]
+  /** Les recherches triées par place, la meilleure d'abord. */
+  classement: Rang[]
   /** Le nombre de jours réellement couverts par les relevés comparés. 0 : pas encore deux. */
   ecartJours: number
   /**
@@ -184,7 +277,16 @@ export async function lireOrganique(
     return { ok: false, raison: 'Ce site n’est pas dans votre Search Console.' }
   }
 
-  const serie = await parJour(acces.accessToken, propriete, jours, pays)
+  /*
+   * Les deux lectures partent ensemble. La seconde relit les requêtes que l'écran affiche
+   * déjà par ailleurs, et c'est assumé : lui faire traverser la page pour économiser un appel
+   * gratuit ferait dépendre l'évolution de l'ordre d'exécution d'un composant. Le classement
+   * se calcule ici, où se trouvent les relevés auxquels il se compare.
+   */
+  const [serie, actuelles] = await Promise.all([
+    parJour(acces.accessToken, propriete, jours, pays),
+    requetes(acces.accessToken, propriete, 'query', JOURS_LUS, pays),
+  ])
   if (!serie.ok) return { ok: false, raison: serie.raison }
 
   /*
@@ -210,6 +312,16 @@ export async function lireOrganique(
     ? mouvements(premier.requetes, dernier.requetes)
     : { gagnees: [], perdues: [] }
 
+  /*
+   * Les repères viennent du même relevé ancien que les mouvements, pour que les deux blocs de
+   * l'écran racontent la même histoire. Deux points de comparaison différents afficheraient
+   * « +12 » ici et « +4 » là sur la même recherche, et on ne saurait lequel croire.
+   */
+  const reperes = new Map<string, number>()
+  if (comparable && premier !== undefined) {
+    for (const ligne of lignes(premier.requetes)) reperes.set(ligne.requete, ligne.position)
+  }
+
   return {
     ok: true,
     vue: {
@@ -217,6 +329,12 @@ export async function lireOrganique(
       serie: serie.lignes,
       gagnees: bouge.gagnees,
       perdues: bouge.perdues,
+      /*
+       * Un refus sur cette lecture-là ne coûte que le classement. La courbe et les mouvements
+       * sont deux réponses entières, et les perdre parce qu'un troisième appel a échoué
+       * viderait l'écran pour rien.
+       */
+      classement: actuelles.ok ? classement(actuelles.lignes, reperes) : [],
       ecartJours:
         comparable && premier !== undefined && dernier !== undefined
           ? Math.round((+dernier.jour - +premier.jour) / (24 * 60 * 60 * 1000))
