@@ -14,6 +14,7 @@ import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
 import { fairePoint } from './point'
 import { synchroniserTous } from '@/server/ads/synchro'
+import { synchroniserTousMeta } from '@/server/ads/synchro-meta'
 import { synchroniserCreatifs } from '@/server/ads/creatif'
 import { evaluerTous } from '@/server/ads/recommandations'
 
@@ -615,6 +616,17 @@ export async function tournerQuotidien(
     if (publicite !== null) {
       bilan.comptesAds = publicite.comptes
       bilan.echecsAds += publicite.echecs
+    }
+
+    /*
+     * Meta suit la même tournée, dans le même bilan. Les deux plateformes ne se distinguent
+     * pas ici : un compte publicitaire lu est un compte publicitaire lu, et séparer les
+     * compteurs ferait croire à deux mécaniques là où il n'y en a qu'une.
+     */
+    const meta = await synchroniserTousMeta().catch(() => null)
+    if (meta !== null) {
+      bilan.comptesAds += meta.comptes
+      bilan.echecsAds += meta.echecs
     }
 
     /*

@@ -10,6 +10,9 @@ import { findVisibilityAgent } from '@/server/agents/visibility'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
+import { LireMeta } from '@/components/studio/LireMeta'
+import { withUserScope } from '@/server/db/scope'
+import { NIVEAU_CAMPAGNE } from '@/server/ads/niveaux'
 import { LinkButton } from '@/components/ui'
 
 /**
@@ -57,6 +60,26 @@ export default async function ComptesMetaPage({
     : [false, []]
 
   const actif = comptes.find((compte) => compte.actif) ?? null
+
+  /*
+   * Ce qui a été lu, compté sur ce qui est réellement en base. Annoncer « 4 campagnes »
+   * d'après la réponse de Meta plutôt que d'après ce qu'on a rangé ferait diverger l'écran
+   * de la vérité au premier rattachement manqué.
+   *
+   * Les relevés ne comptent que l'étage campagne : sans ce filtre, le nombre de journées
+   * compterait trois fois les mêmes — voir niveaux.ts.
+   */
+  const lu =
+    actif === null
+      ? null
+      : await withUserScope(user.id, async (tx) => ({
+          campagnes: await tx.adsCampagne.count({ where: { accountId: actif.id } }),
+          ensembles: await tx.adsGroupe.count({ where: { accountId: actif.id } }),
+          annonces: await tx.adsAnnonce.count({ where: { accountId: actif.id } }),
+          journees: await tx.adsReleve.count({
+            where: { accountId: actif.id, ...NIVEAU_CAMPAGNE },
+          }),
+        }))
 
   return (
     <Shell
@@ -137,6 +160,45 @@ export default async function ComptesMetaPage({
             <div className="mt-6">
               <ComptesAds initiaux={comptes} agent="MIRA" plateforme="Meta" />
             </div>
+
+            {actif === null || lu === null ? null : (
+              <section className="mt-6 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+                <h2 className="m-0 text-base font-semibold">Ce que MIRA a lu</h2>
+                <p className="mt-1 mb-4 text-xs text-[var(--color-ink-faint)]">
+                  {actif.synchroAt === null
+                    ? 'Aucune lecture n’a encore eu lieu.'
+                    : `Dernière lecture : ${actif.synchroAt.toLocaleString(locale)}.`}
+                </p>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {[
+                    { nom: 'Campagnes', valeur: lu.campagnes },
+                    { nom: 'Ensembles', valeur: lu.ensembles },
+                    { nom: 'Annonces', valeur: lu.annonces },
+                    { nom: 'Journées', valeur: lu.journees },
+                  ].map((carte) => (
+                    <div
+                      key={carte.nom}
+                      className="rounded-[var(--radius-card)] border border-[var(--color-line)] p-4"
+                    >
+                      <p className="m-0 text-2xl font-semibold tabular-nums">{carte.valeur}</p>
+                      <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">{carte.nom}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4">
+                  <LireMeta premiere={actif.synchroAt === null} />
+                </div>
+
+                <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+                  Les chiffres sont lus avec la fenêtre d’attribution de votre compte Meta,
+                  celle-là même que montre votre gestionnaire de publicités. Evoliia n’en
+                  impose aucune : deux vérités pour la même semaine ne laisseraient aucun
+                  moyen de savoir laquelle croire.
+                </p>
+              </section>
+            )}
 
             <p className="mt-6 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
               Deux comptes peuvent porter le même nom : c’est le numéro sous chaque nom qui

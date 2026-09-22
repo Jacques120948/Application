@@ -1,7 +1,7 @@
 import { env } from '@/lib/env'
 import type { Jetons } from '@/server/integrations/oauth'
 import { logger } from '@/server/observability/logger'
-import type { AdPlatformAuth, CompteAds, Lecture } from './provider'
+import type { AccesAds, AdPlatformAuth, CompteAds, Lecture } from './provider'
 
 /**
  * Meta Ads, en lecture — Facebook et Instagram.
@@ -359,4 +359,309 @@ export const metaAds: AdPlatformAuth = {
   echangerCode,
   rafraichir,
   listerComptes,
+}
+
+// ════════════════════════ La lecture des campagnes ═══════════════════════════
+
+/**
+ * Le nombre de pages qu'on suit au plus.
+ *
+ * Meta pagine tout, et sa page suivante est une adresse complète qu'il suffit de rappeler.
+ * Une boucle sans borne dépend donc entièrement de ce que Meta décide de rendre : un compte
+ * d'agence, un curseur qui se répète, et la lecture nocturne d'un seul compte consomme le
+ * plafond de tout le monde. Vingt pages couvrent très largement les comptes que ce produit
+ * rencontrera, et la borne est dite plutôt que subie.
+ */
+const PAGES_MAX = 20
+
+type Page<T> = { data?: T[]; paging?: { next?: unknown } }
+
+/**
+ * Un appel paginé, suivi jusqu'au bout.
+ *
+ * L'adresse de la page suivante porte le jeton : elle est rappelée telle quelle, et n'entre
+ * dans aucun journal.
+ */
+async function appelerTout<T>(
+  chemin: string,
+  parametres: Record<string, string>,
+): Promise<{ ok: true; lignes: T[] } | { ok: false; raison: string }> {
+  const lignes: T[] = []
+  let premier = await appeler<Page<T>>(chemin, parametres)
+  if (!premier.ok) return premier
+  lignes.push(...(premier.donnees.data ?? []))
+
+  let suivante = typeof premier.donnees.paging?.next === 'string' ? premier.donnees.paging.next : ''
+  for (let page = 1; page < PAGES_MAX && suivante !== ''; page += 1) {
+    const controle = new AbortController()
+    const minuteur = setTimeout(() => controle.abort(), DELAI_MS)
+    let reponse: Response
+    try {
+      reponse = await fetch(suivante, { headers: { accept: 'application/json' }, signal: controle.signal })
+    } catch {
+      return { ok: false, raison: 'Meta est momentanément injoignable. Réessayez.' }
+    } finally {
+      clearTimeout(minuteur)
+    }
+    const corps = (await reponse.json().catch(() => null)) as (ReponseMeta & Page<T>) | null
+    if (reponse.status !== 200 || corps === null) {
+      logger.warn('Meta a refusé une page', { chemin, status: reponse.status })
+      return { ok: false, raison: messageRefusMeta(reponse.status, corps?.error) }
+    }
+    lignes.push(...(corps.data ?? []))
+    suivante = typeof corps.paging?.next === 'string' ? corps.paging.next : ''
+  }
+
+  return { ok: true, lignes }
+}
+
+/** `act_` devant le numéro, tel que Meta désigne un compte dans ses adresses. */
+function ressource(compteId: string): string {
+  return `/act_${compteId.replace(/^act_/u, '')}`
+}
+
+/**
+ * Un montant rendu par Meta, en micros de la devise du compte.
+ *
+ * Meta écrit les dépenses en unités entières et décimales — « 12.34 » pour douze francs
+ * trente-quatre — là où les budgets sont en centimes entiers. Deux conventions dans la même
+ * réponse, et les confondre donne un facteur cent : une campagne à 5 francs par jour
+ * s'afficherait à 500, ou l'inverse. D'où deux fonctions plutôt qu'une, nommées d'après ce
+ * qu'elles convertissent.
+ */
+export function depenseEnMicros(valeur: unknown): number {
+  const nombre = typeof valeur === 'number' ? valeur : Number.parseFloat(String(valeur ?? ''))
+  return Number.isFinite(nombre) && nombre > 0 ? Math.round(nombre * 1_000_000) : 0
+}
+
+/** Un budget rendu par Meta : des centimes entiers, jamais des unités. */
+export function budgetEnMicros(valeur: unknown): number {
+  const centimes = typeof valeur === 'number' ? valeur : Number.parseInt(String(valeur ?? ''), 10)
+  return Number.isFinite(centimes) && centimes > 0 ? centimes * 10_000 : 0
+}
+
+/**
+ * Les types d'action qui comptent comme un achat, par ordre de préférence.
+ *
+ * L'ordre est tout, et c'est le piège le plus coûteux de cette API. Meta rend une même vente
+ * sous plusieurs étiquettes à la fois : `purchase`, `omni_purchase`,
+ * `offsite_conversion.fb_pixel_purchase`… Les additionner compterait la même vente deux ou
+ * trois fois — un ROAS triplé, parfaitement plausible à l'écran, sur lequel on augmenterait
+ * un budget.
+ *
+ * On en retient donc **une seule**, la première trouvée. `omni_purchase` d'abord : c'est le
+ * total dédoublonné de Meta, celui qui réconcilie le site, l'application et la boutique.
+ */
+const ACHATS = [
+  'omni_purchase',
+  'purchase',
+  'offsite_conversion.fb_pixel_purchase',
+  'onsite_web_purchase',
+] as const
+
+type ActionMeta = { action_type?: unknown; value?: unknown }
+
+/**
+ * Le nombre d'achats d'une ligne d'insights, ou sa valeur.
+ *
+ * Jamais une somme : voir `ACHATS`. Zéro quand aucune étiquette connue n'apparaît, ce qui
+ * est un état ordinaire — une campagne de notoriété n'a pas d'achats, et lui en inventer
+ * serait pire que de n'en montrer aucun.
+ */
+export function achatsDe(actions: unknown): number {
+  if (!Array.isArray(actions)) return 0
+  for (const etiquette of ACHATS) {
+    const trouvee = (actions as ActionMeta[]).find((une) => une?.action_type === etiquette)
+    if (trouvee === undefined) continue
+    const valeur = Number.parseFloat(String(trouvee.value ?? ''))
+    return Number.isFinite(valeur) && valeur > 0 ? valeur : 0
+  }
+  return 0
+}
+
+export type CampagneMeta = {
+  campagneId: string
+  nom: string
+  /** L'objectif, tel que Meta le nomme : OUTCOME_SALES, OUTCOME_TRAFFIC… */
+  type: string
+  statut: string
+  /** Le budget quotidien quand la campagne le pilote. 0 : il vit sur les ensembles. */
+  budgetMicros: number
+}
+
+export type EnsembleMeta = {
+  ensembleId: string
+  campagneId: string
+  nom: string
+  statut: string
+  /** Le budget quotidien quand il vit à ce niveau. 0 : la campagne le pilote. */
+  budgetMicros: number
+}
+
+export type AnnonceMeta = {
+  annonceId: string
+  ensembleId: string
+  nom: string
+  statut: string
+  /** L'adresse de la vignette chez Meta. Jamais l'image : Evoliia n'héberge pas de créatives. */
+  apercu: string
+}
+
+/** Une journée d'un objet, à l'un des trois niveaux. */
+export type JourneeMeta = {
+  /** Vide pour les lignes de campagne : voir `niveaux.ts`. */
+  ensembleId: string
+  annonceId: string
+  campagneId: string
+  jour: string
+  coutMicros: number
+  impressions: number
+  clics: number
+  /** Personnes distinctes atteintes. Meta le donne, Google non. */
+  portee: number
+  achats: number
+  valeurAchats: number
+}
+
+function statut(ligne: Record<string, unknown>): string {
+  /*
+   * `effective_status` plutôt que `status`, et la nuance décide de ce qu'on affiche : une
+   * annonce active dans une campagne en pause n'est pas diffusée. `status` dirait ACTIVE,
+   * `effective_status` dit CAMPAIGN_PAUSED. Montrer le premier ferait chercher pourquoi une
+   * annonce « active » ne dépense rien.
+   */
+  return texte(ligne.effective_status) || texte(ligne.status)
+}
+
+export async function lireCampagnesMeta(acces: AccesAds): Promise<Lecture<CampagneMeta[]>> {
+  const lecture = await appelerTout<Record<string, unknown>>(
+    `${ressource(acces.compteId)}/campaigns`,
+    {
+      access_token: acces.accessToken,
+      fields: 'id,name,objective,status,effective_status,daily_budget',
+      limit: '200',
+    },
+  )
+  if (!lecture.ok) return { ok: false, raison: lecture.raison }
+
+  return {
+    ok: true,
+    valeur: lecture.lignes
+      .map((ligne) => ({
+        campagneId: texte(ligne.id),
+        nom: texte(ligne.name),
+        type: texte(ligne.objective),
+        statut: statut(ligne),
+        budgetMicros: budgetEnMicros(ligne.daily_budget),
+      }))
+      .filter((campagne) => campagne.campagneId !== ''),
+  }
+}
+
+export async function lireEnsemblesMeta(acces: AccesAds): Promise<Lecture<EnsembleMeta[]>> {
+  const lecture = await appelerTout<Record<string, unknown>>(
+    `${ressource(acces.compteId)}/adsets`,
+    {
+      access_token: acces.accessToken,
+      fields: 'id,name,campaign_id,status,effective_status,daily_budget',
+      limit: '200',
+    },
+  )
+  if (!lecture.ok) return { ok: false, raison: lecture.raison }
+
+  return {
+    ok: true,
+    valeur: lecture.lignes
+      .map((ligne) => ({
+        ensembleId: texte(ligne.id),
+        campagneId: texte(ligne.campaign_id),
+        nom: texte(ligne.name),
+        statut: statut(ligne),
+        budgetMicros: budgetEnMicros(ligne.daily_budget),
+      }))
+      .filter((un) => un.ensembleId !== '' && un.campagneId !== ''),
+  }
+}
+
+export async function lireAnnoncesMeta(acces: AccesAds): Promise<Lecture<AnnonceMeta[]>> {
+  const lecture = await appelerTout<Record<string, unknown>>(`${ressource(acces.compteId)}/ads`, {
+    access_token: acces.accessToken,
+    fields: 'id,name,adset_id,status,effective_status,creative{thumbnail_url}',
+    limit: '200',
+  })
+  if (!lecture.ok) return { ok: false, raison: lecture.raison }
+
+  return {
+    ok: true,
+    valeur: lecture.lignes
+      .map((ligne) => {
+        const creatif = (ligne.creative ?? {}) as Record<string, unknown>
+        return {
+          annonceId: texte(ligne.id),
+          ensembleId: texte(ligne.adset_id),
+          nom: texte(ligne.name),
+          statut: statut(ligne),
+          apercu: texte(creatif.thumbnail_url),
+        }
+      })
+      .filter((une) => une.annonceId !== '' && une.ensembleId !== ''),
+  }
+}
+
+/** Les trois étages auxquels Meta sait rendre des chiffres. */
+export type NiveauMeta = 'campaign' | 'adset' | 'ad'
+
+/**
+ * Les journées d'un compte, à l'un des trois niveaux.
+ *
+ * `time_increment=1` demande une ligne par jour : sans lui, Meta rend un seul total pour
+ * toute la période, ce qui ne permet ni courbe ni comparaison — et ressemble pourtant à une
+ * réponse valable.
+ *
+ * La fenêtre d'attribution n'est pas imposée : c'est celle du compte qui s'applique, et
+ * c'est délibéré. Forcer une fenêtre ici donnerait des chiffres qui ne correspondraient pas
+ * à ceux que la personne lit dans son gestionnaire Meta — deux vérités pour la même semaine,
+ * et aucune façon de savoir laquelle croire.
+ */
+export async function lireJourneesMeta(
+  acces: AccesAds,
+  niveau: NiveauMeta,
+  depuis: string,
+  jusqua: string,
+): Promise<Lecture<JourneeMeta[]>> {
+  const lecture = await appelerTout<Record<string, unknown>>(
+    `${ressource(acces.compteId)}/insights`,
+    {
+      access_token: acces.accessToken,
+      level: niveau,
+      fields:
+        'campaign_id,adset_id,ad_id,spend,impressions,clicks,reach,actions,action_values,date_start',
+      time_range: JSON.stringify({ since: depuis, until: jusqua }),
+      time_increment: '1',
+      limit: '500',
+    },
+  )
+  if (!lecture.ok) return { ok: false, raison: lecture.raison }
+
+  return {
+    ok: true,
+    valeur: lecture.lignes
+      .map((ligne) => ({
+        campagneId: texte(ligne.campaign_id),
+        /*
+         * Chaîne vide aux étages supérieurs, et c'est ce qui permet aux trois de cohabiter
+         * dans la même table sans que les totaux comptent la même dépense trois fois.
+         */
+        ensembleId: niveau === 'campaign' ? '' : texte(ligne.adset_id),
+        annonceId: niveau === 'ad' ? texte(ligne.ad_id) : '',
+        jour: texte(ligne.date_start),
+        coutMicros: depenseEnMicros(ligne.spend),
+        impressions: Math.round(Number.parseFloat(String(ligne.impressions ?? '0')) || 0),
+        clics: Math.round(Number.parseFloat(String(ligne.clicks ?? '0')) || 0),
+        portee: Math.round(Number.parseFloat(String(ligne.reach ?? '0')) || 0),
+        achats: achatsDe(ligne.actions),
+        valeurAchats: achatsDe(ligne.action_values),
+      }))
+      .filter((une) => une.campagneId !== '' && /^\d{4}-\d{2}-\d{2}$/u.test(une.jour)),
+  }
 }

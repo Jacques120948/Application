@@ -3,6 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { findProvider } from '@/server/integrations/catalog'
 import { afterEach, beforeEach } from 'vitest'
 import {
+  achatsDe,
+  budgetEnMicros,
+  depenseEnMicros,
   jetonsDepuisMeta,
   MARGE_MS,
   messageRefusMeta,
@@ -208,5 +211,101 @@ describe('ce qu’on dit d’un refus de Meta', () => {
     // Un message de mille signes remplirait l'écran et pousserait le bouton hors de vue.
     const dit = messageRefusMeta(400, { code: 190, message: 'x'.repeat(2_000) })
     expect(dit.length).toBeLessThan(400)
+  })
+})
+
+describe('les deux conventions de montant de Meta', () => {
+  it('lit une dépense en unités décimales', () => {
+    // « 12.34 » veut dire douze francs trente-quatre.
+    expect(depenseEnMicros('12.34')).toBe(12_340_000)
+    expect(depenseEnMicros('0.07')).toBe(70_000)
+  })
+
+  it('lit un budget en centimes entiers', () => {
+    /*
+     * Le piège de cette API : deux conventions dans la même réponse. « 5000 » en budget veut
+     * dire cinquante francs, pas cinq mille. Les confondre donne un facteur cent — une
+     * campagne à 5 francs par jour s'afficherait à 500, ou l'inverse.
+     */
+    expect(budgetEnMicros('5000')).toBe(50_000_000)
+    expect(budgetEnMicros('100')).toBe(1_000_000)
+  })
+
+  it('ne confond jamais les deux', () => {
+    // La même chaîne, deux sens. C'est tout le propos des deux fonctions.
+    expect(depenseEnMicros('5000')).not.toBe(budgetEnMicros('5000'))
+  })
+
+  it('rend zéro plutôt que NaN sur une réponse illisible', () => {
+    for (const bruit of [undefined, null, '', 'gratuit', -3]) {
+      expect(depenseEnMicros(bruit)).toBe(0)
+      expect(budgetEnMicros(bruit)).toBe(0)
+    }
+  })
+})
+
+describe('les achats, comptés une seule fois', () => {
+  it('ne somme jamais deux étiquettes de la même vente', () => {
+    /*
+     * Le piège le plus coûteux de cette API. Meta rend une même vente sous plusieurs
+     * étiquettes : les additionner triplerait le ROAS — un chiffre parfaitement plausible à
+     * l'écran, sur lequel on augmenterait un budget.
+     */
+    const actions = [
+      { action_type: 'purchase', value: '3' },
+      { action_type: 'omni_purchase', value: '3' },
+      { action_type: 'offsite_conversion.fb_pixel_purchase', value: '3' },
+    ]
+
+    expect(achatsDe(actions)).toBe(3)
+  })
+
+  it('préfère le total dédoublonné de Meta', () => {
+    // `omni_purchase` réconcilie le site, l'application et la boutique.
+    const actions = [
+      { action_type: 'purchase', value: '2' },
+      { action_type: 'omni_purchase', value: '5' },
+    ]
+
+    expect(achatsDe(actions)).toBe(5)
+  })
+
+  it('descend la liste quand la préférée manque', () => {
+    expect(achatsDe([{ action_type: 'purchase', value: '4' }])).toBe(4)
+    expect(
+      achatsDe([{ action_type: 'offsite_conversion.fb_pixel_purchase', value: '7' }]),
+    ).toBe(7)
+  })
+
+  it('ignore les actions qui ne sont pas des achats', () => {
+    /*
+     * Une campagne de notoriété n'a pas d'achats, et lui en inventer à partir de ses clics
+     * sur le lien serait pire que de n'en montrer aucun.
+     */
+    const actions = [
+      { action_type: 'link_click', value: '340' },
+      { action_type: 'landing_page_view', value: '210' },
+      { action_type: 'post_engagement', value: '900' },
+    ]
+
+    expect(achatsDe(actions)).toBe(0)
+  })
+
+  it('survit à une réponse illisible', () => {
+    expect(achatsDe(undefined)).toBe(0)
+    expect(achatsDe('bruit')).toBe(0)
+    expect(achatsDe([{ action_type: 'purchase' }])).toBe(0)
+    expect(achatsDe([null])).toBe(0)
+  })
+
+  it('sert aussi aux valeurs, dans la même préférence', () => {
+    // `action_values` a la même forme : le chiffre d'affaires doit suivre le même choix,
+    // sans quoi on diviserait une valeur dédoublonnée par un nombre d'achats qui ne l'est pas.
+    const valeurs = [
+      { action_type: 'purchase', value: '120.50' },
+      { action_type: 'omni_purchase', value: '260.00' },
+    ]
+
+    expect(achatsDe(valeurs)).toBe(260)
   })
 })
