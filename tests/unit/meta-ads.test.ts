@@ -309,3 +309,24 @@ describe('les achats, comptés une seule fois', () => {
     expect(achatsDe(valeurs)).toBe(260)
   })
 })
+
+describe('ce que MIRA refuse de lire', () => {
+  it('écarte l’archivé et le supprimé, et nomme ce qu’elle écarte', () => {
+    /*
+     * Cent quatorze campagnes sur le premier compte réel qui a essayé, dont une poignée
+     * seulement diffusaient encore. Les lire toutes coûte des pages chez Meta, des écritures
+     * en base, et remplit un tableau de bord de lignes sur lesquelles on ne peut rien faire.
+     *
+     * Exclure plutôt qu'énumérer : la liste des états vivants s'allonge avec le temps chez
+     * Meta. Nommer ce qu'on garde ferait disparaître en silence, un jour, un état qu'on
+     * aurait voulu voir.
+     */
+    const source = readFileSync('src/server/ads/meta-ads.ts', 'utf8')
+
+    expect(source).toContain("operator: 'NOT_IN'")
+    expect(source).toContain("'ARCHIVED'")
+    expect(source).toContain("'DELETED'")
+    // Les trois lectures de structure portent le même filtre, sans exception.
+    expect(source.split('filtering: ECARTES').length - 1).toBe(3)
+  })
+})

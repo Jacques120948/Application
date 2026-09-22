@@ -415,6 +415,23 @@ async function appelerTout<T>(
   return { ok: true, lignes }
 }
 
+/**
+ * Ce qu'on refuse de lire : l'archivé et le supprimé.
+ *
+ * Un compte qui tourne depuis des années accumule des campagnes mortes — cent quatorze sur
+ * le premier compte réel qui a essayé, dont une poignée seulement diffusaient encore. Les
+ * lire toutes coûte des pages chez Meta, des écritures en base, et remplit un tableau de
+ * bord de lignes sur lesquelles on ne peut rien faire.
+ *
+ * Exclure plutôt qu'énumérer, et c'est délibéré : la liste des états vivants s'allonge avec
+ * le temps chez Meta — `WITH_ISSUES`, `IN_PROCESS`, et ceux qu'il ajoutera. Nommer ce qu'on
+ * garde ferait disparaître en silence, un jour, un état qu'on aurait voulu voir. Nommer ce
+ * qu'on écarte ne peut échouer que dans l'autre sens : montrer une ligne de trop.
+ */
+const ECARTES = JSON.stringify([
+  { field: 'effective_status', operator: 'NOT_IN', value: ['ARCHIVED', 'DELETED'] },
+])
+
 /** `act_` devant le numéro, tel que Meta désigne un compte dans ses adresses. */
 function ressource(compteId: string): string {
   return `/act_${compteId.replace(/^act_/u, '')}`
@@ -539,6 +556,7 @@ export async function lireCampagnesMeta(acces: AccesAds): Promise<Lecture<Campag
     {
       access_token: acces.accessToken,
       fields: 'id,name,objective,status,effective_status,daily_budget',
+      filtering: ECARTES,
       limit: '200',
     },
   )
@@ -564,6 +582,7 @@ export async function lireEnsemblesMeta(acces: AccesAds): Promise<Lecture<Ensemb
     {
       access_token: acces.accessToken,
       fields: 'id,name,campaign_id,status,effective_status,daily_budget',
+      filtering: ECARTES,
       limit: '200',
     },
   )
@@ -587,6 +606,7 @@ export async function lireAnnoncesMeta(acces: AccesAds): Promise<Lecture<Annonce
   const lecture = await appelerTout<Record<string, unknown>>(`${ressource(acces.compteId)}/ads`, {
     access_token: acces.accessToken,
     fields: 'id,name,adset_id,status,effective_status,creative{thumbnail_url}',
+    filtering: ECARTES,
     limit: '200',
   })
   if (!lecture.ok) return { ok: false, raison: lecture.raison }

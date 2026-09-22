@@ -72,6 +72,30 @@ export const JOURS_RELECTURE = 28
  */
 export const JOURS_DETAIL = 28
 
+/**
+ * Le nombre d'écritures par transaction.
+ *
+ * Vingt, et le chiffre vient d'une panne. Regrouper toutes les écritures d'un étage dans une
+ * seule transaction était censé éviter d'en ouvrir une par objet ; sur un compte à cent
+ * quatorze campagnes et ses centaines d'ensembles, cette transaction unique dépassait les
+ * quinze secondes que la portée s'autorise, et la lecture échouait sur une erreur qui ne
+ * disait rien — après avoir écrit les campagnes, ce qui laissait l'écran dans un état à
+ * moitié vrai.
+ *
+ * Par paquets, donc. Une transaction par objet coûte trop cher, une pour tous ne tient pas :
+ * le nombre d'objets ne doit décider ni du nombre de transactions ni de leur durée.
+ */
+const PAR_TRANSACTION = 20
+
+/** Découpe une liste en paquets de `taille`. */
+function paquets<T>(liste: readonly T[], taille: number): T[][] {
+  const tranches: T[][] = []
+  for (let debut = 0; debut < liste.length; debut += taille) {
+    tranches.push(liste.slice(debut, debut + taille))
+  }
+  return tranches
+}
+
 export type BilanMeta = {
   campagnes: number
   ensembles: number
@@ -124,9 +148,10 @@ export async function synchroniserCompteMeta(
    * d'objets ne doit pas décider du nombre de transactions.
    */
   const parCampagne = new Map<string, string>()
-  await withUserScope(userId, async (tx) => {
-   for (const campagne of campagnes.valeur) {
-    const ligne = await (tx.adsCampagne.upsert({
+  for (const paquet of paquets(campagnes.valeur, PAR_TRANSACTION)) {
+   await withUserScope(userId, async (tx) => {
+    for (const campagne of paquet) {
+     const ligne = await (tx.adsCampagne.upsert({
         where: {
           accountId_campagneId: { accountId: compte.id, campagneId: campagne.campagneId },
         },
@@ -148,19 +173,21 @@ export async function synchroniserCompteMeta(
         },
         select: { id: true },
       }))
-    parCampagne.set(campagne.campagneId, ligne.id)
-   }
-  })
+     parCampagne.set(campagne.campagneId, ligne.id)
+    }
+   })
+  }
 
   const ensembles = await lireEnsemblesMeta(acces)
   if (!ensembles.ok) return ensembles
 
   const parEnsemble = new Map<string, string>()
-  await withUserScope(userId, async (tx) => {
-   for (const ensemble of ensembles.valeur) {
-    const campagneId = parCampagne.get(ensemble.campagneId)
-    if (campagneId === undefined) continue
-    const ligne = await (tx.adsGroupe.upsert({
+  for (const paquet of paquets(ensembles.valeur, PAR_TRANSACTION)) {
+   await withUserScope(userId, async (tx) => {
+    for (const ensemble of paquet) {
+     const campagneId = parCampagne.get(ensemble.campagneId)
+     if (campagneId === undefined) continue
+     const ligne = await (tx.adsGroupe.upsert({
         where: { accountId_groupeId: { accountId: compte.id, groupeId: ensemble.ensembleId } },
         create: {
           userId,
@@ -186,19 +213,21 @@ export async function synchroniserCompteMeta(
         },
         select: { id: true },
       }))
-    parEnsemble.set(ensemble.ensembleId, ligne.id)
-   }
-  })
+     parEnsemble.set(ensemble.ensembleId, ligne.id)
+    }
+   })
+  }
 
   const annonces = await lireAnnoncesMeta(acces)
   if (!annonces.ok) return annonces
 
   let annoncesEcrites = 0
-  await withUserScope(userId, async (tx) => {
-   for (const annonce of annonces.valeur) {
-    const groupeId = parEnsemble.get(annonce.ensembleId)
-    if (groupeId === undefined) continue
-    await (tx.adsAnnonce.upsert({
+  for (const paquet of paquets(annonces.valeur, PAR_TRANSACTION)) {
+   await withUserScope(userId, async (tx) => {
+    for (const annonce of paquet) {
+     const groupeId = parEnsemble.get(annonce.ensembleId)
+     if (groupeId === undefined) continue
+     await (tx.adsAnnonce.upsert({
         where: { accountId_annonceId: { accountId: compte.id, annonceId: annonce.annonceId } },
         create: {
           userId,
@@ -217,9 +246,10 @@ export async function synchroniserCompteMeta(
           vueAt: new Date(),
         },
       }))
-    annoncesEcrites += 1
-   }
-  })
+     annoncesEcrites += 1
+    }
+   })
+  }
 
   const premiere = compte.synchroAt === null
 
@@ -284,6 +314,15 @@ export async function synchroniserCompteMeta(
   }
 
   const ecrites = lignes.length
+
+  /*
+   * L'effacement d'abord, dans sa propre transaction, puis l'écriture par paquets.
+   *
+   * La séparation a un coût assumé : une écriture interrompue en son milieu laisse la
+   * fenêtre à moitié remplie. C'est le moindre mal — la relecture suivante la réécrit
+   * entièrement, alors qu'une transaction unique de plusieurs milliers de lignes dépasserait
+   * les quinze secondes de la portée et ne laisserait, elle, jamais rien.
+   */
   await withUserScope(userId, async (tx) => {
     /*
      * Deux effacements, un par fenêtre, chacun borné à ses étages. Un seul effacement sur la
@@ -314,8 +353,13 @@ export async function synchroniserCompteMeta(
         },
       },
     })
-    if (lignes.length > 0) await tx.adsReleve.createMany({ data: lignes, skipDuplicates: true })
   })
+
+  for (const paquet of paquets(lignes, PAR_TRANSACTION * 50)) {
+    await withUserScope(userId, (tx) =>
+      tx.adsReleve.createMany({ data: paquet, skipDuplicates: true }),
+    )
+  }
 
   await withUserScope(userId, (tx) =>
     tx.adsAccount.updateMany({ where: { id: compte.id, userId }, data: { synchroAt: new Date() } }),
