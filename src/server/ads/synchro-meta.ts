@@ -41,7 +41,12 @@ import { fenetre } from './metriques'
  * étage et des jours neufs à un autre.
  */
 
-/** Ce que la première lecture remonte. Assez pour comparer un mois au mois précédent. */
+/**
+ * Ce que la première lecture remonte, **au niveau des campagnes seulement**.
+ *
+ * Assez pour comparer un mois au mois précédent. Le détail, lui, ne remonte pas si loin :
+ * voir `JOURS_DETAIL`, et la panne qui l'a imposé.
+ */
 export const JOURS_PREMIERE_LECTURE = 90
 
 /**
@@ -52,6 +57,20 @@ export const JOURS_PREMIERE_LECTURE = 90
  * remontent plus loin. Relire trop court fige des journées que Meta corrigera ensuite.
  */
 export const JOURS_RELECTURE = 28
+
+/**
+ * Ce que les ensembles et les annonces remontent, toujours.
+ *
+ * Vingt-huit jours, même à la première lecture, et c'est une leçon payée : quatre-vingt-dix
+ * jours multipliés par une ligne par jour et par annonce font des dizaines de milliers de
+ * lignes, que Meta rend cinq cents à la fois. La première lecture d'un compte ordinaire
+ * dépassait la minute et l'hébergement la coupait — un 504 sans explication, sur un bouton
+ * qui venait d'annoncer « une minute ».
+ *
+ * L'histoire longue n'est de toute façon utile qu'au niveau des campagnes : personne
+ * n'analyse une annonce sur trois mois, et Meta les renouvelle bien plus vite que ça.
+ */
+export const JOURS_DETAIL = 28
 
 export type BilanMeta = {
   campagnes: number
@@ -99,10 +118,15 @@ export async function synchroniserCompteMeta(
   const campagnes = await lireCampagnesMeta(acces)
   if (!campagnes.ok) return campagnes
 
+  /*
+   * Les écritures d'un même étage tiennent dans une seule portée. Une transaction par objet
+   * ouvrait une portée et posait une variable de session pour chaque annonce — le nombre
+   * d'objets ne doit pas décider du nombre de transactions.
+   */
   const parCampagne = new Map<string, string>()
-  for (const campagne of campagnes.valeur) {
-    const ligne = await withUserScope(userId, (tx) =>
-      tx.adsCampagne.upsert({
+  await withUserScope(userId, async (tx) => {
+   for (const campagne of campagnes.valeur) {
+    const ligne = await (tx.adsCampagne.upsert({
         where: {
           accountId_campagneId: { accountId: compte.id, campagneId: campagne.campagneId },
         },
@@ -123,20 +147,20 @@ export async function synchroniserCompteMeta(
           vueAt: new Date(),
         },
         select: { id: true },
-      }),
-    )
+      }))
     parCampagne.set(campagne.campagneId, ligne.id)
-  }
+   }
+  })
 
   const ensembles = await lireEnsemblesMeta(acces)
   if (!ensembles.ok) return ensembles
 
   const parEnsemble = new Map<string, string>()
-  for (const ensemble of ensembles.valeur) {
+  await withUserScope(userId, async (tx) => {
+   for (const ensemble of ensembles.valeur) {
     const campagneId = parCampagne.get(ensemble.campagneId)
     if (campagneId === undefined) continue
-    const ligne = await withUserScope(userId, (tx) =>
-      tx.adsGroupe.upsert({
+    const ligne = await (tx.adsGroupe.upsert({
         where: { accountId_groupeId: { accountId: compte.id, groupeId: ensemble.ensembleId } },
         create: {
           userId,
@@ -161,20 +185,20 @@ export async function synchroniserCompteMeta(
           vueAt: new Date(),
         },
         select: { id: true },
-      }),
-    )
+      }))
     parEnsemble.set(ensemble.ensembleId, ligne.id)
-  }
+   }
+  })
 
   const annonces = await lireAnnoncesMeta(acces)
   if (!annonces.ok) return annonces
 
   let annoncesEcrites = 0
-  for (const annonce of annonces.valeur) {
+  await withUserScope(userId, async (tx) => {
+   for (const annonce of annonces.valeur) {
     const groupeId = parEnsemble.get(annonce.ensembleId)
     if (groupeId === undefined) continue
-    await withUserScope(userId, (tx) =>
-      tx.adsAnnonce.upsert({
+    await (tx.adsAnnonce.upsert({
         where: { accountId_annonceId: { accountId: compte.id, annonceId: annonce.annonceId } },
         create: {
           userId,
@@ -192,13 +216,23 @@ export async function synchroniserCompteMeta(
           apercu: annonce.apercu,
           vueAt: new Date(),
         },
-      }),
-    )
+      }))
     annoncesEcrites += 1
-  }
+   }
+  })
 
   const premiere = compte.synchroAt === null
+
+  /*
+   * Deux fenêtres, et non une. La campagne remonte loin, le détail non.
+   *
+   * C'est la correction d'une vraie panne : quatre-vingt-dix jours multipliés par une ligne
+   * par jour et par annonce font des dizaines de milliers de lignes, que Meta rend cinq
+   * cents à la fois. La première lecture dépassait la minute et l'hébergement la coupait —
+   * un 504 sans explication, sur un bouton qui venait d'annoncer « une minute ».
+   */
   const bornes = fenetre(premiere ? JOURS_PREMIERE_LECTURE : JOURS_RELECTURE, compte.fuseau)
+  const detail = fenetre(Math.min(JOURS_DETAIL, premiere ? JOURS_PREMIERE_LECTURE : JOURS_RELECTURE), compte.fuseau)
 
   /*
    * Les trois niveaux sont lus en parallèle : ils ne dépendent pas l'un de l'autre, et les
@@ -207,8 +241,8 @@ export async function synchroniserCompteMeta(
    */
   const [parJourCampagne, parJourEnsemble, parJourAnnonce] = await Promise.all([
     lireJourneesMeta(acces, 'campaign', bornes.depuis, bornes.jusqua),
-    lireJourneesMeta(acces, 'adset', bornes.depuis, bornes.jusqua),
-    lireJourneesMeta(acces, 'ad', bornes.depuis, bornes.jusqua),
+    lireJourneesMeta(acces, 'adset', detail.depuis, detail.jusqua),
+    lireJourneesMeta(acces, 'ad', detail.depuis, detail.jusqua),
   ])
   if (!parJourCampagne.ok) return parJourCampagne
   if (!parJourEnsemble.ok) return parJourEnsemble
@@ -251,13 +285,32 @@ export async function synchroniserCompteMeta(
 
   const ecrites = lignes.length
   await withUserScope(userId, async (tx) => {
+    /*
+     * Deux effacements, un par fenêtre, chacun borné à ses étages. Un seul effacement sur la
+     * fenêtre longue emporterait des journées de détail qu'on ne réécrit pas — et un écran
+     * qui montrerait des campagnes sur trois mois et des annonces sur trois semaines, sans
+     * que rien n'explique le trou.
+     */
     await tx.adsReleve.deleteMany({
       where: {
         userId,
         accountId: compte.id,
+        groupeId: '',
+        annonceId: '',
         jour: {
           gte: new Date(`${bornes.depuis}T00:00:00Z`),
           lte: new Date(`${bornes.jusqua}T00:00:00Z`),
+        },
+      },
+    })
+    await tx.adsReleve.deleteMany({
+      where: {
+        userId,
+        accountId: compte.id,
+        NOT: { groupeId: '', annonceId: '' },
+        jour: {
+          gte: new Date(`${detail.depuis}T00:00:00Z`),
+          lte: new Date(`${detail.jusqua}T00:00:00Z`),
         },
       },
     })

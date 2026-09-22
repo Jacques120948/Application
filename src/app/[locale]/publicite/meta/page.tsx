@@ -11,6 +11,8 @@ import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
 import { LireMeta } from '@/components/studio/LireMeta'
+import { TableauMeta } from '@/components/studio/TableauMeta'
+import { lireTableauMeta, periodeMetaValide, PERIODES_META } from '@/server/ads/tableau-meta'
 import { withUserScope } from '@/server/db/scope'
 import { NIVEAU_CAMPAGNE } from '@/server/ads/niveaux'
 import { LinkButton } from '@/components/ui'
@@ -29,10 +31,21 @@ import { LinkButton } from '@/components/ui'
  * certains qui ne nous appartiennent plus vraiment. Tant que personne n'en désigne un,
  * aucun n'est lu : c'est le bon défaut, mais il faut pouvoir en sortir.
  */
+/** Comment nommer une fenêtre, en français et sans arithmétique mentale. */
+const NOM_PERIODE: Record<number, string> = {
+  1: 'Hier',
+  3: '3 jours',
+  7: '7 jours',
+  14: '14 jours',
+  30: '30 jours',
+}
+
 export default async function ComptesMetaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>
+  searchParams: Promise<{ jours?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -69,6 +82,13 @@ export default async function ComptesMetaPage({
    * Les relevés ne comptent que l'étage campagne : sans ce filtre, le nombre de journées
    * compterait trois fois les mêmes — voir niveaux.ts.
    */
+  /*
+   * La période voyage dans l'adresse, comme partout ailleurs dans le produit : elle se met en
+   * favori et survit au rafraîchissement. Une valeur inattendue retombe sur sept jours plutôt
+   * que de faire échouer un écran qu'on venait consulter.
+   */
+  const jours = periodeMetaValide((await searchParams).jours)
+
   const lu =
     actif === null
       ? null
@@ -80,6 +100,16 @@ export default async function ComptesMetaPage({
             where: { accountId: actif.id, ...NIVEAU_CAMPAGNE },
           }),
         }))
+
+  /*
+   * Le tableau n'est lu que s'il y a quelque chose à montrer. Sans journée en base, il
+   * rendrait des cartes à zéro et des listes vides — un écran qui ressemble à une panne
+   * alors qu'il suffit de cliquer sur le bouton juste au-dessus.
+   */
+  const tableau =
+    actif === null || lu === null || lu.journees === 0
+      ? null
+      : await lireTableauMeta(user.id, jours).catch(() => null)
 
   return (
     <Shell
@@ -192,12 +222,59 @@ export default async function ComptesMetaPage({
                 </div>
 
                 <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-                  Les chiffres sont lus avec la fenêtre d’attribution de votre compte Meta,
-                  celle-là même que montre votre gestionnaire de publicités. Evoliia n’en
-                  impose aucune : deux vérités pour la même semaine ne laisseraient aucun
-                  moyen de savoir laquelle croire.
+                  La première lecture remonte 90 jours pour les campagnes et 28 pour le
+                  détail : personne n’analyse une annonce sur trois mois, et Meta les
+                  renouvelle bien plus vite que cela.
                 </p>
               </section>
+            )}
+
+            {tableau === null ? null : (
+              <div className="mt-10 min-w-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <h2 className="m-0 text-xl font-semibold tracking-tight">Vos chiffres</h2>
+                  <nav className="flex flex-wrap gap-2" aria-label="Choisir la période">
+                    {PERIODES_META.map((periode) => {
+                      const courante = periode === jours
+                      return (
+                        <a
+                          key={periode}
+                          href={`/${locale}/publicite/meta?jours=${periode}`}
+                          aria-current={courante ? 'true' : undefined}
+                          className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
+                            courante
+                              ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+                              : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+                          }`}
+                        >
+                          {NOM_PERIODE[periode] ?? `${periode} jours`}
+                        </a>
+                      )
+                    })}
+                  </nav>
+                </div>
+
+                {tableau.profil.roasCible === 0 && tableau.profil.cpaCible === 0 ? (
+                  <div className="mt-4 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-caution-soft)] p-4">
+                    <p className="m-0 text-sm leading-relaxed">
+                      Vous n’avez pas encore posé d’objectif. MIRA peut montrer vos chiffres,
+                      mais elle ne les jugera pas : un coût par vente de 37 n’est ni bon ni
+                      mauvais tant qu’on ignore votre marge et votre panier moyen.
+                    </p>
+                    <LinkButton
+                      href={`/${locale}/publicite`}
+                      variant="secondary"
+                      className="mt-3"
+                    >
+                      Renseigner mes objectifs
+                    </LinkButton>
+                  </div>
+                ) : null}
+
+                <div className="mt-6">
+                  <TableauMeta vue={tableau} />
+                </div>
+              </div>
             )}
 
             <p className="mt-6 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
