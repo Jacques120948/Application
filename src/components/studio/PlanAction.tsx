@@ -205,8 +205,20 @@ export function PlanAction({
           return (
             <li
               key={ligne.checkId}
+              /*
+                Un liséré de la couleur du verdict, à gauche.
+                
+                C'est ce qui permet de trier une liste de dix constats sans en lire un seul :
+                l'œil suit une colonne de couleurs avant de lire des mots. La pastille dit
+                déjà la gravité, mais elle est au milieu d'autres pastilles — celle du
+                moteur, celle du nombre de pages — et se noie dans la ligne.
+              */
               className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5 transition-opacity"
-              style={{ opacity: traitee ? 0.55 : 1 }}
+              style={{
+                opacity: traitee ? 0.55 : 1,
+                borderLeftWidth: '4px',
+                borderLeftColor: gravite?.texte ?? 'var(--color-line)',
+              }}
             >
               <div className="flex flex-wrap items-baseline gap-3">
                 <span className="text-sm font-semibold text-[var(--color-ink-faint)]">
@@ -227,12 +239,37 @@ export function PlanAction({
                 <span className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2.5 py-0.5 text-xs text-[var(--color-ink-soft)]">
                   {MOTEURS[ligne.engine] ?? ligne.engine}
                 </span>
-                {ligne.scope === 'site' ? null : (
-                  <span className="text-sm text-[var(--color-ink-faint)]">
-                    {ligne.affected} page{ligne.affected > 1 ? 's' : ''} sur {ligne.examined}
-                  </span>
-                )}
               </div>
+
+              {/*
+                L'ampleur, en chiffres plutôt qu'en incise.
+                
+                « 47 pages sur 176 » perdue au bout d'une rangée de pastilles ne se lit pas ;
+                c'est pourtant ce qui décide de l'ordre dans lequel on traite la liste. Un
+                constat qui touche trois pages et un qui en touche la moitié ne demandent
+                pas le même matin.
+              */}
+              {ligne.scope === 'site' || ligne.examined === 0 ? null : (
+                <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="text-2xl leading-none font-semibold">{ligne.affected}</span>
+                  <span className="text-sm text-[var(--color-ink-soft)]">
+                    page{ligne.affected > 1 ? 's' : ''} concernée{ligne.affected > 1 ? 's' : ''}{' '}
+                    sur {ligne.examined} analysées
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className="ml-1 h-1.5 w-24 overflow-hidden rounded-[var(--radius-pill)] bg-[var(--color-canvas)]"
+                  >
+                    <span
+                      className="block h-1.5 rounded-[var(--radius-pill)]"
+                      style={{
+                        width: `${Math.min(100, Math.round((ligne.affected / ligne.examined) * 100))}%`,
+                        background: gravite?.texte ?? 'var(--color-ink-soft)',
+                      }}
+                    />
+                  </span>
+                </div>
+              )}
 
               <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
                 {ligne.why}

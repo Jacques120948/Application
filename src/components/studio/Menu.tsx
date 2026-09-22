@@ -152,12 +152,78 @@ function destinations(locale: string, siteId: string): Entree[] {
   }))
 }
 
+export type SiteVu = { id: string; host: string }
+
 export type ProprietesMenu = {
   locale: string
   ecran: string
   /** Le site regardé, pour que les liens n'en changent pas en chemin. */
   siteId?: string
+  /** Les sites de la personne, le courant compris. Vide : le sélecteur ne s'affiche pas. */
+  sites?: readonly SiteVu[]
   isAdmin?: boolean
+}
+
+/**
+ * Le site qu'on regarde, en haut du menu.
+ *
+ * Il manquait, et le manque coûtait cher : tout ce que l'écran affiche — les notes, les
+ * priorités, les recherches — porte sur un site, et rien ne disait lequel. Avec plusieurs
+ * sites reliés, on lisait des chiffres sans savoir de qui ils parlaient.
+ *
+ * Un seul site : on le nomme et on s'arrête là, un sélecteur à un choix est un ornement.
+ * Plusieurs : un dépliant natif, qui se ferme à l'échappement et fonctionne sans script.
+ */
+function Site({
+  locale,
+  sites,
+  siteId,
+}: {
+  locale: string
+  sites: readonly SiteVu[]
+  siteId: string
+}) {
+  if (sites.length === 0) return null
+  const courant = sites.find((un) => un.id === siteId) ?? sites[0]
+  if (courant === undefined) return null
+
+  if (sites.length === 1) {
+    return (
+      <p className="m-0 truncate px-3 pb-4 text-sm font-medium" title={courant.host}>
+        {courant.host}
+      </p>
+    )
+  }
+
+  return (
+    <details className="px-3 pb-4">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-[var(--radius-control)] border border-[var(--color-line)] px-3 py-2">
+        <span className="min-w-0 truncate text-sm font-medium" title={courant.host}>
+          {courant.host}
+        </span>
+        <span aria-hidden="true" className="shrink-0 text-xs text-[var(--color-ink-faint)]">
+          ▾
+        </span>
+      </summary>
+      <ul className="m-0 mt-1 grid list-none gap-0.5 p-0">
+        {sites.map((site) => (
+          <li key={site.id}>
+            <a
+              href={`/${locale}/visibilite?siteId=${site.id}`}
+              aria-current={site.id === courant.id ? 'true' : undefined}
+              className={`block truncate rounded-[var(--radius-control)] px-3 py-1.5 text-sm no-underline ${
+                site.id === courant.id
+                  ? 'bg-[var(--color-brand-soft)] text-[var(--color-ink)]'
+                  : 'text-[var(--color-ink-soft)] hover:bg-[var(--color-canvas)]'
+              }`}
+            >
+              {site.host}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </details>
+  )
 }
 
 /**
@@ -168,7 +234,13 @@ export type ProprietesMenu = {
  * fonction qui gère les deux finissait par afficher les deux à la fois sur grand écran — le
  * menu en colonne, et le même à nouveau dans l'en-tête.
  */
-export function ContenuMenu({ locale, ecran, siteId = '', isAdmin = false }: ProprietesMenu) {
+export function ContenuMenu({
+  locale,
+  ecran,
+  siteId = '',
+  sites = [],
+  isAdmin = false,
+}: ProprietesMenu) {
   const site = siteId === '' ? '' : `?siteId=${siteId}`
 
   const resultats: Entree[] = [
@@ -234,7 +306,8 @@ export function ContenuMenu({ locale, ecran, siteId = '', isAdmin = false }: Pro
   ) as Record<string, string>
 
   return (
-    <nav aria-label="Navigation principale" className="px-3 pb-6">
+    <nav aria-label="Navigation principale" className="pb-6">
+      <Site locale={locale} sites={sites} siteId={siteId} />
       <Groupe
         titre="Votre équipe"
         entrees={destinations(locale, siteId)}

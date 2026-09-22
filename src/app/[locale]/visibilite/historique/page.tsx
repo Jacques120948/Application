@@ -162,7 +162,8 @@ export default async function HistoriquePage({
   return (
     <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite"
       menu="historique"
-      siteId={tableau.site.id}>
+      siteId={tableau.site.id}
+      sites={[tableau.site, ...tableau.autresSites]}>
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <div className="mb-8 flex flex-wrap items-baseline justify-between gap-3">
           <div>

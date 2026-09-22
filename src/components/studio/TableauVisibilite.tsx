@@ -40,7 +40,6 @@ export type TableauProps = {
   }
   precedent: { finishedAt: Date | null; seoScore: Note; geoScore: Note } | null
   historique: { finishedAt: Date | null; seoScore: Note; geoScore: Note }[]
-  autresSites: { id: string; host: string; label: string }[]
   /** Les lignes du plan, avec leur état. Le composant qui les rend est interactif. */
   lignes: readonly LigneVue[]
   /** Ce qui a été traité et ne figure plus dans la dernière analyse. */
@@ -335,13 +334,42 @@ function Courbes({
   )
 }
 
+/**
+ * Un chiffre, et ce qu'il compte.
+ *
+ * Gros, parce qu'il se lit d'un coup d'œil ; sans flèche ni pourcentage, parce qu'il n'y a
+ * rien à comparer — c'est un état, pas une tendance. La teinte ne sert qu'à distinguer ce
+ * qui presse de ce qui rassure ; par défaut il n'en a pas, et c'est bien ainsi pour un
+ * nombre de pages.
+ */
+function Compteur({
+  valeur,
+  quoi,
+  teinte,
+}: {
+  valeur: number
+  quoi: string
+  teinte?: string
+}) {
+  return (
+    <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+      <p
+        className="m-0 text-3xl leading-none font-semibold"
+        style={teinte === undefined ? undefined : { color: teinte }}
+      >
+        {valeur}
+      </p>
+      <p className="mt-1.5 mb-0 text-sm text-[var(--color-ink-soft)]">{quoi}</p>
+    </div>
+  )
+}
+
 export function TableauVisibilite({
   locale,
   site,
   audit,
   precedent,
   historique,
-  autresSites,
   lignes,
   reglees,
   cout,
@@ -428,19 +456,26 @@ export function TableauVisibilite({
             </p>
           ) : null}
         </div>
-        {autresSites.length === 0 ? null : (
-          <nav className="flex flex-wrap gap-2">
-            {autresSites.map((autre) => (
-              <a
-                key={autre.id}
-                href={`/${locale}/visibilite?siteId=${autre.id}`}
-                className="rounded-[var(--radius-pill)] border border-[var(--color-line)] px-3 py-1 text-sm text-[var(--color-ink-soft)] no-underline hover:border-[var(--color-brand)]"
-              >
-                {autre.host}
-              </a>
-            ))}
-          </nav>
-        )}
+      </div>
+
+      {/*
+        Trois chiffres, et seulement trois.
+        
+        C'est ce qu'on regarde en arrivant : combien de pages ont été lues, combien de points
+        restent, combien sont déjà réglés. Aucun n'est estimé — ils se comptent tous sur ce
+        que l'analyse a réellement trouvé, et c'est pour cela qu'on peut les afficher gros.
+        
+        Le troisième est celui qui manquait : une liste qui ne montre que ce qu'il reste à
+        faire ne donne jamais l'impression d'avancer.
+      */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Compteur valeur={audit.pagesCrawled} quoi="pages analysées" />
+        <Compteur
+          valeur={aCorriger}
+          quoi={critiques === 0 ? 'points à corriger' : `points à corriger, dont ${critiques} critique${critiques > 1 ? 's' : ''}`}
+          teinte={critiques > 0 ? 'var(--color-critical)' : undefined}
+        />
+        <Compteur valeur={reglees.length} quoi="déjà réglés" teinte="var(--color-positive)" />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

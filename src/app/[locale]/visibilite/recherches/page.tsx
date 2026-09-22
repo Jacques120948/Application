@@ -728,7 +728,8 @@ export default async function RecherchesPage({
   return (
     <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite"
       menu="recherches"
-      siteId={tableau.site.id}>
+      siteId={tableau.site.id}
+      sites={[tableau.site, ...tableau.autresSites]}>
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a
           href={`/${locale}/visibilite?siteId=${tableau.site.id}`}

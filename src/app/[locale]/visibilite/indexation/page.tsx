@@ -46,6 +46,7 @@ export default async function IndexationPage({
       screen="visibilite"
       menu="indexation"
       siteId={tableau.site.id}
+      sites={[tableau.site, ...tableau.autresSites]}
     >
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a

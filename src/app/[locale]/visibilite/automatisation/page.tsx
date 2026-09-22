@@ -64,6 +64,7 @@ export default async function AutomatisationPage({
       screen="visibilite"
       menu="automatisation"
       siteId={tableau.site.id}
+      sites={[tableau.site, ...tableau.autresSites]}
     >
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a

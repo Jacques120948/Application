@@ -74,6 +74,7 @@ export default async function AssistantsPage({
       screen="visibilite"
       menu="assistants"
       siteId={tableau.site.id}
+      sites={[tableau.site, ...tableau.autresSites]}
     >
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a

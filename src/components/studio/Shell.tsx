@@ -38,6 +38,7 @@ export function Shell({
   screen = 'autre',
   menu,
   siteId = '',
+  sites = [],
   children,
 }: {
   locale: Locale
@@ -63,6 +64,13 @@ export function Shell({
   menu?: string
   /** Le site regardé, pour que les liens du menu n'en changent pas en chemin. */
   siteId?: string
+  /**
+   * Les sites de la personne, pour le sélecteur en haut du menu.
+   *
+   * Tout ce qu'un écran affiche porte sur un site, et rien ne disait lequel : avec
+   * plusieurs sites reliés, on lisait des chiffres sans savoir de qui ils parlaient.
+   */
+  sites?: readonly { id: string; host: string }[]
   children: ReactNode
 }) {
   const marque = menu ?? screen
@@ -83,7 +91,13 @@ export function Shell({
           >
             <Logo id="mark-shell" size={26} wordmark={t('common.appName')} />
           </a>
-          <ContenuMenu locale={locale} ecran={marque} siteId={siteId} isAdmin={isAdmin} />
+          <ContenuMenu
+            locale={locale}
+            ecran={marque}
+            siteId={siteId}
+            sites={sites}
+            isAdmin={isAdmin}
+          />
         </div>
       </aside>
 
@@ -109,7 +123,13 @@ export function Shell({
                 <span className="hidden text-[var(--color-ink-soft)] sm:inline">{userName}</span>
               ) : null}
               <LogoutButton label={t('nav.logout')} locale={locale} />
-              <MenuMobile locale={locale} ecran={marque} siteId={siteId} isAdmin={isAdmin} />
+              <MenuMobile
+                locale={locale}
+                ecran={marque}
+                siteId={siteId}
+                sites={sites}
+                isAdmin={isAdmin}
+              />
             </div>
           </div>
         </header>
