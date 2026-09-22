@@ -122,6 +122,7 @@ export default async function PublicitePage({
       credits={credits}
       isAdmin={user.role === 'ADMIN'}
       screen="visibilite"
+      menu="publicite"
     >
       <div className="mx-auto w-full max-w-5xl px-5 py-10">
         <div className="flex flex-wrap items-center gap-4">

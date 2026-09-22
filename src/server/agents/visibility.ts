@@ -1,3 +1,4 @@
+import { membre, type MembreEquipe } from '@/lib/equipe'
 /**
  * L'équipe de visibilité.
  *
@@ -35,25 +36,14 @@ export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'ads', 'm
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
 
-export type VisibilityAgent = {
+export type VisibilityAgent = MembreEquipe & {
   id: VisibilityAgentId
-  /** Prénom affiché. Un interlocuteur se retient mieux qu'un intitulé de fonction. */
-  name: string
-  /** Sa spécialité, en deux mots. */
-  role: string
   /** Ce qu'il fait, en une phrase, pour l'écran de choix et la page publique. */
   summary: string
   /** Ce qu'il sait traiter. Des noms de choses, pas des promesses. */
   handles: readonly string[]
   /** Identifiant de la fonction qui l'ouvre. Voir server/billing/features.ts. */
   feature: string
-  /**
-   * Portrait, quand il existe. Absent : la pastille à initiale prend le relais, ce qui est
-   * le cas aujourd'hui pour les quatre.
-   */
-  avatar?: string
-  /** Jeton de couleur de sa pastille. Fond tendre, lettre sombre : lisible partout. */
-  tint: 'brand' | 'accent' | 'warm' | 'night' | 'sun' | 'sea'
   /**
    * Ce que ce spécialiste fait déjà, aujourd'hui, dans le produit livré.
    *
@@ -68,18 +58,30 @@ export type VisibilityAgent = {
   starters: readonly string[]
 }
 
+/**
+ * L'identité d'un membre, tirée du fichier partagé plutôt que recopiée.
+ *
+ * Le menu du studio affiche la même équipe, et un composant de navigateur ne peut pas
+ * importer une valeur du serveur. Sans source unique, un prénom changé ici laisserait
+ * l'ancien dans la navigation — et personne ne verrait l'écart avant un client.
+ *
+ * Lève si l'identifiant est inconnu : c'est une erreur de programmation, pas un cas limite,
+ * et elle doit tomber à la construction du module plutôt que sur un écran vide.
+ */
+function identite(id: string): MembreEquipe {
+  const trouve = membre(id)
+  if (trouve === undefined) throw new Error(`Membre d'équipe inconnu : ${id}`)
+  return trouve
+}
+
 export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
   {
-    id: 'audit',
-    name: 'Léa',
-    role: 'Audit',
+    ...identite('audit'),
     summary:
       'Elle lit votre site page par page, relève ce qui cloche et dit par quoi commencer. Elle constate : elle ne touche à rien.',
     handles: ['Analyse du site', 'Problèmes détectés', 'Priorités', 'Progression'],
     feature: 'visibility_audit_agent',
     atWork: 'Elle analyse, elle priorise, et vous pouvez lui écrire.',
-    avatar: '/equipe/lea.webp',
-    tint: 'brand',
     starters: [
       'Pourquoi mon score a-t-il baissé ?',
       'Par quoi devrais-je commencer ?',
@@ -87,16 +89,12 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
     ],
   },
   {
-    id: 'seo',
-    name: 'Néo',
-    role: 'Référencement',
+    ...identite('seo'),
     summary:
       'Il travaille ce qu’un moteur de recherche regarde : les titres, les descriptions, la structure et les liens entre vos pages.',
     handles: ['Titles', 'Meta descriptions', 'H1 et H2', 'Structure', 'Maillage interne'],
     feature: 'visibility_seo_agent',
     atWork: 'Il rédige vos titres, vos descriptions et vos H1, et il répond à vos questions.',
-    avatar: '/equipe/neo.webp',
-    tint: 'night',
     starters: [
       'Mes titres de pages sont-ils bons ?',
       'Que manque-t-il à ma page d’accueil ?',
@@ -104,16 +102,12 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
     ],
   },
   {
-    id: 'geo',
-    name: 'Gia',
-    role: 'Moteurs IA',
+    ...identite('geo'),
     summary:
       'Elle rend vos pages compréhensibles par les assistants : des réponses directes, des faits nets, une entreprise clairement identifiée.',
     handles: ['Réponses directes', 'FAQ', 'Données structurées', 'Identité de la marque'],
     feature: 'visibility_geo_agent',
     atWork: 'Elle rédige vos introductions, et elle explique ce qu’une IA comprend de vos pages.',
-    avatar: '/equipe/gia.webp',
-    tint: 'accent',
     starters: [
       'Pourquoi mon score GEO est-il bas ?',
       'Mes pages répondent-elles aux vraies questions ?',
@@ -121,16 +115,12 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
     ],
   },
   {
-    id: 'content',
-    name: 'Milo',
-    role: 'Contenu',
+    ...identite('content'),
     summary:
       'Il écrit et réécrit : descriptions, pages, questions fréquentes, articles. Toujours à partir de votre site, jamais à partir d’un modèle générique.',
     handles: ['Descriptions', 'Pages', 'FAQ', 'Articles', 'Introductions'],
     feature: 'visibility_content_agent',
     atWork: 'Il écrit à partir de vos pages, sur demande, dans la conversation.',
-    avatar: '/equipe/milo.webp',
-    tint: 'warm',
     starters: [
       'Réécris la description de cette page.',
       'Propose une FAQ pour ce service.',
@@ -153,9 +143,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
    * ce qu'elle a modifié est journalisé avec son ancienne valeur.
    */
   {
-    id: 'ads',
-    name: 'Naya',
-    role: 'Publicité',
+    ...identite('ads'),
     summary:
       'Elle lit vos campagnes Google Ads, explique où part votre argent et ce qu’il rapporte, et propose des ajustements. Elle ne modifie rien sans votre accord.',
     handles: ['Campagnes', 'Budgets', 'ROAS et CPA', 'Mots-clés', 'Termes de recherche'],
@@ -170,8 +158,6 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
      */
     atWork:
       'Elle lit vos campagnes Google Ads, dit où part votre argent, et prépare des mots-clés et des campagnes que vous confirmez.',
-    avatar: '/equipe/naya.webp',
-    tint: 'sun',
     starters: [
       'Comment vont mes campagnes aujourd’hui ?',
       'Quelle campagne dépense trop ?',
@@ -196,9 +182,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
    * modèle. Ce sont les règles du produit, pas celles de Google.
    */
   {
-    id: 'meta',
-    name: 'MIRA',
-    role: 'Meta Ads',
+    ...identite('meta'),
     summary:
       'Elle analyse vos campagnes Facebook et Instagram, détecte les opportunités et vous aide à améliorer vos performances publicitaires.',
     handles: ['Campagnes', 'Ensembles', 'Créatives', 'Audiences', 'ROAS et CPA'],
@@ -209,8 +193,6 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
      */
     atWork:
       'Elle lit vos campagnes Facebook et Instagram, repère ce qui fatigue votre audience, et vous dit ce qui mérite d’être changé.',
-    avatar: '/equipe/mira.webp',
-    tint: 'sea',
     starters: [
       'Pourquoi mon ROAS baisse ?',
       'Quelle publicité fonctionne le mieux ?',

@@ -57,6 +57,7 @@ export default async function SubscriptionPage({
       credits={wallet.balance}
       isAdmin={user.role === 'ADMIN'}
       screen="abonnement"
+      menu="abonnement"
     >
       <div className="mx-auto w-full max-w-4xl">
         <h1 className="mb-1 text-2xl font-semibold">{t('subscription.title')}</h1>

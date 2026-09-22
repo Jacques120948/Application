@@ -44,6 +44,8 @@ export default async function IndexationPage({
       credits={credits}
       isAdmin={user.role === 'ADMIN'}
       screen="visibilite"
+      menu="indexation"
+      siteId={tableau.site.id}
     >
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a

@@ -53,7 +53,9 @@ export default async function ArticlesPage({
   ])
 
   return (
-    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite">
+    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite"
+      menu="articles"
+      siteId={tableau.site.id}>
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a
           href={`/${locale}/visibilite?siteId=${tableau.site.id}`}

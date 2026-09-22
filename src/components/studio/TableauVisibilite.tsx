@@ -1,4 +1,4 @@
-import { Card, CardBody, LinkButton } from '@/components/ui'
+import { Card, CardBody } from '@/components/ui'
 import { PlanAction, type LigneVue } from './PlanAction'
 
 /**
@@ -468,76 +468,21 @@ export function TableauVisibilite({
       <Courbes historique={historique} locale={locale} />
 
       <section>
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+        {/*
+          Le titre seul, et plus les dix boutons qui l'accompagnaient.
+          
+          Ils offraient à plat dix destinations — vos pages dans Google, ce que les gens
+          cherchent, votre boutique, quoi écrire, vos campagnes, les IA, l'automatique, un
+          article, l'équipe, l'historique — sans hiérarchie ni ordre. On y trouvait tout, et
+          rien du premier coup d'œil. Ils vivent désormais dans le menu de gauche, groupés et
+          commentés, où ils ne concurrencent plus ce que cet écran a de propre : la liste de
+          ce qu'il faut corriger.
+        */}
+        <div className="mb-4">
           <h2 className="m-0 text-lg font-semibold">Votre plan d’action</h2>
-          <div className="flex flex-wrap gap-2">
-            <LinkButton
-              href={`/${locale}/visibilite/indexation?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Vos pages dans Google
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/recherches?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Ce que les gens cherchent
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/boutique`}
-              variant="secondary"
-              size="medium"
-            >
-              Votre boutique
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/calendrier?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Quoi écrire, et quand
-            </LinkButton>
-            <LinkButton href={`/${locale}/publicite`} variant="secondary" size="medium">
-              Vos campagnes
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/assistants?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Votre marque dans les IA
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/automatisation?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Ce qui tourne tout seul
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/articles?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Écrire un article
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/equipe?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Parler à l’équipe
-            </LinkButton>
-            <LinkButton
-              href={`/${locale}/visibilite/historique?siteId=${site.id}`}
-              variant="secondary"
-              size="medium"
-            >
-              Voir l’historique
-            </LinkButton>
-          </div>
+          <p className="mt-1 mb-0 text-sm text-[var(--color-ink-soft)]">
+            Ce que Léa a relevé, du plus rentable au moins urgent.
+          </p>
         </div>
 
         {lignes.length === 0 ? (

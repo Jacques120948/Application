@@ -78,6 +78,8 @@ export function EquipeVisibilite({
   agents,
   echanges,
   cout,
+  /** Le membre que le menu demande d'ouvrir. Vide : le premier disponible. */
+  demande = '',
 }: {
   siteId: string
   siteHost: string
@@ -85,8 +87,14 @@ export function EquipeVisibilite({
   agents: readonly AgentVu[]
   echanges: readonly EchangeVu[]
   cout: number
+  demande?: string
 }) {
-  const premier = agents.find((agent) => agent.open) ?? agents[0]
+  /*
+   * Le membre demandé l'emporte sur le premier ouvert, mais seulement s'il existe : un
+   * identifiant venu de l'adresse ne doit pas laisser l'écran sans interlocuteur.
+   */
+  const voulu = agents.find((agent) => agent.id === demande)
+  const premier = voulu ?? agents.find((agent) => agent.open) ?? agents[0]
   const [choisi, setChoisi] = useState<string>(premier?.id ?? '')
   const [question, setQuestion] = useState('')
   const [fil, setFil] = useState<EchangeVu[]>([...echanges])

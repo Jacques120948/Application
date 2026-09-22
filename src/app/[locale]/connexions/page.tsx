@@ -107,6 +107,7 @@ export default async function ConnectionsPage({
       credits={wallet.balance}
       isAdmin={user.role === 'ADMIN'}
       screen="autre"
+      menu="connexions"
     >
       <div className="mx-auto w-full max-w-4xl">
         <h1 className="mb-1 text-2xl font-semibold">Connecter vos outils</h1>

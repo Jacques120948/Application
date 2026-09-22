@@ -62,6 +62,8 @@ export default async function AutomatisationPage({
       credits={credits}
       isAdmin={user.role === 'ADMIN'}
       screen="visibilite"
+      menu="automatisation"
+      siteId={tableau.site.id}
     >
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a

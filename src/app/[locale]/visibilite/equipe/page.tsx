@@ -27,7 +27,7 @@ export default async function EquipePage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ siteId?: string }>
+  searchParams: Promise<{ siteId?: string; agent?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
   const user = await getCurrentUser()
@@ -43,7 +43,9 @@ export default async function EquipePage({
   ])
 
   return (
-    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite">
+    <Shell locale={locale} userName={user.name} credits={credits} isAdmin={user.role === 'ADMIN'} screen="visibilite"
+      menu="equipe"
+      siteId={tableau.site.id}>
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <div className="mb-8 flex flex-wrap items-baseline justify-between gap-3">
           <div>
@@ -63,6 +65,12 @@ export default async function EquipePage({
           siteHost={desk.siteHost}
           locale={locale}
           agents={desk.agents}
+          /*
+            Le membre demandé par le menu, quand il y en a un. Sans cela, cliquer « Néo »
+            dans la colonne de gauche ouvrait la conversation de Léa : on croyait s'être
+            trompé de lien, et on cherchait ailleurs ce qui était déjà là.
+          */
+          demande={demande.agent ?? ''}
           echanges={desk.notes}
           cout={VISIBILITY_ASK_ESTIMATED_CREDITS}
         />

@@ -271,6 +271,7 @@ export default async function ComptesMetaPage({
       credits={credits}
       isAdmin={user.role === 'ADMIN'}
       screen="publicite"
+      menu="publicite-meta"
     >
       <div className="mx-auto w-full max-w-4xl px-5 py-10">
         <a

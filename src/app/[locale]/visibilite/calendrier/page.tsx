@@ -163,6 +163,8 @@ export default async function CalendrierPage({
       credits={credits}
       isAdmin={user.role === 'ADMIN'}
       screen="visibilite"
+      menu="calendrier"
+      siteId={tableau.site.id}
     >
       <div className="mx-auto w-full max-w-3xl px-5 py-10">
         <a
