@@ -82,7 +82,7 @@ async function enTete(userId: string, siteId: string): Promise<string[]> {
     return lignes
   }
   lignes.push(
-    `Dernière analyse : ${derniere.pagesCrawled} pages lues. Note de référencement ${derniere.seoScore ?? 'non calculée'}/100, note « moteurs IA » ${derniere.geoScore ?? 'non calculée'}/100.`,
+    `Dernière analyse : ${derniere.pagesCrawled} pages lues. Note de référencement ${derniere.seoScore ?? 'non calculée'}/100, note « moteurs IA » ${derniere.geoScore ?? 'non calculée'}/100, note « conversion » ${derniere.croScore ?? 'non calculée'}/100.`,
   )
   if (analyses.length > 1) {
     lignes.push(
@@ -99,7 +99,7 @@ async function enTete(userId: string, siteId: string): Promise<string[]> {
 async function constats(
   userId: string,
   siteId: string,
-  moteur: 'seo' | 'geo' | null,
+  moteur: 'seo' | 'geo' | 'cro' | null,
 ): Promise<string[]> {
   const plan = await readPlan(userId, siteId)
   if (plan === null || plan.lignes.length === 0) {
@@ -116,7 +116,7 @@ async function constats(
 async function pages(
   userId: string,
   siteId: string,
-  quoi: 'balises' | 'machine' | 'texte',
+  quoi: 'balises' | 'machine' | 'texte' | 'conversion',
 ): Promise<string[]> {
   const audit = await withUserScope(userId, (tx) =>
     tx.audit.findFirst({
@@ -145,6 +145,14 @@ async function pages(
     lists?: number
     tables?: number
     author?: string
+    boutons?: number
+    premierBouton?: string
+    formulaires?: number
+    champsMax?: number
+    prix?: boolean
+    avisDeclares?: boolean
+    reassurance?: string[]
+    hasViewport?: boolean
   }
 
   const decrire = (page: (typeof relevees)[number]): string => {
@@ -157,6 +165,17 @@ async function pages(
         (titre) => titre.level >= 2 && titre.text.trim().endsWith('?'),
       ).length
       return `- ${page.path} | données structurées: ${(signaux.schemaTypes ?? []).join(', ') || '(aucune)'} | intertitres-questions: ${questions} | listes: ${signaux.lists ?? 0} | tableaux: ${signaux.tables ?? 0} | auteur: ${signaux.author || '(absent)'}`
+    }
+    if (quoi === 'conversion') {
+      /*
+       * Les relevés de conversion sont nés avec Cleo : un audit antérieur ne les porte pas.
+       * « (non relevé) » n'est pas de la coquetterie — écrire « 0 bouton » sur une page qui
+       * en a peut-être dix ferait dire à Cleo une chose fausse sur le ton du constat.
+       */
+      const ou = (valeur: number | undefined) => (valeur === undefined ? '(non relevé)' : valeur)
+      const oui = (valeur: boolean | undefined) =>
+        valeur === undefined ? '(non relevé)' : valeur ? 'oui' : 'non'
+      return `- ${page.path} | boutons: ${ou(signaux.boutons)} | premier libellé: ${signaux.premierBouton === undefined ? '(non relevé)' : signaux.premierBouton || '(vide)'} | formulaires: ${ou(signaux.formulaires)} (champs max ${ou(signaux.champsMax)}) | prix visible: ${oui(signaux.prix)} | avis déclarés: ${oui(signaux.avisDeclares)} | réassurance: ${signaux.reassurance === undefined ? '(non relevé)' : signaux.reassurance.join(', ') || '(aucune)'} | mobile: ${oui(signaux.hasViewport)}`
     }
     return `- ${page.path} | ${page.wordCount} mots | h1: ${signaux.h1?.[0] ?? '(absent)'} | début: ${(signaux.intro ?? '').slice(0, 160) || '(aucun paragraphe substantiel)'}`
   }
@@ -227,6 +246,30 @@ export async function readSiteFacts(
       ...base,
       ...(await constats(userId, siteId, 'geo')),
       ...(await pages(userId, siteId, 'machine')),
+    ].join('\n')
+  }
+  /*
+   * Cleo voit ce qui se passe une fois la personne arrivée, et rien d'autre.
+   *
+   * Cette branche est explicite alors qu'elle pourrait tomber dans celle de Milo, et c'est
+   * volontaire : elle y tombait, justement, et Cleo recevait le texte des pages avec les
+   * constats des trois moteurs. Un spécialiste qui voit tout répond à côté, et celui-ci
+   * aurait en plus commenté du référencement sous le titre « conversion ».
+   *
+   * La dernière phrase n'est pas une précaution de style. Cleo porte un nom qui évoque la
+   * mesure des ventes, et aucune n'est reliée : sans cette ligne, un modèle comble, et il
+   * comble avec un taux de conversion inventé.
+   */
+  if (agent === 'cro') {
+    return [
+      ...base,
+      ...(await constats(userId, siteId, 'cro')),
+      ...(await pages(userId, siteId, 'conversion')),
+      'AUCUNE DONNÉE DE VENTE : Evoliia n’est reliée à aucune source de conversion — ni' +
+        ' panier, ni chiffre d’affaires, ni taux d’abandon, ni parcours d’achat. Tu ne' +
+        ' disposes que de ce que les pages montrent. Ne cite aucun taux de conversion,' +
+        ' aucun chiffre de vente, aucune estimation de gain, et dis-le quand la question en' +
+        ' demande.',
     ].join('\n')
   }
   /*

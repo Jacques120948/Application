@@ -147,6 +147,34 @@ describe('chacun voit ce qui le regarde', () => {
     expect(contexte).toContain('début:')
   }, 30_000)
 
+  it('donne à Cleo ce que la page offre pour décider, et lui dit qu’elle ne voit aucune vente', async () => {
+    /*
+     * Sa branche a bien failli ne pas exister : sans elle, Cleo tombait dans le périmètre de
+     * Milo et recevait le texte des pages avec les constats des trois moteurs. Un
+     * spécialiste qui voit tout répond à côté, et celui-ci aurait commenté du référencement
+     * sous le titre « conversion ».
+     *
+     * La seconde assertion compte autant : Cleo porte un nom qui évoque la mesure des
+     * ventes, et aucune n'est reliée. Si le contexte ne le dit pas, le modèle comble — et il
+     * comble avec un taux de conversion inventé.
+     */
+    const { askVisibility } = await import('@/server/agents/visibility-service')
+    await askVisibility(
+      userId,
+      { siteId, agent: 'cro', question: 'Pourquoi personne n’achète ?', history: [] },
+      'fr',
+    )
+
+    const contexte = dernierContexte()
+    expect(contexte).toContain('boutons:')
+    expect(contexte).toContain('réassurance:')
+    expect(contexte).toContain('AUCUNE DONNÉE DE VENTE')
+    // Ni les balises de Néo, ni le vocabulaire de Gia, ni le texte de Milo.
+    expect(contexte).not.toContain('| description:')
+    expect(contexte).not.toContain('données structurées:')
+    expect(contexte).not.toContain('début:')
+  }, 30_000)
+
   it('donne à Léa les deux moteurs, et pas le détail des pages', async () => {
     const { askVisibility } = await import('@/server/agents/visibility-service')
     await askVisibility(userId, { siteId, agent: 'audit', question: 'Par quoi je commence ?', history: [] }, 'fr')

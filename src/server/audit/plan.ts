@@ -211,9 +211,11 @@ export type LigneHistorique = {
   pagesCrawled: number
   seoScore: number | null
   geoScore: number | null
+  croScore: number | null
   /** Écart avec l'analyse précédente. `null` pour la première, qui n'a rien à comparer. */
   seoDelta: number | null
   geoDelta: number | null
+  croDelta: number | null
 }
 
 /** Au-delà, personne ne remonte : on garde tout en base, on n'affiche pas tout. */
@@ -242,6 +244,7 @@ export async function listAudits(
         pagesCrawled: true,
         seoScore: true,
         geoScore: true,
+        croScore: true,
       },
     }),
   )
@@ -256,6 +259,7 @@ export async function listAudits(
       ...audit,
       seoDelta: ecart(audit.seoScore, precedent?.seoScore),
       geoDelta: ecart(audit.geoScore, precedent?.geoScore),
+      croDelta: ecart(audit.croScore, precedent?.croScore),
     }
   })
 }
