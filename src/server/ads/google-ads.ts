@@ -1044,6 +1044,49 @@ async function metriquesDeMotsCles(
   }
 }
 
+/**
+ * La langue que chaque campagne cible, telle qu'elle la déclare.
+ *
+ * Lue et non devinée. La rédaction écrivait en français quoi qu'il arrive, ce qui pour une
+ * boutique suisse servant trois langues produit des titres corrects dans la mauvaise langue
+ * — une annonce que son public ne comprend pas consomme ses impressions sans être cliquée.
+ *
+ * Une campagne qui cible plusieurs langues ne rend rien : on ne saurait pas laquelle choisir
+ * pour ses annonces, et en choisir une au hasard serait exactement la faute qu'on corrige.
+ * L'appelant retombe alors sur la langue du site, ce qu'il sait être un repli.
+ */
+async function lireLanguesDesCampagnes(
+  acces: AccesAds,
+): Promise<Lecture<Record<string, string>>> {
+  const lecture = await interroger(
+    acces,
+    `SELECT campaign.id, campaign_criterion.language.language_constant
+     FROM campaign_criterion
+     WHERE campaign_criterion.type = 'LANGUAGE'
+       AND campaign_criterion.negative = false
+       AND campaign.status != 'REMOVED'`,
+  )
+  if (!lecture.ok) return lecture
+
+  const parCampagne = new Map<string, Set<string>>()
+  for (const ligne of lecture.valeur) {
+    const campagne = String(nombre(((ligne.campaign ?? {}) as Record<string, unknown>).id))
+    const critere = (ligne.campaignCriterion ?? {}) as Record<string, unknown>
+    const langue = texte(((critere.language ?? {}) as Record<string, unknown>).languageConstant)
+    if (campagne === '0' || langue === '') continue
+    const vues = parCampagne.get(campagne) ?? new Set<string>()
+    vues.add(langue)
+    parCampagne.set(campagne, vues)
+  }
+
+  const langues: Record<string, string> = {}
+  for (const [campagne, vues] of parCampagne) {
+    // Une seule, ou rien. Choisir parmi plusieurs serait deviner.
+    if (vues.size === 1) langues[campagne] = [...vues][0] as string
+  }
+  return { ok: true, valeur: langues }
+}
+
 export const googleAds: AdPlatformProvider = {
   id: 'google-ads',
   nom: 'Google Ads',
@@ -1061,4 +1104,5 @@ export const googleAds: AdPlatformProvider = {
   ideesDeMotsCles,
   metriquesDeMotsCles,
   lireMotsClesDuGroupe,
+  lireLanguesDesCampagnes,
 }

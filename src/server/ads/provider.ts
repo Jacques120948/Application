@@ -290,4 +290,13 @@ export type AdPlatformProvider = {
     acces: AccesAds,
     groupeId: string,
   ) => Promise<Lecture<Array<{ texte: string; correspondance: string }>>>
+
+  /**
+   * La langue que chaque campagne cible, par identifiant de campagne.
+   *
+   * Lue dans le ciblage, jamais devinée sur les mots : c'est la personne qui l'a posée.
+   * Une campagne qui en cible plusieurs est absente du résultat — choisir pour elle serait
+   * exactement la faute qu'on cherche à éviter.
+   */
+  lireLanguesDesCampagnes: (acces: AccesAds) => Promise<Lecture<Record<string, string>>>
 }

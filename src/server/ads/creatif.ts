@@ -4,6 +4,7 @@ import { logger } from '@/server/observability/logger'
 import { classer } from '@/server/audit/intentions'
 import { accesCompteActif, compteActif } from './comptes'
 import { googleAds } from './google-ads'
+import { LANGUES } from './mots-cles'
 import { fenetre } from './metriques'
 
 /**
@@ -31,6 +32,17 @@ import { fenetre } from './metriques'
  */
 
 /** Le créatif se relit à ce rythme. Une semaine : il ne bouge pas plus vite. */
+/**
+ * Les constantes de langue de Google vers les codes qu'on écrit partout ailleurs.
+ *
+ * L'inverse de `LANGUES` dans `mots-cles.ts`, construit une fois plutôt que parcouru : une
+ * campagne dont la langue n'est pas dans cette table reste sans langue connue, ce qui est
+ * plus honnête que de ranger de l'ukrainien sous « autre ».
+ */
+const CODES_LANGUE: Record<string, string> = Object.fromEntries(
+  Object.entries(LANGUES).map(([code, langue]) => [langue.code, code]),
+)
+
 export const FRAICHEUR_CREA_MS = 7 * 24 * 60 * 60 * 1000
 
 /** La fenêtre des termes de recherche. Trente jours : assez pour que la traîne compte. */
@@ -224,6 +236,26 @@ export async function synchroniserCreatif(
   await withUserScope(userId, (tx) =>
     tx.adsGroupe.deleteMany({ where: { userId, accountId: compte.id, vueAt: { lt: debut } } }),
   )
+
+  /*
+   * La langue de chaque campagne, telle qu'elle la déclare à Google. Son échec n'annule
+   * rien : sans elle, la rédaction retombera sur la langue du site, ce qui est un repli
+   * connu et non une panne.
+   */
+  const langues = await googleAds.lireLanguesDesCampagnes(acces)
+  bilan.appels += 1
+  if (langues.ok) {
+    await withUserScope(userId, async (tx) => {
+      for (const [identifiant, langue] of Object.entries(langues.valeur)) {
+        const code = CODES_LANGUE[langue]
+        if (code === undefined) continue
+        await tx.adsCampagne.updateMany({
+          where: { userId, accountId: compte.id, campagneId: identifiant },
+          data: { langue: code },
+        })
+      }
+    })
+  }
 
   const bornes = fenetre(JOURS_TERMES, compte.fuseau, maintenant)
   const termes = await googleAds.lireTermes(acces, bornes.depuis, bornes.jusqua)

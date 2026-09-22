@@ -1842,6 +1842,9 @@ model AdsCampagne {
   budgetId     String  @default("")
   /// Vrai quand la plateforme signale que la campagne est bridée par son budget.
   budgetLimite Boolean @default(false)
+  /// La langue ciblée, lue dans le ciblage de la campagne — jamais devinée sur les mots.
+  /// Vide quand la campagne en cible plusieurs ou aucune : on ne sait pas, on le dit.
+  langue       String  @default("")
 
   vueAt     DateTime @default(now())
   createdAt DateTime @default(now())

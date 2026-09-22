@@ -34,6 +34,15 @@ import { lireProfil } from './profil'
  */
 
 /** Ce que Google accepte au maximum, par genre de contenant et par champ. */
+/** Les codes de langue vers le mot que le modèle comprend. */
+const LANGUES_LISIBLES: Record<string, string> = {
+  fr: 'français',
+  de: 'allemand',
+  it: 'italien',
+  en: 'anglais',
+  es: 'espagnol',
+}
+
 export const MAXIMUMS: Record<string, Record<string, number>> = {
   annonces: { titre: 15, 'titre-long': 0, description: 4 },
   elements: { titre: 15, 'titre-long': 5, description: 5 },
@@ -259,7 +268,7 @@ export async function redigerPourGroupe(
         id: true,
         nom: true,
         genre: true,
-        campagne: { select: { nom: true } },
+        campagne: { select: { nom: true, langue: true } },
         elements: { select: { champ: true, texte: true } },
         propositions: {
           where: { etat: 'proposee' },
@@ -300,11 +309,23 @@ export async function redigerPourGroupe(
    * traduit l'erreur en phrase. Intercepter ici ferait un second endroit où décider de ce
    * qu'on dit d'une panne de modèle.
    */
+  /*
+   * La langue vient du ciblage de la campagne, que la personne a posé elle-même chez Google.
+   * Ni devinée sur les mots des mots-clés, ni supposée d'après l'interface : une boutique
+   * suisse en sert trois, et des titres corrects dans la mauvaise langue consomment leurs
+   * impressions sans jamais être cliqués.
+   *
+   * Vide — campagne multilingue, ou pas encore relue — on retombe sur le français, et c'est
+   * assumé comme un repli : mieux vaut la langue du site qu'un choix au hasard.
+   */
+  const langue = LANGUES_LISIBLES[groupe.campagne.langue] ?? 'français'
+
   const issue = await proposerElementsAds({
     userId,
     genre: groupe.genre,
     nomGroupe: groupe.nom,
     campagne: groupe.campagne.nom,
+    langue,
     activite: profil.activite,
     produits: profil.produits,
     pays: profil.pays,

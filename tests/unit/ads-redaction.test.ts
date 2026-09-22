@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { LONGUEURS, manques, MAXIMUMS } from '@/server/ads/redaction'
 
@@ -83,5 +84,41 @@ describe('les maximums', () => {
     expect(MAXIMUMS.annonces?.['titre-long']).toBe(0)
     expect(MAXIMUMS.annonces?.description).toBe(4)
     expect(MAXIMUMS.elements?.description).toBe(5)
+  })
+})
+
+describe('la langue de la rédaction', () => {
+  it('vient du ciblage de la campagne, pas de l’interface', () => {
+    /*
+     * La rédaction écrivait en français quoi qu'il arrive. Pour une boutique suisse qui sert
+     * trois langues, c'est une faute qui ne se voit pas tout de suite : les titres sont bons,
+     * ils sont simplement dans la mauvaise langue — et une annonce que son public ne comprend
+     * pas consomme ses impressions sans être cliquée.
+     */
+    const source = readFileSync('src/server/ads/redaction.ts', 'utf8')
+    expect(source).toContain('groupe.campagne.langue')
+    expect(source).toContain('langue,')
+  })
+
+  it('retombe sur le français quand la campagne n’en déclare qu’aucune ou plusieurs', () => {
+    // Un repli assumé : mieux vaut la langue du site qu'un choix au hasard.
+    const source = readFileSync('src/server/ads/redaction.ts', 'utf8')
+    expect(source).toContain("?? 'français'")
+  })
+
+  it('ne devine jamais la langue sur les mots', () => {
+    /*
+     * Tentant et faux : « quartz rose » et « quarzo rosa » se ressemblent assez pour tromper
+     * une heuristique, et une campagne mal étiquetée écrit tout de travers. Google connaît
+     * la réponse — la personne l'a posée dans le ciblage.
+     */
+    const source = readFileSync('src/server/ads/creatif.ts', 'utf8')
+    expect(source).toContain('lireLanguesDesCampagnes')
+
+    const lecture = readFileSync('src/server/ads/google-ads.ts', 'utf8')
+    const corps = lecture.slice(lecture.indexOf('async function lireLanguesDesCampagnes'))
+    expect(corps).toContain("campaign_criterion.type = 'LANGUAGE'")
+    // Plusieurs langues : on ne rend rien plutôt que d'en choisir une.
+    expect(corps).toContain('vues.size === 1')
   })
 })
