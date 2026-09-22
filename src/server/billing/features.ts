@@ -191,6 +191,21 @@ export const FEATURES: readonly Feature[] = [
     status: 'live',
   },
   {
+    id: 'visibility_cro_agent',
+    group: 'equipe',
+    label: 'Cleo — Conversion',
+    /*
+     * La fiche promet ce qui existe, et rien de plus — même discipline que pour Naya et
+     * MIRA. Cleo lit les pages ; elle ne voit ni les visiteurs, ni les ventes, ni le
+     * tunnel, parce qu'aucune source de mesure n'est reliée à Evoliia. Écrire « elle
+     * mesure vos conversions » ferait attendre un tableau de bord à quelqu'un qui
+     * trouverait une analyse de pages.
+     */
+    summary:
+      'Ce qui, dans vos pages, fait hésiter un visiteur avant d’acheter : une promesse floue, un bouton qu’on ne trouve pas, une livraison qu’on découvre trop tard.',
+    status: 'live',
+  },
+  {
     id: 'visibility_ads_agent',
     group: 'equipe',
     label: 'Naya — Publicité',
@@ -318,12 +333,14 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'visibility_cro_agent',
   ],
   'vis-starter': [
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'visibility_cro_agent',
     'shopify_read',
     'search_console',
   ],
@@ -332,6 +349,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'visibility_cro_agent',
     'shopify_read',
     'search_console',
   ],
@@ -346,6 +364,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_seo_agent',
     'visibility_geo_agent',
     'visibility_content_agent',
+    'visibility_cro_agent',
     'shopify_read',
     'search_console',
     'visibility_ads_agent',

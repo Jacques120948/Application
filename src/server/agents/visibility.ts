@@ -32,7 +32,7 @@ import { membre, type MembreEquipe } from '@/lib/equipe'
  * spécialiste ajouté plus tard sans portrait.
  */
 
-export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'ads', 'meta'] as const
+export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta'] as const
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
 
@@ -142,6 +142,46 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
    * n'existe pour personne d'autre : elle ne modifie rien sans confirmation explicite, et
    * ce qu'elle a modifié est journalisé avec son ancienne valeur.
    */
+  /*
+   * Cleo passe avant les publicitaires, comme dans le menu, et pour la même raison : elle
+   * travaille sur le trafic qu'on a déjà. Un visiteur qu'on convertit mieux ne se rachète
+   * pas, et dépenser en publicité avant d'avoir regardé où l'on perd les gens revient à
+   * remplir un seau percé.
+   */
+  {
+    ...identite('cro'),
+    summary:
+      'Elle lit votre site du point de vue de quelqu’un qui hésite à acheter, et relève ce qui le fait partir : une promesse floue, un bouton qu’on ne trouve pas, une livraison qu’on découvre trop tard.',
+    handles: [
+      'Proposition de valeur',
+      'Boutons d’action',
+      'Réassurance',
+      'Points de friction',
+      'Fiches produits',
+      'Formulaires',
+      'Expérience mobile',
+    ],
+    feature: 'visibility_cro_agent',
+    /*
+     * Ce qu'elle fait aujourd'hui, et rien de plus. Elle lit les pages — le même passage que
+     * Léa, sans lecture supplémentaire — et en tire des constats calculés.
+     *
+     * Ce qui n'est PAS promis ici l'est délibérément : elle ne voit ni vos visiteurs, ni vos
+     * ventes, ni votre tunnel. Aucune source de mesure n'est reliée à Evoliia. Annoncer « je
+     * mesure vos conversions » à quelqu'un qui trouverait une analyse de pages serait la
+     * façon la plus sûre de décevoir quelqu'un qui vient de payer. La phrase s'élargira
+     * quand une mesure existera, pas avant.
+     */
+    atWork:
+      'Elle analyse vos pages à chaque audit et dit ce qui peut faire hésiter un visiteur. Elle ne mesure pas encore vos ventes : aucune source de conversion n’est reliée.',
+    starters: [
+      'Pourquoi mes visiteurs n’achètent-ils pas ?',
+      'Quelle page dois-je améliorer en premier ?',
+      'Qu’est-ce qui manque à mes fiches produits ?',
+      'Donne-moi trois améliorations simples.',
+      'Mon bouton d’achat est-il assez visible ?',
+    ],
+  },
   {
     ...identite('ads'),
     summary:

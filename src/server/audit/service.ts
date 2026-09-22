@@ -62,6 +62,7 @@ export type SiteResume = {
     pagesCrawled: number
     seoScore: number | null
     geoScore: number | null
+    croScore: number | null
     startedAt: Date
   } | null
 }
@@ -137,6 +138,7 @@ export async function listSites(userId: string): Promise<SiteResume[]> {
             pagesCrawled: true,
             seoScore: true,
             geoScore: true,
+            croScore: true,
             startedAt: true,
           },
         },
@@ -327,6 +329,7 @@ async function cloreAudit(
         finishedAt: new Date(),
         seoScore: notes?.seo ?? null,
         geoScore: notes?.geo ?? null,
+        croScore: notes?.cro ?? null,
         // L'audit est utilisable : le code d'échec n'a plus lieu d'être affiché. Reste à dire
         // s'il porte sur tout le site ou sur ce qu'on a eu le temps d'en lire.
         errorCode: complet ? null : EXPLORATION_PARTIELLE,
@@ -559,6 +562,7 @@ export async function advanceAudit(userId: string, auditId: string): Promise<Ava
               finishedAt: new Date(),
               seoScore: notes?.seo ?? null,
               geoScore: notes?.geo ?? null,
+              croScore: notes?.cro ?? null,
               /*
                * Atteindre la limite de pages de l'offre n'est pas une exploration écourtée :
                * c'est la borne annoncée, et conseiller de relancer n'y changerait rien. Seul
@@ -636,6 +640,7 @@ export async function readAudit(userId: string, auditId: string) {
         maxPages: true,
         seoScore: true,
         geoScore: true,
+        croScore: true,
         startedAt: true,
         finishedAt: true,
         site: { select: { id: true, host: true, label: true } },
@@ -670,7 +675,7 @@ async function noterAudit(
   userId: string,
   auditId: string,
   origin: string,
-): Promise<{ seo: number; geo: number } | null> {
+): Promise<{ seo: number; geo: number; cro: number } | null> {
   const audit = await withUserScope(userId, (tx) =>
     tx.audit.findFirst({
       where: { id: auditId, userId },
@@ -716,8 +721,8 @@ async function noterAudit(
     sitemapFound: true,
   }
 
-  const { seo, geo } = await evaluateAll(pages, site)
-  const constats = [...seo.constats, ...geo.constats]
+  const { seo, geo, cro } = await evaluateAll(pages, site)
+  const constats = [...seo.constats, ...geo.constats, ...cro.constats]
 
   await withUserScope(userId, async (tx) => {
     for (const constat of constats) {
@@ -746,8 +751,14 @@ async function noterAudit(
     }
   })
 
-  logger.info('audit noté', { auditId, seo: seo.score, geo: geo.score, constats: constats.length })
-  return { seo: seo.score, geo: geo.score }
+  logger.info('audit noté', {
+    auditId,
+    seo: seo.score,
+    geo: geo.score,
+    cro: cro.score,
+    constats: constats.length,
+  })
+  return { seo: seo.score, geo: geo.score, cro: cro.score }
 }
 
 /**

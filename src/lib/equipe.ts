@@ -8,7 +8,7 @@
  *
  * La séparation n'est pas une élégance : le menu du studio affiche l'équipe, et un composant
  * de navigateur ne peut pas importer une valeur du serveur — il tirerait la base de données
- * avec lui. Sans ce fichier, il aurait fallu recopier les six prénoms dans le menu, et le
+ * avec lui. Sans ce fichier, il aurait fallu recopier chaque prénom dans le menu, et le
  * jour où l'un change, l'écran en afficherait un que le reste du produit ne connaît plus.
  */
 
@@ -16,12 +16,12 @@
 export type TeinteMembre = 'brand' | 'accent' | 'warm' | 'night' | 'sun' | 'sea'
 
 /**
- * Les six identifiants, comme type et comme valeur.
+ * Les identifiants de l'équipe, comme type et comme valeur.
  *
  * Un identifiant mal orthographié ailleurs dans le produit doit se voir à la compilation, pas
  * sur un écran vide : c'est ce que cette union achète.
  */
-export const IDS_MEMBRES = ['audit', 'seo', 'geo', 'content', 'ads', 'meta'] as const
+export const IDS_MEMBRES = ['audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta'] as const
 
 export type IdMembre = (typeof IDS_MEMBRES)[number]
 
@@ -41,6 +41,21 @@ export const MEMBRES: readonly MembreEquipe[] = [
   { id: 'seo', name: 'Néo', role: 'Référencement', avatar: '/equipe/neo.webp', tint: 'night' },
   { id: 'geo', name: 'Gia', role: 'Moteurs IA', avatar: '/equipe/gia.webp', tint: 'accent' },
   { id: 'content', name: 'Milo', role: 'Contenu', avatar: '/equipe/milo.webp', tint: 'warm' },
+  /*
+   * Cleo est placée entre le contenu et la publicité, et l'ordre de cette liste est celui du
+   * menu. Ce n'est pas un détail : on attire d'abord (Léa, Néo, Gia, Milo), on transforme
+   * ensuite (Cleo), on achète du trafic en dernier (Naya, MIRA). Mettre Cleo après les
+   * publicitaires laisserait croire qu'on optimise ce qu'on a payé, alors que son intérêt
+   * est justement de passer avant — un visiteur qu'on convertit mieux ne se rachète pas.
+   */
+  /*
+   * Cleo n'a pas encore son portrait : la pastille à initiale prend le relais, ce que le
+   * composant sait faire depuis toujours. Le jour où `public/equipe/cleo.webp` existera —
+   * 320 × 320, même facture 3D que les six autres — il suffira de rétablir la ligne
+   * `avatar` ci-dessous. Mieux vaut une initiale qu'un portrait d'une autre facture : une
+   * équipe dont un membre ne ressemble pas aux autres se lit comme une pièce rapportée.
+   */
+  { id: 'cro', name: 'Cleo', role: 'Conversion', tint: 'accent' },
   { id: 'ads', name: 'Naya', role: 'Publicité', avatar: '/equipe/naya.webp', tint: 'sun' },
   { id: 'meta', name: 'MIRA', role: 'Meta Ads', avatar: '/equipe/mira.webp', tint: 'sea' },
 ] as const

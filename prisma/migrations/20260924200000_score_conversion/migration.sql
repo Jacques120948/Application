@@ -1,0 +1,13 @@
+-- La note de conversion, celle de Cleo.
+--
+-- Une troisième note à côté du référencement et des moteurs IA, et non une moyenne : les
+-- trois répondent à des questions différentes — ce site se trouve-t-il, une machine peut-elle
+-- s'en servir, un visiteur arrivé dessus a-t-il de quoi décider. Un site est très souvent bon
+-- pour l'une et mauvais pour l'autre, et les additionner effacerait exactement ce qu'il y a à
+-- voir.
+--
+-- Nullable, et c'est ce qui rend la migration sans danger : les audits déjà en base n'ont pas
+-- été jugés sur ces contrôles, et leur attribuer zéro les ferait tous paraître catastrophiques
+-- du jour au lendemain. « Pas encore mesuré » et « mesuré à zéro » sont deux choses, et
+-- l'écran doit pouvoir les distinguer.
+ALTER TABLE "Audit" ADD COLUMN "croScore" INTEGER;

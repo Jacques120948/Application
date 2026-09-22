@@ -55,10 +55,21 @@ export type Verdict = boolean | null
 
 export type Severity = 'critical' | 'important' | 'improvement'
 
+/**
+ * À quelle question un contrôle répond.
+ *
+ * `seo` : ce site se trouve-t-il. `geo` : une machine qui doit répondre à quelqu'un peut-elle
+ * s'en servir. `cro` : un visiteur arrivé dessus a-t-il de quoi décider. Trois métiers, trois
+ * notes, un seul parcours de pages — le site n'est lu qu'une fois.
+ */
+export const MOTEURS = ['seo', 'geo', 'cro'] as const
+
+export type Moteur = (typeof MOTEURS)[number]
+
 export type Check = {
   /** Identifiant stable : il relie un constat d'un audit à l'autre, et au plan d'action. */
   id: string
-  engine: 'seo' | 'geo'
+  engine: Moteur
   /** Le constat, dit comme le créateur le lira. */
   label: string
   /** Ce que ça lui coûte. Jamais la définition du terme technique. */

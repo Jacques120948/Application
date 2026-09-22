@@ -77,6 +77,38 @@ export type Signaux = {
   publishedTime: string
   /** Auteur déclaré, par la méta ou par les données structurées. */
   author: string
+
+  /*
+   * ── Ce que Cleo regarde ──────────────────────────────────────────────────
+   *
+   * Facultatifs, et ce n'est pas une commodité : les audits enregistrés avant que ces
+   * relevés n'existent ne les portent pas. Un contrôle qui s'en sert doit s'abstenir —
+   * rendre `null` — plutôt que de conclure « aucun bouton » d'une information manquante.
+   * C'est la même règle que pour les assistants écartés par robots.txt.
+   */
+
+  /** Boutons et liens qui se présentent comme des actions. Voir `compterActions`. */
+  boutons?: number
+  /**
+   * Le premier d'entre eux, tel qu'il est écrit.
+   *
+   * C'est lui qu'on juge : « Envoyer » ne dit pas ce qui va se passer, « Demander un
+   * devis » si. Un libellé vide — une icône seule — est un bouton qu'un lecteur d'écran
+   * ne sait pas annoncer et qu'un visiteur pressé ne reconnaît pas.
+   */
+  premierBouton?: string
+  /** Formulaires de la page, et le nombre de champs du plus long. */
+  formulaires?: number
+  champsMax?: number
+  /** Un prix est-il visible, ou déclaré dans les données structurées ? */
+  prix?: boolean
+  /** Des avis ou une note sont-ils déclarés en données structurées ? */
+  avisDeclares?: boolean
+  /**
+   * Les gages de confiance trouvés dans le texte, par nom : livraison, retour, garantie,
+   * paiement, contact. Comptés sur des mots entiers, jamais sur des fragments.
+   */
+  reassurance?: readonly string[]
 }
 
 /** Le texte d'un élément, espaces normalisés. */
@@ -258,6 +290,28 @@ export function extractSignals(html: string, pageUrl: string): Signaux {
   const metaPropriete = (nom: string): string =>
     attribut(racine.querySelector(`meta[property="${nom}"]`), 'content')
 
+  const actions = racine.querySelectorAll(
+    'button, a[role="button"], input[type="submit"], input[type="button"], [class*="btn"], [class*="button"], [class*="cta"]',
+  )
+  const libelles = actions
+    .map((element) => {
+      const texte = element.text.replace(/\s+/gu, ' ').trim()
+      if (texte !== '') return texte
+      // Une icône seule : ce qu'un lecteur d'écran annoncerait, s'il y a quelque chose.
+      return (element.getAttribute('aria-label') ?? element.getAttribute('value') ?? '').trim()
+    })
+    .filter((texte) => texte.length <= 60)
+
+  const formulaires = racine.querySelectorAll('form')
+  const champsParFormulaire = formulaires.map(
+    (form) =>
+      form.querySelectorAll('input, select, textarea').filter((champ) => {
+        const type = (champ.getAttribute('type') ?? '').toLowerCase()
+        // Ni les boutons ni les champs cachés ne sont des champs à remplir.
+        return type !== 'hidden' && type !== 'submit' && type !== 'button' && type !== 'image'
+      }).length,
+  )
+
   return {
     title: texteDe(racine.querySelector('title')),
     description: meta('description'),
@@ -287,5 +341,61 @@ export function extractSignals(html: string, pageUrl: string): Signaux {
       metaPropriete('article:modified_time') ||
       attribut(racine.querySelector('time[datetime]'), 'datetime'),
     author: meta('author') || auteurDe(jsonLd),
+
+    boutons: actions.length,
+    premierBouton: libelles[0] ?? '',
+    formulaires: formulaires.length,
+    champsMax: champsParFormulaire.length === 0 ? 0 : Math.max(...champsParFormulaire),
+    /*
+     * Un prix : déclaré dans les données structurées, ou écrit dans la page. Le second
+     * chemin compte autant que le premier — la plupart des sites affichent un prix sans le
+     * déclarer, et ne regarder que le schéma conclurait « aucun prix » sur une boutique
+     * entière.
+     */
+    prix:
+      schemaTypes.some((type) => type === 'Offer' || type === 'AggregateOffer') ||
+      MONNAIE.test(text),
+    avisDeclares: schemaTypes.some(
+      (type) => type === 'AggregateRating' || type === 'Review' || type === 'Rating',
+    ),
+    reassurance: gagesDe(text, schemaTypes),
   }
+}
+
+/**
+ * Un prix écrit dans la page.
+ *
+ * Le symbole ou le code de monnaie collé à un nombre, dans un sens ou dans l'autre :
+ * « 29.90 CHF », « CHF 29.90 », « 29,90 € ». On ne cherche pas un nombre seul, qui serait
+ * une quantité, une taille ou une année une fois sur deux.
+ */
+const MONNAIE =
+  /(?:(?:chf|eur|usd|€|\$|£)\s*\d|\d\s*(?:chf|eur|usd|€|\$|£))/iu
+
+/**
+ * Les gages de confiance, cherchés sur des mots entiers.
+ *
+ * Chacun répond à une question qu'un acheteur se pose avant de payer, et qu'il ne posera
+ * jamais : quand est-ce que je le reçois, que se passe-t-il si ça ne me va pas, à qui
+ * j'ai affaire, est-ce que mon paiement est sûr. Une page qui n'y répond nulle part ne
+ * perd pas tout le monde — elle perd ceux qui hésitaient.
+ *
+ * Les mots entiers, jamais les fragments : « or » est dans « alors », et « avis » dans
+ * « aviser ». Un gage détecté à tort est pire qu'un gage manqué, parce qu'il fait taire un
+ * constat juste.
+ */
+const GAGES: readonly { nom: string; mots: RegExp }[] = [
+  { nom: 'livraison', mots: /\b(?:livraison|livré|livrée|expédition|expédié|délai)\b/iu },
+  { nom: 'retour', mots: /\b(?:retour|retours|rembours\w*|satisfait|échange)\b/iu },
+  { nom: 'garantie', mots: /\b(?:garantie|garanti|garantis)\b/iu },
+  { nom: 'paiement', mots: /\b(?:paiement|payer|carte|visa|mastercard|twint|sécurisé)\b/iu },
+  { nom: 'contact', mots: /\b(?:contact|contactez|téléphone|adresse|courriel|e-?mail)\b/iu },
+  { nom: 'avis', mots: /\b(?:avis|témoignage\w*|étoiles?|not[ée]\s)\b/iu },
+]
+
+function gagesDe(texte: string, schemaTypes: readonly string[]): string[] {
+  const trouves = GAGES.filter((gage) => gage.mots.test(texte)).map((gage) => gage.nom)
+  // Une FAQ déclarée vaut un gage : elle répond aux objections avant qu'on les pose.
+  if (schemaTypes.includes('FAQPage')) trouves.push('faq')
+  return trouves
 }

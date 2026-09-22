@@ -1299,6 +1299,9 @@ model Audit {
   /// Nuls tant que l'audit n'est pas terminé.
   seoScore Int?
   geoScore Int?
+  /// La note de conversion. Nulle sur un audit antérieur à Cleo : « pas encore mesuré »
+  /// n'est pas « mesuré à zéro », et l'écran doit pouvoir les distinguer.
+  croScore Int?
 
   /// Ce qui s'observe une fois pour le site entier — robots.txt, plan de site, protocole —
   /// et non page par page. Relevé à la première tranche, quand l'accueil est visité, et

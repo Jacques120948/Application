@@ -40,9 +40,22 @@ describe('l’équipe de visibilité', () => {
     expect(orphelins.map((agent) => agent.name)).toEqual([])
   })
 
-  it('donne à chacun sa teinte, et Naya la sienne', () => {
-    const teintes = VISIBILITY_AGENTS.map((agent) => agent.tint)
-    expect(new Set(teintes).size).toBe(VISIBILITY_AGENTS.length)
+  /**
+   * La teinte ne distingue que ceux qu'aucun portrait ne distingue déjà.
+   *
+   * Ce test exigeait une teinte unique par membre. C'était juste tant qu'il y avait autant
+   * de membres que de jetons de couleur, et c'est devenu impossible en arrivant à sept —
+   * or le catalogue de jetons est celui du design system, qu'on n'élargit pas pour loger un
+   * septième prénom.
+   *
+   * L'invariant durable est ailleurs : la teinte ne sert qu'à la pastille à initiale, qui
+   * ne s'affiche que pour un membre sans portrait. Deux membres illustrés peuvent donc
+   * partager une couleur sans qu'on les confonde jamais ; deux membres sans portrait, non.
+   */
+  it('ne fait porter la même teinte qu’à des membres déjà distingués par leur portrait', () => {
+    const sansPortrait = VISIBILITY_AGENTS.filter((agent) => agent.avatar === undefined)
+    const teintes = sansPortrait.map((agent) => agent.tint)
+    expect(new Set(teintes).size).toBe(sansPortrait.length)
     expect(VISIBILITY_AGENTS.find((agent) => agent.id === 'ads')?.name).toBe('Naya')
   })
 

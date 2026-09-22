@@ -51,6 +51,7 @@ import {
   NEO_SYSTEM,
   GIA_SYSTEM,
   MILO_SYSTEM,
+  CLEO_SYSTEM,
   MIRA_SYSTEM,
   NAYA_SYSTEM,
 } from './prompts'
@@ -1535,6 +1536,7 @@ const VISIBILITE_SYSTEMS = {
   seo: NEO_SYSTEM,
   geo: GIA_SYSTEM,
   content: MILO_SYSTEM,
+  cro: CLEO_SYSTEM,
   ads: NAYA_SYSTEM,
   meta: MIRA_SYSTEM,
 } as const

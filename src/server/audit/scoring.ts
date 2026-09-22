@@ -1,7 +1,8 @@
 import { readSetting } from '@/server/settings/store'
 import { GEO_CHECKS } from './checks/geo'
 import { SEO_CHECKS } from './checks/seo'
-import type { Check, Contexte, PageVue, Severity, SiteVu } from './checks/types'
+import { CRO_CHECKS } from './checks/cro'
+import type { Check, Contexte, Moteur, PageVue, Severity, SiteVu } from './checks/types'
 
 /**
  * Des constats, puis une note.
@@ -27,7 +28,7 @@ import type { Check, Contexte, PageVue, Severity, SiteVu } from './checks/types'
 
 export type Constat = {
   checkId: string
-  engine: 'seo' | 'geo'
+  engine: Moteur
   label: string
   why: string
   severity: Severity
@@ -53,7 +54,7 @@ export type Resultat = {
  * Les libellés ne sont pas en base : un constat de la semaine dernière emprunte la
  * formulation d'aujourd'hui, et réécrire une explication ne demande aucune migration.
  */
-export const ALL_CHECKS: readonly Check[] = [...SEO_CHECKS, ...GEO_CHECKS]
+export const ALL_CHECKS: readonly Check[] = [...SEO_CHECKS, ...GEO_CHECKS, ...CRO_CHECKS]
 
 /** Le contrôle derrière un identifiant, ou `undefined` s'il a été retiré du catalogue. */
 export function findCheck(checkId: string): Check | undefined {
@@ -199,12 +200,18 @@ export async function evaluate(
 export async function evaluateAll(
   pages: readonly PageVue[],
   site: SiteVu,
-): Promise<{ seo: Resultat; geo: Resultat }> {
+): Promise<{ seo: Resultat; geo: Resultat; cro: Resultat }> {
   const reglages = await checkWeights()
+  /*
+   * Un seul contexte, trois catalogues. Le site n'est parcouru qu'une fois et la note de
+   * conversion ne coûte donc rien de plus : ni requête, ni crédit, ni délai. C'est ce qui
+   * permet à Cleo d'exister sans que l'audit devienne trois fois plus lent.
+   */
   const contexte = buildContexte(pages, site)
   return {
     seo: noter(SEO_CHECKS, contexte, reglages),
     geo: noter(GEO_CHECKS, contexte, reglages),
+    cro: noter(CRO_CHECKS, contexte, reglages),
   }
 }
 
