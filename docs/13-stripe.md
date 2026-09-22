@@ -24,6 +24,50 @@ Statuts Stripe → Evoliia : `active` → ACTIVE, `trialing` → TRIALING, `past
 Une offre attribuée à la main (sans `stripeSubscriptionId`) reste gérée à la main : la page
 le dit, et ne propose ni portail ni résiliation.
 
+### Mensuel ou annuel
+
+Une offre, deux façons de la payer. `Plan.priceYearCents` porte le prix de douze mois payés
+d'avance ; zéro veut dire « pas d'offre annuelle ». Le rythme (`mois` | `an`) voyage avec la
+demande de paiement plutôt que dans l'identifiant de l'offre : deux offres jumelles
+finiraient par diverger sous le même nom.
+
+Chez Stripe, ce sont deux tarifs distincts accrochés au même produit, d'où deux colonnes
+(`stripePriceIdYear`, `stripePriceFingerprintYear`) et deux empreintes. Créer l'annuel ne
+désactive que l'ancien annuel : éteindre le mensuel rendrait toute souscription au mois
+impossible. Demander l'année à une offre qui n'en a pas est refusé, jamais rattrapé en
+mensuel — on s'apercevrait de l'erreur sur le relevé bancaire.
+
+Aucun taux de remise n'est stocké : le pourcentage annoncé se déduit des deux prix. Deux
+nombres censés s'accorder finissent toujours par diverger, et un client repère l'écart en
+une multiplication.
+
+Les crédits ne suivent pas la facturation : leur renouvellement dépend de `resetsAt` sur le
+portefeuille et de `monthlyCredits` sur l'offre. Un abonné à l'année reçoit sa dotation
+chaque mois, pas douze fois d'un coup.
+
+### Les recharges de crédits — annoncées, pas encore achetables
+
+`DEFAULT_CREDIT_PACKS` est lu par la seule page de tarifs : **aucune route de paiement
+n'existe pour un pack**. Quelqu'un qui lit le prix n'a aujourd'hui aucun bouton pour
+acheter. C'est une décision assumée tant qu'Evoliia n'a pas de vrais clients — mais c'est
+une promesse sans porte derrière, exactement le motif qu'on a retiré des offres.
+
+Ce qu'il faudra, le jour venu :
+
+- une session Stripe en mode `payment` (et non `subscription`) ;
+- les crédits ajoutés **après validation serveur du webhook**, jamais au retour du
+  navigateur — c'est la règle qui vaut pour tout ce qui touche aux crédits ;
+- le nombre de crédits décidé par le serveur d'après le pack, jamais d'après ce que le
+  navigateur annonce.
+
+À défaut, masquer la section plutôt qu'annoncer ce qui n'existe pas.
+
+Le prix d'une recharge reste toujours au-dessus du crédit le plus cher vendu en abonnement
+(0,23 contre 0,19 franc aujourd'hui), et un test le tient : une recharge moins chère que
+l'abonnement est une porte dérobée dans sa propre grille tarifaire, et elle se rompt sans
+rien casser — on augmente les offres, on oublie les recharges, et on perd en silence les
+changements d'offre qu'on aurait dû gagner.
+
 ## 2. Les créateurs encaissent leurs clients (Stripe Connect)
 
 Le visiteur d'une application paie **le créateur**, sur le compte Stripe **du créateur**.
