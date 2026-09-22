@@ -46,6 +46,31 @@ import type { VitrineShopify } from '@/server/integrations/providers/shopify'
 const SEUIL = 0.5
 
 /**
+ * La part du souhait qui doit correspondre, et le nombre de mots en commun exigés.
+ *
+ * Le seuil de rareté seul ne suffisait pas, et le défaut est arrivé en production : un
+ * article sur l'obsidienne noire s'est retrouvé illustré par une bandoulière de sac. Le
+ * rapprochement s'était fait sur « noire » — assez rare dans le catalogue pour franchir le
+ * seuil à elle seule — alors que « obsidienne », le mot qui définit le sujet, était absent.
+ * Une couleur n'est pas un sujet, et aucun seuil absolu ne peut faire la différence : un
+ * mot rare reste un mot rare, qu'il désigne la chose ou sa teinte.
+ *
+ * Deux exigences supplémentaires, et il faut les deux.
+ *
+ * **La part.** Ce qui correspond doit peser au moins la moitié de ce qui était demandé,
+ * rareté comprise. Une fiche qui ne répond qu'à un mot sur trois ne répond pas au souhait,
+ * si distinctif que soit ce mot.
+ *
+ * **Le nombre.** Au moins deux mots en commun dès que le souhait en contient deux que le
+ * catalogue connaît. C'est un filet grossier, et il est là exprès : la part seule laisse
+ * passer le cas où le mot accessoire est encore plus rare que le mot principal, et c'est
+ * précisément la situation qui s'est produite. Un souhait d'un seul mot connu reste jugé
+ * sur la rareté, faute de mieux.
+ */
+const PART_MINIMUM = 0.5
+const MOTS_COMMUNS_MINIMUM = 2
+
+/**
  * Les mots qu'on ne compte pas.
  *
  * Ils sont dans presque toutes les fiches et dans presque toutes les demandes : les garder
@@ -122,22 +147,53 @@ export function choisirIllustrations(
     const cherches = new Set(normaliser(souhait))
     if (cherches.size === 0) return
 
+    /*
+     * Le poids total du souhait, et combien de ses mots le catalogue connaît.
+     *
+     * Un mot que la boutique n'emploie nulle part compte **plein**, et c'était la
+     * correction décisive : on l'avait d'abord tenu pour neutre — il ne peut correspondre
+     * à rien, donc il ne devait ni durcir ni adoucir le jugement. C'est faux. Un mot absent
+     * du catalogue n'est pas une absence d'information, c'est l'information que la boutique
+     * ne vend pas cette chose-là. « Une labradorite noire » dans une boutique sans
+     * labradorite ne doit pas se rabattre sur ce qui est noir ; elle doit rester sans image.
+     *
+     * Le souhait est court par construction — le modèle reçoit pour consigne de le dire en
+     * quelques mots du métier —, donc cette sévérité ne prive pas d'image les sections qui
+     * en méritent une.
+     */
+    let poidsDemande = 0
+    let motsConnus = 0
+    for (const mot of cherches) {
+      const poids = rarete(mot, frequences, vitrine.length)
+      if (poids > 0) motsConnus += 1
+      poidsDemande += poids === 0 ? 1 : poids
+    }
+
     let meilleur = -1
     let note = 0
+    let communs = 0
     mots.forEach((liste, rang) => {
       if (pris.has(rang)) return
       const presents = new Set(liste)
       let somme = 0
+      let nombre = 0
       for (const mot of cherches) {
-        if (presents.has(mot)) somme += rarete(mot, frequences, vitrine.length)
+        if (!presents.has(mot)) continue
+        const poids = rarete(mot, frequences, vitrine.length)
+        if (poids > 0) nombre += 1
+        somme += poids
       }
       if (somme > note) {
         note = somme
+        communs = nombre
         meilleur = rang
       }
     })
 
     if (meilleur < 0 || note < SEUIL) return
+    // Mieux vaut aucune image qu'une mauvaise : les deux garde-fous ci-dessous le disent.
+    if (note / poidsDemande < PART_MINIMUM) return
+    if (motsConnus >= MOTS_COMMUNS_MINIMUM && communs < MOTS_COMMUNS_MINIMUM) return
     const piece = vitrine[meilleur]
     if (piece === undefined) return
 

@@ -120,3 +120,60 @@ describe('le choix des illustrations', () => {
     expect(choisirIllustrations(['une bougie obsidienne'], [])).toEqual([])
   })
 })
+
+/**
+ * Le mot qui définit le sujet doit correspondre, pas seulement un mot rare.
+ *
+ * Le défaut est arrivé en production, et il est de ceux qui coûtent toute la crédibilité du
+ * texte : un article sur l'obsidienne noire illustré par une bandoulière de sac. Le
+ * rapprochement s'était fait sur « noire », assez rare dans le catalogue pour franchir le
+ * seuil à elle seule, alors que « obsidienne » était absent de la fiche. Une couleur n'est
+ * pas un sujet, et aucun seuil absolu ne peut faire cette différence — un mot rare reste un
+ * mot rare, qu'il désigne la chose ou sa teinte.
+ */
+describe('le mot qui définit le sujet', () => {
+  /* Un catalogue où « noire » est rare, et où une seule fiche parle d'obsidienne. */
+  const MELANGE: VitrineShopify[] = [
+    fiche('Bougie parfumée obsidienne noire'),
+    fiche('Bandoulière noire à motifs'),
+    fiche('Bougie parfumée améthyste'),
+    fiche('Bougie parfumée quartz rose'),
+    fiche('Bougie parfumée jade'),
+    fiche('Diffuseur de parfum lavande'),
+  ]
+
+  it('n’illustre pas une obsidienne par une bandoulière, si « noire » soit-elle', () => {
+    /*
+     * La bandoulière est prise d'abord, pour forcer le cas : sans elle, la vraie fiche
+     * gagnerait et le test ne prouverait rien. On demande donc une seconde obsidienne,
+     * qui n'existe plus — et la bonne réponse est de ne rien illustrer.
+     */
+    const retenues = choisirIllustrations(
+      ['une bougie obsidienne noire', 'une autre obsidienne noire'],
+      MELANGE,
+    )
+    expect(retenues).toHaveLength(1)
+    expect(retenues[0]?.titre).toBe('Bougie parfumée obsidienne noire')
+  })
+
+  it('choisit bien la fiche qui porte le sujet quand elle existe', () => {
+    const retenues = choisirIllustrations(['une obsidienne noire'], MELANGE)
+    expect(retenues[0]?.titre).toBe('Bougie parfumée obsidienne noire')
+  })
+
+  it('s’abstient quand seule la couleur correspond', () => {
+    // « labradorite » n'existe nulle part ; « noire » seule ne doit pas suffire.
+    expect(choisirIllustrations(['une labradorite noire'], MELANGE)).toEqual([])
+  })
+
+  it('juge encore un souhait d’un seul mot connu sur sa rareté', () => {
+    // Faute de second mot, la rareté reste le seul juge possible — et elle suffit ici.
+    expect(choisirIllustrations(['de la lavande'], MELANGE)[0]?.titre).toBe(
+      'Diffuseur de parfum lavande',
+    )
+  })
+
+  it('s’abstient quand aucun mot du souhait n’est connu du catalogue', () => {
+    expect(choisirIllustrations(['une météorite martienne'], MELANGE)).toEqual([])
+  })
+})
