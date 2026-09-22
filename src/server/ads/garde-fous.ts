@@ -443,6 +443,53 @@ export function autoriseEnchere(enchereMicros: number, budgetMicros: number): Ve
 }
 
 /**
+ * Les bornes d'une exclusion de recherche.
+ *
+ * Les plus légères du fichier, et c'est raisonné : exclure ne peut que faire baisser une
+ * dépense. Il n'y a pas d'argent à protéger ici — seulement un compte à ne pas abîmer.
+ *
+ * Reste donc ce qui protège du geste malencontreux : le mode du compte, la borne quotidienne
+ * partagée avec les dépôts, et la forme du texte. Un terme vient du rapport de Google et
+ * devrait être propre ; « devrait » n'est pas une garantie quand on écrit chez quelqu'un.
+ */
+export function autoriseExclusion(
+  demande: Demande & { textesAujourdhui: number },
+  texte: string,
+): Verdict {
+  if (demande.mode !== 'assiste') {
+    return {
+      ok: false,
+      raison:
+        'Ce compte est en lecture seule. Passez-le en mode assisté pour qu’une recherche puisse être exclue.',
+    }
+  }
+  if (demande.textesAujourdhui >= TEXTES_PAR_JOUR) {
+    return {
+      ok: false,
+      raison: `Vous avez fait ${TEXTES_PAR_JOUR} gestes de ce type aujourd’hui. Reprenez demain.`,
+    }
+  }
+
+  const propre = texte.trim().replace(/\s+/gu, ' ')
+  if (propre === '' || propre.length > LONGUEUR_MOT_CLE) {
+    return {
+      ok: false,
+      raison: `Google refuse cette exclusion : ${propre.length} caractères pour ${LONGUEUR_MOT_CLE} au maximum.`,
+    }
+  }
+  if (propre.split(' ').length > MOTS_MAX) {
+    return { ok: false, raison: `Google refuse une exclusion de plus de ${MOTS_MAX} mots.` }
+  }
+  if (/["'\[\]+]/u.test(propre)) {
+    return {
+      ok: false,
+      raison: 'Une exclusion ne porte ni guillemets ni crochets : la correspondance est posée à côté du texte.',
+    }
+  }
+  return { ok: true }
+}
+
+/**
  * Les bornes de la création d'une campagne.
  *
  * C'est le garde-fou le plus sévère du produit, parce que c'est le seul geste qui parte de

@@ -49,6 +49,7 @@ export type RecommandationVue = {
 export type ActionProposeeVue =
   | { type: 'budget'; campagneId: string; versMicros: number; attenduMicros: number; resume: string }
   | { type: 'statut'; campagneId: string; vers: 'PAUSED'; attendu: string; resume: string }
+  | { type: 'exclusion'; campagneId: string; terme: string; resume: string }
 
 const PRIORITES: Record<
   RecommandationVue['priorite'],

@@ -8,6 +8,7 @@ import {
   appliquerStatut,
   deposerMotCle,
   deposerPhoto,
+  exclureTerme,
   deposerTexte,
   restaurer,
 } from '@/server/ads/actions'
@@ -54,6 +55,13 @@ const input = z.discriminatedUnion('type', [
     format: z.enum(Object.keys(FORMATS) as [string, ...string[]]),
   }),
   z.object({ type: z.literal('mot-cle'), motCleId: z.string().uuid() }),
+  z.object({
+    type: z.literal('exclusion'),
+    campagneId: z.string().uuid(),
+    /** Le terme vient du rapport de Google, donc du réseau : il est relu comme tel. */
+    terme: z.string().min(1).max(200),
+    recommandationId: z.string().uuid().optional(),
+  }),
   z.object({ type: z.literal('restaurer'), actionId: z.string().uuid() }),
 ])
 
@@ -80,7 +88,9 @@ export async function POST(request: Request) {
                 })
               : demande.type === 'mot-cle'
                 ? await deposerMotCle(user.id, demande.motCleId)
-                : await restaurer(user.id, demande.actionId)
+                : demande.type === 'exclusion'
+                  ? await exclureTerme(user.id, demande)
+                  : await restaurer(user.id, demande.actionId)
 
     /*
      * Un refus de Google ou d'un garde-fou n'est pas une erreur HTTP : c'est une réponse. La

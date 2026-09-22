@@ -304,6 +304,53 @@ export async function retirerMotCle(
   })
 }
 
+/**
+ * Empêche une campagne de sortir sur une recherche précise.
+ *
+ * Un mot-clé à exclure, posé sur la campagne et non sur un groupe d'annonces : le terme
+ * parasite a été payé par la campagne, et rien ne dit qu'un autre groupe ne le servirait pas
+ * demain. L'exclure au-dessus vaut pour tous.
+ *
+ * `EXACT`, et c'est le choix prudent. Une exclusion en expression bloquerait aussi les
+ * recherches qui contiennent ce terme — « bougie pas chère » exclurait « bougie pas chère
+ * artisanale suisse », qui pourrait très bien acheter. On exclut exactement ce qu'on a vu
+ * coûter, rien de plus large : une exclusion trop gourmande coupe un chiffre d'affaires
+ * qu'on ne verra jamais, puisqu'il ne s'affichera pas.
+ *
+ * C'est la seule écriture d'Evoliia qui ne peut que faire baisser une dépense. Elle n'en est
+ * pas moins journalisée et réversible : « faire moins » reste une modification du compte de
+ * quelqu'un.
+ */
+export async function creerMotCleNegatif(
+  acces: AccesAds,
+  campagneId: string,
+  texte: string,
+): Promise<{ ok: true; resourceName: string } | { ok: false; raison: string; technique: string }> {
+  const issue = await envoyerEtLire('campaignCriteria:mutate', acces, {
+    operations: [
+      {
+        create: {
+          campaign: `customers/${acces.compteId}/campaigns/${campagneId}`,
+          negative: true,
+          keyword: { text: texte, matchType: 'EXACT' },
+        },
+      },
+    ],
+  })
+  if (!issue.ok) return issue
+  return { ok: true, resourceName: issue.resourceName }
+}
+
+/** Retire une exclusion. La campagne peut de nouveau sortir sur cette recherche. */
+export async function retirerMotCleNegatif(
+  acces: AccesAds,
+  critereResourceName: string,
+): Promise<Ecriture> {
+  return envoyer('campaignCriteria:mutate', acces, {
+    operations: [{ remove: critereResourceName }],
+  })
+}
+
 /** Ce qu'il faut pour bâtir une campagne Recherche, déjà validé par l'appelant. */
 export type PlanCampagne = {
   nom: string

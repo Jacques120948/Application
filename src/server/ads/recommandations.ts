@@ -6,7 +6,14 @@ import { logger } from '@/server/observability/logger'
 import { compteActif, type CompteRelie } from './comptes'
 import { objectifsDuCompte } from './profil'
 import { lireTableauAds, type CampagneVue } from './tableau'
-import { evaluer, HAUSSE_BUDGET, type Constat, type Priorite, type Risque } from './regles'
+import {
+  evaluer,
+  HAUSSE_BUDGET,
+  type Constat,
+  type Priorite,
+  type Risque,
+  type TermeVu,
+} from './regles'
 
 /**
  * Les recommandations : leur vie, et pourquoi elles en ont une.
@@ -145,6 +152,7 @@ export type ActionProposee =
       resume: string
     }
   | { type: 'statut'; campagneId: string; vers: 'PAUSED'; attendu: string; resume: string }
+  | { type: 'exclusion'; campagneId: string; terme: string; resume: string }
 
 export function proposerAction(
   recommandation: RecommandationVue,
@@ -176,6 +184,22 @@ export function proposerAction(
       versMicros: Math.round(propose * 1_000_000),
       attenduMicros: Math.round(campagne.budget * 1_000_000),
       resume: `Passer le budget quotidien de « ${campagne.nom} » de ${montant(campagne.budget)} à ${montant(propose)}.`,
+    }
+  }
+
+  if (action.type === 'exclusion') {
+    /*
+     * Le terme vient du constat et non d'une relecture : c'est le mot exact que la règle a
+     * vu coûter. Le retrouver dans les chiffres du jour donnerait parfois un autre mot, et
+     * la personne exclurait autre chose que ce qu'elle a lu.
+     */
+    const terme = typeof action.terme === 'string' ? action.terme.trim() : ''
+    if (terme === '') return null
+    return {
+      type: 'exclusion',
+      campagneId,
+      terme,
+      resume: `Empêcher « ${campagne.nom} » de sortir sur la recherche « ${terme} ». Les autres mots-clés de la campagne ne bougent pas.`,
     }
   }
 
@@ -217,6 +241,39 @@ export type BilanEvaluation = {
  * Ne lève pas : elle est appelée dans une boucle nocturne qui ne doit pas s'interrompre, et
  * depuis des routes dont ce n'est pas le sujet principal.
  */
+/**
+ * Les termes de recherche du compte, rapportés à la campagne qui les a payés.
+ *
+ * Lus en une fois : une requête par campagne ferait huit allers-retours pour une évaluation
+ * qui tourne toutes les nuits, sur tous les comptes.
+ *
+ * Les campagnes supprimées entre-temps sont exclues par la jointure elle-même — un terme
+ * sans campagne n'a plus rien à exclure.
+ */
+async function termesDuCompte(userId: string, accountId: string): Promise<TermeVu[]> {
+  const lignes = await withUserScope(userId, (tx) =>
+    tx.adsTerme.findMany({
+      where: { userId, accountId },
+      select: {
+        terme: true,
+        clics: true,
+        conversions: true,
+        coutMicros: true,
+        campagne: { select: { id: true, nom: true } },
+      },
+    }),
+  )
+
+  return lignes.map((ligne) => ({
+    campagneId: ligne.campagne.id,
+    campagneNom: ligne.campagne.nom,
+    terme: ligne.terme,
+    clics: Number(ligne.clics),
+    conversions: ligne.conversions,
+    cout: Number(ligne.coutMicros) / 1_000_000,
+  }))
+}
+
 export async function evaluerCompte(
   userId: string,
   maintenant = new Date(),
@@ -231,7 +288,14 @@ export async function evaluerCompte(
   const courte = await lireTableauAds(userId, FENETRE_COURTE)
   const { profil, lecture } = await objectifsDuCompte(userId, compte, longue.total, maintenant)
 
-  const constats = evaluer({ devise: compte.devise, profil, lecture, longue, courte })
+  /*
+   * Les termes de recherche, rapportés à la campagne qui les a payés. Ils dormaient en base
+   * depuis la lecture du créatif sans qu'aucune règle ne les regarde — or c'est là que
+   * l'argent fuit sur un petit budget.
+   */
+  const termes = await termesDuCompte(userId, compte.id)
+
+  const constats = evaluer({ devise: compte.devise, profil, lecture, longue, courte, termes })
   const attendus = new Map(constats.map((constat) => [cle(constat.regle, constat.campagneId), constat]))
 
   const existantes = await withUserScope(userId, (tx) =>

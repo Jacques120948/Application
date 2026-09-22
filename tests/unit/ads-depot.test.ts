@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
+  autoriseExclusion,
   autoriseImage,
   autoriseTexte,
   IMAGES_PAR_CHAMP,
@@ -217,5 +218,63 @@ describe('la mécanique du dépôt', () => {
      */
     const source = readFileSync('src/server/ads/actions.ts', 'utf8')
     expect(source).toContain('Cette annonce a changé depuis le dépôt')
+  })
+})
+
+describe('les bornes d’une exclusion', () => {
+  it('refusent un compte en lecture seule', () => {
+    expect(autoriseExclusion(demande({ mode: 'lecture' }), 'bougie pas chère').ok).toBe(false)
+  })
+
+  it('acceptent un terme ordinaire venu du rapport de Google', () => {
+    expect(autoriseExclusion(demande(), 'bougie pas chère').ok).toBe(true)
+  })
+
+  it('refusent ce que Google refuserait', () => {
+    expect(autoriseExclusion(demande(), '   ').ok).toBe(false)
+    expect(autoriseExclusion(demande(), 'a'.repeat(81)).ok).toBe(false)
+    expect(
+      autoriseExclusion(demande(), 'un deux trois quatre cinq six sept huit neuf dix onze').ok,
+    ).toBe(false)
+    expect(autoriseExclusion(demande(), '"bougie"').ok).toBe(false)
+  })
+
+  it('partagent la borne quotidienne', () => {
+    expect(
+      autoriseExclusion(demande({ textesAujourdhui: TEXTES_PAR_JOUR }), 'bougie').ok,
+    ).toBe(false)
+  })
+})
+
+describe('la mécanique d’une exclusion', () => {
+  it('exclut exactement le terme vu, jamais plus large', () => {
+    /*
+     * Une exclusion en expression bloquerait aussi ce qui contient le terme : exclure
+     * « bougie pas chère » couperait « bougie pas chère artisanale suisse », qui pourrait
+     * très bien acheter. Une exclusion trop gourmande coupe un chiffre d'affaires qu'on ne
+     * verra jamais, puisqu'il ne s'affichera pas.
+     */
+    const source = readFileSync('src/server/ads/google-ads-ecriture.ts', 'utf8')
+    const corps = source.slice(source.indexOf('export async function creerMotCleNegatif'))
+    const fin = corps.indexOf('export async function retirerMotCleNegatif')
+    expect(corps.slice(0, fin)).toContain("matchType: 'EXACT'")
+    expect(corps.slice(0, fin)).toContain('negative: true')
+  })
+
+  it('se pose sur la campagne, pas sur un groupe', () => {
+    // Le terme a été payé par la campagne, et rien ne dit qu'un autre groupe ne le servirait
+    // pas demain. L'exclure au-dessus vaut pour tous.
+    const source = readFileSync('src/server/ads/google-ads-ecriture.ts', 'utf8')
+    const corps = source.slice(source.indexOf('export async function creerMotCleNegatif'))
+    expect(corps.slice(0, corps.indexOf('export async function retirerMotCleNegatif'))).toContain(
+      'campaignCriteria:mutate',
+    )
+  })
+
+  it('reste journalisée et réversible', () => {
+    // « Faire moins » reste une modification du compte de quelqu'un.
+    const source = readFileSync('src/server/ads/actions.ts', 'utf8')
+    expect(source).toContain('retirerMotCleNegatif(')
+    expect(source).toContain("pose: true, critereId")
   })
 })

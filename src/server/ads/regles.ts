@@ -1,3 +1,4 @@
+import { cpaAcceptable } from './mots-cles'
 import type { LectureObjectifs, ProfilAds } from './profil'
 import type { CampagneVue, TableauAds } from './tableau'
 
@@ -61,6 +62,25 @@ export type ContexteRegles = {
   longue: TableauAds
   /** La fenêtre courte, pour ce qui se constate vite : une campagne qui ne s'affiche plus. */
   courte: TableauAds
+  /**
+   * Ce que les gens ont réellement tapé, et ce que ça a coûté.
+   *
+   * Absent des huit premières règles, et c'était un trou : la donnée était lue et rangée
+   * chaque semaine, et personne ne la regardait. Or sur un petit budget, c'est là que
+   * l'argent fuit — une seule requête hors sujet mange la moitié d'une journée.
+   */
+  termes: TermeVu[]
+}
+
+/** Un terme tapé par quelqu'un, rapporté à la campagne qui l'a payé. */
+export type TermeVu = {
+  campagneId: string
+  campagneNom: string
+  terme: string
+  clics: number
+  conversions: number
+  /** En unités de la devise, comme partout ailleurs dans ce fichier. */
+  cout: number
 }
 
 /*
@@ -102,6 +122,18 @@ const DERIVE_CPA = 1.25
 
 /** L'augmentation proposée quand une campagne rentable est bridée par son budget. */
 export const HAUSSE_BUDGET = 1.2
+
+/**
+ * Ce qu'un terme doit avoir coûté, sans rien vendre, pour qu'on propose de l'exclure.
+ *
+ * Exprimé en multiples de ce qu'une vente peut coûter, et non en francs : un seuil en francs
+ * serait arbitraire pour tout le monde sauf pour celui qui l'a écrit. Ici, le raisonnement se
+ * lit — ce terme a consommé ce qu'une vente entière rapporte, et n'a rien vendu.
+ *
+ * Un seul multiple, pas deux : attendre davantage, c'est laisser filer une deuxième vente
+ * pour être sûr d'avoir raison sur la première.
+ */
+const GACHIS_PAR_TERME = 1
 
 const MICROS = 1_000_000
 
@@ -434,6 +466,7 @@ const REGLES: ReadonlyArray<(contexte: ContexteRegles) => Constat[]> = [
   budgetDepasse,
   deriveCpa,
   dormante,
+  termeParasite,
 ]
 
 const RANG: Record<Priorite, number> = {
@@ -441,6 +474,77 @@ const RANG: Record<Priorite, number> = {
   opportunite: 1,
   surveiller: 2,
   information: 3,
+}
+
+/**
+ * Un terme qui a coûté ce que vaut une vente, sans rien vendre.
+ *
+ * La règle la plus rentable du lot, et la plus tardive : elle vise l'argent qui part sans
+ * qu'on l'ait choisi. En correspondance d'expression, Google diffuse aussi sur les variantes
+ * qu'il juge proches — « bougie citrine » peut servir « bougie parfumée pas chère », et
+ * celle-là ne vendra jamais une bougie suisse à quarante francs.
+ *
+ * **Un seul terme par campagne à la fois**, et ce n'est pas une limite technique : les
+ * recommandations sont classées par règle et par campagne, et surtout une liste de quinze
+ * exclusions à valider ne se lit pas. Le pire terme d'abord ; le suivant réapparaîtra demain,
+ * une fois celui-ci traité. L'observation dit combien il y en a derrière, pour qu'on sache
+ * que la liste n'est pas finie.
+ *
+ * **Silencieuse sans marge.** Sans coût par vente acceptable, il n'existe aucun seuil qui ne
+ * soit pas inventé — et la doctrine de ce fichier est de se taire plutôt que d'emprunter une
+ * moyenne de marché à personne en particulier.
+ */
+function termeParasite(contexte: ContexteRegles): Constat[] {
+  const acceptable = cpaAcceptable(contexte.profil)
+  if (acceptable <= 0) return []
+  const seuil = acceptable * GACHIS_PAR_TERME
+
+  const parCampagne = new Map<string, TermeVu[]>()
+  for (const terme of contexte.termes) {
+    if (terme.conversions > 0 || terme.cout < seuil) continue
+    const liste = parCampagne.get(terme.campagneId) ?? []
+    liste.push(terme)
+    parCampagne.set(terme.campagneId, liste)
+  }
+
+  return [...parCampagne.values()].map((liste) => {
+    const tries = [...liste].sort((une, autre) => autre.cout - une.cout)
+    const pire = tries[0] as TermeVu
+    const autres = tries.length - 1
+    const total = tries.reduce((somme, un) => somme + un.cout, 0)
+
+    return {
+      regle: 'ads.terme.parasite',
+      campagneId: pire.campagneId,
+      priorite: 'opportunite' as const,
+      titre: `« ${pire.terme} » coûte sans vendre`,
+      observation:
+        `Dans « ${pire.campagneNom} », ce terme a été tapé et cliqué ${pire.clics} fois pour` +
+        ` ${argent(pire.cout, contexte.devise)}, sans aucune vente — alors qu'une vente peut` +
+        ` vous coûter ${argent(acceptable, contexte.devise)} au maximum.` +
+        (autres === 0
+          ? ''
+          : ` ${autres} autre${autres > 1 ? 's' : ''} terme${autres > 1 ? 's' : ''} dans le` +
+            ` même cas, pour ${argent(total - pire.cout, contexte.devise)} de plus : ils` +
+            ' apparaîtront une fois celui-ci traité.') +
+        ' L’exclure empêche vos annonces de sortir sur cette recherche, sans toucher au reste.',
+      jours: contexte.longue.jours,
+      donnees: {
+        terme: pire.terme,
+        cout: pire.cout,
+        clics: pire.clics,
+        conversions: 0,
+        autres,
+      },
+      /*
+       * Le terme voyage dans l'action, et non seulement dans l'observation : c'est lui que
+       * le serveur enverra à Google. Le relire dans une phrase serait une occasion de se
+       * tromper de mot.
+       */
+      action: { type: 'exclusion', campagne: pire.campagneId, terme: pire.terme },
+      risque: 'faible' as const,
+    }
+  })
 }
 
 /**

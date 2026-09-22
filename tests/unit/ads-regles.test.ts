@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluer, type ContexteRegles } from '@/server/ads/regles'
+import { evaluer, type ContexteRegles, type TermeVu } from '@/server/ads/regles'
 import { lectureObjectifs, PROFIL_VIDE, rythmeBudget, type ProfilAds } from '@/server/ads/profil'
 import { indicateurs, type Indicateurs } from '@/server/ads/metriques'
 import type { CampagneVue, TableauAds } from '@/server/ads/tableau'
@@ -83,6 +83,7 @@ function contexte(
   profil: Partial<ProfilAds> = {},
   budget: Parameters<typeof lectureObjectifs>[3] = null,
   courtes?: CampagneVue[],
+  termes: TermeVu[] = [],
 ): ContexteRegles {
   const complet: ProfilAds = { ...PROFIL_VIDE, ...profil }
   const longue = tableau(30, campagnes)
@@ -92,6 +93,7 @@ function contexte(
     lecture: lectureObjectifs(complet, longue.total, DEVISE, budget),
     longue,
     courte: tableau(14, courtes ?? campagnes),
+    termes,
   }
 }
 
@@ -289,5 +291,78 @@ describe('chaque constat', () => {
       expect(constat.observation.length).toBeGreaterThan(40)
       expect(constat.titre).not.toBe('')
     }
+  })
+})
+
+describe('les termes qui coûtent sans vendre', () => {
+  /** Un terme tapé par quelqu'un, dans la campagne « Recherche ». */
+  function terme(texte: string, cout: number, conversions = 0, clics = 4): TermeVu {
+    return {
+      campagneId: 'c1',
+      campagneNom: 'Recherche',
+      terme: texte,
+      clics,
+      conversions,
+      cout,
+    }
+  }
+
+  /** Une campagne ordinaire et rentable : les autres règles n'ont rien à en dire. */
+  const CAMPAGNE = campagne({ id: 'c1', nom: 'Recherche', actuel: chiffres(300, 900, 6) })
+
+  function parasites(termes: TermeVu[], profil: Partial<ProfilAds> = { cpaCible: 20 }) {
+    return evaluer(contexte([CAMPAGNE], profil, null, undefined, termes)).filter(
+      (constat) => constat.regle === 'ads.terme.parasite',
+    )
+  }
+
+  it('signale un terme qui a coûté une vente entière sans rien vendre', () => {
+    const constats = parasites([terme('bougie pas chère', 25)])
+    expect(constats).toHaveLength(1)
+    expect(constats[0]?.titre).toContain('bougie pas chère')
+    expect(constats[0]?.action).toMatchObject({ type: 'exclusion', terme: 'bougie pas chère' })
+  })
+
+  it('se tait sur un terme qui a vendu', () => {
+    expect(parasites([terme('bougie citrine', 40, 1)])).toHaveLength(0)
+  })
+
+  it('se tait sur un terme qui n’a pas encore assez coûté', () => {
+    /*
+     * Un terme à trois francs ne prouve rien. Le seuil est ce qu'une vente peut coûter :
+     * en dessous, on n'a pas encore payé le prix d'une information.
+     */
+    expect(parasites([terme('bougie ambre', 3)])).toHaveLength(0)
+  })
+
+  it('ne propose qu’un terme à la fois, le plus coûteux, et dit qu’il y en a d’autres', () => {
+    /*
+     * Une liste de quinze exclusions à valider ne se lit pas. Le pire d'abord ; le suivant
+     * réapparaîtra une fois celui-ci traité.
+     */
+    const constats = parasites([
+      terme('bougie pas chère', 25),
+      terme('bougie ikea', 60),
+      terme('bougie gratuite', 30),
+    ])
+    expect(constats).toHaveLength(1)
+    expect(constats[0]?.titre).toContain('bougie ikea')
+    expect(constats[0]?.observation).toContain('2 autres termes')
+    expect(constats[0]?.donnees.autres).toBe(2)
+  })
+
+  it('se tait quand la marge est inconnue', () => {
+    /*
+     * Sans coût par vente acceptable, il n'existe aucun seuil qui ne soit pas inventé. La
+     * doctrine du fichier est de se taire plutôt que d'emprunter une moyenne de marché.
+     */
+    expect(parasites([terme('bougie pas chère', 500)], {})).toHaveLength(0)
+  })
+
+  it('déduit le seuil de la marge quand l’objectif n’est pas donné', () => {
+    // 70 CHF de panier à 60 % de marge : une vente peut coûter 42 CHF.
+    const profil = { panierMoyen: 70, margePourcent: 60 }
+    expect(parasites([terme('bougie ikea', 50)], profil)).toHaveLength(1)
+    expect(parasites([terme('bougie ikea', 30)], profil)).toHaveLength(0)
   })
 })

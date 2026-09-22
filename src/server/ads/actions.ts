@@ -10,6 +10,7 @@ import {
   creerCampagneComplete,
   creerImageElement,
   creerMotCle,
+  creerMotCleNegatif,
   creerTexteElement,
   detacherElement,
   ecrireBudget,
@@ -17,12 +18,14 @@ import {
   ecrireTextesAnnonce,
   rattacherElement,
   retirerMotCle,
+  retirerMotCleNegatif,
   supprimerBudget,
   supprimerCampagne,
 } from './google-ads-ecriture'
 import {
   autoriseBudget,
   autoriseCreation,
+  autoriseExclusion,
   autoriseImage,
   autoriseMotCle,
   autoriseStatut,
@@ -1104,6 +1107,74 @@ export async function deposerMotCle(userId: string, motCleId: string): Promise<I
 }
 
 /**
+ * Empêche une campagne de sortir sur une recherche précise.
+ *
+ * La seule écriture d'Evoliia qui ne peut que faire baisser une dépense. Elle passe pourtant
+ * par le même chemin que les autres — journal écrit avant l'envoi, valeur d'avant conservée,
+ * retour arrière possible — parce que « faire moins » reste une modification du compte de
+ * quelqu'un, et qu'une exclusion posée par erreur coupe un chiffre d'affaires qu'on ne verra
+ * jamais : ce qui ne s'affiche pas ne se mesure pas.
+ *
+ * Le terme vient de la recommandation, donc du rapport de Google. Il est malgré tout relu
+ * par les garde-fous : un texte venu du réseau reste un texte venu du réseau.
+ */
+export async function exclureTerme(
+  userId: string,
+  demande: { campagneId: string; terme: string; recommandationId?: string },
+): Promise<Issue> {
+  const ouverture = await ouvrir(userId)
+  if (!ouverture.ok) return ouverture
+  const { compte } = ouverture
+
+  const cible = await cibleDe(userId, compte.id, demande.campagneId)
+  if (cible === null) throw notFound('Cette campagne est introuvable.')
+
+  const textes = await textesAujourdhui(userId, compte.id)
+  const verdict = autoriseExclusion({ ...ouverture.demande, textesAujourdhui: textes }, demande.terme)
+  if (!verdict.ok) return verdict
+
+  const acces = await accesCompteActif(userId)
+  if (!acces.ok) return { ok: false, raison: acces.raison }
+
+  const terme = demande.terme.trim().replace(/\s+/gu, ' ')
+  let critere = ''
+
+  return journaliser(
+    userId,
+    compte,
+    {
+      quoi: 'exclusion',
+      motif: `Recherche « ${terme} » exclue de « ${cible.nom} »`,
+      campagneId: cible.id,
+      /*
+       * Rien avant : l'exclusion n'existait pas. Ce qu'il faut pour défaire est la poignée
+       * du critère chez Google, écrite après coup une fois qu'il l'a rendue.
+       */
+      avant: { champ: 'exclusion', pose: false },
+      apres: { champ: 'exclusion', texte: terme },
+      mode: 'assiste',
+      ...(demande.recommandationId === undefined
+        ? {}
+        : { recommandationId: demande.recommandationId }),
+    },
+    async () => {
+      const issue = await creerMotCleNegatif(acces.acces, cible.campagneId, terme)
+      if (!issue.ok) return issue
+      critere = issue.resourceName
+      return { ok: true }
+    },
+    async (actionId) => {
+      await withUserScope(userId, (tx) =>
+        tx.adsAction.updateMany({
+          where: { id: actionId, userId },
+          data: { avant: { champ: 'exclusion', pose: true, critereId: critere } },
+        }),
+      )
+    },
+  )
+}
+
+/**
  * Crée une campagne Recherche entière, à partir d'un plan que la personne a relu.
  *
  * Le seul geste d'Evoliia qui fabrique une dépense au lieu d'en ajuster une. Quatre choses
@@ -1296,6 +1367,7 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
     creee?: boolean
     campagne?: string
     budget?: string
+    pose?: boolean
   }
 
   const acces = await accesCompteActif(userId)
@@ -1350,6 +1422,32 @@ export async function restaurer(userId: string, actionId: string): Promise<Issue
           }),
         )
       },
+    )
+  }
+
+  /*
+   * Retirer une exclusion rouvre la campagne à cette recherche. C'est le seul retour arrière
+   * du produit qui rétablit une dépense au lieu d'en annuler une — d'où le motif, qui le dit.
+   */
+  if (origine.quoi === 'exclusion' && avant.pose === true && typeof avant.critereId === 'string') {
+    const terme = ((origine.apres ?? {}) as { texte?: string }).texte ?? ''
+    return journaliser(
+      userId,
+      compte,
+      {
+        quoi: 'exclusion',
+        motif:
+          terme === ''
+            ? 'Exclusion retirée'
+            : `Exclusion de « ${terme} » retirée : la campagne peut de nouveau sortir dessus`,
+        campagneId: origine.campagneId,
+        avant: { champ: 'exclusion', pose: true, critereId: avant.critereId },
+        apres: { champ: 'exclusion', pose: false },
+        mode: 'restauration',
+        annuleId: origine.id,
+      },
+      () => retirerMotCleNegatif(acces.acces, avant.critereId ?? ''),
+      async () => {},
     )
   }
 
