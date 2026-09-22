@@ -6,7 +6,6 @@ import { getEntitlements } from '@/server/billing/entitlements'
 import { hasConnection } from '@/server/integrations/service'
 import { listerComptesRelies } from '@/server/ads/comptes'
 import { googleAds } from '@/server/ads/google-ads'
-import { metaAds } from '@/server/ads/meta-ads'
 import { findVisibilityAgent } from '@/server/agents/visibility'
 import { readDashboard } from '@/server/audit/service'
 import { Shell } from '@/components/studio/Shell'
@@ -55,18 +54,14 @@ export default async function PublicitePage({
 
   const naya = findVisibilityAgent('ads')
   const ouvert = entitlements.granted.includes('visibility_ads_agent')
-  const [relie, comptes, metaRelie] = ouvert
-    ? await Promise.all([
-        hasConnection(user.id, googleAds.id),
-        listerComptesRelies(user.id),
-        /*
-         * Meta est lu ici pour une seule raison : décider s'il faut montrer le passage vers
-         * l'écran de MIRA. Un lien vers un écran vide fait chercher une fonction qui
-         * n'existe pas.
-         */
-        hasConnection(user.id, metaAds.id),
-      ])
-    : [false, [], false]
+  /*
+   * Meta n'est plus lu ici. Cette page ne parlait de MIRA que pour offrir une porte vers son
+   * écran, du temps où la publicité n'en avait qu'un ; depuis qu'elle figure dans le menu,
+   * au même rang que Naya, cette lecture ne servait plus qu'à décider d'un doublon.
+   */
+  const [relie, comptes] = ouvert
+    ? await Promise.all([hasConnection(user.id, googleAds.id), listerComptesRelies(user.id)])
+    : [false, []]
   const actif = comptes.find((compte) => compte.actif) ?? null
 
   /*
@@ -200,27 +195,15 @@ export default async function PublicitePage({
               </section>
 
               {/*
-                Le passage vers MIRA. Discret, parce que son écran ne fait encore qu'une
-                chose — désigner un compte — et qu'annoncer davantage décevrait au clic.
-                Montré seulement quand Meta est relié : un lien vers un écran vide fait
-                chercher une fonction qui n'existe pas.
+                Le passage vers MIRA a disparu d'ici, et c'est le menu qui l'a rendu inutile.
+                
+                Il existait quand la publicité n'avait qu'une page : il fallait bien une
+                porte vers l'écran de Meta, et on l'avait mise là. Depuis que MIRA figure
+                dans la colonne de gauche, au même rang que Naya, ce bloc n'était plus qu'un
+                second chemin vers la même chose — et deux chemins pour une destination font
+                hésiter au lieu de guider. Une page qui porte le nom d'un agent ne parle que
+                de lui.
               */}
-              {metaRelie ? (
-                <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="m-0 text-base font-semibold">Meta Ads — MIRA</h2>
-                      <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-                        Votre compte Meta est relié. Désignez celui que MIRA doit suivre —
-                        tant qu’aucun ne l’est, aucun n’est lu.
-                      </p>
-                    </div>
-                    <LinkButton href={`/${locale}/publicite/meta`} variant="secondary">
-                      Choisir le compte
-                    </LinkButton>
-                  </div>
-                </section>
-              ) : null}
 
               {actif === null || tableau === null ? null : (
                 <>
