@@ -91,6 +91,7 @@ function pageQuiVend(signaux: Signaux): boolean {
 export const CRO_CHECKS: readonly Check[] = [
   {
     id: 'cro.cta.absent',
+    rapide: true,
     engine: 'cro',
     scope: 'page',
     label: 'Aucun bouton d’action',
@@ -105,6 +106,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.cta.muet',
+    rapide: true,
     engine: 'cro',
     scope: 'page',
     label: 'Le bouton ne dit pas ce qui va se passer',
@@ -120,6 +122,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.promesse.absente',
+    rapide: true,
     engine: 'cro',
     scope: 'page',
     label: 'Aucune phrase n’explique ce que propose la page',
@@ -138,6 +141,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.h1.absent',
+    rapide: true,
     engine: 'cro',
     scope: 'page',
     label: 'Aucun titre visible en haut de page',
@@ -195,6 +199,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.formulaire.long',
+    rapide: true,
     engine: 'cro',
     scope: 'page',
     label: 'Le formulaire demande trop de choses',
@@ -210,6 +215,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.mobile.viewport',
+    rapide: true,
     engine: 'cro',
     scope: 'page',
     label: 'La page n’est pas prévue pour le téléphone',

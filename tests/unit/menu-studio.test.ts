@@ -51,6 +51,21 @@ describe('l’équipe', () => {
     }
   })
 
+  it('donne une pastille lisible au membre qui n’a pas encore de portrait', () => {
+    /*
+     * La pastille à initiale prend la teinte du membre. Une table indexée par membre
+     * existait, mais le composant la lisait par écran — deux clés différentes, donc aucune
+     * correspondance, et tout le monde retombait sur la couleur de la marque. Le défaut est
+     * resté invisible tant que chacun avait son portrait ; il s'est vu le jour où Cleo est
+     * arrivée sans le sien.
+     *
+     * Ce qui doit rester vrai : la teinte voyage avec l'entrée du menu.
+     */
+    const source = readFileSync('src/components/studio/Menu.tsx', 'utf8')
+    expect(source).toContain('tint: membre.tint')
+    expect(source).toContain('TEINTES[entree.tint')
+  })
+
   it('n’est pas recopiée dans le menu', () => {
     /*
      * La vérification qui compte, et la seule qui survive à une refonte : le menu doit tirer

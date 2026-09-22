@@ -61,7 +61,11 @@ const GRAVITES: Record<string, { label: string; fond: string; texte: string }> =
   },
 }
 
-const MOTEURS: Record<string, string> = { seo: 'Référencement', geo: 'Moteurs IA' }
+const MOTEURS: Record<string, string> = {
+  seo: 'Référencement',
+  geo: 'Moteurs IA',
+  cro: 'Conversion',
+}
 
 const CHAMPS: Record<string, string> = {
   title: 'Titre de la page (balise title)',

@@ -787,13 +787,24 @@ export type TableauVisibilite = {
     pagesSkipped: number
     seoScore: number | null
     geoScore: number | null
+    croScore: number | null
     /** L'exploration s'est arrêtée avant d'avoir fait le tour du site. */
     partiel: boolean
   }
   /** L'audit terminé juste avant, s'il existe : c'est lui qui donne l'écart. */
-  precedent: { finishedAt: Date | null; seoScore: number | null; geoScore: number | null } | null
+  precedent: {
+    finishedAt: Date | null
+    seoScore: number | null
+    geoScore: number | null
+    croScore: number | null
+  } | null
   /** Les analyses terminées, de la plus ancienne à la plus récente. */
-  historique: { finishedAt: Date | null; seoScore: number | null; geoScore: number | null }[]
+  historique: {
+    finishedAt: Date | null
+    seoScore: number | null
+    geoScore: number | null
+    croScore: number | null
+  }[]
   /** Les autres sites suivis, pour passer de l'un à l'autre. */
   autresSites: { id: string; host: string; label: string }[]
 }
@@ -839,6 +850,7 @@ export async function readDashboard(
         pagesSkipped: true,
         seoScore: true,
         geoScore: true,
+        croScore: true,
         errorCode: true,
       },
     }),
@@ -853,7 +865,12 @@ export async function readDashboard(
     audit: { ...mesures, partiel: errorCode === EXPLORATION_PARTIELLE },
     precedent: audits[1] ?? null,
     historique: audits
-      .map(({ finishedAt, seoScore, geoScore }) => ({ finishedAt, seoScore, geoScore }))
+      .map(({ finishedAt, seoScore, geoScore, croScore }) => ({
+        finishedAt,
+        seoScore,
+        geoScore,
+        croScore,
+      }))
       .reverse(),
     autresSites: sites
       .filter((autre) => autre.id !== site.id)

@@ -76,6 +76,19 @@ export type Check = {
   why: string
   severity: Severity
   /**
+   * Ce constat se règle-t-il en une seule fois ?
+   *
+   * Un jugement sur **l'effort**, écrit à la main, et jamais une mesure du gain : personne
+   * ne sait ce qu'un bouton renommé rapporte. Vrai quand la correction tient en une
+   * modification locale — une balise à ajouter, un libellé à réécrire, des champs à
+   * retirer. Faux dès qu'il faut produire quelque chose qui n'existe pas encore : des avis
+   * clients, une politique de retour, une grille de prix.
+   *
+   * L'écran s'en sert pour proposer « ce qui se règle aujourd'hui » sans prétendre que ce
+   * soit ce qui rapporte le plus. Absent : on ne sait pas, et le constat n'y figure pas.
+   */
+  rapide?: boolean
+  /**
    * Poids dans la note.
    *
    * Il n'a de sens que relativement aux autres : la note est la part des poids qui ne sont

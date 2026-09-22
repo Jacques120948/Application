@@ -40,6 +40,15 @@ type Entree = {
   ecran: string
   /** Le portrait du membre, quand l'entrée en désigne un. */
   avatar?: string
+  /**
+   * Sa teinte, quand l'entrée désigne un membre sans portrait.
+   *
+   * Elle voyage avec l'entrée plutôt que dans une table à part. Une table indexée par
+   * membre existait, mais la pastille la lisait par écran — deux clés différentes, donc
+   * aucune correspondance, et tout le monde retombait sur la couleur de la marque. Le
+   * défaut ne se voyait pas tant que chaque membre avait son portrait.
+   */
+  tint?: string
 }
 
 /** Une pastille de couleur quand il n'y a pas de portrait. */
@@ -52,13 +61,13 @@ const TEINTES: Record<string, string> = {
   sea: 'var(--color-positive-soft)',
 }
 
-function Pastille({ entree, teinte }: { entree: Entree; teinte: string }) {
+function Pastille({ entree }: { entree: Entree }) {
   if (entree.avatar === undefined) {
     return (
       <span
         aria-hidden="true"
         className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
-        style={{ backgroundColor: TEINTES[teinte] ?? 'var(--color-canvas)' }}
+        style={{ backgroundColor: TEINTES[entree.tint ?? ''] ?? 'var(--color-canvas)' }}
       >
         {entree.nom.slice(0, 1)}
       </span>
@@ -80,12 +89,10 @@ function Groupe({
   titre,
   entrees,
   courant,
-  teintes,
 }: {
   titre: string
   entrees: readonly Entree[]
   courant: string
-  teintes?: Record<string, string>
 }) {
   if (entrees.length === 0) return null
   return (
@@ -107,7 +114,7 @@ function Groupe({
                     : 'text-[var(--color-ink)] hover:bg-[var(--color-canvas)]'
                 }`}
               >
-                <Pastille entree={entree} teinte={teintes?.[entree.ecran] ?? 'brand'} />
+                <Pastille entree={entree} />
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium">{entree.nom}</span>
                   <span className="block truncate text-xs text-[var(--color-ink-soft)]">
@@ -126,9 +133,9 @@ function Groupe({
 /**
  * Où mène chaque membre de l'équipe.
  *
- * Trois d'entre eux ont leur propre écran, parce qu'ils y montrent des chiffres ; les trois
- * autres mènent à la conversation, qui est tout ce qu'ils savent faire aujourd'hui. On ne
- * fabrique pas d'écran vide pour l'uniformité du menu.
+ * Ceux qui montrent des chiffres ont leur propre écran ; les autres mènent à la
+ * conversation, qui est tout ce qu'ils savent faire aujourd'hui. On ne fabrique pas d'écran
+ * vide pour l'uniformité du menu.
  */
 function destinations(locale: string, siteId: string): Entree[] {
   const site = siteId === '' ? '' : `?siteId=${siteId}`
@@ -139,6 +146,7 @@ function destinations(locale: string, siteId: string): Entree[] {
     audit: { href: `/${locale}/visibilite`, ecran: 'visibilite' },
     geo: { href: `/${locale}/visibilite/assistants${site}`, ecran: 'assistants' },
     content: { href: `/${locale}/visibilite/articles${site}`, ecran: 'articles' },
+    cro: { href: `/${locale}/visibilite/conversion${site}`, ecran: 'conversion' },
     ads: { href: `/${locale}/publicite`, ecran: 'publicite' },
     meta: { href: `/${locale}/publicite/meta`, ecran: 'publicite-meta' },
   }
@@ -147,6 +155,7 @@ function destinations(locale: string, siteId: string): Entree[] {
     nom: membre.name,
     quoi: membre.role,
     avatar: membre.avatar,
+    tint: membre.tint,
     href: propres[membre.id]?.href ?? versEquipe(membre.id),
     ecran: propres[membre.id]?.ecran ?? `equipe-${membre.id}`,
   }))
@@ -313,19 +322,10 @@ export function ContenuMenu({
       : []),
   ]
 
-  const teintes = Object.fromEntries(
-    MEMBRES.map((membre) => [membre.id, membre.tint] as const),
-  ) as Record<string, string>
-
   return (
     <nav aria-label="Navigation principale" className="pb-6">
       <Site locale={locale} sites={sites} siteId={siteId} />
-      <Groupe
-        titre="Votre équipe"
-        entrees={destinations(locale, siteId)}
-        courant={ecran}
-        teintes={teintes}
-      />
+      <Groupe titre="Votre équipe" entrees={destinations(locale, siteId)} courant={ecran} />
       <Groupe titre="Ce que ça donne" entrees={resultats} courant={ecran} />
       <Groupe titre="Réglages" entrees={reglages} courant={ecran} />
     </nav>
