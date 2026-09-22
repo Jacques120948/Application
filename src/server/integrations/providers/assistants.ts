@@ -67,12 +67,31 @@ type ChargeOpenAI = {
 }
 
 /**
+ * Les deux noms qu'a portés l'outil de recherche d'OpenAI.
+ *
+ * Il s'est d'abord appelé `web_search_preview`, puis `web_search`. Les deux ont coexisté, et
+ * tous les comptes n'ont pas basculé en même temps. N'en tenter qu'un seul ferait échouer
+ * ChatGPT à chaque relevé chez qui a l'autre — sans rien casser, sans rien coûter, et sans
+ * que personne comprenne pourquoi la colonne reste vide.
+ *
+ * Le second n'est essayé que si le premier est refusé sur l'outil lui-même : un compte sans
+ * crédit ou une clé révoquée ne doivent pas déclencher un second appel pour rien.
+ */
+const OUTILS_RECHERCHE = ['web_search', 'web_search_preview'] as const
+
+/** Le refus porte-t-il sur l'outil, ou sur autre chose ? */
+function refusDOutil(message: string): boolean {
+  const plat = message.toLowerCase()
+  return plat.includes('web_search') || plat.includes('tool')
+}
+
+/**
  * ChatGPT, par l'API des réponses, avec l'outil de recherche web.
  *
- * `web_search` est l'équivalent de l'ancrage de Gemini et de la recherche de Claude : sans
- * lui, le modèle répond de mémoire, et une mémoire d'entraînement ne dit rien de ce que
- * voit un client aujourd'hui. OpenAI facture l'appel de l'outil en plus des jetons — c'est
- * la part variable du coût, et c'est pourquoi le relevé est facturé au forfait.
+ * La recherche est l'équivalent de l'ancrage de Gemini et de celle de Claude : sans elle, le
+ * modèle répond de mémoire, et une mémoire d'entraînement ne dit rien de ce que voit un
+ * client aujourd'hui. OpenAI facture l'appel de l'outil en plus des jetons — c'est la part
+ * variable du coût, et c'est pourquoi le relevé est facturé au forfait.
  *
  * Le petit modèle suffit, comme chez Claude : on ne lui demande pas de raisonner, on lui
  * demande de répondre à une question de client comme il le ferait.
@@ -84,21 +103,32 @@ async function demanderChatGpt(question: string): Promise<Reponse> {
   const cle = env.openaiApiKey
   if (cle === undefined) return { ok: false, raison: 'ChatGPT n’est pas configuré.' }
 
-  const reponse = await appeler(OPENAI_API, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: `Bearer ${cle}` },
-    body: JSON.stringify({
-      model: OPENAI_MODELE,
-      tools: [{ type: 'web_search' }],
-      input: question,
-    }),
-  })
-  if (reponse === null) return { ok: false, raison: 'ChatGPT est momentanément injoignable.' }
+  let charge: ChargeOpenAI | null = null
+  let refus = 'ChatGPT a refusé.'
 
-  const charge = (await reponse.json().catch(() => null)) as ChargeOpenAI | null
-  if (reponse.status !== 200 || charge === null) {
-    return { ok: false, raison: charge?.error?.message?.slice(0, 150) ?? 'ChatGPT a refusé.' }
+  for (const outil of OUTILS_RECHERCHE) {
+    const reponse = await appeler(OPENAI_API, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${cle}` },
+      body: JSON.stringify({
+        model: OPENAI_MODELE,
+        tools: [{ type: outil }],
+        input: question,
+      }),
+    })
+    if (reponse === null) return { ok: false, raison: 'ChatGPT est momentanément injoignable.' }
+
+    const lue = (await reponse.json().catch(() => null)) as ChargeOpenAI | null
+    if (reponse.status === 200 && lue !== null) {
+      charge = lue
+      break
+    }
+
+    refus = lue?.error?.message?.slice(0, 150) ?? 'ChatGPT a refusé.'
+    if (!refusDOutil(refus)) return { ok: false, raison: refus }
   }
+
+  if (charge === null) return { ok: false, raison: refus }
 
   const morceaux: string[] = []
   const sources: string[] = []
