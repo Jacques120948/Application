@@ -9,7 +9,10 @@ import {
   lireEnsemblesMeta,
   lireJourneesMeta,
   metaAds,
+  type JourneeMeta,
+  type NiveauMeta,
 } from './meta-ads'
+import type { AccesAds } from './provider'
 import { fenetre } from './metriques'
 
 /**
@@ -127,6 +130,88 @@ type LigneReleve = {
  * Ne lève pas : un refus est une valeur de retour, parce que cette fonction est appelée dans
  * une boucle qui ne doit pas s'interrompre.
  */
+/**
+ * La largeur d'une demande d'insights, en jours, et pourquoi elle dépend du niveau.
+ *
+ * Les chiffres viennent d'une panne. Meta facture une demande d'insights au produit
+ * « objets × jours » : cinq cent soixante-neuf annonces sur vingt-huit jours lui demandent
+ * d'agréger seize mille lignes avant de rendre la première page. Au-delà d'un certain
+ * volume il ne rend plus rien à temps, et l'appel meurt sur son propre délai — « Meta est
+ * momentanément injoignable », alors que Meta va très bien et que c'est nous qui avons trop
+ * demandé.
+ *
+ * D'où une largeur par étage plutôt qu'une largeur unique, parce que le nombre d'objets
+ * n'est pas du tout le même : un compte porte des dizaines de campagnes, des centaines
+ * d'ensembles et des milliers d'annonces. Découper les campagnes aussi finement que les
+ * annonces multiplierait les appels sans rien alléger — et le plafond d'appels appartient à
+ * l'application Meta d'Evoliia, partagé entre tous les comptes reliés.
+ *
+ * La fenêtre couverte, elle, ne change pas : c'est la même, découpée.
+ */
+export const TRANCHES_PAR_NIVEAU: Record<NiveauMeta, number> = {
+  campaign: 30,
+  adset: 7,
+  ad: 7,
+}
+
+const JOUR_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Découpe une fenêtre en tranches d'au plus `jours` journées, bornes comprises.
+ *
+ * Pure et exportée pour être vérifiable : une tranche qui déborderait d'un jour ferait
+ * relire deux fois la même journée — sans erreur visible, puisque l'écriture est un
+ * remplacement — et une tranche qui en oublierait un laisserait un trou dans une courbe.
+ */
+export function tranches(
+  depuis: string,
+  jusqua: string,
+  jours: number,
+): Array<{ depuis: string; jusqua: string }> {
+  const debut = Date.parse(`${depuis}T00:00:00Z`)
+  const fin = Date.parse(`${jusqua}T00:00:00Z`)
+  if (!Number.isFinite(debut) || !Number.isFinite(fin) || fin < debut) {
+    return [{ depuis, jusqua }]
+  }
+
+  const largeur = Math.max(1, Math.floor(jours))
+  const decoupe: Array<{ depuis: string; jusqua: string }> = []
+  for (let curseur = debut; curseur <= fin; curseur += largeur * JOUR_MS) {
+    const borne = Math.min(curseur + (largeur - 1) * JOUR_MS, fin)
+    decoupe.push({
+      depuis: new Date(curseur).toISOString().slice(0, 10),
+      jusqua: new Date(borne).toISOString().slice(0, 10),
+    })
+  }
+  return decoupe
+}
+
+/**
+ * Les journées d'un niveau, demandées par tranches et recollées.
+ *
+ * Les tranches s'enchaînent au lieu de partir ensemble : elles visent le même compte, et
+ * Meta compte les appels par compte. Trois niveaux qui lanceraient chacun quatre demandes
+ * simultanées feraient douze appels d'un coup sur un plafond partagé par tous les comptes
+ * reliés à Evoliia.
+ *
+ * Un refus sur une tranche arrête tout : une fenêtre à trous serait pire qu'une fenêtre
+ * absente, parce qu'elle se lit comme une baisse de dépense.
+ */
+async function journeesParTranches(
+  acces: AccesAds,
+  niveau: NiveauMeta,
+  depuis: string,
+  jusqua: string,
+): Promise<{ ok: true; valeur: JourneeMeta[] } | { ok: false; raison: string }> {
+  const toutes: JourneeMeta[] = []
+  for (const tranche of tranches(depuis, jusqua, TRANCHES_PAR_NIVEAU[niveau])) {
+    const lecture = await lireJourneesMeta(acces, niveau, tranche.depuis, tranche.jusqua)
+    if (!lecture.ok) return lecture
+    toutes.push(...lecture.valeur)
+  }
+  return { ok: true, valeur: toutes }
+}
+
 export async function synchroniserCompteMeta(
   userId: string,
 ): Promise<{ ok: true; bilan: BilanMeta } | { ok: false; raison: string }> {
@@ -271,9 +356,9 @@ export async function synchroniserCompteMeta(
    * réécrite avec deux étages sur trois donnerait des totaux qui ne se recoupent pas.
    */
   const [parJourCampagne, parJourEnsemble, parJourAnnonce] = await Promise.all([
-    lireJourneesMeta(acces, 'campaign', bornes.depuis, bornes.jusqua),
-    lireJourneesMeta(acces, 'adset', detail.depuis, detail.jusqua),
-    lireJourneesMeta(acces, 'ad', detail.depuis, detail.jusqua),
+    journeesParTranches(acces, 'campaign', bornes.depuis, bornes.jusqua),
+    journeesParTranches(acces, 'adset', detail.depuis, detail.jusqua),
+    journeesParTranches(acces, 'ad', detail.depuis, detail.jusqua),
   ])
   if (!parJourCampagne.ok) return parJourCampagne
   if (!parJourEnsemble.ok) return parJourEnsemble
