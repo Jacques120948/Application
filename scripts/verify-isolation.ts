@@ -51,6 +51,7 @@ const PROTECTED_TABLES = [
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',
+  'VolumeRecherche',
   'PromptIA',
   'ReleveIA',
   'PointHebdo',

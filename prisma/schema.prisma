@@ -112,6 +112,7 @@ model User {
   adsMotsCles          AdsMotCle[]
   adsPlans             AdsPlanCampagne[]
   releveRecherches     ReleveRecherche[]
+  volumesRecherche     VolumeRecherche[]
 
   @@index([createdAt])
 }
@@ -1255,6 +1256,7 @@ model Site {
   relevesIa      ReleveIA[]
   points         PointHebdo[]
   releves        ReleveRecherche[]
+  volumes        VolumeRecherche[]
 
   /// Deux fois le même site pour la même personne n'aurait aucun sens, et ferait
   /// diverger deux historiques qui devraient n'en faire qu'un.
@@ -1520,6 +1522,49 @@ model ReleveRecherche {
 
   @@unique([siteId, jour])
   @@index([siteId, jour(sort: Desc)])
+}
+
+/// Le volume de recherche d'un mot, gardé plutôt que redemandé.
+///
+/// Search Console dit combien de fois le site a été montré sur une recherche ; il ne dit
+/// jamais combien de fois cette recherche a été tapée. L'écart est tout le sujet : sortir
+/// trentième sur un mot cherché cinq mille fois donne moins d'affichages que sortir troisième
+/// sur un mot cherché vingt fois, et les chiffres de Search Console montrent donc ces deux
+/// lignes dans le mauvais ordre.
+///
+/// Gardé, et non relu à chaque affichage : un volume est une moyenne mensuelle. Le redemander
+/// à chaque ouverture d'écran consommerait le quota d'appels d'Evoliia — partagé par tous ses
+/// utilisateurs — pour une valeur qui n'aura pas bougé.
+model VolumeRecherche {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+  siteId String @db.Uuid
+
+  /// Le mot normalisé : minuscules, espaces réduits. Deux formes donneraient deux lignes
+  /// pour un seul mot, et un cache qui ne trouve jamais rien.
+  motCle String
+  /// La ressource géographique de Google, ex. « geoTargetConstants/2756 ».
+  marche String
+  /// Le code de langue à deux lettres, tel qu'Evoliia le manipule.
+  langue String
+
+  /// La moyenne mensuelle rendue par Google. -1 : demandé, mais Google n'a rien à dire —
+  /// distinct de 0, qui est une réponse : personne ne cherche cela.
+  volume         Int    @default(-1)
+  /// LOW | MEDIUM | HIGH | '', tel que Google le nomme.
+  concurrence    String @default("")
+  /// Ce que ce mot vaut à ceux qui le paient. Un repère, même sans intention d'acheter.
+  coutBasMicros  BigInt @default(0)
+  coutHautMicros BigInt @default(0)
+
+  releveAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, marche, langue, motCle], map: "VolumeRecherche_cle_key")
+  @@index([siteId, releveAt])
 }
 
 /// Une question qu'un client pourrait poser à un assistant, et où la marque devrait sortir.

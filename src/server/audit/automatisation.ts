@@ -9,6 +9,7 @@ import { redigerArticle } from './articles'
 import { lireCalendrier } from './calendrier'
 import { inspecter, lireIndexation } from './indexation'
 import { lireRecherches } from './recherches'
+import { aRafraichir, lireVolumes, rafraichirVolumes } from './volumes'
 import { ouvrirPassage, poursuivrePassage, soldeCouvre } from './visibilite-ia'
 import { noterPourEquipe } from '@/server/agents/memoire'
 import { fairePoint } from './point'
@@ -235,6 +236,8 @@ export type Bilan = {
   recommandationsAds: number
   /** Comptes dont le créatif a été relu — une fois par semaine, pas chaque nuit. */
   creatifsAds: number
+  /** Sites dont les volumes de recherche ont été rafraîchis. Environ un par mois et par site. */
+  volumes?: number
   echecs: number
   /** Combien de sites auraient dépensé. Rempli seulement à blanc. */
   redactionsDues?: number
@@ -469,6 +472,26 @@ export async function tournerQuotidien(
       if (reglages.releve && (await relever(candidat.userId, candidat.siteId, site.origin))) {
         bilan.releves += 1
         fait.releveAt = maintenant
+
+        /*
+         * Les volumes de recherche suivent le relevé, et seulement quand les anciens ont
+         * plus d'un mois. Un volume est une moyenne mensuelle : le redemander chaque nuit
+         * réécrirait le même nombre en usant le quota d'appels d'Evoliia, partagé par tous
+         * ses utilisateurs. À ce rythme, un site coûte un appel par mois.
+         *
+         * L'échec ne compte pas comme une panne de la nuit : la plupart des sites n'ont
+         * aucun compte publicitaire relié, et c'est un état ordinaire, pas une erreur.
+         */
+        const connus = await lireVolumes(candidat.userId, candidat.siteId)
+        if (aRafraichir(connus, maintenant)) {
+          const issue = await rafraichirVolumes(
+            candidat.userId,
+            candidat.siteId,
+            site.origin,
+            'fr',
+          ).catch(() => ({ ok: false as const, raison: '' }))
+          if (issue.ok) bilan.volumes = (bilan.volumes ?? 0) + 1
+        }
       }
 
       if (redactionDue(reglages, maintenant)) {

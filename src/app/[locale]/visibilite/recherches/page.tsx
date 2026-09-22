@@ -19,9 +19,11 @@ import {
   type Tranche,
   type VueOrganique,
 } from '@/server/audit/organique'
+import { lireVolumes, normaliser, type VolumeConnu } from '@/server/audit/volumes'
 import { nomDuPays } from '@/lib/pays'
 import type { Ligne } from '@/server/integrations/providers/google-search-console'
 import { CourbeOrganique } from '@/components/studio/CourbeOrganique'
+import { VolumesRecherche } from '@/components/studio/VolumesRecherche'
 import { Shell } from '@/components/studio/Shell'
 import { LinkButton } from '@/components/ui'
 
@@ -179,6 +181,42 @@ const TRANCHES: { cle: Tranche; titre: string; note: string; teinte: string; fon
   },
 ]
 
+/**
+ * Le volume mensuel d'une recherche, ou rien.
+ *
+ * Toujours précédé d'un « environ », et ce n'est pas une coquetterie : Google ne publie pas
+ * un compte, il publie une moyenne sur douze mois arrondie à un palier. Afficher « 590 »
+ * sans réserve laisserait croire à un décompte, et la première personne qui comparerait deux
+ * outils y verrait une erreur d'Evoliia plutôt que la nature de la donnée.
+ */
+function Volume({ connu }: { connu: VolumeConnu | undefined }) {
+  // -1 : demandé, mais Google n'a rien à dire. Distinct de 0, qui est une réponse.
+  if (connu === undefined || connu.volume < 0) {
+    return <span className="text-[var(--color-ink-faint)]">—</span>
+  }
+  if (connu.volume === 0) {
+    return (
+      <span
+        className="text-[var(--color-ink-faint)]"
+        title="Google ne mesure aucune recherche sur ce mot : trop rare pour être compté."
+      >
+        &lt; 10
+      </span>
+    )
+  }
+  return (
+    <span title={concurrenceEnClair(connu.concurrence)}>≈ {nombre(connu.volume)}</span>
+  )
+}
+
+/** La concurrence publicitaire, dite en français plutôt qu'en majuscules anglaises. */
+function concurrenceEnClair(valeur: string): string {
+  if (valeur === 'LOW') return 'Peu d’annonceurs se disputent ce mot.'
+  if (valeur === 'MEDIUM') return 'Quelques annonceurs se disputent ce mot.'
+  if (valeur === 'HIGH') return 'Beaucoup d’annonceurs se disputent ce mot.'
+  return ''
+}
+
 /** Le mouvement d'une recherche, ou le silence honnête quand on ne le connaît pas. */
 function Deplacement({ gain }: { gain: number | null }) {
   if (gain === null) {
@@ -211,10 +249,35 @@ function Deplacement({ gain }: { gain: number | null }) {
  * position à trois clics par mois est un mot que personne ne tape, pas un échec ; une
  * recherche en quinzième position à quarante clics est un travail qui reste à faire.
  */
-function Classement({ rangs, jours }: { rangs: Rang[]; jours: number }) {
+function Classement({
+  rangs,
+  jours,
+  volumes,
+  siteId,
+  locale,
+}: {
+  rangs: Rang[]
+  jours: number
+  volumes: Map<string, VolumeConnu>
+  siteId: string
+  locale: string
+}) {
   if (rangs.length === 0) return null
 
   const compte = compterTranches(rangs)
+
+  /*
+   * La date du relevé le plus récent, pour que le bouton dise si les volumes datent d'hier
+   * ou de six mois. Calculée sur ce qui est réellement affiché, et non sur toute la table :
+   * une ligne fraîche pour un mot qu'on ne montre plus ne dit rien de ce tableau-ci.
+   */
+  let releveLe: Date | null = null
+  for (const rang of rangs) {
+    const connu = volumes.get(normaliser(rang.requete))
+    if (connu !== undefined && (releveLe === null || connu.releveAt > releveLe)) {
+      releveLe = connu.releveAt
+    }
+  }
 
   return (
     <section className="mt-8">
@@ -247,6 +310,33 @@ function Classement({ rangs, jours }: { rangs: Rang[]; jours: number }) {
         ))}
       </div>
 
+      {/*
+        Le volume est la moitié que Search Console ne connaît pas, et la confusion entre les
+        deux colonnes est la plus coûteuse du référencement. « Vues » compte les fois où
+        Google vous a montré ; « Cherché » compte les fois où le mot a été tapé, par qui que
+        ce soit. Sortir trentième sur un mot cherché cinq mille fois donne moins de vues que
+        sortir troisième sur un mot cherché vingt fois — et sans la seconde colonne, ces deux
+        lignes se lisent dans le mauvais ordre.
+      */}
+      <div className="mt-4 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+        <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+          <strong className="font-medium text-[var(--color-ink)]">Cherché / mois</strong> n’est
+          pas la même chose que <strong className="font-medium text-[var(--color-ink)]">Vues</strong> :
+          l’une compte les fois où le mot a été tapé par qui que ce soit, l’autre les fois où
+          Google vous a montré. Sortir 30<sup>e</sup> sur un mot cherché cinq mille fois vaut
+          mieux que sortir 3<sup>e</sup> sur un mot cherché vingt fois, et seule la première
+          colonne le dit. Elle vient du planificateur de Google Ads, et demande donc un compte
+          publicitaire relié.
+        </p>
+        <div className="mt-3">
+          <VolumesRecherche
+            siteId={siteId}
+            releveLe={releveLe === null ? null : releveLe.toISOString()}
+            locale={locale}
+          />
+        </div>
+      </div>
+
       <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-line)]">
         <table className="w-full border-collapse text-sm">
           <thead>
@@ -254,6 +344,7 @@ function Classement({ rangs, jours }: { rangs: Rang[]; jours: number }) {
               <th className="px-4 py-2 text-right font-medium">Place</th>
               <th className="px-4 py-2 font-medium">Recherche</th>
               <th className="px-4 py-2 text-right font-medium">Évolution</th>
+              <th className="px-4 py-2 text-right font-medium">Cherché / mois</th>
               <th className="px-4 py-2 text-right font-medium">Clics</th>
               <th className="px-4 py-2 text-right font-medium">Vues</th>
             </tr>
@@ -274,6 +365,9 @@ function Classement({ rangs, jours }: { rangs: Rang[]; jours: number }) {
                   <td className="px-4 py-2 break-words">{rang.requete}</td>
                   <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">
                     <Deplacement gain={rang.gain} />
+                  </td>
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap">
+                    <Volume connu={volumes.get(normaliser(rang.requete))} />
                   </td>
                   <td className="px-4 py-2 text-right tabular-nums">{nombre(rang.clics)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">
@@ -616,13 +710,19 @@ export default async function RecherchesPage({
    */
   const jours = periodeValide(demande.jours)
 
-  const [lecture, organique] = await Promise.all([
+  const [lecture, organique, volumes] = await Promise.all([
     lireRecherches(user.id, tableau.site.origin, demande.pays),
     /*
      * La courbe est lue en parallèle et son échec n'emporte pas la page : c'est un appel de
      * plus chez Google, et une lecture qui échoue doit coûter un bloc, pas l'écran entier.
      */
     lireOrganique(user.id, tableau.site.id, tableau.site.origin, jours, demande.pays),
+    /*
+     * Lus en base, jamais chez Google : un volume est une moyenne mensuelle, et le
+     * redemander à chaque affichage ferait dépendre le quota d'appels d'Evoliia — partagé
+     * par tous ses utilisateurs — du nombre d'onglets ouverts. Le bouton s'en charge.
+     */
+    lireVolumes(user.id, tableau.site.id),
   ])
 
   return (
@@ -650,7 +750,13 @@ export default async function RecherchesPage({
                   Où l'on est d'abord, comment cela bouge ensuite. L'ordre inverse ferait
                   commencer l'écran par une dérivée avant d'avoir donné la valeur.
                 */}
-                <Classement rangs={organique.vue.classement} jours={lecture.vue.jours} />
+                <Classement
+                  rangs={organique.vue.classement}
+                  jours={lecture.vue.jours}
+                  volumes={volumes}
+                  siteId={tableau.site.id}
+                  locale={locale}
+                />
                 <Evolution
                   vue={organique.vue}
                   locale={locale}
