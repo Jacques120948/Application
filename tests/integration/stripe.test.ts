@@ -299,13 +299,13 @@ describe('Abonnements Evoliia', () => {
   })
 
   it('refuse de faire payer l’offre gratuite', async () => {
-    await expect(startCheckout(fake, subscriber, { planId: FREE_PLAN_ID, locale: 'fr' })).rejects.toMatchObject({
+    await expect(startCheckout(fake, subscriber, { planId: FREE_PLAN_ID, rythme: 'mois', locale: 'fr' })).rejects.toMatchObject({
       code: 'VALIDATION',
     })
   })
 
   it('ouvre une page de paiement rattachée à la personne, sans rien changer en base', async () => {
-    const result = await startCheckout(fake, subscriber, { planId: PAID_PLAN, locale: 'fr' })
+    const result = await startCheckout(fake, subscriber, { planId: PAID_PLAN, rythme: 'mois', locale: 'fr' })
     expect(result).toHaveProperty('url')
     const last = created.sessions.at(-1)!
     expect(last.params.mode).toBe('subscription')
@@ -350,7 +350,7 @@ describe('Abonnements Evoliia', () => {
     vi.mocked(fake.subscriptions.update).mockResolvedValueOnce(
       fakeSubscription({ id: current.stripeSubscriptionId!, customer, priceId: builderPrice, userId: subscriber, planId: 'builder' }) as never,
     )
-    const result = await startCheckout(fake, subscriber, { planId: 'builder', locale: 'fr' })
+    const result = await startCheckout(fake, subscriber, { planId: 'builder', rythme: 'mois', locale: 'fr' })
     expect(result).toEqual({ changed: true })
     expect((await getSubscriptionView(subscriber)).planId).toBe('builder')
     await prisma.plan.update({

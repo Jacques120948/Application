@@ -50,6 +50,13 @@ export const planUpdateInput = z.object({
   name: z.string().trim().min(1).max(60),
   description: z.string().trim().min(1).max(400),
   priceCents: z.number().int().min(0).max(1_000_000),
+  /*
+   * Douze mois payés d'avance. Zéro : cette offre ne se prend pas à l'année — et c'est la
+   * valeur de départ partout, parce qu'une remise est une décision commerciale et ne
+   * s'allume pas parce que le champ existe. Aucun taux n'est stocké : la remise annoncée
+   * se déduit de ce prix et du mensuel, ce qui les empêche de se contredire.
+   */
+  priceYearCents: z.number().int().min(0).max(12_000_000),
   maxProjects: z.number().int().min(0).max(1_000),
   maxConnections: z.number().int().min(0).max(100),
   /** Espace d'images, en mégaoctets. Converti en octets avant écriture. */

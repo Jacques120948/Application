@@ -16,6 +16,7 @@ export type AdminPlan = {
   name: string
   description: string
   priceCents: number
+  priceYearCents: number
   currency: string
   maxProjects: number
   maxConnections: number
@@ -67,6 +68,23 @@ function euros(cents: number): string {
   return (cents / 100).toString()
 }
 
+/**
+ * Ce que le prix annuel réglé représente, dit à l'exploitant pendant qu'il le saisit.
+ *
+ * Saisir « 470 » ne dit pas si c'est une bonne affaire : c'est la comparaison aux douze
+ * mois pleins qui le dit, et la faire de tête à chaque essai est exactement ce qu'un
+ * formulaire doit éviter. Un prix annuel plus cher que douze mensualités est signalé comme
+ * tel plutôt que corrigé : c'est peut-être voulu, et ce n'est pas au code d'en décider.
+ */
+function remise(plan: AdminPlan): string {
+  if (plan.priceYearCents <= 0) return ''
+  const plein = plan.priceCents * 12
+  if (plein <= 0) return ''
+  if (plan.priceYearCents >= plein) return 'Attention : ce prix est plus élevé que douze mois.'
+  const pourcent = Math.floor(((plein - plan.priceYearCents) / plein) * 100)
+  return `Actuellement : ${pourcent} % de remise, soit ${euros(Math.round(plan.priceYearCents / 12))} par mois.`
+}
+
 export function PlanEditor({
   plans,
   features,
@@ -102,6 +120,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         name: String(form.get('name') ?? ''),
         description: String(form.get('description') ?? ''),
         priceCents: Math.round(Number(form.get('price')) * 100),
+        priceYearCents: Math.round(Number(form.get('priceYear')) * 100),
         maxProjects: Number(form.get('maxProjects')),
         maxConnections: Number(form.get('maxConnections')),
         sitesMax: Number(form.get('sitesMax')),
@@ -141,7 +160,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
             {!plan.isActive ? <Badge tone="caution">Masquée</Badge> : null}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Nom affiché">
               <Input name="name" maxLength={60} required defaultValue={plan.name} />
             </Field>
@@ -153,6 +172,29 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
                 step="0.01"
                 required
                 defaultValue={euros(plan.priceCents)}
+              />
+            </Field>
+            {/*
+              Le prix de douze mois payés d'avance, et non un pourcentage : un taux saisi à
+              part finirait par contredire le prix qu'il prétend décrire, et c'est l'écart
+              qu'un client repère en une multiplication. La remise annoncée se déduit des
+              deux prix, elle ne se règle nulle part.
+            */}
+            <Field
+              label={`Prix annuel (${plan.currency})`}
+              hint={
+                plan.priceCents <= 0
+                  ? 'L’offre gratuite ne se prend pas à l’année.'
+                  : `Zéro : pas d’offre annuelle. Douze mois pleins feraient ${euros(plan.priceCents * 12)}. ${remise(plan)}`
+              }
+            >
+              <Input
+                name="priceYear"
+                type="number"
+                min={0}
+                step="0.01"
+                required
+                defaultValue={euros(plan.priceYearCents)}
               />
             </Field>
           </div>

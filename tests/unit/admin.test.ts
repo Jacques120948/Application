@@ -11,6 +11,7 @@ describe('validation du back-office', () => {
     name: 'Builder',
     description: 'Plusieurs projets et adresse personnalisée.',
     priceCents: 5900,
+    priceYearCents: 0,
     maxProjects: 5,
     maxConnections: 3,
     storageMegabytes: 250,
@@ -66,5 +67,51 @@ describe('validation du back-office', () => {
 
   it('borne la liste par défaut', () => {
     expect(userSearchInput.parse({}).take).toBe(50)
+  })
+})
+
+/**
+ * Le prix annuel.
+ *
+ * Il ouvre une seconde façon de payer la même offre, et la seule chose qui compte ici est
+ * que zéro veuille dire « pas d'offre annuelle » plutôt que « gratuite à l'année ». La
+ * remise, elle, n'est jamais saisie : elle se déduit des deux prix, ce qui les empêche de
+ * se contredire.
+ */
+describe('le prix annuel d’une offre', () => {
+  const valid = {
+    name: 'Pro',
+    description: 'Pour ceux qui travaillent leur visibilité régulièrement.',
+    priceCents: 4900,
+    priceYearCents: 47_000,
+    maxProjects: 0,
+    maxConnections: 3,
+    storageMegabytes: 0,
+    monthlyCredits: 600,
+    sitesMax: 3,
+    pagesPerAudit: 250,
+    auditsPerMonth: 12,
+    radarRunsPerMonth: 0,
+    liaAnswersPerMonth: 0,
+    alertsPerMonth: 0,
+    imagesPerMonth: 0,
+    liaConversationsPerMonth: 0,
+    allowBuild: false,
+    isRecommended: false,
+    isActive: true,
+    sortOrder: 2,
+  }
+
+  it('accepte un prix annuel', () => {
+    expect(planUpdateInput.parse(valid).priceYearCents).toBe(47_000)
+  })
+
+  it('accepte zéro, qui veut dire « pas d’offre annuelle »', () => {
+    expect(planUpdateInput.parse({ ...valid, priceYearCents: 0 }).priceYearCents).toBe(0)
+  })
+
+  it('refuse un prix annuel négatif ou à virgule', () => {
+    expect(() => planUpdateInput.parse({ ...valid, priceYearCents: -1 })).toThrow()
+    expect(() => planUpdateInput.parse({ ...valid, priceYearCents: 470.5 })).toThrow()
   })
 })

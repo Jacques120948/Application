@@ -43,6 +43,7 @@ export default async function SubscriptionPage({
     name: plan.name,
     description: plan.description,
     priceCents: plan.priceCents,
+    priceYearCents: plan.priceYearCents,
     currency: plan.currency,
     interval: plan.interval,
     monthlyCredits: plan.monthlyCredits,

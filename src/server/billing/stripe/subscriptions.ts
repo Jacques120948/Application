@@ -22,8 +22,22 @@ import { FREE_PLAN_ID, getEffectivePlan } from '@/server/billing/plans'
  * en cours gardent l'ancien, comme Stripe le veut.
  */
 
+/**
+ * Mensuel ou annuel.
+ *
+ * Le rythme est une propriété du paiement, pas de l'offre : la même offre ouvre les mêmes
+ * portes dans les deux cas, seule la façon de la payer change. C'est pourquoi il voyage
+ * avec la demande de paiement plutôt que dans l'identifiant de l'offre — « vis-pro-annuel »
+ * aurait fait deux offres à tenir à jour, et un jour deux offres divergentes sous le même
+ * nom.
+ */
+export const RYTHMES_PAIEMENT = ['mois', 'an'] as const
+
+export type RythmePaiement = (typeof RYTHMES_PAIEMENT)[number]
+
 export const checkoutInput = z.object({
   planId: z.string().trim().min(1).max(48),
+  rythme: z.enum(RYTHMES_PAIEMENT).default('mois'),
   locale: z.enum(['fr', 'en', 'de', 'it', 'es']).default('fr'),
 })
 
@@ -42,21 +56,64 @@ type PlanRow = {
   name: string
   description: string
   priceCents: number
+  priceYearCents: number
   currency: string
   interval: string
   stripeProductId: string | null
   stripePriceId: string | null
   stripePriceFingerprint: string | null
+  stripePriceIdYear: string | null
+  stripePriceFingerprintYear: string | null
 }
 
-/** Ce qui, s'il change, exige un nouveau tarif Stripe. */
+/**
+ * Le montant d'une offre pour un rythme donné, en centimes. Zéro : ce rythme n'est pas
+ * ouvert pour cette offre — c'est ainsi qu'une offre sans tarif annuel se signale.
+ */
+export function montantPour(
+  plan: Pick<PlanRow, 'priceCents' | 'priceYearCents'>,
+  rythme: RythmePaiement,
+): number {
+  return rythme === 'an' ? plan.priceYearCents : plan.priceCents
+}
+
+/**
+ * La remise annuelle, en pourcentage entier, ou `null` quand il n'y en a pas.
+ *
+ * Calculée, jamais réglée : l'exploitant saisit deux prix, et le pourcentage en découle.
+ * Un taux saisi à part finirait par contredire les prix qu'il prétend décrire — c'est le
+ * genre d'écart qu'un client repère en une multiplication, et qui coûte la confiance qu'on
+ * mettait des mois à gagner.
+ *
+ * Arrondi vers le bas : annoncer « 20 % » pour 19,7 % est une exagération, annoncer
+ * « 19 % » pour 19,7 % n'en est pas une.
+ */
+export function remiseAnnuelle(
+  plan: Pick<PlanRow, 'priceCents' | 'priceYearCents'>,
+): number | null {
+  if (plan.priceCents <= 0 || plan.priceYearCents <= 0) return null
+  const plein = plan.priceCents * 12
+  if (plan.priceYearCents >= plein) return null
+  return Math.floor(((plein - plan.priceYearCents) / plein) * 100)
+}
+
+/**
+ * Ce qui, s'il change, exige un nouveau tarif Stripe.
+ *
+ * Le rythme y entre au même titre que le montant : deux tarifs Stripe distincts, deux
+ * empreintes distinctes. Sans cela, changer de rythme aurait réutilisé le tarif de
+ * l'autre, et quelqu'un aurait payé douze fois le prix d'un mois — ou un douzième de
+ * l'année.
+ */
 export function priceFingerprint(
-  plan: Pick<PlanRow, 'priceCents' | 'currency' | 'interval'>,
+  plan: Pick<PlanRow, 'priceCents' | 'priceYearCents' | 'currency' | 'interval'>,
+  rythme: RythmePaiement = 'mois',
   mode: StripeMode = stripeMode(),
 ): string {
   // Le mode fait partie de l'empreinte : un tarif créé en test n'existe pas en production,
   // et la première demande de paiement après le passage en production le recrée d'elle-même.
-  return `${mode}:${plan.priceCents}:${plan.currency.toLowerCase()}:${plan.interval}`
+  const periode = rythme === 'an' ? 'year' : plan.interval
+  return `${mode}:${montantPour(plan, rythme)}:${plan.currency.toLowerCase()}:${periode}`
 }
 
 /** Statut Evoliia d'un abonnement Stripe. `null` : l'abonnement n'existe plus. */
@@ -85,18 +142,43 @@ function periodEndOf(sub: Stripe.Subscription): Date | null {
   return seconds === undefined ? null : new Date(seconds * 1000)
 }
 
-/** Crée ou met à jour le produit et le tarif Stripe d'une offre. */
-export async function ensureStripePrice(stripe: Stripe, planId: string): Promise<string> {
+/**
+ * Crée ou met à jour le produit et le tarif Stripe d'une offre, pour un rythme donné.
+ *
+ * Un seul produit Stripe par offre, deux tarifs accrochés dessus : c'est ainsi que Stripe
+ * lui-même range un abonnement payable au mois ou à l'année, et cela laisse au client une
+ * facture au bon nom quel que soit le rythme choisi.
+ *
+ * Demander l'année à une offre qui n'en a pas est refusé plutôt que rattrapé en mensuel :
+ * un paiement lancé sur un rythme qu'on n'a pas choisi est la pire façon de découvrir une
+ * erreur de réglage.
+ */
+export async function ensureStripePrice(
+  stripe: Stripe,
+  planId: string,
+  rythme: RythmePaiement = 'mois',
+): Promise<string> {
   const plan = await prisma.plan.findUnique({ where: { id: planId } })
   if (plan === null || !plan.isActive) throw notFound("Cette offre n'existe pas.")
   if (plan.priceCents === 0) throw validation("L'offre gratuite ne se paie pas.")
+  const montant = montantPour(plan, rythme)
+  if (montant <= 0) throw validation("Cette offre ne se prend pas à l'année.")
 
-  const fingerprint = priceFingerprint(plan)
-  if (plan.stripePriceId !== null && plan.stripePriceFingerprint === fingerprint) return plan.stripePriceId
+  const annuel = rythme === 'an'
+  const fingerprint = priceFingerprint(plan, rythme)
+  const connu = annuel ? plan.stripePriceIdYear : plan.stripePriceId
+  const empreinteConnue = annuel ? plan.stripePriceFingerprintYear : plan.stripePriceFingerprint
+  if (connu !== null && empreinteConnue === fingerprint) return connu
 
-  // Un produit de l'autre mode n'existe pas ici : on repart d'un produit neuf, et l'ancien
-  // tarif n'est pas à désactiver — Stripe ne le connaît pas dans ce mode.
-  const sameMode = plan.stripePriceFingerprint?.startsWith(`${stripeMode()}:`) === true
+  /*
+   * Le produit se retrouve par l'une ou l'autre empreinte : le tarif annuel d'une offre
+   * dont seul le mensuel existait doit s'accrocher au produit déjà créé, sinon le client
+   * verrait deux lignes « Evoliia — Pro » sans savoir laquelle est la sienne.
+   */
+  const prefixe = `${stripeMode()}:`
+  const sameMode =
+    plan.stripePriceFingerprint?.startsWith(prefixe) === true ||
+    plan.stripePriceFingerprintYear?.startsWith(prefixe) === true
   let productId = sameMode ? plan.stripeProductId : null
   if (productId === null) {
     const product = await stripe.products.create({
@@ -112,18 +194,32 @@ export async function ensureStripePrice(stripe: Stripe, planId: string): Promise
   const price = await stripe.prices.create({
     product: productId,
     currency: plan.currency.toLowerCase(),
-    unit_amount: plan.priceCents,
-    recurring: { interval: plan.interval === 'year' ? 'year' : 'month' },
-    metadata: { planId: plan.id },
+    unit_amount: montant,
+    recurring: { interval: annuel || plan.interval === 'year' ? 'year' : 'month' },
+    metadata: { planId: plan.id, rythme },
   })
-  if (plan.stripePriceId !== null && sameMode) {
-    await stripe.prices.update(plan.stripePriceId, { active: false }).catch(() => undefined)
+  /*
+   * L'ancien tarif du **même** rythme est désactivé, jamais celui de l'autre : éteindre le
+   * mensuel en créant l'annuel empêcherait toute nouvelle souscription au mois.
+   */
+  if (connu !== null && empreinteConnue?.startsWith(prefixe) === true) {
+    await stripe.prices.update(connu, { active: false }).catch(() => undefined)
   }
   await prisma.plan.update({
     where: { id: plan.id },
-    data: { stripeProductId: productId, stripePriceId: price.id, stripePriceFingerprint: fingerprint },
+    data: annuel
+      ? {
+          stripeProductId: productId,
+          stripePriceIdYear: price.id,
+          stripePriceFingerprintYear: fingerprint,
+        }
+      : {
+          stripeProductId: productId,
+          stripePriceId: price.id,
+          stripePriceFingerprint: fingerprint,
+        },
   })
-  logger.info('stripe : tarif créé', { planId: plan.id, fingerprint })
+  logger.info('stripe : tarif créé', { planId: plan.id, fingerprint, rythme })
   return price.id
 }
 
@@ -177,7 +273,7 @@ export async function startCheckout(
   input: z.infer<typeof checkoutInput>,
 ): Promise<{ url: string } | { changed: true }> {
   if (input.planId === FREE_PLAN_ID) throw validation("Pour revenir à l'offre gratuite, résiliez l'abonnement en cours.")
-  const priceId = await ensureStripePrice(stripe, input.planId)
+  const priceId = await ensureStripePrice(stripe, input.planId, input.rythme)
   const current = await prisma.subscription.findUnique({ where: { userId } })
 
   if (current?.stripeSubscriptionId && current.status !== 'CANCELED') {
@@ -210,7 +306,7 @@ export async function startCheckout(
     metadata: { userId, planId: input.planId },
   })
   if (session.url === null) throw new AppError('INTERNAL', "Stripe n'a pas renvoyé de page de paiement.")
-  logger.info('stripe : paiement commencé', { userId, planId: input.planId })
+  logger.info('stripe : paiement commencé', { userId, planId: input.planId, rythme: input.rythme })
   return { url: session.url }
 }
 

@@ -9,6 +9,7 @@ import { DEFAULT_ACTION_COSTS, FREE_ACTIONS } from '@/server/billing/action-cost
 import { auditsLabel } from '@/server/billing/plan-details'
 import { listPublicPlans } from '@/server/billing/plans'
 import { actionCosts } from '@/server/billing/action-costs'
+import { remiseAnnuelle } from '@/server/billing/stripe/subscriptions'
 import { phraseVolumes } from '@/server/billing/volumes-offre'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { formatAmount } from '@/server/business/economics'
@@ -681,6 +682,23 @@ export default async function LandingPage({
                   {t('vis.plansPerMonth')}
                 </span>
               </p>
+              {/*
+                L'année sous le mois, et non derrière un interrupteur qui cacherait l'un
+                des deux. Un visiteur qui découvre les prix compare d'abord des mensualités
+                — c'est la seule unité qu'il peut rapprocher de ce qu'il paie ailleurs — et
+                un bouton « à l'année » lui demanderait de basculer pour découvrir qu'il
+                existe une économie dont rien ne lui avait parlé. Les deux nombres visibles
+                d'un coup lui laissent la comparaison. L'écran d'abonnement, lui, propose un
+                vrai choix : c'est là qu'on paie.
+              */}
+              {remiseAnnuelle(plan) === null ? null : (
+                <p className="mt-1 mb-0 text-sm text-[var(--color-brand-strong)]">
+                  {t('vis.plansYearly', {
+                    amount: formatAmount(plan.priceYearCents, plan.currency),
+                    percent: remiseAnnuelle(plan) ?? 0,
+                  })}
+                </p>
+              )}
               <p className="mt-4 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
                 {plan.description}
               </p>

@@ -11,6 +11,8 @@ export type PlanCard = {
   name: string
   description: string
   priceCents: number
+  /** Prix pour douze mois payés d'avance. Zéro : cette offre se prend au mois seulement. */
+  priceYearCents: number
   currency: string
   interval: string
   monthlyCredits: number
@@ -49,6 +51,36 @@ export function SubscriptionBoard({
   const [subscription, setSubscription] = useState(initial)
   const [busy, setBusy] = useState<string | null>(null)
   const [showDetails, setShowDetails] = useState(false)
+  /*
+   * Le mois par défaut, toujours. Ouvrir sur l'année ferait lire le plus gros nombre en
+   * premier, ce qui fait fuir quelqu'un qui découvre les prix — et donnerait l'impression
+   * d'un engagement imposé. C'est une économie qu'on propose, pas une condition.
+   */
+  const [rythme, setRythme] = useState<'mois' | 'an'>('mois')
+
+  /*
+   * La remise se calcule à partir des deux prix, jamais d'un taux réglé à part : deux
+   * nombres qui devraient s'accorder finissent toujours par diverger, et un client repère
+   * l'écart en une multiplication. Arrondie vers le bas — annoncer 20 % pour 19,7 % est
+   * une exagération, annoncer 19 % n'en est pas une.
+   */
+  const remiseDe = (plan: PlanCard): number | null => {
+    if (plan.priceCents <= 0 || plan.priceYearCents <= 0) return null
+    const plein = plan.priceCents * 12
+    if (plan.priceYearCents >= plein) return null
+    return Math.floor(((plein - plan.priceYearCents) / plein) * 100)
+  }
+
+  const annuelPossible = plans.some((plan) => plan.priceYearCents > 0)
+  const remises = plans.map(remiseDe).filter((valeur): valeur is number => valeur !== null)
+  /* La plus forte, sur le bouton : c'est ce qui décide d'aller voir, pas une moyenne. */
+  const remiseMax = remises.length === 0 ? null : Math.max(...remises)
+
+  const argent = (cents: number): string =>
+    new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: plans[0]?.currency ?? 'CHF',
+    }).format(cents / 100)
   const [message, setMessage] = useState<{ tone: 'positive' | 'caution' | 'critical'; text: string } | null>(
     returnState === 'annule' ? { tone: 'caution', text: t('subscription.canceledCheckout') } : null,
   )
@@ -186,9 +218,51 @@ export function SubscriptionBoard({
         </CardBody>
       </Card>
 
+      {/*
+        Le choix du rythme, au-dessus de la grille et non dans chaque carte : c'est une
+        décision qu'on prend une fois pour toutes les offres, et la répéter quatre fois
+        laisserait croire qu'on peut payer Starter au mois et Pro à l'année en même temps.
+        Il n'apparaît que si une offre au moins a un tarif annuel — sinon c'est un
+        interrupteur sans effet, et rien ne fait douter d'une page de prix comme un bouton
+        qui ne change rien.
+      */}
+      {annuelPossible ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {(['mois', 'an'] as const).map((choix) => {
+            const actif = choix === rythme
+            return (
+              <button
+                key={choix}
+                type="button"
+                onClick={() => setRythme(choix)}
+                aria-pressed={actif}
+                className={`cursor-pointer rounded-[var(--radius-pill)] border px-4 py-2 text-sm ${
+                  actif
+                    ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+                    : 'border-[var(--color-line)] bg-transparent text-[var(--color-ink-soft)]'
+                }`}
+              >
+                {choix === 'mois' ? t('subscription.payMonthly') : t('subscription.payYearly')}
+                {choix === 'an' && remiseMax !== null ? (
+                  <span className="ml-2 text-xs">{t('subscription.yearlyOff', { percent: remiseMax })}</span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {plans.map((plan) => {
           const current = plan.id === subscription.planId
+          /*
+           * L'année demandée pour une offre qui n'en a pas : on montre son prix mensuel et
+           * on le dit. La masquer ferait disparaître une offre au changement de rythme,
+           * et personne ne comprendrait qu'elle existe encore.
+           */
+          const annuel = rythme === 'an' && plan.priceYearCents > 0
+          const montant = annuel ? plan.priceYearCents : plan.priceCents
+          const remise = remiseDe(plan)
           const canChoose =
             paymentAvailable &&
             plan.priceCents > 0 &&
@@ -210,17 +284,32 @@ export function SubscriptionBoard({
                   ) : null}
                 </div>
                 <p className="m-0 mt-2 text-2xl font-semibold">
-                  {plan.priceCents === 0
-                    ? t('subscription.free')
-                    : new Intl.NumberFormat(locale, { style: 'currency', currency: plan.currency }).format(
-                        plan.priceCents / 100,
-                      )}
+                  {plan.priceCents === 0 ? t('subscription.free') : argent(montant)}
                   {plan.priceCents > 0 ? (
                     <span className="ml-1 text-sm font-normal text-[var(--color-ink-soft)]">
-                      {plan.interval === 'year' ? t('subscription.perYear') : t('subscription.perMonth')}
+                      {annuel || plan.interval === 'year'
+                        ? t('subscription.perYear')
+                        : t('subscription.perMonth')}
                     </span>
                   ) : null}
                 </p>
+                {/*
+                  Ce que l'année revient au mois, et ce qu'elle fait gagner. Le pourcentage
+                  seul ne dit rien à qui compare un prix mensuel : c'est la division qui
+                  permet de décider, et elle est faite ici plutôt que laissée au client.
+                */}
+                {annuel && remise !== null ? (
+                  <p className="m-0 mt-1 text-xs text-[var(--color-brand-strong)]">
+                    {t('subscription.yearlyEquivalent', {
+                      amount: argent(Math.round(plan.priceYearCents / 12)),
+                      percent: remise,
+                    })}
+                  </p>
+                ) : rythme === 'an' && plan.priceCents > 0 ? (
+                  <p className="m-0 mt-1 text-xs text-[var(--color-ink-faint)]">
+                    {t('subscription.monthlyOnly')}
+                  </p>
+                ) : null}
                 <p className="m-0 mt-2 text-sm text-[var(--color-ink-soft)]">{plan.description}</p>
                 {/*
                   Le contenu exact, groupe par groupe. Une carte qui ne dirait que « 3
@@ -251,7 +340,16 @@ export function SubscriptionBoard({
                     <Button
                       className="w-full"
                       disabled={busy !== null}
-                      onClick={() => void call('/api/abonnement', { planId: plan.id, locale }, plan.id)}
+                      onClick={() =>
+                        void call(
+                          '/api/abonnement',
+                          // Le rythme réellement payable pour cette offre, pas celui de
+                          // l'écran : demander l'année à une offre qui n'en a pas serait
+                          // refusé côté serveur, et l'échec arriverait après le clic.
+                          { planId: plan.id, rythme: annuel ? 'an' : 'mois', locale },
+                          plan.id,
+                        )
+                      }
                     >
                       {busy === plan.id
                         ? t('subscription.working')

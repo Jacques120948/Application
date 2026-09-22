@@ -211,11 +211,18 @@ model Plan {
   isRecommended            Boolean  @default(false)
   isActive                 Boolean  @default(true)
   sortOrder                Int      @default(0)
+  /// Prix pour douze mois payés d'avance, en centimes. Zéro : cette offre ne se prend pas
+  /// à l'année. La remise n'est écrite nulle part — elle se déduit des deux prix réglés.
+  priceYearCents           Int      @default(0)
   /// Produit et tarif Stripe, créés à la demande. L'empreinte dit pour quel prix, quelle
   /// monnaie et quelle période le tarif a été créé.
   stripeProductId          String?
   stripePriceId            String?
   stripePriceFingerprint   String?
+  /// Le tarif annuel, gardé à part : chez Stripe ce sont deux tarifs distincts, et une
+  /// colonne unique ferait payer au mois quelqu'un qui a choisi l'année.
+  stripePriceIdYear          String?
+  stripePriceFingerprintYear String?
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
 
