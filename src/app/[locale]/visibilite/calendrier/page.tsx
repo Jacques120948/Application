@@ -422,7 +422,9 @@ export default async function CalendrierPage({
           {vue.dejaEcrits === 0
             ? null
             : `${vue.dejaEcrits} sujet${vue.dejaEcrits > 1 ? 's ont' : ' a'} été écarté${vue.dejaEcrits > 1 ? 's' : ''} : vous avez déjà un article dessus. `}
-          Cliquez sur un sujet pour le faire écrire. Les sujets à venir se recalculent à
+          Cliquez sur un sujet pour le faire écrire, ou passez par{' '}
+          <a href={`/${locale}/visibilite/articles?siteId=${tableau.site.id}`}>l’écran de Milo</a>{' '}
+          pour en demander un sur un sujet à vous. Les sujets à venir se recalculent à
           chaque ouverture, sur les chiffres du moment. Aucun gain n’est annoncé ici : un
           article bien écrit rend une page reprenable, il ne garantit ni position ni visite —
           personne ne peut le promettre.

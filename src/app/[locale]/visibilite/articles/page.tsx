@@ -71,6 +71,33 @@ export default async function ArticlesPage({
             : 'Milo écrit un article de fond à partir de ce que l’analyse relève sur votre contenu.'}
         </p>
 
+        {/*
+          Le chemin vers le calendrier, ici et bien visible.
+          
+          Les deux écrans se répondent — celui-ci écrit un article, l'autre dit lesquels et
+          quand — mais rien ne les reliait : le calendrier vivait dans une autre section du
+          menu, et on venait le chercher chez Milo, qui est l'endroit où l'on pense au
+          contenu. Un écran qu'on cherche au mauvais endroit n'existe pas davantage qu'un
+          écran qu'aucun lien n'atteint.
+        */}
+        <a
+          href={`/${locale}/visibilite/calendrier?siteId=${tableau.site.id}`}
+          className="mb-8 flex items-center justify-between gap-4 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4 no-underline hover:bg-[var(--color-brand-soft)]"
+        >
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-[var(--color-ink)]">
+              Le calendrier de rédaction
+            </span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              Quoi écrire et quand, mois par mois, à partir de ce que les gens tapent
+              réellement pour vous trouver.
+            </span>
+          </span>
+          <span aria-hidden="true" className="shrink-0 text-[var(--color-brand-strong)]">
+            →
+          </span>
+        </a>
+
         <ArticlesRediges
           siteId={tableau.site.id}
           host={tableau.site.host}
