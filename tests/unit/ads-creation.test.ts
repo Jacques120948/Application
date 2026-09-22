@@ -15,6 +15,7 @@ import {
   PRIX_MINIMUM_CONNUS,
   TAUX_PLAUSIBLE,
 } from '@/server/ads/mots-cles'
+import { auPasFacturable, PAS_FACTURABLE } from '@/lib/pas-facturable'
 import { PROFIL_VIDE } from '@/server/ads/profil'
 
 /**
@@ -206,6 +207,42 @@ describe('l’enchère proposée', () => {
   })
 })
 
+describe('l’unité facturable', () => {
+  it('arrondit au centime, parce que Google refuse le reste', () => {
+    /*
+     * « Value must be a multiple of billable unit. » Une médiane ne tombe pas sur un centime
+     * rond : une enchère calculée à 0,375 CHF faisait refuser la création entière.
+     */
+    expect(PAS_FACTURABLE).toBe(10_000)
+    expect(auPasFacturable(375_000)).toBe(380_000)
+    expect(auPasFacturable(374_999)).toBe(370_000)
+    expect(auPasFacturable(500_000)).toBe(500_000)
+  })
+
+  it('ne rend jamais de montant négatif ni absurde', () => {
+    expect(auPasFacturable(-1)).toBe(0)
+    expect(auPasFacturable(Number.NaN)).toBe(0)
+  })
+
+  it('s’applique à l’enchère calculée', () => {
+    // Milieux : 0.35, 0.375, 0.40 — médiane 0.375, qui doit sortir arrondie.
+    const mots = [
+      { coutBasMicros: 300_000, coutHautMicros: 400_000 },
+      { coutBasMicros: 350_000, coutHautMicros: 400_000 },
+      { coutBasMicros: 350_000, coutHautMicros: 450_000 },
+    ]
+    const enchere = enchereProposee(mots, 0)
+    expect(enchere % PAS_FACTURABLE).toBe(0)
+  })
+
+  it('s’applique au repère affiché', () => {
+    // 17 CHF par vente à 5 % font 0,85 CHF — mais 13 CHF feraient 0,65 et 7 CHF, 0,35.
+    for (const cpa of [7, 13, 17, 23]) {
+      expect(plafondEnchere(cpa) % PAS_FACTURABLE).toBe(0)
+    }
+  })
+})
+
 describe('l’enchère saisie à la main', () => {
   it('refuse une enchère qui épuiserait la journée en un clic', () => {
     /*
@@ -218,6 +255,12 @@ describe('l’enchère saisie à la main', () => {
     expect(verdict.ok).toBe(false)
     if (!verdict.ok) expect(verdict.raison).toContain('un seul clic')
     expect(autoriseEnchere(5 * MICROS, 5 * MICROS).ok).toBe(true)
+  })
+
+  it('refuse un montant qui n’est pas au centime', () => {
+    // Google le refuserait, et son message ne nomme pas le champ sans qu'on le lui demande.
+    expect(autoriseEnchere(375_000, 5 * MICROS).ok).toBe(false)
+    expect(autoriseEnchere(380_000, 5 * MICROS).ok).toBe(true)
   })
 
   it('refuse un montant absent ou absurde', () => {

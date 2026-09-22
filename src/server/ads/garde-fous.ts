@@ -1,4 +1,5 @@
 import { FACTEUR_MAX, FACTEUR_MIN } from '@/lib/bornes-budget'
+import { PAS_FACTURABLE } from '@/lib/pas-facturable'
 import type { ProfilAds } from './profil'
 
 /**
@@ -422,6 +423,14 @@ const JOURS_DU_MOIS = 30.4
 export function autoriseEnchere(enchereMicros: number, budgetMicros: number): Verdict {
   if (!Number.isFinite(enchereMicros) || enchereMicros <= 0) {
     return { ok: false, raison: 'Indiquez un coût par clic.' }
+  }
+  /*
+   * Google refuse un montant qui n'est pas un multiple de l'unité facturable — le centime.
+   * L'appelant arrondit avant d'enregistrer ; ce contrôle existe pour que la règle soit
+   * écrite là où vivent toutes les autres, et non seulement dans le chemin qui l'applique.
+   */
+  if (enchereMicros % PAS_FACTURABLE !== 0) {
+    return { ok: false, raison: 'Le coût par clic se règle au centime.' }
   }
   if (enchereMicros > budgetMicros) {
     return {

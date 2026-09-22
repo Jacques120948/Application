@@ -11,6 +11,7 @@ import {
 } from '@/server/ads/creation'
 import { creerCampagne } from '@/server/ads/actions'
 import { readDashboard } from '@/server/audit/service'
+import { auPasFacturable } from '@/lib/pas-facturable'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -77,10 +78,14 @@ export async function POST(request: Request) {
     }
 
     if (demande.action === 'encherir') {
+      /*
+       * Arrondi au centime avant d'être enregistré, et non au moment de l'envoi : ce que la
+       * personne relit sur son plan doit être exactement ce qui partira chez Google.
+       */
       const issue = await fixerEnchere(
         user.id,
         demande.planId,
-        Math.round(demande.enchere * 1_000_000),
+        auPasFacturable(demande.enchere * 1_000_000),
       )
       return ok(issue.ok ? { ok: true, plan: issue.plan } : { ok: false, raison: issue.raison })
     }

@@ -1,3 +1,4 @@
+import { auPasFacturable } from '@/lib/pas-facturable'
 import { logger } from '@/server/observability/logger'
 import { DELAI_MS, entetes, messageErreur, RACINE } from './google-ads'
 import type { AccesAds, TexteAnnonceAds } from './provider'
@@ -117,7 +118,7 @@ export async function ecrireBudget(
       {
         update: {
           resourceName: `customers/${acces.compteId}/campaignBudgets/${budgetId}`,
-          amountMicros: String(Math.round(montantMicros)),
+          amountMicros: String(auPasFacturable(montantMicros)),
         },
         updateMask: 'amountMicros',
       },
@@ -370,7 +371,12 @@ export async function creerCampagneComplete(
         create: {
           resourceName: budget,
           name: `${plan.nom} — budget`,
-          amountMicros: String(Math.round(plan.budgetMicros)),
+          /*
+           * Arrondis au centime jusqu'ici, une dernière fois. L'appelant le fait déjà, mais
+           * un montant refusé fait échouer la création entière — et ce fichier est le seul
+           * endroit par lequel tout passe.
+           */
+          amountMicros: String(auPasFacturable(plan.budgetMicros)),
           deliveryMethod: 'STANDARD',
           /*
            * Non partagé, et c'est une protection : un budget partagé modifié plus tard
@@ -433,7 +439,7 @@ export async function creerCampagneComplete(
           campaign: campagne,
           status: 'ENABLED',
           type: 'SEARCH_STANDARD',
-          cpcBidMicros: String(Math.round(plan.enchereMicros)),
+          cpcBidMicros: String(auPasFacturable(plan.enchereMicros)),
         },
       },
     },

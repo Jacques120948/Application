@@ -1,3 +1,4 @@
+import { auPasFacturable } from '@/lib/pas-facturable'
 import { chercheASavoir, classer, type Intention } from '@/server/audit/intentions'
 import type { IdeeMotCle } from './provider'
 import type { ProfilAds } from './profil'
@@ -288,7 +289,7 @@ export function tauxNecessaire(coutMicros: number, cpa: number): number | null {
  */
 export function plafondEnchere(cpa: number): number {
   if (cpa <= 0) return 0
-  return Math.round(((cpa * TAUX_PLAUSIBLE) / 100) * MICROS)
+  return auPasFacturable(((cpa * TAUX_PLAUSIBLE) / 100) * MICROS)
 }
 
 /**
@@ -349,7 +350,11 @@ export function enchereProposee(
       : ((prix[milieu - 1] ?? 0) + (prix[milieu] ?? 0)) / 2
 
   const plafond = plafondEnchere(cpa)
-  return plafond === 0 ? Math.round(mediane) : Math.round(Math.min(mediane, plafond))
+  /*
+   * Arrondie au centime : Google refuse un montant qui n'est pas un multiple de l'unité
+   * facturable, et une médiane ne tombe pas sur un centime rond.
+   */
+  return auPasFacturable(plafond === 0 ? mediane : Math.min(mediane, plafond))
 }
 
 /**
