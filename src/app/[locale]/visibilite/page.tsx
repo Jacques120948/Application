@@ -11,6 +11,8 @@ import { Shell } from '@/components/studio/Shell'
 import { SiteBoard } from '@/components/studio/SiteBoard'
 import { TableauVisibilite } from '@/components/studio/TableauVisibilite'
 import { PointHebdo } from '@/components/studio/PointHebdo'
+import { AlerteMeta } from '@/components/studio/AlerteMeta'
+import { alertesMeta } from '@/server/ads/recommandations-meta'
 import { dernierPoint } from '@/server/audit/point'
 
 /**
@@ -71,11 +73,17 @@ export default async function VisibilitePage({
    * rend trente lignes se referme, et « par quoi je commence » est la seule question que se
    * pose quelqu'un devant cet écran. L'historique montre le reste.
    */
-  const [plan, cout, alertes, point] = await Promise.all([
+  const [plan, cout, alertes, point, publicite] = await Promise.all([
     tableau === null ? null : readPlan(user.id, tableau.site.id),
     estimerCorrection(),
     tableau === null ? [] : listWatches(user.id, tableau.site.id),
     tableau === null ? null : dernierPoint(user.id, tableau.site.id).catch(() => null),
+    /*
+     * Ce que MIRA a trouvé d'urgent sur les publicités. Lu ici et non sur son écran, parce
+     * que c'est ici qu'on vient : un budget qui part sans vente ne doit pas attendre qu'on
+     * pense à aller voir. Une panne de cette lecture n'emporte pas le tableau de bord.
+     */
+    alertesMeta(user.id).catch(() => null),
   ])
   const lignes = (plan?.lignes ?? []).slice(0, PRIORITES_MAX)
 
@@ -102,6 +110,21 @@ export default async function VisibilitePage({
           je commence » ; tout le reste répond à « où en suis-je », qui est une autre
           question et qu'on se pose moins souvent.
         */}
+        {/*
+          L'alerte publicitaire passe avant le point de Léa, et c'est le seul ordre
+          défendable : le point dit par quoi continuer, l'alerte dit ce qui coûte pendant
+          qu'on lit. Ce qui coûte ne se met pas en second.
+        */}
+        {publicite === null ? null : (
+          <div className="mb-8">
+            <AlerteMeta
+              combien={publicite.combien}
+              premiers={publicite.premiers}
+              href={`/${locale}/publicite/meta`}
+            />
+          </div>
+        )}
+
         {tableau === null ? null : (
           <div className="mb-8">
             <PointHebdo
