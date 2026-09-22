@@ -550,6 +550,44 @@ function statut(ligne: Record<string, unknown>): string {
   return texte(ligne.effective_status) || texte(ligne.status)
 }
 
+/** Ce que Meta dit avoir réellement accordé, et ce qu'il dit avoir été refusé. */
+export type PermissionsMeta = { accordees: string[]; refusees: string[] }
+
+/**
+ * Les autorisations réellement obtenues, demandées à Meta plutôt que supposées.
+ *
+ * Evoliia enregistrait jusqu'ici les portées qu'elle avait **demandées**, ce qui n'est pas
+ * la même chose que celles qu'elle a reçues : l'écran de consentement de Meta permet de
+ * décocher une permission à la volée. Le dossier affirmait donc un droit d'écriture que le
+ * jeton n'avait peut-être pas, et l'on ne l'aurait découvert qu'au premier bouton, sur un
+ * refus incompréhensible.
+ *
+ * `/me/permissions` est la seule source qui sache. L'appel est gratuit, sans paramètre, et
+ * ne lit rien du compte publicitaire — il ne dit que ce que cette personne a accordé à cette
+ * application.
+ */
+export async function lirePermissionsMeta(
+  accessToken: string,
+): Promise<Lecture<PermissionsMeta>> {
+  const lecture = await appelerTout<Record<string, unknown>>('/me/permissions', {
+    access_token: accessToken,
+  })
+  if (!lecture.ok) return { ok: false, raison: lecture.raison }
+
+  const accordees: string[] = []
+  const refusees: string[] = []
+  for (const ligne of lecture.lignes) {
+    const nom = texte(ligne.permission)
+    if (nom === '') continue
+    // Meta ne connaît que deux états : « granted » et « declined ». Tout autre mot est
+    // nouveau, donc inconnu, donc pas un accord — on ne devine pas un droit.
+    if (texte(ligne.status) === 'granted') accordees.push(nom)
+    else refusees.push(nom)
+  }
+
+  return { ok: true, valeur: { accordees, refusees } }
+}
+
 export async function lireCampagnesMeta(acces: AccesAds): Promise<Lecture<CampagneMeta[]>> {
   const lecture = await appelerTout<Record<string, unknown>>(
     `${ressource(acces.compteId)}/campaigns`,

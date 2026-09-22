@@ -16,6 +16,9 @@ import {
   synthese,
 } from '@/server/ads/tableau-meta'
 import { lireRecommandationsMeta } from '@/server/ads/recommandations-meta'
+import { droitsMeta } from '@/server/ads/droits-meta'
+import { autoriseMeta } from '@/server/ads/garde-fous-meta'
+import { contexteActionsMeta, proposerActionMeta } from '@/server/ads/actions-meta'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
@@ -172,6 +175,69 @@ export default async function ComptesMetaPage({
   const constats =
     tableau === null ? [] : await lireRecommandationsMeta(user.id, tableau.compte.id)
 
+  /*
+   * Ce que MIRA enverrait, et si elle a le droit de l'envoyer.
+   *
+   * Monté sur les chiffres du jour et non sur ceux du constat : un constat ouvert il y a
+   * douze jours porte le budget de ce jour-là, et rejouer ce chiffre ferait passer une
+   * division par deux pour un palier. Voir `actions-meta.ts`.
+   *
+   * Le contexte est lu une fois pour tout le compte : un écran qui affiche huit constats
+   * ferait sinon vingt-quatre allers-retours pour composer huit phrases.
+   */
+  const droits = tableau === null ? null : await droitsMeta(user.id)
+  const contexte =
+    tableau === null ? null : await contexteActionsMeta(user.id, tableau.compte.id)
+
+  /*
+   * Les écritures déjà faites aujourd'hui : c'est une des bornes, et elle se compte sur le
+   * journal plutôt que sur un compteur tenu à part — deux nombres qui disent la même chose
+   * finissent toujours par se contredire.
+   */
+  const debutDuJour = new Date()
+  debutDuJour.setHours(0, 0, 0, 0)
+  const faitesAujourdhui =
+    tableau === null
+      ? 0
+      : await withUserScope(user.id, (tx) =>
+          tx.adsAction.count({
+            where: { accountId: tableau.compte.id, createdAt: { gte: debutDuJour } },
+          }),
+        )
+
+  const cadre =
+    tableau === null || droits === null
+      ? null
+      : {
+          mode: tableau.compte.mode,
+          devise: tableau.compte.devise,
+          profil: tableau.profil,
+          droits,
+          faitesAujourdhui,
+        }
+
+  /*
+   * Le verdict commun, calculé une fois. Quand il refuse, il refuse pour tous les constats
+   * de la même façon — le dire huit fois de suite ferait de la page un mur de rouge pour un
+   * seul problème, et on cesserait de lire les refus qui, eux, sont propres à un objet.
+   */
+  const blocage = cadre === null ? null : autoriseMeta({ ...cadre })
+
+  const propositions =
+    cadre === null || contexte === null
+      ? []
+      : constats.map((constat) => {
+          const issue = proposerActionMeta(constat, contexte, cadre)
+          if (issue.etat === 'aucune') return { id: constat.id, etat: 'aucune' as const }
+          return {
+            id: constat.id,
+            etat: issue.etat,
+            resume: issue.action.resume,
+            // Le motif commun est déjà dit en haut : ici, seuls les refus propres à l'objet.
+            raison: issue.etat === 'refusee' && blocage?.ok === true ? issue.raison : '',
+          }
+        })
+
   const objectifsPoses =
     tableau !== null && (tableau.profil.roasCible > 0 || tableau.profil.cpaCible > 0)
 
@@ -271,7 +337,11 @@ export default async function ComptesMetaPage({
                   Le sélecteur de période est plus bas parce qu'il ne commande que le tableau —
                   les constats, eux, sont jugés sur une fenêtre fixe.
                 */}
-                <ConstatsMeta initiaux={constats} />
+                <ConstatsMeta
+                  initiaux={constats}
+                  propositions={propositions}
+                  blocage={blocage !== null && !blocage.ok ? blocage.raison : ''}
+                />
 
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <p className="m-0 text-sm text-[var(--color-ink-soft)]">
@@ -371,6 +441,21 @@ export default async function ComptesMetaPage({
                         annonces · {lu.journees} journées.
                       </p>
                       <LireMeta premiere={actif.synchroAt === null} />
+                      {/*
+                        Ce que Meta a réellement accordé, et non ce qu'Evoliia a demandé.
+                        L'écran de consentement de Meta permet de décocher une permission à
+                        la volée : sans cette ligne, on découvrirait l'amputation au premier
+                        bouton, sur un refus incompréhensible.
+                      */}
+                      {droits === null ? null : (
+                        <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+                          <strong>Ce que Meta autorise :</strong>{' '}
+                          {droits.lire ? 'lire vos campagnes' : 'rien pour l’instant'}
+                          {droits.ecrire
+                            ? ', et les modifier après votre accord.'
+                            : '. Meta n’a pas accordé le droit de les modifier — MIRA ne pourra que proposer. Reconnectez votre compte en laissant cochée l’autorisation « gérer les publicités » pour y remédier.'}
+                        </p>
+                      )}
                       <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
                         La première lecture remonte 90 jours pour les campagnes et 28 pour le
                         détail. L’archivé et le supprimé sont écartés : on ne peut rien en

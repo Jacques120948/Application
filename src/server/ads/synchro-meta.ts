@@ -2,6 +2,7 @@ import { prisma } from '@/server/db/client'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { accesCompteActif } from './comptes'
+import { rafraichirDroitsMeta } from './droits-meta'
 import {
   lireAnnoncesMeta,
   lireCampagnesMeta,
@@ -373,6 +374,15 @@ export async function synchroniserCompteMeta(
     /* Six au minimum : la pagination peut en ajouter, et le chiffre reste un plancher dit. */
     appels: 6,
   }
+  /*
+   * Les droits réellement accordés, relus pendant qu'on tient un jeton valide.
+   *
+   * Un appel de plus ici est négligeable ; le faire à l'affichage coûterait un aller-retour
+   * à chaque visite, pour une réponse qui ne change qu'au moment où l'on reconnecte. Son
+   * échec n'est pas celui de la lecture : les campagnes, elles, sont bien en base.
+   */
+  await rafraichirDroitsMeta(userId).catch(() => null)
+
   logger.info('compte Meta synchronisé', { ...bilan, premiere })
   return { ok: true, bilan }
 }

@@ -120,6 +120,18 @@ const CREATIVE_GAGNANTE = 1.4
 /** La part de la dépense au-delà de laquelle une ligne pèse assez pour alerter. */
 const PART_MINIMALE = 15
 
+/**
+ * Le pas d'une baisse de budget proposée : un cinquième.
+ *
+ * Un palier, pas un basculement. Meta remet son apprentissage à zéro quand un budget bouge
+ * trop fort, si bien qu'une grande correction se paie deux fois — en dépense mal placée, et
+ * en réapprentissage. Un cinquième se constate en quelques jours et se reprend sans drame.
+ *
+ * Exporté parce que l'action proposée est montée sur le budget d'aujourd'hui, pas sur celui
+ * que la règle avait vu : voir `actions-meta.ts`.
+ */
+export const BAISSE_BUDGET = 0.8
+
 function argent(valeur: number, devise: string): string {
   return `${valeur.toLocaleString('fr-CH', {
     minimumFractionDigits: 2,
@@ -483,7 +495,13 @@ function budgetMalPlace(contexte: ContexteMeta): ConstatMeta[] {
           depense: ensemble.actuel.cout,
           depenseMeilleur: meilleur.actuel.cout,
         },
-        action: {},
+        /*
+         * Baisser celui qui rend le moins, plutôt que monter celui qui rend le plus. Les
+         * deux rééquilibrent, un seul est sûr : une hausse engage de l'argent sur une
+         * performance passée, une baisse en retire d'une performance constatée. Et si l'on
+         * se trompe, on a moins dépensé.
+         */
+        action: { type: 'budget-ensemble', ensemble: ensemble.id, sens: 'baisse' },
         risque: 'moyen' as const,
       },
     ]

@@ -68,7 +68,31 @@ const ETAGES: Record<ConstatVue['niveau'], string> = {
   annonce: 'Publicité',
 }
 
-export function ConstatsMeta({ initiaux }: { initiaux: readonly ConstatVue[] }) {
+/**
+ * Ce que MIRA enverrait pour un constat, prêt à afficher.
+ *
+ * Le résumé est la phrase exacte de ce qui partira chez Meta, composée côté serveur en même
+ * temps que l'action elle-même. Les séparer, c'est le jour où l'écran annonce une pause et
+ * où le serveur change un budget.
+ */
+export type PropositionVue = {
+  id: string
+  etat: 'aucune' | 'possible' | 'refusee'
+  resume?: string
+  /** Le motif, quand il est propre à cet objet. Le motif commun est dit une fois, en haut. */
+  raison?: string
+}
+
+export function ConstatsMeta({
+  initiaux,
+  propositions,
+  /** Ce qui empêche toute écriture sur ce compte, dit une fois plutôt que huit. */
+  blocage,
+}: {
+  initiaux: readonly ConstatVue[]
+  propositions: readonly PropositionVue[]
+  blocage: string
+}) {
   const [liste, setListe] = useState<ConstatVue[]>([...initiaux])
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
@@ -108,6 +132,7 @@ export function ConstatsMeta({ initiaux }: { initiaux: readonly ConstatVue[] }) 
   }
 
   const urgents = liste.filter((un) => un.priorite === 'urgent').length
+  const parConstat = new Map(propositions.map((une) => [une.id, une]))
 
   return (
     <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
@@ -118,6 +143,17 @@ export function ConstatsMeta({ initiaux }: { initiaux: readonly ConstatVue[] }) 
           {urgents === 0 ? '' : ` · ${urgents} à traiter`}
         </span>
       </div>
+
+      {/*
+        Ce qui bloque tout, dit une fois. Répété sous chaque constat, il ferait de la page un
+        mur de rouge pour un seul problème — et l'on cesserait de lire les refus qui, eux,
+        ne concernent qu'un objet.
+      */}
+      {blocage === '' ? null : (
+        <p className="mt-3 mb-0 rounded-[var(--radius-control)] bg-[var(--color-caution-soft)] p-3 text-sm leading-relaxed">
+          {blocage}
+        </p>
+      )}
 
       {erreur === null ? null : (
         <p
@@ -164,6 +200,24 @@ export function ConstatsMeta({ initiaux }: { initiaux: readonly ConstatVue[] }) 
                 {constat.recommandation}
               </p>
 
+              {(() => {
+                const proposition = parConstat.get(constat.id)
+                if (proposition === undefined || proposition.etat === 'aucune') return null
+                return (
+                  <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3">
+                    <p className="m-0 text-xs font-medium text-[var(--color-ink-soft)]">
+                      Ce que MIRA enverrait à Meta
+                    </p>
+                    <p className="mt-1 mb-0 text-sm leading-relaxed">{proposition.resume}</p>
+                    {proposition.raison === undefined || proposition.raison === '' ? null : (
+                      <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-caution)]">
+                        {proposition.raison}
+                      </p>
+                    )}
+                  </div>
+                )
+              })()}
+
               <details className="mt-2">
                 <summary className="cursor-pointer list-none text-xs text-[var(--color-ink-soft)]">
                   <span className="underline underline-offset-4">
@@ -194,8 +248,16 @@ export function ConstatsMeta({ initiaux }: { initiaux: readonly ConstatVue[] }) 
       <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
         Ces constats sont produits par des règles écrites, pas par un modèle : chacun porte
         les chiffres qui l’ont déclenché, et se vérifie. Ils sont jugés sur quatorze jours,
-        quelle que soit la période affichée plus bas. Aucun n’est appliqué — MIRA propose,
-        c’est vous qui décidez. « Ce n’est pas un problème » écarte le constat pour un mois.
+        quelle que soit la période affichée plus bas. « Ce n’est pas un problème » écarte le
+        constat pour un mois.
+        {' '}
+        <strong>
+          Aucune de ces modifications n’est envoyée à Meta : il n’y a pas encore de bouton
+          pour les appliquer.
+        </strong>{' '}
+        Ce que vous lisez ci-dessus est la phrase exacte qui partira le jour où il existera,
+        recalculée sur vos chiffres du jour — et déjà passée par les garde-fous, ce qui
+        explique les refus affichés en orange.
       </p>
     </section>
   )
