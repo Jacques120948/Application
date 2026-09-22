@@ -736,6 +736,7 @@ export function ArticlesRediges({
                     */}
                     <div className="mt-4 grid gap-2 border-t border-[var(--color-line)] pt-4">
                       {lienDepot !== null ? (
+                        <>
                         <a
                           href={lienDepot}
                           target="_blank"
@@ -744,6 +745,30 @@ export function ArticlesRediges({
                         >
                           Brouillon déposé dans Shopify — le relire et le publier ↗
                         </a>
+                          {/*
+                            Le renvoi, discret et sous le lien.
+
+                            Un second dépôt crée un doublon dans la boutique : c'est pour
+                            cela qu'il n'y a pas de bouton franc. Mais le marchand qui a
+                            supprimé son brouillon chez Shopify n'avait plus aucun moyen de
+                            renvoyer l'article, qu'il avait pourtant payé. Le serveur
+                            tranche — il demande à Shopify si le brouillon y est encore, et
+                            refuse tant qu'il y est ou tant qu'il l'ignore.
+                          */}
+                          <button
+                            type="button"
+                            disabled={envoi}
+                            onClick={() => void deposer(ouvert)}
+                            className="mt-2 block cursor-pointer border-0 bg-transparent p-0 text-left text-xs text-[var(--color-ink-faint)] underline"
+                          >
+                            {envoi ? 'Renvoi…' : 'Vous l’avez supprimé dans Shopify ? Le renvoyer'}
+                          </button>
+                          {erreurDepot === null ? null : (
+                            <p className="mt-1 mb-0 text-xs text-[var(--color-danger,#b42318)]">
+                              {erreurDepot}
+                            </p>
+                          )}
+                        </>
                       ) : (
                         <>
                           {blogs === null || blogs.length < 2 ? null : (

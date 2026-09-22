@@ -176,6 +176,28 @@ describe('ce que le connecteur ne fait jamais', () => {
    * dépendre d'Evoliia. Ce geste ne doit jamais devenir une porte d'entrée vers ses
    * fichiers existants : on en crée, on n'en relit pas, on n'en efface pas.
    */
+  /**
+   * L'incertitude doit empêcher, jamais autoriser.
+   *
+   * `articleExisteEncore` sert à décider si l'on peut redéposer un article. Confondre « il
+   * n'y est plus » avec « je ne sais pas » créerait un doublon dans la boutique d'un
+   * marchand, à côté du brouillon qu'il est peut-être en train de relire. Le code doit
+   * donc distinguer trois réponses, et le refus doit être le comportement par défaut.
+   */
+  it('distingue « disparu » de « je ne sais pas » avant d’autoriser un second dépôt', () => {
+    const source = readFileSync('src/server/integrations/providers/shopify.ts', 'utf8')
+    // Trois issues nommées, dont le « null » d'incertitude.
+    expect(source).toContain('Promise<boolean | null>')
+
+    const publication = readFileSync('src/server/commerce/publication.ts', 'utf8')
+    /*
+     * La condition est écrite « différent de false » et non « égal à true » : la nuance est
+     * tout le test. `=== true` laisserait passer le cas inconnu.
+     */
+    expect(publication).toContain('encoreLa !== false')
+    expect(publication).not.toMatch(/encoreLa\s*===\s*false/u)
+  })
+
   it('ne fait qu’ajouter des fichiers, jamais en toucher d’autres', () => {
     const source = readFileSync('src/server/integrations/providers/shopify.ts', 'utf8')
     expect(source).toContain('fileCreate')

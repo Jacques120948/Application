@@ -5,6 +5,7 @@ import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { markConnectionError, useCredential } from '@/server/integrations/service'
 import {
+  articleExisteEncore,
   deposerBrouillon,
   frapperJeton,
   lireAcces,
@@ -263,11 +264,43 @@ export async function deposerDansShopify(
       select: { shopifyId: true, shopifyUrl: true },
     }),
   )
-  if (deja?.shopifyId != null && deja.shopifyId !== '') {
-    throw validation('Cet article est déjà dans Shopify. Relisez-le là-bas.')
-  }
+  const dejaDepose = deja?.shopifyId != null && deja.shopifyId !== ''
 
   const { acces, jeton } = await ouvrirBoutique(userId)
+
+  /*
+   * Déjà déposé ? On demande à Shopify si le brouillon y est encore.
+   *
+   * Le refus sec était juste sur le fond — un second envoi crée un doublon dans la boutique
+   * — et faux dans un cas qu'on ne pouvait pas contourner : celui où le marchand a supprimé
+   * le brouillon chez lui. Evoliia continuait alors de croire l'article déposé, et plus
+   * rien ne permettait de le renvoyer. Un article payé devenait définitivement bloqué, pour
+   * un brouillon qui n'existait plus.
+   *
+   * C'est la même règle que pour un abonnement introuvable chez Stripe : une trace locale
+   * qui ne correspond à rien n'est pas une vérité, c'est un orphelin, et on l'efface.
+   *
+   * L'incertitude, elle, empêche. Shopify qui ne répond pas, une portée qui manque, un
+   * réseau qui lâche : on refuse comme avant. Créer un doublon à côté d'un brouillon que le
+   * marchand est peut-être en train de relire serait bien pire que de lui faire réessayer.
+   */
+  if (dejaDepose) {
+    const encoreLa = await articleExisteEncore(acces, jeton, deja!.shopifyId!)
+    if (encoreLa !== false) {
+      throw validation(
+        encoreLa === true
+          ? 'Cet article est déjà dans Shopify. Relisez-le là-bas.'
+          : 'Cet article a déjà été déposé, et Shopify ne confirme pas ce qu’il en est. Réessayez dans un instant.',
+      )
+    }
+    await withUserScope(userId, (tx) =>
+      tx.siteArticle.updateMany({
+        where: { id: articleId, userId },
+        data: { shopifyId: null, shopifyUrl: null, shopifyAt: null },
+      }),
+    )
+    logger.info('article : brouillon disparu de Shopify, trace effacée', { articleId })
+  }
 
   const blogs = await lireBlogs(acces, jeton)
   if (!blogs.ok) throw new AppError('VALIDATION', blogs.raison)

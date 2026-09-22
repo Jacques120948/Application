@@ -981,3 +981,36 @@ export async function lirePortees(acces: AccesShopify, jeton: string): Promise<s
     .filter((handle): handle is string => typeof handle === 'string')
     .sort()
 }
+
+const REQUETE_ARTICLE = `query($id: ID!) {
+  node(id: $id) { ... on Article { id } }
+}`
+
+/**
+ * Cet article existe-t-il encore dans la boutique ?
+ *
+ * Trois réponses possibles, et la troisième est celle qui compte. `true` : il est là.
+ * `false` : Shopify a répondu, et il n'y est plus. `null` : **on ne sait pas** — la requête
+ * a échoué, la portée manque, le réseau a lâché.
+ *
+ * Confondre `false` et `null` serait la faute grave. Le seul usage de cette fonction est de
+ * décider si l'on peut redéposer un article : un « je ne sais pas » traité comme « il n'y
+ * est plus » créerait un doublon dans la boutique d'un marchand, à côté du brouillon qu'il
+ * est peut-être en train de relire. L'incertitude doit donc empêcher, jamais autoriser.
+ */
+export async function articleExisteEncore(
+  acces: AccesShopify,
+  jeton: string,
+  articleId: string,
+): Promise<boolean | null> {
+  const reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_ARTICLE, {
+    id: articleId,
+  }).catch(() => null)
+  if (reponse === null || reponse.status !== 200 || reponse.data === null) return null
+  if (reponse.erreurs.length > 0) return null
+
+  const noeud = (reponse.data as { node?: { id?: string } | null }).node
+  // `node` vaut explicitement null quand l'identifiant ne désigne plus rien.
+  if (noeud === null) return false
+  return noeud?.id !== undefined ? true : null
+}

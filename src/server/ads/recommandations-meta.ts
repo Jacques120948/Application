@@ -380,3 +380,76 @@ export async function evaluerTousMeta(limite = 40): Promise<{
   logger.info('tournée des règles Meta passée', { ...total })
   return total
 }
+
+// ──────────────────────────── Ce qui doit alerter ────────────────────────────
+
+/**
+ * Les priorités qui méritent de sortir de l'écran de MIRA.
+ *
+ * `urgent` seulement, et c'est tout l'objet du tri. MIRA ouvre régulièrement des constats
+ * qui valent la peine d'être lus — une créative qui s'use, un CPM qui monte — mais qui
+ * n'appellent aucun geste dans la journée. Les faire remonter sur le tableau de bord
+ * reviendrait à y installer une alerte permanente, et une alerte permanente n'alerte plus
+ * de rien : on apprend à ne plus la lire, y compris le jour où elle a raison.
+ *
+ * Ce qui reste est ce qui coûte pendant qu'on ne regarde pas : de l'argent qui part sans
+ * vente, une créative épuisée qu'on continue de payer.
+ */
+const PRIORITES_ALERTANTES = ['urgent']
+
+/** Combien de constats on nomme. Au-delà, ce n'est plus une alerte, c'est une liste. */
+const ALERTES_MAX = 3
+
+export type AlerteMeta = {
+  titre: string
+  cible: string
+}
+
+export type AlertesMeta = {
+  /** Combien de constats urgents sont ouverts, y compris ceux qu'on ne nomme pas. */
+  combien: number
+  /** Les premiers, pour que l'alerte dise de quoi elle parle. */
+  premiers: AlerteMeta[]
+  /** Le compte concerné, pour le lien. */
+  compteId: string
+}
+
+/**
+ * Ce que MIRA a trouvé d'urgent, pour le dire là où la personne regarde.
+ *
+ * MIRA tourne la nuit et ouvre ses constats sur son propre écran. Quelqu'un qui n'y va pas
+ * ne sait rien — et il n'y va pas, parce que rien ne l'y appelle. Un budget qui part sans
+ * vente se découvrait donc une semaine plus tard, sur un relevé.
+ *
+ * Rend `null` plutôt qu'un zéro quand il n'y a rien à dire : l'écran n'affiche alors aucune
+ * bande, au lieu d'en afficher une qui annonce qu'il n'y a rien.
+ */
+export async function alertesMeta(userId: string): Promise<AlertesMeta | null> {
+  const compte = await withUserScope(userId, (tx) =>
+    tx.adsAccount.findFirst({
+      where: { userId, plateforme: 'meta-ads', actif: true },
+      select: { id: true },
+    }),
+  ).catch(() => null)
+  if (compte === null) return null
+
+  const ouverts = await withUserScope(userId, (tx) =>
+    tx.adsRecommandation.findMany({
+      where: {
+        userId,
+        accountId: compte.id,
+        etat: 'ouverte',
+        priorite: { in: PRIORITES_ALERTANTES },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { titre: true, cible: true },
+    }),
+  ).catch(() => [])
+  if (ouverts.length === 0) return null
+
+  return {
+    combien: ouverts.length,
+    premiers: ouverts.slice(0, ALERTES_MAX).map((un) => ({ titre: un.titre, cible: un.cible })),
+    compteId: compte.id,
+  }
+}
