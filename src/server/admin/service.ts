@@ -56,6 +56,19 @@ export const planUpdateInput = z.object({
   storageMegabytes: z.number().int().min(0).max(20_000),
   monthlyCredits: z.number().int().min(0).max(1_000_000),
   /*
+   * Ce que l'offre accorde dans le produit d'aujourd'hui.
+   *
+   * Ces trois bornes n'étaient modifiables qu'en SQL, alors qu'elles décident de tout ce
+   * qui se vend — combien de sites, quelle profondeur d'analyse, combien de fois par mois.
+   * Le back-office promettait « les offres se règlent ici, sans redéploiement » et ne
+   * tenait cette promesse que pour le prix. Les pages sont bornées haut parce qu'un audit
+   * n'est pas du calcul gratuit : c'est un parcours réel de pages sur le réseau, à la
+   * charge d'Evoliia.
+   */
+  sitesMax: z.number().int().min(0).max(1_000),
+  pagesPerAudit: z.number().int().min(0).max(100_000),
+  auditsPerMonth: z.number().int().min(0).max(1_000),
+  /*
    * Quotas mensuels des deux modules. Bornés haut, jamais illimités : un quota qu'on peut
    * régler à « sans limite » finit par l'être un jour, et c'est ce jour-là que la facture
    * arrive.

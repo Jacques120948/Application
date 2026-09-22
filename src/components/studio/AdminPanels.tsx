@@ -20,6 +20,9 @@ export type AdminPlan = {
   maxProjects: number
   maxConnections: number
   monthlyCredits: number
+  sitesMax: number
+  pagesPerAudit: number
+  auditsPerMonth: number
   alertsPerMonth: number
   imagesPerMonth: number
   allowBuild: boolean
@@ -39,6 +42,12 @@ export type AdminFeature = {
   label: string
   summary: string
   status: 'live' | 'prevu'
+  /**
+   * Cette fonction vient-elle du premier Evoliia, celui qui construisait des
+   * applications ? Calculé côté serveur : cet écran ne connaît pas le catalogue, il le
+   * reçoit, et c'est ce qui l'empêche d'en tenir une copie qui dériverait.
+   */
+  legacy: boolean
 }
 
 export type AdminUser = {
@@ -78,6 +87,9 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
   const [status, setStatus] = useState<'idle' | 'busy' | 'saved'>('idle')
   const [error, setError] = useState<string | null>(null)
 
+  const courantes = features.filter((feature) => !feature.legacy)
+  const anciennes = features.filter((feature) => feature.legacy)
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setStatus('busy')
@@ -92,6 +104,9 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
         priceCents: Math.round(Number(form.get('price')) * 100),
         maxProjects: Number(form.get('maxProjects')),
         maxConnections: Number(form.get('maxConnections')),
+        sitesMax: Number(form.get('sitesMax')),
+        pagesPerAudit: Number(form.get('pagesPerAudit')),
+        auditsPerMonth: Number(form.get('auditsPerMonth')),
         storageMegabytes: Number(form.get('storageMegabytes')),
         monthlyCredits: Number(form.get('monthlyCredits')),
         radarRunsPerMonth: Number(form.get('radarRunsPerMonth')),
@@ -146,18 +161,51 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
             <Textarea name="description" maxLength={400} required defaultValue={plan.description} />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Applications autorisées">
+          {/*
+            Ce que l'offre accorde dans le produit d'aujourd'hui. Les trois premières
+            bornes manquaient : elles décidaient pourtant de tout ce qui se vend, et il
+            fallait les changer en SQL. Les régler ici était la seule façon de tenir la
+            promesse du back-office — les prix et les réserves se modifient sans
+            redéploiement, donc les limites aussi.
+          */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Sites suivis" hint="Nombre de sites que l’offre peut surveiller.">
               <Input
-                name="maxProjects"
+                name="sitesMax"
                 type="number"
                 min={0}
                 max={1000}
                 required
-                defaultValue={plan.maxProjects}
+                defaultValue={plan.sitesMax}
               />
             </Field>
-            <Field label="Connexions externes">
+            <Field
+              label="Pages par audit"
+              hint="Plafond du parcours. Chaque page est une visite réelle, à la charge d’Evoliia."
+            >
+              <Input
+                name="pagesPerAudit"
+                type="number"
+                min={0}
+                max={100000}
+                required
+                defaultValue={plan.pagesPerAudit}
+              />
+            </Field>
+            <Field label="Audits par mois" hint="Zéro ferme l’analyse pour cette offre.">
+              <Input
+                name="auditsPerMonth"
+                type="number"
+                min={0}
+                max={1000}
+                required
+                defaultValue={plan.auditsPerMonth}
+              />
+            </Field>
+            <Field
+              label="Connexions externes"
+              hint="Shopify, Search Console, Google Ads, Meta. Zéro ferme toutes les connexions."
+            >
               <Input
                 name="maxConnections"
                 type="number"
@@ -167,17 +215,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
                 defaultValue={plan.maxConnections}
               />
             </Field>
-            <Field label="Images (Mo)" hint="Espace total pour les photos des applications.">
-              <Input
-                name="storageMegabytes"
-                type="number"
-                min={0}
-                max={20000}
-                required
-                defaultValue={Math.round(plan.storageBytes / (1024 * 1024))}
-              />
-            </Field>
-            <Field label="Crédits par mois">
+            <Field label="Crédits par mois" hint="Remis à zéro au renouvellement.">
               <Input
                 name="monthlyCredits"
                 type="number"
@@ -199,72 +237,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
             </Field>
           </div>
 
-          {/*
-            Les quotas des deux modules. Ils ne disent pas si la fonction est ouverte —
-            c'est la case correspondante plus bas — mais combien de fois par mois elle
-            peut servir. Une fonction ouverte à quota zéro se présente comme fermée.
-          */}
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Field label="Recherches Radar par mois" hint="Chaque recherche appelle le modèle.">
-              <Input
-                name="radarRunsPerMonth"
-                type="number"
-                min={0}
-                max={1000}
-                required
-                defaultValue={plan.radarRunsPerMonth}
-              />
-            </Field>
-            <Field
-              label="Alertes par mois"
-              hint="Courriels envoyés au créateur quand un visiteur saisit une fiche. À la charge d’Evoliia. Zéro ferme la fonction."
-            >
-              <Input
-                name="alertsPerMonth"
-                type="number"
-                min={0}
-                max={100000}
-                required
-                defaultValue={plan.alertsPerMonth}
-              />
-            </Field>
-            <Field
-              label="Images IA par mois"
-              hint="Créées sur le compte d’Evoliia, donc payées par elle avant d’être refacturées en crédits. Zéro ferme la fonction ; le créateur garde sa propre clé."
-            >
-              <Input
-                name="imagesPerMonth"
-                type="number"
-                min={0}
-                max={1000}
-                required
-                defaultValue={plan.imagesPerMonth}
-              />
-            </Field>
-            <Field label="Réponses de Lia par mois" hint="Payées par le créateur de l’application.">
-              <Input
-                name="liaAnswersPerMonth"
-                type="number"
-                min={0}
-                max={100000}
-                required
-                defaultValue={plan.liaAnswersPerMonth}
-              />
-            </Field>
-            <Field label="Conversations Lia par mois">
-              <Input
-                name="liaConversationsPerMonth"
-                type="number"
-                min={0}
-                max={100000}
-                required
-                defaultValue={plan.liaConversationsPerMonth}
-              />
-            </Field>
-          </div>
-
           <div className="grid gap-2 text-sm sm:grid-cols-2">
-            <Toggle name="allowBuild" label="Peut construire une application" checked={plan.allowBuild} />
             <Toggle name="isRecommended" label="Mise en avant sur la page d’accueil" checked={plan.isRecommended} />
             <Toggle name="isActive" label="Visible publiquement" checked={plan.isActive} />
           </div>
@@ -277,7 +250,7 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
               elle sera prête. Aucune grille tarifaire ne la présente entre-temps.
             </p>
             <div className="grid gap-2 text-sm sm:grid-cols-2">
-              {features.map((feature) => (
+              {courantes.map((feature) => (
                 <Toggle
                   key={feature.id}
                   name={`feature:${feature.id}`}
@@ -287,6 +260,127 @@ function PlanCard({ plan, features }: { plan: AdminPlan; features: AdminFeature[
               ))}
             </div>
           </fieldset>
+
+          {/*
+            Tout ce qui suit appartient au premier Evoliia, celui qui construisait des
+            applications. Replié plutôt que supprimé, et les deux moitiés comptent : plus
+            aucun écran ne conduit à ces fonctions, donc les mêler aux réglages du jour
+            ferait cocher une case qui ne mène nulle part ; mais des offres les portent
+            encore en base, et les effacer d'ici rendrait ces offres illisibles — on ne
+            saurait plus ce qu'elles accordent, sans pour autant cesser de l'accorder.
+
+            Les champs restent dans le formulaire même replié : ils sont donc envoyés tels
+            quels, et ouvrir ce bloc n'est pas nécessaire pour enregistrer le reste.
+          */}
+          <details className="rounded-[var(--radius-control)] border border-[var(--color-line)] p-3">
+            <summary className="cursor-pointer text-sm font-medium">
+              Ancien produit — constructeur d’applications
+            </summary>
+            <p className="mt-2 mb-3 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              Evoliia ne vend plus la construction d’applications. Ces réglages restent
+              pour les offres qui les portent encore ; aucun écran n’y conduit
+              aujourd’hui, et les cocher sur une offre actuelle ne donnerait accès à rien.
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Field label="Applications autorisées">
+                <Input
+                  name="maxProjects"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  required
+                  defaultValue={plan.maxProjects}
+                />
+              </Field>
+              <Field label="Images (Mo)" hint="Espace total pour les photos des applications.">
+                <Input
+                  name="storageMegabytes"
+                  type="number"
+                  min={0}
+                  max={20000}
+                  required
+                  defaultValue={Math.round(plan.storageBytes / (1024 * 1024))}
+                />
+              </Field>
+              <Field label="Recherches Radar par mois" hint="Chaque recherche appelle le modèle.">
+                <Input
+                  name="radarRunsPerMonth"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  required
+                  defaultValue={plan.radarRunsPerMonth}
+                />
+              </Field>
+              <Field
+                label="Alertes par mois"
+                hint="Courriels envoyés au créateur quand un visiteur saisit une fiche. À la charge d’Evoliia. Zéro ferme la fonction."
+              >
+                <Input
+                  name="alertsPerMonth"
+                  type="number"
+                  min={0}
+                  max={100000}
+                  required
+                  defaultValue={plan.alertsPerMonth}
+                />
+              </Field>
+              <Field
+                label="Images IA par mois"
+                hint="Créées sur le compte d’Evoliia, donc payées par elle avant d’être refacturées en crédits. Zéro ferme la fonction ; le créateur garde sa propre clé."
+              >
+                <Input
+                  name="imagesPerMonth"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  required
+                  defaultValue={plan.imagesPerMonth}
+                />
+              </Field>
+              <Field label="Réponses de Lia par mois" hint="Payées par le créateur de l’application.">
+                <Input
+                  name="liaAnswersPerMonth"
+                  type="number"
+                  min={0}
+                  max={100000}
+                  required
+                  defaultValue={plan.liaAnswersPerMonth}
+                />
+              </Field>
+              <Field label="Conversations Lia par mois">
+                <Input
+                  name="liaConversationsPerMonth"
+                  type="number"
+                  min={0}
+                  max={100000}
+                  required
+                  defaultValue={plan.liaConversationsPerMonth}
+                />
+              </Field>
+            </div>
+
+            <div className="mt-3 grid gap-2 text-sm">
+              <Toggle name="allowBuild" label="Peut construire une application" checked={plan.allowBuild} />
+            </div>
+
+            {anciennes.length === 0 ? null : (
+              <fieldset className="mt-4 grid gap-2 border-0 p-0">
+                <legend className="mb-1 text-sm font-medium">Fonctions de l’ancien produit</legend>
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  {anciennes.map((feature) => (
+                    <Toggle
+                      key={feature.id}
+                      name={`feature:${feature.id}`}
+                      label={feature.label}
+                      checked={plan.features.includes(feature.id)}
+                    />
+                  ))}
+                </div>
+              </fieldset>
+            )}
+          </details>
 
           {error !== null ? <Notice tone="critical">{error}</Notice> : null}
           {status === 'saved' ? (

@@ -4,6 +4,7 @@ import {
   FREE_PLAN_ID,
   PLANNED_PLAN_CAPABILITIES,
 } from '@/server/billing/plans'
+import { LEGACY_FEATURE_IDS, isLegacyFeature } from '@/server/billing/features'
 
 /**
  * Une offre ne doit jamais promettre ce que le produit ne sait pas encore faire.
@@ -75,5 +76,37 @@ describe('offres', () => {
 
   it('ne recommande qu’une seule offre', () => {
     expect(DEFAULT_PLANS.filter((plan) => plan.isRecommended)).toHaveLength(1)
+  })
+})
+
+/**
+ * Ce qui reste du premier Evoliia ne se vend plus.
+ *
+ * Le produit a changé de métier : il analysait puis construisait des applications, il
+ * travaille maintenant la visibilité. Le moteur de l'ancien répond encore et des offres
+ * anciennes le portent encore en base, mais plus aucun écran n'y conduit. Une offre neuve
+ * qui l'accorderait vendrait une porte sans couloir — et c'est le genre d'erreur qui se
+ * fait en recopiant une offre voisine sans relire ce qu'elle contient.
+ */
+describe('héritage du constructeur d’applications', () => {
+  it("n'accorde aucune fonction de l'ancien produit dans les offres de départ", () => {
+    const offenders = DEFAULT_PLANS.flatMap((plan) =>
+      plan.features.filter(isLegacyFeature).map((id) => `${plan.id} accorde ${id}`),
+    )
+    expect(offenders).toEqual([])
+  })
+
+  it("n'ouvre le constructeur dans aucune offre de départ", () => {
+    expect(DEFAULT_PLANS.filter((plan) => plan.allowBuild).map((plan) => plan.id)).toEqual([])
+    expect(DEFAULT_PLANS.filter((plan) => plan.maxProjects > 0).map((plan) => plan.id)).toEqual([])
+  })
+
+  /*
+   * La liste sert de carte : elle nomme ce qu'il faudra retirer le jour où le moteur du
+   * constructeur partira. Une liste vide voudrait dire que la carte a été perdue, pas que
+   * le ménage est fait.
+   */
+  it('garde trace de ce qui appartient à l’ancien produit', () => {
+    expect(LEGACY_FEATURE_IDS.length).toBeGreaterThan(0)
   })
 })

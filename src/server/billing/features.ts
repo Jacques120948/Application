@@ -228,6 +228,47 @@ export const FEATURES: readonly Feature[] = [
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)
 
 /**
+ * Les fonctions du premier Evoliia — celui qui construisait des applications.
+ *
+ * Elles ne sont ni supprimées du catalogue ni éteintes, et les deux se justifient : leur
+ * moteur répond encore, et un abonnement les référence encore. Les effacer d'ici rendrait
+ * ces offres illisibles dans le back-office, et personne ne saurait plus ce qu'elles
+ * accordaient.
+ *
+ * Mais plus aucun écran n'y conduit depuis le recentrage sur la visibilité. Les vendre
+ * serait donc promettre une porte sans couloir : l'administration les range à part, sous
+ * un intitulé qui dit d'où elles viennent, au lieu de les mêler aux fonctions du produit
+ * actuel. C'est la seule chose que cette liste décide — pas un droit, un rangement.
+ *
+ * Le jour où le moteur du constructeur sera retiré pour de bon, ces identifiants
+ * disparaîtront d'un seul tenant, et cette liste sera la carte de ce qu'il faut enlever.
+ */
+export const LEGACY_FEATURE_IDS: readonly string[] = [
+  'social_launch_basic',
+  'social_angles',
+  'social_week',
+  'social_calendar',
+  'social_content_generation',
+  'social_agent',
+  'social_analytics_basic',
+  'marketing_team',
+  'seo_agent',
+  'analytics_agent',
+  'radar',
+  'lia_support',
+]
+
+/** Cette fonction vient-elle de l'ancien produit ? */
+export function isLegacyFeature(id: string): boolean {
+  return LEGACY_FEATURE_IDS.includes(id)
+}
+
+/** Les fonctions du produit actuel : celles qu'une offre peut encore promettre. */
+export function currentFeatures(): Feature[] {
+  return FEATURES.filter((feature) => !isLegacyFeature(feature.id))
+}
+
+/**
  * Kit de lancement. Nommé ici plutôt que dans le service qui l'implémente : la grille
  * tarifaire a besoin de savoir quelles offres l'ouvrent, sans charger tout le moteur.
  */
@@ -294,6 +335,12 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'shopify_read',
     'search_console',
   ],
+  /*
+   * Les deux publicitaires n'entrent que dans la plus haute offre, et ce choix recopie
+   * celui qui a déjà été fait en production plutôt que d'en inventer un : une offre
+   * commerciale ne se décide pas dans un fichier. Les ouvrir sur Pro demande une case à
+   * cocher dans le back-office, pas un déploiement.
+   */
   'vis-business': [
     'visibility_audit_agent',
     'visibility_seo_agent',
@@ -301,6 +348,8 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_content_agent',
     'shopify_read',
     'search_console',
+    'visibility_ads_agent',
+    'visibility_meta_agent',
   ],
 }
 

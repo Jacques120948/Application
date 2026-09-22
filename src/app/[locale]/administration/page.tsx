@@ -1,4 +1,4 @@
-import { FEATURES } from "@/server/billing/features";
+import { FEATURES, isLegacyFeature } from "@/server/billing/features";
 import { notFound, redirect } from "next/navigation";
 import { getTranslator, resolveLocale } from "@/i18n";
 import { getCurrentUser } from "@/server/auth/session";
@@ -329,6 +329,7 @@ export default async function AdminPage({
             label: feature.label,
             summary: feature.summary,
             status: feature.status,
+            legacy: isLegacyFeature(feature.id),
           }))}
         />
 

@@ -104,20 +104,28 @@ function liaOpen(plan: Plan): boolean {
 }
 
 /**
- * La boutique demande deux choses à la fois : la fonction, et une place de connexion.
+ * Les fonctions qui demandent deux choses à la fois : la fonction, et une place de
+ * connexion.
  *
- * Sans cette conjonction, une offre à qui l'exploitant accorderait la fonction sans accorder
- * de connexion afficherait une coche devant une porte qui ne s'ouvre pas. C'est la même
- * prudence que pour le Radar et pour Lia, dont les quotas peuvent être nuls.
+ * Sans cette conjonction, une offre à qui l'exploitant accorderait la fonction sans
+ * accorder de connexion afficherait une coche devant une porte qui ne s'ouvre pas. C'est
+ * la même prudence que pour le Radar et pour Lia, dont les quotas peuvent être nuls.
+ *
+ * Les deux publicitaires y ont été ajoutés après coup, et il a fallu un oubli pour s'en
+ * apercevoir : Naya lit Google Ads, MIRA lit Meta, et les deux passent par le même budget
+ * de connexions que la boutique et les chiffres de recherche. Une offre qui accorderait
+ * l'une sans accorder de place aurait affiché son nom dans la grille puis refusé la
+ * connexion au premier clic.
+ *
+ * La liste est écrite plutôt que devinée d'après le groupe de la fonction : « équipe »
+ * contient aussi Léa, Néo, Gia et Milo, qui eux ne demandent rien à personne.
  */
-function boutiqueOpen(plan: Plan): boolean {
-  return has(plan, 'shopify_read') && plan.maxConnections > 0
-}
-
-/** Search Console est une connexion, exactement comme la boutique : même conjonction. */
-function rechercheOpen(plan: Plan): boolean {
-  return has(plan, 'search_console') && plan.maxConnections > 0
-}
+const FEATURES_A_CONNEXION: readonly string[] = [
+  'shopify_read',
+  'search_console',
+  'visibility_ads_agent',
+  'visibility_meta_agent',
+]
 
 /**
  * Cette fonction est-elle réellement ouverte à cette offre ?
@@ -128,8 +136,7 @@ function rechercheOpen(plan: Plan): boolean {
  * chose que d'une case cochée.
  */
 function ouverte(plan: Plan, featureId: string): boolean {
-  if (featureId === 'shopify_read') return boutiqueOpen(plan)
-  if (featureId === 'search_console') return rechercheOpen(plan)
+  if (FEATURES_A_CONNEXION.includes(featureId)) return has(plan, featureId) && plan.maxConnections > 0
   return has(plan, featureId)
 }
 
