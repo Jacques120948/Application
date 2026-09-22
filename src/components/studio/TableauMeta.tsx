@@ -1,4 +1,4 @@
-import type { IndicateursMeta, LigneMeta, Verdict, VueMeta } from '@/server/ads/tableau-meta'
+import type { APriorite, IndicateursMeta, LigneMeta, Verdict, VueMeta } from '@/server/ads/tableau-meta'
 
 /**
  * Ce que MIRA montre, et dans quel ordre.
@@ -184,107 +184,217 @@ function Niveau({
   )
 }
 
+/**
+ * Ce qu'il faut faire, avant tout le reste.
+ *
+ * C'est la seule chose qu'on doit voir sans chercher. Un tableau de bord qui commence par
+ * des totaux répond à « combien » ; celui qui commence par ceci répond à « et alors ? », qui
+ * est la question qu'on se pose en l'ouvrant.
+ *
+ * Le silence est une réponse, et il est dit en toutes lettres : « rien ne réclame votre
+ * attention » vaut mieux qu'un bloc absent, qu'on prendrait pour un écran qui n'a pas fini
+ * de charger.
+ */
+function AFaire({ lignes, devise }: { lignes: APriorite[]; devise: string }) {
+  if (lignes.length === 0) {
+    return (
+      <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-positive-soft)] p-5">
+        <h2 className="m-0 text-base font-semibold">Rien ne réclame votre attention</h2>
+        <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+          Sur cette période, aucune campagne, aucun ensemble et aucune annonce ne s’écarte de
+          vos objectifs. Les chiffres détaillés restent en dessous.
+        </p>
+      </section>
+    )
+  }
+
+  const urgentes = lignes.filter((une) => une.jugement.verdict === 'agir').length
+
+  return (
+    <section className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="m-0 text-base font-semibold">Ce qu’il faut regarder</h2>
+        <span className="text-xs text-[var(--color-ink-faint)]">
+          {urgentes === 0
+            ? `${lignes.length} à surveiller`
+            : `${urgentes} à traiter, ${lignes.length - urgentes} à surveiller`}
+        </span>
+      </div>
+
+      <ul className="mt-4 mb-0 grid list-none gap-3 p-0">
+        {lignes.map((ligne) => (
+          <li
+            key={`${ligne.niveau}-${ligne.id}`}
+            className="rounded-[var(--radius-card)] border-l-4 border border-[var(--color-line)] p-4"
+            style={{ borderLeftColor: COULEURS[ligne.jugement.verdict].point }}
+          >
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="m-0 text-sm font-medium break-words">{ligne.nom}</p>
+              <span className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2 py-0.5 text-xs text-[var(--color-ink-soft)]">
+                {ligne.niveau}
+              </span>
+            </div>
+            <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {ligne.jugement.motif}
+            </p>
+            <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)] tabular-nums">
+              {argent(ligne.actuel.cout, devise)} dépensés sur la période
+              {ligne.actuel.conversions > 0 ? ` · ${ligne.actuel.conversions} ventes` : ''}
+            </p>
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-4 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+        Classé par urgence, puis par dépense : deux campagnes également en difficulté ne le
+        sont pas également, et celle qui dépense le plus mérite le regard d’abord.
+      </p>
+    </section>
+  )
+}
+
 function Chiffres({ total, ecarts, devise }: {
   total: IndicateursMeta
   ecarts: VueMeta['ecarts']
   devise: string
 }) {
+  /*
+   * Quatre devant, huit repliés. Douze cartes d'un bloc se regardent comme un mur : on les
+   * parcourt sans en lire aucune. Les quatre qui restent sont celles qui répondent à « est-ce
+   * que ça marche » — ce que j'ai dépensé, ce que ça a rapporté, combien de ventes, à quel
+   * prix. Les autres servent à comprendre pourquoi, et on ne les cherche qu'ensuite.
+   */
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      <Carte nom="Dépensé" valeur={argent(total.cout, devise)} ecart={ecarts.cout} inverse />
-      <Carte
-        nom="Chiffre d’affaires attribué"
-        valeur={argent(total.valeur, devise)}
-        note="Tel que Meta l’attribue"
-      />
-      <Carte
-        nom="ROAS"
-        valeur={total.roas === null ? '—' : `${total.roas} %`}
-        ecart={ecarts.roas}
-        unite=" pts"
-      />
-      <Carte nom="Ventes" valeur={nombre(total.conversions)} ecart={ecarts.conversions} />
-      <Carte
-        nom="Coût par vente"
-        valeur={argent(total.cpa, devise)}
-        ecart={ecarts.cpa}
-        inverse
-      />
-      <Carte nom="Coût par clic" valeur={argent(total.cpc, devise)} />
-      <Carte nom="Coût des mille affichages" valeur={argent(total.cpm, devise)} />
-      <Carte nom="Taux de clic" valeur={total.ctr === null ? '—' : `${total.ctr} %`} />
-      <Carte nom="Affichages" valeur={nombre(total.impressions)} />
-      <Carte nom="Clics" valeur={nombre(total.clics)} />
-      <Carte
-        nom="Portée"
-        valeur={total.portee === 0 ? '—' : nombre(total.portee)}
-        note="Personnes différentes atteintes"
-      />
-      <Carte
-        nom="Fréquence"
-        valeur={total.frequence === 0 ? '—' : String(total.frequence)}
-        note="Affichages par personne"
-      />
+    <div className="min-w-0">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Carte nom="Dépensé" valeur={argent(total.cout, devise)} ecart={ecarts.cout} inverse />
+        <Carte
+          nom="Chiffre d’affaires"
+          valeur={argent(total.valeur, devise)}
+          note="Tel que Meta l’attribue"
+        />
+        <Carte
+          nom="ROAS"
+          valeur={total.roas === null ? '—' : `${total.roas} %`}
+          ecart={ecarts.roas}
+          unite=" pts"
+        />
+        <Carte
+          nom="Coût par vente"
+          valeur={argent(total.cpa, devise)}
+          ecart={ecarts.cpa}
+          inverse
+        />
+      </div>
+
+      <details className="mt-3 group">
+        <summary className="cursor-pointer list-none text-sm text-[var(--color-ink-soft)]">
+          <span className="underline underline-offset-4">Voir les autres indicateurs</span>
+        </summary>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          <Carte nom="Ventes" valeur={nombre(total.conversions)} ecart={ecarts.conversions} />
+          <Carte nom="Coût par clic" valeur={argent(total.cpc, devise)} />
+          <Carte nom="Coût des mille affichages" valeur={argent(total.cpm, devise)} />
+          <Carte nom="Taux de clic" valeur={total.ctr === null ? '—' : `${total.ctr} %`} />
+          <Carte nom="Affichages" valeur={nombre(total.impressions)} />
+          <Carte nom="Clics" valeur={nombre(total.clics)} />
+          <Carte
+            nom="Portée"
+            valeur={total.portee === 0 ? '—' : nombre(total.portee)}
+            note="Personnes différentes"
+          />
+          <Carte
+            nom="Fréquence"
+            valeur={total.frequence === 0 ? '—' : String(total.frequence)}
+            note="Affichages par personne"
+          />
+        </div>
+      </details>
     </div>
   )
 }
 
-export function TableauMeta({ vue }: { vue: VueMeta }) {
+/**
+ * L'écran de MIRA, dans l'ordre où l'on se pose les questions.
+ *
+ * Ce qu'il faut regarder d'abord, parce que c'est pour cela qu'on ouvre la page. Les quatre
+ * chiffres qui disent où l'on en est ensuite. Le détail par étage en dernier, et replié : il
+ * répond au « pourquoi », qu'on ne cherche qu'après avoir vu le « quoi ».
+ *
+ * L'ordre inverse — trois tableaux à lire de haut en bas, la ligne qui compte quelque part
+ * dedans — est celui de la première version, et c'est ce qu'on lui a reproché à raison.
+ */
+export function TableauMeta({ vue, priorites }: { vue: VueMeta; priorites: APriorite[] }) {
+  /*
+   * Les priorités arrivent calculées, elles ne sont pas déduites ici. Un composant ne peut
+   * pas appeler le serveur — il n'en importe que des types — et c'est une bonne barrière :
+   * le tri par urgence puis par dépense se teste sans monter d'écran.
+   */
   const devise = vue.compte.devise === '' ? '' : vue.compte.devise
 
   return (
-    <div className="min-w-0">
-      <Chiffres total={vue.total} ecarts={vue.ecarts} devise={devise} />
+    <div className="grid min-w-0 gap-8">
+      <AFaire lignes={priorites} devise={devise} />
 
-      <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-        Les totaux portent sur les campagnes, jamais sur la somme des trois étages — additionner
-        une campagne, ses ensembles et ses annonces compterait la même dépense trois fois. Les
-        chiffres sont ceux de la fenêtre d’attribution de votre compte Meta, et le jour en cours
-        n’y est pas : il est incomplet par définition.
-      </p>
+      <div className="min-w-0">
+        <h2 className="m-0 mb-3 text-base font-semibold">Où vous en êtes</h2>
+        <Chiffres total={vue.total} ecarts={vue.ecarts} devise={devise} />
+      </div>
 
-      <Niveau
-        titre="Campagnes"
-        note="Le budget est indiqué quand la campagne le pilote ; sinon il vit sur les ensembles."
-        lignes={vue.campagnes}
-        devise={devise}
-        budget
-      />
-      <Niveau
-        titre="Ensembles de publicités"
-        note="C’est ici que Meta place le plus souvent le budget, et l’audience visée."
-        lignes={vue.ensembles}
-        devise={devise}
-        budget
-      />
-      <Niveau
-        titre="Annonces"
-        note="Les créatives elles-mêmes. Une fréquence qui monte pendant que le taux de clic baisse est le signe d’une audience qui se lasse."
-        lignes={vue.annonces}
-        devise={devise}
-        budget={false}
-      />
+      <details className="min-w-0 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+        <summary className="cursor-pointer list-none">
+          <span className="text-base font-semibold">Le détail, étage par étage</span>
+          <span className="ml-2 text-sm text-[var(--color-ink-soft)]">
+            {vue.campagnes.length} campagnes · {vue.ensembles.length} ensembles ·{' '}
+            {vue.annonces.length} annonces
+          </span>
+        </summary>
 
-      <section className="mt-8 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-        <h2 className="m-0 text-base font-semibold">Ce que disent les pastilles</h2>
-        <ul className="mt-3 mb-0 grid list-none gap-2 p-0 text-sm">
-          {(Object.keys(COULEURS) as Verdict[]).map((verdict) => (
-            <li key={verdict} className="flex items-start gap-2">
-              <span
-                aria-hidden="true"
-                className="mt-1.5 inline-block h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: COULEURS[verdict].point }}
-              />
-              <span>{COULEURS[verdict].nom}</span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-          Ces verdicts se fondent sur vos objectifs — ROAS visé, coût par vente acceptable — et
-          sur rien d’autre. Sans objectif renseigné, MIRA se tait : « coût par vente de 37 »
-          n’est ni bon ni mauvais tant qu’on ignore votre marge et votre panier moyen.
-        </p>
-      </section>
+        <Niveau
+          titre="Campagnes"
+          note="Le budget est indiqué quand la campagne le pilote ; sinon il vit sur les ensembles."
+          lignes={vue.campagnes}
+          devise={devise}
+          budget
+        />
+        <Niveau
+          titre="Ensembles de publicités"
+          note="C’est ici que Meta place le plus souvent le budget, et l’audience visée."
+          lignes={vue.ensembles}
+          devise={devise}
+          budget
+        />
+        <Niveau
+          titre="Annonces"
+          note="Les créatives elles-mêmes. Une fréquence qui monte pendant que le taux de clic baisse est le signe d’une audience qui se lasse."
+          lignes={vue.annonces}
+          devise={devise}
+          budget={false}
+        />
+
+        <div className="mt-8 border-t border-[var(--color-line)] pt-5">
+          <p className="m-0 text-sm font-medium">Ce que disent les pastilles</p>
+          <ul className="mt-2 mb-0 flex flex-wrap list-none gap-x-5 gap-y-2 p-0 text-sm">
+            {(Object.keys(COULEURS) as Verdict[]).map((verdict) => (
+              <li key={verdict} className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: COULEURS[verdict].point }}
+                />
+                <span>{COULEURS[verdict].nom}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+            Ces verdicts se fondent sur vos objectifs — ROAS visé, coût par vente acceptable —
+            et sur rien d’autre. Les totaux portent sur les campagnes, jamais sur la somme des
+            trois étages : additionner une campagne, ses ensembles et ses annonces compterait
+            la même dépense trois fois. Le jour en cours n’y est pas, il est incomplet par
+            définition.
+          </p>
+        </div>
+      </details>
     </div>
   )
 }

@@ -267,6 +267,44 @@ export type VueMeta = {
   annonces: LigneMeta[]
 }
 
+/** Une ligne qui réclame quelque chose, avec l'étage d'où elle vient. */
+export type APriorite = LigneMeta & { niveau: 'Campagne' | 'Ensemble' | 'Annonce' }
+
+/** Ce qu'on met devant. Au-delà, ce n'est plus une liste de priorités, c'est un inventaire. */
+const PRIORITES_MONTREES = 6
+
+/**
+ * Ce qu'il faut faire, tous étages confondus.
+ *
+ * L'écran de MIRA répondait à « combien » avant de répondre à « et alors ? » : trois
+ * tableaux à lire de haut en bas, et la ligne qui compte quelque part dedans. Cette fonction
+ * remonte ce qui réclame une décision, et le reste descend.
+ *
+ * L'ordre est celui de l'urgence, puis de l'argent. Deux campagnes également en difficulté
+ * ne le sont pas également : celle qui dépense trois cents francs par semaine mérite le
+ * regard avant celle qui en dépense douze.
+ *
+ * Les doublons d'étage sont assumés. Une campagne en difficulté à cause d'une seule de ses
+ * annonces apparaîtra deux fois, et c'est une information : elle dit où agir précisément.
+ */
+export function aFaire(vue: VueMeta): APriorite[] {
+  const toutes: APriorite[] = [
+    ...vue.campagnes.map((une) => ({ ...une, niveau: 'Campagne' as const })),
+    ...vue.ensembles.map((un) => ({ ...un, niveau: 'Ensemble' as const })),
+    ...vue.annonces.map((une) => ({ ...une, niveau: 'Annonce' as const })),
+  ]
+
+  const rang = { agir: 0, surveiller: 1, bon: 2, insuffisant: 3 }
+  return toutes
+    .filter((une) => une.jugement.verdict === 'agir' || une.jugement.verdict === 'surveiller')
+    .sort(
+      (une, autre) =>
+        rang[une.jugement.verdict] - rang[autre.jugement.verdict] ||
+        autre.actuel.cout - une.actuel.cout,
+    )
+    .slice(0, PRIORITES_MONTREES)
+}
+
 type Releve = {
   campagneId: string
   groupeId: string
