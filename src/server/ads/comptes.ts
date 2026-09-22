@@ -205,6 +205,53 @@ export async function enregistrerComptes(
 }
 
 /** Désigne le compte que Naya suit. Un seul à la fois, et il doit être à cette personne. */
+/**
+ * Retire un compte publicitaire de la liste.
+ *
+ * Réservé aux comptes qu'Evoliia n'a pas pu lire, et c'est tout l'objet : un compte fermé,
+ * suspendu ou auquel on a perdu l'accès reste affiché — il le faut, le cacher ferait
+ * chercher un compte qu'on sait posséder — mais il encombre indéfiniment une liste où l'on
+ * vient désigner celui qu'on suit.
+ *
+ * Deux refus, et ils sont là pour la même raison.
+ *
+ * **Un compte lisible ne se retire pas ici.** Il porte des campagnes, des relevés, des
+ * constats, parfois des modifications journalisées. Les effacer d'un bouton posé au milieu
+ * d'un écran de réglage serait offrir une perte irréversible à portée de clic distrait. Le
+ * jour où il faudra pouvoir le faire, ce sera un geste à part, avec ce qu'il emporte écrit
+ * devant.
+ *
+ * **Un compte suivi ne se retire pas non plus.** On ne retire pas le sol sous ses pieds ;
+ * et un compte suivi est lisible, donc déjà refusé par la première règle — la seconde
+ * existe pour que le jour où la première changerait, celle-ci tienne encore.
+ *
+ * Sans effet chez la plateforme : Evoliia oublie le compte, elle ne le ferme pas.
+ */
+export async function retirerCompte(userId: string, adsAccountId: string): Promise<void> {
+  const compte = await withUserScope(userId, (tx) =>
+    tx.adsAccount.findFirst({ where: { id: adsAccountId, userId } }),
+  )
+  if (compte === null) throw notFound('Ce compte publicitaire est introuvable.')
+
+  /*
+   * La devise vide est la marque d'un compte illisible : elle vient de la plateforme, et une
+   * lecture qui a abouti la rend toujours. Refusé côté serveur et pas seulement absent de
+   * l'écran — ce qui arrive du navigateur désigne, il n'autorise pas.
+   */
+  if (compte.devise !== '') {
+    throw validation(
+      'Ce compte est lisible : Evoliia peut en montrer les chiffres. Seuls les comptes devenus illisibles peuvent être retirés d’ici.',
+    )
+  }
+  if (compte.actif) {
+    throw validation('Ce compte est celui qui est suivi. Désignez-en un autre avant de le retirer.')
+  }
+
+  await withUserScope(userId, (tx) =>
+    tx.adsAccount.deleteMany({ where: { id: adsAccountId, userId } }),
+  )
+}
+
 export async function choisirCompte(userId: string, adsAccountId: string): Promise<CompteRelie> {
   const compte = await withUserScope(userId, (tx) =>
     tx.adsAccount.findFirst({ where: { id: adsAccountId, userId } }),

@@ -51,6 +51,12 @@ export function ComptesAds({
   const [comptes, setComptes] = useState<CompteVu[]>([...initiaux])
   const [occupe, setOccupe] = useState<string | null>(null)
   const [erreur, setErreur] = useState<string | null>(null)
+  /*
+   * Le retrait se confirme, et la confirmation est un état de la page plutôt qu'une fenêtre
+   * du navigateur : `confirm()` ne permet pas d'écrire ce qui va disparaître, et c'est
+   * exactement la phrase qui fait la différence entre confirmer et cliquer.
+   */
+  const [aRetirer, setARetirer] = useState<string | null>(null)
 
   async function choisir(id: string) {
     setOccupe(id)
@@ -67,6 +73,24 @@ export function ComptesAds({
       return
     }
     setComptes((actuels) => actuels.map((compte) => ({ ...compte, actif: compte.id === id })))
+  }
+
+  async function retirer(id: string) {
+    setOccupe(id)
+    setErreur(null)
+    const reponse = await fetch('/api/ads/compte', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ geste: 'retirer', compteId: id }),
+    }).catch(() => null)
+    const corps = (await reponse?.json().catch(() => null)) as { message?: string } | null
+    setOccupe(null)
+    if (reponse === null || !reponse.ok) {
+      setErreur(corps?.message ?? `Le retrait n’a pas abouti (code ${reponse?.status ?? 0}).`)
+      return
+    }
+    setARetirer(null)
+    setComptes((actuels) => actuels.filter((compte) => compte.id !== id))
   }
 
   const diffusants = comptes.filter((compte) => !compte.gestionnaire && compte.lisible)
@@ -99,10 +123,48 @@ export function ComptesAds({
              * Montré plutôt que caché : le cacher ferait chercher un compte qu'on sait
              * posséder. Mais pas choisissable — le suivre donnerait un écran vide.
              */
-            <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
-              Evoliia n’a pas pu lire ce compte chez {plateforme} : il est peut-être fermé,
-              suspendu, ou votre compte n’y a plus accès. Il ne peut pas être suivi.
-            </p>
+            <>
+              <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                Evoliia n’a pas pu lire ce compte chez {plateforme} : il est peut-être fermé,
+                suspendu, ou votre compte n’y a plus accès. Il ne peut pas être suivi.
+              </p>
+
+              {aRetirer === compte.id ? (
+                <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3">
+                  <p className="m-0 text-xs leading-relaxed">
+                    Ce compte disparaîtra de votre liste. <strong>Rien ne change chez{' '}
+                    {plateforme}</strong> : Evoliia l’oublie, elle ne le ferme pas. S’il
+                    redevient accessible, il reviendra tout seul à la prochaine connexion.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void retirer(compte.id)}
+                      disabled={occupe !== null}
+                      className="cursor-pointer rounded-[var(--radius-pill)] border-0 bg-[var(--color-ink)] px-3 py-1.5 text-xs font-medium text-[var(--color-surface)] disabled:opacity-50"
+                    >
+                      {occupe === compte.id ? 'Retrait…' : 'Retirer'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setARetirer(null)}
+                      disabled={occupe !== null}
+                      className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-3 py-1.5 text-xs text-[var(--color-ink-soft)]"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setARetirer(compte.id)}
+                  className="mt-2 cursor-pointer rounded-[var(--radius-control)] border border-[var(--color-line)] bg-transparent px-3 py-1.5 text-xs text-[var(--color-ink-soft)]"
+                >
+                  Retirer ce compte
+                </button>
+              )}
+            </>
           ) : compte.gestionnaire ? (
             <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
               Compte administrateur : il gère d’autres comptes et ne diffuse pas de publicité

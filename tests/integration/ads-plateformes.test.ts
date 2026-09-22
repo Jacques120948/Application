@@ -4,7 +4,12 @@ import { prisma } from '@/server/db/client'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { withUserScope } from '@/server/db/scope'
-import { choisirCompte, compteActif, listerComptesRelies } from '@/server/ads/comptes'
+import {
+  choisirCompte,
+  compteActif,
+  listerComptesRelies,
+  retirerCompte,
+} from '@/server/ads/comptes'
 import { ensureTestPlan, subscribeToTestPlan } from '../helpers/plan'
 
 /**
@@ -138,5 +143,60 @@ describe('deux plateformes chez la même personne', () => {
   it('porte la plateforme sur le compte rendu, pour que l’écran sache à qui il parle', async () => {
     const compte = await compteActif(userId, 'meta-ads')
     expect(compte?.plateforme).toBe('meta-ads')
+  })
+})
+
+describe('retirer un compte devenu illisible', () => {
+  /*
+   * Un compte fermé, suspendu ou auquel on a perdu l'accès reste affiché — le cacher ferait
+   * chercher un compte qu'on sait posséder — mais il encombre indéfiniment la liste où l'on
+   * vient désigner celui qu'on suit. Le bouton qui le retire est donc légitime ; ce qui se
+   * vérifie ici, c'est qu'il ne puisse rien retirer d'autre.
+   */
+  it('refuse un compte lisible, quoi que demande le navigateur', async () => {
+    /*
+     * La devise vide est la marque d'un compte illisible : elle vient de la plateforme, et
+     * une lecture qui a abouti la rend toujours. Un compte lisible porte des campagnes, des
+     * relevés, des constats — les effacer d'un bouton posé dans un écran de réglage serait
+     * offrir une perte irréversible à portée de clic distrait.
+     */
+    await expect(retirerCompte(userId, googleId)).rejects.toThrow()
+    expect(await compteActif(userId)).not.toBeNull()
+  })
+
+  it('refuse le compte d’un autre comme un compte introuvable', async () => {
+    const autre = `voisin-retrait-${Date.now()}@exemple.test`
+    const voisin = (
+      await register(
+        { email: autre, password: 'motdepasse-2026-solide', locale: 'fr' },
+        { ip: randomUUID() },
+      )
+    ).userId
+    await expect(retirerCompte(voisin, metaId)).rejects.toThrow()
+    await prisma.user.deleteMany({ where: { email: autre } })
+  })
+
+  it('retire un compte illisible, et lui seul', async () => {
+    const illisible = await withUserScope(userId, (tx) =>
+      tx.adsAccount.create({
+        data: {
+          userId,
+          plateforme: 'google-ads',
+          compteId: '4342942713',
+          nom: '4342942713',
+          // Vide : c'est exactement ce que rend une lecture qui n'a pas abouti.
+          devise: '',
+          fuseau: '',
+          actif: false,
+        },
+      }),
+    )
+
+    await retirerCompte(userId, illisible.id)
+
+    const restants = await listerComptesRelies(userId)
+    expect(restants.map((un) => un.id)).not.toContain(illisible.id)
+    // Et le compte suivi n'a pas bougé : on retire une ligne, pas une liste.
+    expect(restants.map((un) => un.id)).toContain(googleId)
   })
 })
