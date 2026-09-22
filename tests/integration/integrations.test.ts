@@ -10,6 +10,7 @@ import {
   disconnect,
   listConnections,
   markConnectionError,
+  setConnectionLabel,
   useCredential,
 } from '@/server/integrations/service'
 import { INTEGRATION_PROVIDERS } from '@/server/integrations/catalog'
@@ -135,6 +136,50 @@ describe('connexion par clé du créateur', () => {
         apiKey: key,
       }),
     ).rejects.toMatchObject({ code: 'VALIDATION' })
+  })
+})
+
+describe('le nom des comptes reliés', () => {
+  /*
+   * Placé avant le test qui met volontairement la connexion en erreur : nommer les comptes
+   * ne vise que les connexions actives, et c'est voulu — une connexion tombée n'a pas à
+   * gagner un nom rassurant au passage.
+   */
+  it('se pose après coup, sans toucher au secret', async () => {
+    /*
+     * Nécessaire pour les fournisseurs dont la connexion est enregistrée avant d'être
+     * interrogée — le cas dès qu'une portée ouvre l'écriture. Sans ce nom, la carte de
+     * l'écran affiche « Votre compte », et quelqu'un qui gère trois comptes publicitaires
+     * n'a aucun moyen de savoir lequel il vient de relier.
+     */
+    await setConnectionLabel(userId, TEST_PROVIDER.id, 'Cap Nature, Cap Nature — essai')
+
+    const entries = await listConnections(userId)
+    const vue = entries.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection
+    expect(vue?.accountLabel).toBe('Cap Nature, Cap Nature — essai')
+    // Le secret est intact : ce n'est pas une reconnexion déguisée.
+    expect(await useCredential(userId, TEST_PROVIDER.id)).not.toBeNull()
+  })
+
+  it('borne la longueur : une carte d’écran n’est pas un journal', async () => {
+    await setConnectionLabel(userId, TEST_PROVIDER.id, 'x'.repeat(500))
+
+    const entries = await listConnections(userId)
+    const vue = entries.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection
+    expect(vue?.accountLabel?.length).toBe(200)
+  })
+
+  it('ne nomme jamais la connexion de quelqu’un d’autre', async () => {
+    /*
+     * Le cloisonnement, sur une écriture de plus. La portée de la base est le garde-fou
+     * premier ; ce test est la ceinture — il tomberait si l'écriture sortait un jour de
+     * `withUserScope`, avant que quiconque ne s'en aperçoive à l'écran.
+     */
+    await setConnectionLabel(otherId, TEST_PROVIDER.id, 'INTRUS')
+
+    const entries = await listConnections(userId)
+    const vue = entries.find((entry) => entry.provider.id === TEST_PROVIDER.id)?.connection
+    expect(vue?.accountLabel).not.toBe('INTRUS')
   })
 })
 

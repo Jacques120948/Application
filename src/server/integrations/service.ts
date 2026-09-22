@@ -394,6 +394,33 @@ export async function storeConnection(
   }
 }
 
+/**
+ * Nomme les comptes auxquels une connexion donne accès.
+ *
+ * Écrit après coup, et c'est nécessaire pour les fournisseurs dont la connexion est
+ * enregistrée avant d'être interrogée — le cas dès qu'une portée ouvre l'écriture : ne pas
+ * conserver l'autorisation parce qu'une lecture a échoué laisserait un accès vivant chez le
+ * fournisseur sans trace ici, ni révocable ni visible.
+ *
+ * Sans ce nom, la carte de l'écran affiche « Votre compte » et la personne ne sait pas
+ * lequel elle vient de relier. Quelqu'un qui gère trois comptes publicitaires n'a alors
+ * aucun moyen de le savoir, sinon en déconnectant pour voir.
+ *
+ * Ne touche à aucun secret, et ne rétablit pas une connexion révoquée.
+ */
+export async function setConnectionLabel(
+  userId: string,
+  providerId: string,
+  accountLabel: string,
+): Promise<void> {
+  await withUserScope(userId, (tx) =>
+    tx.integrationConnection.updateMany({
+      where: { userId, providerId, status: 'CONNECTED', disconnectedAt: null },
+      data: { accountLabel: accountLabel.slice(0, 200) },
+    }),
+  )
+}
+
 /** Une connexion active existe-t-elle ? Ne touche pas aux secrets. */
 export async function hasConnection(
   userId: string,

@@ -4,7 +4,7 @@ import { getCurrentUser } from '@/server/auth/session'
 import { logger } from '@/server/observability/logger'
 import { lireEtat } from '@/server/integrations/oauth'
 import { findProvider } from '@/server/integrations/catalog'
-import { storeConnection } from '@/server/integrations/service'
+import { setConnectionLabel, storeConnection } from '@/server/integrations/service'
 import { metaAds } from '@/server/ads/meta-ads'
 import { enregistrerComptes } from '@/server/ads/comptes'
 
@@ -79,6 +79,17 @@ export async function GET(request: Request) {
     logger.warn('retour Meta : aucun compte lisible')
     redirect(versConnexions('meta-sans-compte'))
   }
+
+  /*
+   * Les comptes sont nommés sur la connexion, une fois lus. Sans cela, la carte de l'écran
+   * des connexions affiche « Votre compte » : quelqu'un qui en gère trois n'a aucun moyen de
+   * savoir lequel il vient de relier, sinon en déconnectant pour voir.
+   */
+  await setConnectionLabel(
+    user.id,
+    metaAds.id,
+    comptes.comptes.map((compte) => compte.nom).filter((nom) => nom !== '').join(', '),
+  )
 
   logger.info('Meta Ads relié', { comptes: comptes.comptes.length })
   redirect(`/${locale}/publicite`)
