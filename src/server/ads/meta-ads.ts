@@ -78,14 +78,34 @@ function adresseRetour(): string {
   return `${env.appUrl}/api/connexions/meta/retour`
 }
 
+/**
+ * L'adresse du dialogue d'autorisation, dans l'une des deux formes que Meta accepte.
+ *
+ * **Avec une configuration** — le cas de toute application créée aujourd'hui à partir du cas
+ * d'usage « API Marketing ». Les portées ne voyagent plus dans l'adresse : elles vivent dans
+ * la configuration, et la personne y choisit en plus les comptes publicitaires qu'elle
+ * confie. C'est un progrès réel pour elle : elle peut en accorder deux sur cinq, là où la
+ * forme classique ouvrait tout ce à quoi elle a droit.
+ *
+ * **Sans configuration** — la forme classique, portées dans l'adresse. Conservée parce
+ * qu'elle reste valable pour les applications plus anciennes, et parce qu'une intégration
+ * qui ne marche que sur les installations neuves est une intégration qui casse en silence
+ * chez ceux qui l'avaient déjà.
+ *
+ * `scope` et `config_id` ne cohabitent pas : envoyer les deux fait refuser le dialogue par
+ * Meta, avec un message qui ne dit pas lequel est de trop.
+ */
 function urlAutorisation(etat: string): string {
+  const configuration = env.metaLoginConfigId
   const parametres = new URLSearchParams({
     client_id: env.metaAppId ?? '',
     redirect_uri: adresseRetour(),
     response_type: 'code',
-    /* Meta sépare ses portées par des virgules là où Google emploie des espaces. */
-    scope: PORTEES.join(','),
     state: etat,
+    ...(configuration === undefined || configuration === ''
+      ? /* Meta sépare ses portées par des virgules là où Google emploie des espaces. */
+        { scope: PORTEES.join(',') }
+      : { config_id: configuration }),
   })
   return `${DIALOGUE}/${version()}/dialog/oauth?${parametres.toString()}`
 }
@@ -219,29 +239,47 @@ export function jetonsDepuisMeta(
 }
 
 /**
+ * Au-delà, le jeton rendu à l'échange est déjà durable et n'a pas à être rééchangé.
+ *
+ * Sept jours : bien au-dessus des deux heures d'un jeton court, bien en dessous des soixante
+ * jours d'un jeton long. Aucune des deux formes ne peut tomber du mauvais côté.
+ */
+const DUREE_DURABLE_MS = 7 * 24 * 60 * 60 * 1000
+
+/**
  * Échange le code de retour contre un jeton durable.
  *
- * Deux appels, et le second n'est pas facultatif. Meta rend d'abord un jeton de deux heures ;
- * s'en contenter donnerait une connexion qui marche pendant la démonstration et tombe le
- * soir même, sans que rien n'explique pourquoi.
+ * Un appel, parfois deux, et c'est Meta qui décide. La connexion classique rend un jeton de
+ * deux heures : s'en contenter donnerait une connexion qui marche pendant la démonstration
+ * et tombe le soir même, sans que rien n'explique pourquoi. Login for Business, lui, rend
+ * directement un jeton de soixante jours.
+ *
+ * On regarde donc la durée rendue plutôt que de supposer la forme. Rééchanger un jeton déjà
+ * durable fonctionne le plus souvent, mais « le plus souvent » n'est pas une garantie qu'on
+ * veut poser sur le chemin d'une première connexion — celui qu'on ne voit échouer qu'une
+ * fois, chez quelqu'un, sans pouvoir le reproduire.
  */
 async function echangerCode(
   code: string,
 ): Promise<{ ok: true; jetons: Jetons } | { ok: false; raison: string }> {
-  const court = await appeler<ReponseMeta>('/oauth/access_token', {
+  const premier = await appeler<ReponseMeta>('/oauth/access_token', {
     client_id: env.metaAppId ?? '',
     client_secret: env.metaAppSecret ?? '',
     redirect_uri: adresseRetour(),
     code,
   })
-  if (!court.ok) return court
+  if (!premier.ok) return premier
 
-  const bref = typeof court.donnees.access_token === 'string' ? court.donnees.access_token : ''
-  if (bref === '') {
+  const jeton = typeof premier.donnees.access_token === 'string' ? premier.donnees.access_token : ''
+  if (jeton === '') {
     return { ok: false, raison: 'Meta n’a pas délivré de jeton. Reprenez la connexion.' }
   }
 
-  return rafraichir(bref)
+  const duree =
+    typeof premier.donnees.expires_in === 'number' ? premier.donnees.expires_in * 1000 : 0
+  if (duree >= DUREE_DURABLE_MS) return jetonsDepuisMeta(premier.donnees)
+
+  return rafraichir(jeton)
 }
 
 /**

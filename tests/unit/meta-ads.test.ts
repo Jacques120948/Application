@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { findProvider } from '@/server/integrations/catalog'
+import { afterEach, beforeEach } from 'vitest'
 import {
   jetonsDepuisMeta,
   MARGE_MS,
@@ -50,6 +51,17 @@ describe('le connecteur Meta', () => {
 })
 
 describe('l’adresse de consentement', () => {
+  const avant = process.env.META_LOGIN_CONFIG_ID
+
+  beforeEach(() => {
+    delete process.env.META_LOGIN_CONFIG_ID
+  })
+
+  afterEach(() => {
+    if (avant === undefined) delete process.env.META_LOGIN_CONFIG_ID
+    else process.env.META_LOGIN_CONFIG_ID = avant
+  })
+
   it('emporte l’état signé, les portées séparées par des virgules, et rien d’autre', () => {
     const url = new URL(metaAds.urlAutorisation('ETAT-SIGNE'))
 
@@ -58,6 +70,31 @@ describe('l’adresse de consentement', () => {
     expect(url.searchParams.get('state')).toBe('ETAT-SIGNE')
     expect(url.searchParams.get('response_type')).toBe('code')
     // Meta sépare par des virgules là où Google emploie des espaces.
+    expect(url.searchParams.get('scope')).toBe('ads_read,ads_management')
+  })
+
+  it('désigne la configuration au lieu des portées quand il y en a une', () => {
+    /*
+     * Login for Business : les portées vivent dans la configuration, et la personne y choisit
+     * en plus les comptes qu'elle confie. C'est la forme que reçoit toute application créée
+     * aujourd'hui à partir du cas d'usage « API Marketing ».
+     */
+    process.env.META_LOGIN_CONFIG_ID = '1234567890'
+    const url = new URL(metaAds.urlAutorisation('ETAT'))
+
+    expect(url.searchParams.get('config_id')).toBe('1234567890')
+    /*
+     * Les deux ne cohabitent pas : envoyer `scope` avec `config_id` fait refuser le dialogue,
+     * avec un message de Meta qui ne dit pas lequel est de trop.
+     */
+    expect(url.searchParams.get('scope')).toBeNull()
+  })
+
+  it('retombe sur les portées quand aucune configuration n’est posée', () => {
+    // Les installations plus anciennes emploient la connexion classique, et doivent continuer.
+    const url = new URL(metaAds.urlAutorisation('ETAT'))
+
+    expect(url.searchParams.get('config_id')).toBeNull()
     expect(url.searchParams.get('scope')).toBe('ads_read,ads_management')
   })
 

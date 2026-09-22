@@ -158,6 +158,27 @@ export const env = {
     return read('META_APP_SECRET')
   },
   /**
+   * L'identifiant de configuration de « Facebook Login for Business ».
+   *
+   * Meta propose deux façons de demander une autorisation, et une application créée
+   * aujourd'hui à partir du cas d'usage « API Marketing » reçoit la seconde.
+   *
+   * **La connexion classique** porte les portées dans l'adresse du dialogue :
+   * `scope=ads_read,ads_management`. C'est ce que fait le connecteur Google.
+   *
+   * **Login for Business** ne les porte plus : elles vivent dans une configuration créée
+   * dans la console de Meta, que l'adresse désigne par son identifiant. La personne y choisit
+   * en plus les comptes publicitaires qu'elle confie — ce qui est un progrès réel : elle
+   * accorde l'accès à deux comptes sur cinq si elle le souhaite, là où la portée classique
+   * ouvrait tout ce à quoi elle a droit.
+   *
+   * Facultatif, donc, et son absence n'est pas une panne : sans lui, le connecteur retombe
+   * sur la connexion classique, qui reste valable pour les applications plus anciennes.
+   */
+  get metaLoginConfigId(): string | undefined {
+    return read('META_LOGIN_CONFIG_ID')
+  },
+  /**
    * La version de l'API Marketing visée, par exemple `v23.0`.
    *
    * Lisible plutôt que figée dans le code, et c'est une leçon payée chez Google : une
