@@ -11,6 +11,7 @@ import { listPublicPlans } from '@/server/billing/plans'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { formatAmount } from '@/server/business/economics'
 import { jsonLd } from '@/server/seo/visibility'
+import { logger } from '@/server/observability/logger'
 import { Logo } from '@/components/marketing/Logo'
 import { CheckList, Eyebrow, Section } from '@/components/marketing/landing'
 import {
@@ -53,6 +54,18 @@ import { LinkButton } from '@/components/ui'
  * sont dessinés et inertes, et ils en ont l'air. Un appel à l'action qui ne fait rien se
  * remarque, et coûte la confiance qu'on vient de gagner.
  */
+
+/**
+ * Ce qu'on rend quand une lecture publique échoue : rien, et une trace.
+ *
+ * Le journal est la moitié utile du repli. Sans lui, la page se dégraderait en silence et
+ * l'on découvrirait la panne par un client, ou jamais. Il ne porte que le nom de ce qui
+ * manquait — aucune adresse, aucun identifiant, aucun message d'erreur de la base.
+ */
+function manque(quoi: string): [] {
+  logger.warn('page publique dégradée', { quoi })
+  return []
+}
 
 const TITLE_KEY = 'vis.metaTitle'
 const DESCRIPTION_KEY = 'vis.metaDescription'
@@ -134,11 +147,32 @@ export default async function LandingPage({
   const locale = resolveLocale((await params).locale)
   const t = getTranslator(locale)
 
-  // Qui est déjà connecté n'a rien à faire sur une page de vente.
-  const user = await getCurrentUser()
+  /*
+   * Trois lectures en base, et aucune ne doit pouvoir abattre la page publique.
+   *
+   * Elle le pouvait : une panne de quelques secondes chez l'hébergeur de la base — le genre
+   * qui arrive et se répare tout seul — rendait à chaque visiteur un écran blanc portant
+   * « Application error ». C'est la page qu'on montre aux gens qui ne nous connaissent pas
+   * encore, celle que les moteurs relisent, et celle dont une panne coûte le plus cher pour
+   * ce qu'elle apporte : elle ne fait que présenter le produit.
+   *
+   * Chaque lecture dégrade donc au lieu d'échouer, et chacune dit quoi.
+   *
+   * La session illisible vaut « personne n'est connecté ». Le pire cas est qu'un client déjà
+   * abonné voie la page de vente au lieu d'être renvoyé chez lui — un désagrément de
+   * quelques secondes, contre un site en panne.
+   *
+   * Les offres et les recharges illisibles valent une liste vide, et la section des prix dit
+   * alors qu'elle est momentanément indisponible. Afficher des prix de repli écrits dans le
+   * code serait la seule faute vraiment grave ici : un prix faux se lit comme un engagement.
+   */
+  const user = await getCurrentUser().catch(() => null)
   if (user !== null) redirect(`/${locale}/visibilite`)
 
-  const [plans, packs] = await Promise.all([listPublicPlans(), creditPacks()])
+  const [plans, packs] = await Promise.all([
+    listPublicPlans().catch(() => manque('offres')),
+    creditPacks().catch(() => manque('recharges')),
+  ])
   // Les trois offres payantes forment la grille ; la gratuite a sa propre section, parce
   // qu'un essai ne se compare pas à un abonnement.
   const payantes = plans.filter((plan) => plan.priceCents > 0)
@@ -590,6 +624,19 @@ export default async function LandingPage({
 
       {/* ───────────────────────── 14. Les offres ─────────────────────────── */}
       <Section id="tarifs" title={t('vis.plansTitle')} body={t('vis.plansBody')}>
+        {/*
+          Une grille vide se prend pour une page qui n'a pas fini de charger, et on attend
+          devant. Mieux vaut dire ce qui se passe et où revenir.
+        */}
+        {plans.length > 0 ? null : (
+          <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-6">
+            <p className="m-0 text-sm leading-relaxed">
+              Nos offres sont momentanément indisponibles. Elles reviennent d’elles-mêmes
+              d’ici quelques instants — rechargez la page. Rien d’autre sur ce site n’est
+              affecté.
+            </p>
+          </div>
+        )}
         <div className="grid gap-5 lg:grid-cols-3">
           {payantes.map((plan) => (
             <div
