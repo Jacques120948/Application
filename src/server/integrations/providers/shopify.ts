@@ -947,3 +947,37 @@ export async function televerserImages(
 
   return { ok: true, adresses }
 }
+
+const REQUETE_PORTEES = `{
+  currentAppInstallation { accessScopes { handle } }
+}`
+
+/**
+ * Ce que Shopify accorde réellement à ce jeton, dit par Shopify.
+ *
+ * Ajouté après un aller-retour qui aurait dû être un seul : une portée cochée dans le
+ * tableau de bord ne devient pas active tant que la boutique ne l'a pas réapprouvée, et
+ * rien ne le disait. Le message d'erreur nommait la portée manquante, mais on ne savait
+ * pas si elle avait été ajoutée, ni où l'ajout s'était perdu — on ne pouvait que
+ * recommencer et espérer.
+ *
+ * Demander la liste change la nature du diagnostic : on ne suppose plus, on lit. Et si
+ * cette lecture échoue elle-même, on se tait plutôt que d'accuser — c'est un appoint au
+ * message d'erreur, pas une nouvelle source d'erreur.
+ *
+ * Aucune portée n'est requise pour cette requête : c'est l'installation qui se décrit.
+ */
+export async function lirePortees(acces: AccesShopify, jeton: string): Promise<string[] | null> {
+  const reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_PORTEES).catch(
+    () => null,
+  )
+  if (reponse === null || reponse.status !== 200 || reponse.data === null) return null
+  const portees = (
+    reponse.data as { currentAppInstallation?: { accessScopes?: { handle?: string }[] } }
+  ).currentAppInstallation?.accessScopes
+  if (portees === undefined) return null
+  return portees
+    .map((portee) => portee.handle)
+    .filter((handle): handle is string => typeof handle === 'string')
+    .sort()
+}

@@ -304,6 +304,8 @@ export function ArticlesRediges({
   const [imagesRestees, setImagesRestees] = useState<{
     combien: number
     raison: string | null
+    /** Ce que Shopify accorde réellement, dit par lui. */
+    portees: string[] | null
   } | null>(null)
   /*
    * Les blogs de la boutique, et celui qui recevra l'article.
@@ -430,6 +432,7 @@ export function ArticlesRediges({
           message?: string
           imagesNonCopiees?: number
           raisonImages?: string | null
+          porteesShopify?: string[] | null
         }
       | null
     setEnvoi(false)
@@ -446,7 +449,11 @@ export function ArticlesRediges({
      */
     setImagesRestees(
       (body.imagesNonCopiees ?? 0) > 0
-        ? { combien: body.imagesNonCopiees ?? 0, raison: body.raisonImages ?? null }
+        ? {
+            combien: body.imagesNonCopiees ?? 0,
+            raison: body.raisonImages ?? null,
+            portees: body.porteesShopify ?? null,
+          }
         : null,
     )
     setDepot({ articleId: article.id, lien: body.lien })
@@ -796,9 +803,30 @@ export function ArticlesRediges({
                           {imagesRestees.combien === 1 ? '' : 'nt'} hébergée
                           {imagesRestees.combien === 1 ? '' : 's'} par Evoliia. L’article
                           s’affiche normalement, mais votre blog en dépend. Ajoutez la portée{' '}
-                          <code>write_files</code> à votre clé Shopify, puis redéposez un
-                          prochain article.
+                          <code>write_files</code> à votre application Shopify, puis
+                          redéposez un prochain article.
                           {imagesRestees.raison === null ? '' : ` (${imagesRestees.raison})`}
+                          {/*
+                            Ce que Shopify accorde vraiment, dit par lui.
+
+                            Sans cette liste, on ne sait pas si la portée a été oubliée, mal
+                            publiée, ou ajoutée sur une autre application : la seule méthode
+                            est de recommencer et d'espérer. Avec elle, on voit d'un coup où
+                            l'ajout s'est perdu — et surtout, si elle y figure déjà, c'est
+                            que la boutique ne l'a pas encore réapprouvée.
+                          */}
+                          {imagesRestees.portees === null ? null : (
+                            <>
+                              <br />
+                              <span className="mt-1 block">
+                                Shopify accorde actuellement à Evoliia :{' '}
+                                <code>{imagesRestees.portees.join(', ')}</code>.
+                                {imagesRestees.portees.includes('write_files')
+                                  ? ' La portée y figure : c’est donc l’installation sur la boutique qui n’a pas encore été réapprouvée.'
+                                  : ' La portée n’y figure pas encore.'}
+                              </span>
+                            </>
+                          )}
                         </p>
                       )}
                     </div>

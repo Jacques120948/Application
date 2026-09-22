@@ -9,6 +9,7 @@ import {
   frapperJeton,
   lireAcces,
   lireBlogs,
+  lirePortees,
   televerserImages,
   type AccesShopify,
 } from '@/server/integrations/providers/shopify'
@@ -234,6 +235,12 @@ export type Depot = {
    */
   imagesNonCopiees: number
   raisonImages: string | null
+  /**
+   * Les portées que Shopify accorde réellement, telles qu'il les rend, quand une image n'a
+   * pas pu être copiée. `null` quand tout s'est bien passé ou quand la question elle-même
+   * n'a pas abouti — on ne remplace jamais un diagnostic par une supposition.
+   */
+  porteesShopify: string[] | null
 }
 
 /**
@@ -312,6 +319,20 @@ export async function deposerDansShopify(
   const adresses = televerse.ok ? televerse.adresses : new Map<string, string>()
   const restees = creees.filter((photo) => !adresses.has(photo.image)).length
 
+  /*
+   * Quand la copie a échoué, on demande à Shopify ce qu'il accorde vraiment.
+   *
+   * Le message d'erreur nomme déjà la portée manquante, mais il ne dit pas si elle a été
+   * ajoutée et mal publiée, ou jamais ajoutée, ou ajoutée sur une autre application. Sans
+   * cette liste, la seule méthode est de recommencer et d'espérer — c'est un aller-retour
+   * par tentative. Avec elle, on voit d'un coup d'œil où l'ajout s'est perdu.
+   *
+   * Un appoint, jamais une source d'erreur de plus : si cette lecture échoue à son tour, on
+   * se tait et le message d'origine reste.
+   */
+  const porteesReelles =
+    restees > 0 ? await lirePortees(acces, jeton).catch(() => null) : null
+
   const rangees = [...article.illustrations]
     .sort((une, autre) => une.section - autre.section)
     .map((photo) => {
@@ -367,5 +388,6 @@ export async function deposerDansShopify(
     blog: blog.titre,
     imagesNonCopiees: restees,
     raisonImages: televerse.ok ? null : televerse.raison,
+    porteesShopify: porteesReelles,
   }
 }
