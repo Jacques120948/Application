@@ -294,6 +294,7 @@ export function PriorityExample({
  */
 export function DashboardMockup({
   labels,
+  equipe,
 }: {
   labels: {
     title: string
@@ -304,6 +305,13 @@ export function DashboardMockup({
     sample: string
     team: string
   }
+  /*
+   * Les vrais portraits, passés en propriété plutôt que lus ici : un composant n'importe du
+   * serveur que des types. La liste venait d'ailleurs d'être codée en dur — quatre initiales
+   * — et elle est restée fausse deux membres durant, sans que rien ne le signale. Une équipe
+   * qui s'agrandit ne doit pas obliger à se souvenir d'un endroit de plus.
+   */
+  equipe: readonly { name: string; avatar?: string }[]
 }) {
   return (
     <div className="rounded-[var(--radius-card)] border border-white/15 bg-white/[0.07] p-5 backdrop-blur-sm">
@@ -332,15 +340,28 @@ export function DashboardMockup({
 
       <div className="mt-4 flex items-center gap-3 border-t border-white/10 pt-4">
         <span className="flex -space-x-2">
-          {['L', 'N', 'G', 'M'].map((lettre) => (
-            <span
-              key={lettre}
-              aria-hidden="true"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-pill)] border-2 border-[var(--color-night)] bg-white/90 text-xs font-semibold text-[var(--color-ink)]"
-            >
-              {lettre}
-            </span>
-          ))}
+          {equipe.map((membre) =>
+            membre.avatar === undefined ? (
+              <span
+                key={membre.name}
+                aria-hidden="true"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-[var(--radius-pill)] border-2 border-[var(--color-night)] bg-white/90 text-xs font-semibold text-[var(--color-ink)]"
+              >
+                {membre.name.slice(0, 1).toUpperCase()}
+              </span>
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                key={membre.name}
+                src={membre.avatar}
+                alt=""
+                aria-hidden="true"
+                width={32}
+                height={32}
+                className="h-8 w-8 rounded-[var(--radius-pill)] border-2 border-[var(--color-night)] object-cover"
+              />
+            ),
+          )}
         </span>
         <p className="m-0 text-xs text-white/60">{labels.team}</p>
       </div>

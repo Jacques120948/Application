@@ -944,7 +944,7 @@ export const en: Record<keyof typeof fr, string> = {
   'vis.mockTitle': 'Your visibility',
   'vis.mockPages': 'pages analysed',
   'vis.mockPriorities': 'priorities',
-  'vis.mockTeam': 'Léa, Néo, Gia and Milo are on it',
+  'vis.mockTeam': 'Léa, Néo, Gia, Milo, Naya and MIRA are on it',
 
   'vis.painTitle': 'Being found is getting harder.',
   'vis.painBody':

@@ -360,6 +360,7 @@ export default async function LandingPage({
               sample: t('vis.heroSample'),
               team: t('vis.mockTeam'),
             }}
+            equipe={VISIBILITY_AGENTS}
           />
         </div>
       </section>
@@ -457,6 +458,7 @@ export default async function LandingPage({
               sample: t('vis.heroSample'),
               team: t('vis.mockTeam'),
             }}
+            equipe={VISIBILITY_AGENTS}
           />
         </div>
       </section>

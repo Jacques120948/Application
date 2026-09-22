@@ -988,7 +988,7 @@ export const fr = {
   'vis.mockTitle': 'Votre visibilité',
   'vis.mockPages': 'pages analysées',
   'vis.mockPriorities': 'priorités',
-  'vis.mockTeam': 'Léa, Néo, Gia et Milo travaillent dessus',
+  'vis.mockTeam': 'Léa, Néo, Gia, Milo, Naya et MIRA travaillent dessus',
 
   'vis.painTitle': 'Être visible devient de plus en plus compliqué.',
   'vis.painBody':

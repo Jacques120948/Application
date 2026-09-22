@@ -160,7 +160,16 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle lit vos campagnes Google Ads, explique où part votre argent et ce qu’il rapporte, et propose des ajustements. Elle ne modifie rien sans votre accord.',
     handles: ['Campagnes', 'Budgets', 'ROAS et CPA', 'Mots-clés', 'Termes de recherche'],
     feature: 'visibility_ads_agent',
-    atWork: null,
+    /*
+     * Cette ligne disait « à venir » longtemps après que Naya eut commencé à travailler, et
+     * c'est une erreur du même genre que la promesse excessive, dans l'autre sens : annoncer
+     * moins que ce qu'on fait coûte des clients à qui l'on avait la réponse.
+     *
+     * Elle dit donc ce qui existe, et s'arrête là. « Que vous confirmez » n'est pas une
+     * formule de prudence : c'est le fonctionnement, et il ne changera pas.
+     */
+    atWork:
+      'Elle lit vos campagnes Google Ads, dit où part votre argent, et prépare des mots-clés et des campagnes que vous confirmez.',
     avatar: '/equipe/naya.webp',
     tint: 'sun',
     starters: [
@@ -194,7 +203,12 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Elle analyse vos campagnes Facebook et Instagram, détecte les opportunités et vous aide à améliorer vos performances publicitaires.',
     handles: ['Campagnes', 'Ensembles', 'Créatives', 'Audiences', 'ROAS et CPA'],
     feature: 'visibility_meta_agent',
-    atWork: null,
+    /*
+     * Ce qu'elle fait aujourd'hui, et pas une ligne de plus. Elle ne modifie encore rien
+     * chez Meta : le jour où elle le fera, cette phrase le dira.
+     */
+    atWork:
+      'Elle lit vos campagnes Facebook et Instagram, repère ce qui fatigue votre audience, et vous dit ce qui mérite d’être changé.',
     avatar: '/equipe/mira.webp',
     tint: 'sea',
     starters: [

@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { VISIBILITY_AGENTS, VISIBILITY_AGENT_IDS } from '@/server/agents/visibility'
-import { FEATURE_IDS } from '@/server/billing/features'
+import { FEATURE_IDS, findFeature } from '@/server/billing/features'
 
 /**
  * L'équipe de visibilité, et ce qui doit rester vrai quand elle s'agrandit.
@@ -46,13 +46,27 @@ describe('l’équipe de visibilité', () => {
     expect(VISIBILITY_AGENTS.find((agent) => agent.id === 'ads')?.name).toBe('Naya')
   })
 
-  it('ne promet, pour chacun, que ce qu’il fait déjà', () => {
+  it('ne promet, pour chacun, que ce qu’il fait déjà — et ne tait pas ce qu’il fait', () => {
     /*
-     * `atWork` décrit le présent livré. Naya répond aux questions mais ne lit encore aucune
-     * campagne : sa ligne reste vide jusqu'à ce que la connexion Google Ads existe.
-     * Décrire une équipe au futur est la façon la plus sûre de décevoir quelqu'un qui
-     * s'inscrit.
+     * `atWork` décrit le présent livré, et la carte de la page d'accueil affiche « à venir »
+     * quand il est vide.
+     *
+     * La première version de ce test figeait un état : elle exigeait que Naya reste muette,
+     * ce qui était juste tant qu'elle ne lisait aucune campagne, et faux le jour où elle en
+     * a lu. Décrire une équipe au futur déçoit celui qui s'inscrit ; la décrire au passé
+     * fait fuir celui à qui l'on avait justement la réponse. Les deux fautes se valent.
+     *
+     * L'invariant durable est donc l'accord entre la fiche d'offre et la carte : un
+     * spécialiste dont la fonction est livrée dit ce qu'il fait, un spécialiste encore prévu
+     * se tait.
      */
-    expect(VISIBILITY_AGENTS.find((agent) => agent.id === 'ads')?.atWork).toBeNull()
+    const desaccords = VISIBILITY_AGENTS.filter((agent) => {
+      const fonction = findFeature(agent.feature)
+      if (fonction === undefined) return false
+      const livre = fonction.status === 'live'
+      return livre ? agent.atWork === null : agent.atWork !== null
+    })
+
+    expect(desaccords.map((agent) => agent.name)).toEqual([])
   })
 })
