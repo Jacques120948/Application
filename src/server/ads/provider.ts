@@ -197,8 +197,21 @@ export type AccesAds = {
   compteId: string
 }
 
-export type AdPlatformProvider = {
-  /** Identifiant dans le catalogue des connecteurs : « google-ads ». */
+/**
+ * Ce qu'il faut savoir faire pour qu'un compte puisse être relié — et rien de plus.
+ *
+ * Séparé de la lecture, et la séparation a une raison pratique : une plateforme s'intègre en
+ * deux temps. L'autorisation d'abord, qui se vérifie contre le vrai fournisseur et ne peut
+ * pas être devinée ; les lectures ensuite, qui demandent un compte relié pour être
+ * essayées. Un seul type aurait obligé à écrire vingt fonctions muettes avant de pouvoir
+ * cliquer une seule fois sur « Connecter » — et vingt fonctions muettes ressemblent à s'y
+ * méprendre à vingt fonctions écrites.
+ *
+ * La couche des comptes ne demande que ceci : elle relie, elle liste, elle renouvelle. Elle
+ * n'a jamais eu besoin de savoir lire une campagne.
+ */
+export type AdPlatformAuth = {
+  /** Identifiant dans le catalogue des connecteurs : « google-ads », « meta-ads ». */
   id: string
   nom: string
   /** Faux quand l'exploitant n'a pas posé les variables : la connexion reste alors fermée. */
@@ -211,6 +224,9 @@ export type AdPlatformProvider = {
   ) => Promise<{ ok: true; jetons: Jetons } | { ok: false; raison: string }>
   /** Les comptes auxquels cette autorisation donne accès. */
   listerComptes: (accessToken: string) => Promise<Lecture<CompteAds[]>>
+}
+
+export type AdPlatformProvider = AdPlatformAuth & {
   lireCampagnes: (acces: AccesAds) => Promise<Lecture<CampagneAds[]>>
   /** Les journées, bornes comprises, en AAAA-MM-JJ. */
   lireJournees: (acces: AccesAds, depuis: string, jusqua: string) => Promise<Lecture<JourneeAds[]>>

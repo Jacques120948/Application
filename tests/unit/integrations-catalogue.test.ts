@@ -26,7 +26,17 @@ describe('catalogue des intégrations', () => {
    * ligne demande d'écrire le plafond en clair dans `freeQuota`, ce que le test suivant
    * vérifie.
    */
-  const PARTAGE_ASSUME: readonly string[] = ['google-ads']
+  const PARTAGE_ASSUME: readonly string[] = [
+    'google-ads',
+    /*
+     * Meta, ajouté sciemment. Son plafond se compte par application ET par compte
+     * publicitaire, avec un budget qui se reconstitue à l'heure : un utilisateur de plus
+     * consomme bien une ressource commune. La discipline est la même que pour Google —
+     * une synchronisation par nuit et par compte, les chiffres gardés en base, jamais un
+     * appel par affichage d'écran.
+     */
+    'meta-ads',
+  ]
 
   it('n’ouvre aucun service dont la facture retomberait sur Evoliia', () => {
     /*

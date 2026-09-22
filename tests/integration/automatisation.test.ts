@@ -81,6 +81,13 @@ describe('ce qui tourne tout seul', () => {
      */
     const bilan = await tournerQuotidien(50)
     expect(bilan.releves).toBe(0)
+    /*
+     * `echecs` ne compte que les sites, depuis que les comptes publicitaires ont le leur.
+     * La distinction n'est pas cosmétique : la tournée des sites suit un curseur, celle des
+     * comptes balaie toute la base. Tant que les deux s'additionnaient, ce test dépendait
+     * des comptes créés au même moment par les fichiers voisins — il passait seul et tombait
+     * en exécution parallèle, une fois sur trois, sans que rien ne désigne la cause.
+     */
     expect(bilan.echecs).toBe(0)
   })
 })

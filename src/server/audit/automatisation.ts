@@ -236,6 +236,17 @@ export type Bilan = {
   recommandationsAds: number
   /** Comptes dont le créatif a été relu — une fois par semaine, pas chaque nuit. */
   creatifsAds: number
+  /**
+   * Les comptes publicitaires qui ont échoué, comptés à part des sites.
+   *
+   * Séparés, et la séparation est utile deux fois. Pour lire le bilan d'abord : « trois
+   * échecs » ne dit pas s'il faut aller voir des sites ou des autorisations expirées, qui ne
+   * se réparent ni au même endroit ni par la même personne. Et parce que la tournée
+   * publicitaire balaie **tous** les comptes de la base là où la tournée des sites suit son
+   * curseur : additionner les deux faisait dépendre le bilan d'un site de l'état des comptes
+   * de quelqu'un d'autre.
+   */
+  echecsAds: number
   /** Sites dont les volumes de recherche ont été rafraîchis. Environ un par mois et par site. */
   volumes?: number
   echecs: number
@@ -404,6 +415,7 @@ export async function tournerQuotidien(
     sites: 0,
     indexations: 0,
     releves: 0,
+    echecsAds: 0,
     articles: 0,
     depots: 0,
     questionsIa: 0,
@@ -602,7 +614,7 @@ export async function tournerQuotidien(
     const publicite = await synchroniserTous().catch(() => null)
     if (publicite !== null) {
       bilan.comptesAds = publicite.comptes
-      bilan.echecs += publicite.echecs
+      bilan.echecsAds += publicite.echecs
     }
 
     /*
@@ -619,13 +631,13 @@ export async function tournerQuotidien(
     const creatif = await synchroniserCreatifs().catch(() => null)
     if (creatif !== null) {
       bilan.creatifsAds = creatif.comptes
-      bilan.echecs += creatif.echecs
+      bilan.echecsAds += creatif.echecs
     }
 
     const regles = await evaluerTous().catch(() => null)
     if (regles !== null) {
       bilan.recommandationsAds = regles.ouvertes
-      bilan.echecs += regles.echecs
+      bilan.echecsAds += regles.echecs
     }
   }
 

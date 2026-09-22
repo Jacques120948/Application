@@ -55,6 +55,7 @@ function tableau(jours: number, campagnes: CampagneVue[], total?: Indicateurs): 
   return {
     compte: {
       id: 'compte',
+      plateforme: 'google-ads',
       compteId: '1869511296',
       nom: 'Cap Nature',
       devise: DEVISE,

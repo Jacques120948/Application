@@ -195,13 +195,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     summary: 'Vos campagnes Facebook et Instagram : ce que vous dépensez, et ce que ça rapporte.',
     usage:
       'Lire vos campagnes, vos ensembles de publicités et vos résultats, pour que MIRA vous dise où part votre argent et ce qu’il faut ajuster. Aucune modification n’est faite sans votre accord explicite.',
-    /*
-     * `planned` tant que l'aller-retour OAuth n'est pas écrit. La fiche existe déjà parce
-     * qu'elle sert à autre chose qu'à brancher : elle dit à l'avance ce que la connexion
-     * coûtera, ce qu'elle exigera de Meta, et ce qui peut mal tourner. Une fiche écrite
-     * après coup est une fiche écrite pour justifier un choix déjà fait.
-     */
-    status: 'planned',
+    status: 'available',
     credential: 'OAUTH',
     connectionTarget: 'EVOLIIA',
     /*
@@ -211,12 +205,12 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
      * n'en publie pas de version intermédiaire. La garantie vient donc du code, pas de la
      * portée : le mode par défaut est la lecture, et rien ne part sans confirmation.
      *
-     * `business_management` n'est demandée que pour lister les comptes atteints à travers
-     * un Business Manager — le cas de toute agence, et de tout client qui a délégué son
-     * compte. Sans elle, une personne dont le compte appartient à son entreprise ne verrait
-     * aucun compte à choisir et ne comprendrait pas pourquoi.
+     * `business_management` a été retirée après vérification. Elle sert à parcourir les
+     * Business Manager eux-mêmes, ce qu'Evoliia ne fait pas : la liste des comptes rend déjà
+     * ceux qu'une personne atteint à travers son entreprise, du moment qu'elle y a un rôle.
+     * La demander aurait alourdi la revue de Meta pour une donnée dont personne ne se sert.
      */
-    scopes: ['ads_read', 'ads_management', 'business_management'],
+    scopes: ['ads_read', 'ads_management'],
     costToEvoliia: 'quota-partage',
     costToCreator: 'gratuit',
     costNotice:

@@ -9,6 +9,7 @@ import { findVerifier } from './verify'
 import { isEnabled } from '@/server/settings/flags'
 import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { estConfigure as estConfigureGoogle } from './providers/google-search-console'
+import { estConfigureMeta } from '@/server/ads/meta-ads'
 
 /**
  * Fournisseurs suspendus à un interrupteur d'exploitation.
@@ -29,6 +30,12 @@ export async function isProviderOpen(provider: IntegrationProvider): Promise<boo
    * un bouton qui répondrait « introuvable ».
    */
   if (provider.id === 'google-search-console' && !estConfigureGoogle()) return false
+  /*
+   * Même raison pour Meta : sans application déclarée chez lui, il n'y a nulle part où
+   * envoyer la personne. Le fournisseur se présente alors comme à venir plutôt que d'offrir
+   * un bouton qui mènerait à une page d'erreur de Facebook.
+   */
+  if (provider.id === 'meta-ads' && !estConfigureMeta()) return false
   const flag = GATED[provider.id]
   return flag === undefined ? true : isEnabled(flag)
 }

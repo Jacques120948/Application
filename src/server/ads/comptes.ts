@@ -3,7 +3,7 @@ import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
 import { useOAuthAccess } from '@/server/integrations/service'
 import { googleAds } from './google-ads'
-import type { AccesAds } from './provider'
+import type { AccesAds, AdPlatformAuth } from './provider'
 
 /**
  * Les comptes publicitaires reliés, et celui que Naya suit.
@@ -25,6 +25,11 @@ import type { AccesAds } from './provider'
  * accès qu'à un seul compte diffusant, il est retenu : demander de choisir dans une liste
  * d'un élément est une question dont la réponse est déjà connue.
  *
+ * **Chaque plateforme a son compte suivi.** Naya suit un compte Google, MIRA un compte Meta,
+ * et les deux cohabitent : « actif » s'entend par plateforme, jamais globalement. Les
+ * fonctions prennent donc la plateforme en paramètre, avec Google par défaut — les appels
+ * écrits avant que Meta n'existe continuent de désigner ce qu'ils ont toujours désigné.
+ *
  * **Un compte dont le détail n'a pas été lu n'est pas choisissable.** Il arrive qu'une
  * autorisation couvre un compte fermé, suspendu, ou dont le compte Google n'a plus les
  * droits : Google le liste encore, mais refuse d'en dire le nom, la devise et le fuseau. Le
@@ -35,6 +40,8 @@ import type { AccesAds } from './provider'
 
 export type CompteRelie = {
   id: string
+  /** « google-ads » ou « meta-ads » : qui de Naya ou de MIRA suit ce compte. */
+  plateforme: string
   compteId: string
   nom: string
   devise: string
@@ -62,11 +69,14 @@ export type CompteRelie = {
   lisible: boolean
 }
 
-/** Le compte que Naya suit, ou `null` quand aucun n'est relié. */
-export async function compteActif(userId: string): Promise<CompteRelie | null> {
+/** Le compte suivi sur cette plateforme, ou `null` quand aucun n'est relié. */
+export async function compteActif(
+  userId: string,
+  plateforme: string = googleAds.id,
+): Promise<CompteRelie | null> {
   const ligne = await withUserScope(userId, (tx) =>
     tx.adsAccount.findFirst({
-      where: { userId, plateforme: googleAds.id, actif: true },
+      where: { userId, plateforme, actif: true },
       orderBy: { createdAt: 'asc' },
     }),
   )
@@ -75,6 +85,7 @@ export async function compteActif(userId: string): Promise<CompteRelie | null> {
 
 function vue(ligne: {
   id: string
+  plateforme: string
   compteId: string
   nom: string
   devise: string
@@ -88,6 +99,7 @@ function vue(ligne: {
 }): CompteRelie {
   return {
     id: ligne.id,
+    plateforme: ligne.plateforme,
     compteId: ligne.compteId,
     nom: ligne.nom,
     devise: ligne.devise,
@@ -102,10 +114,13 @@ function vue(ligne: {
   }
 }
 
-export async function listerComptesRelies(userId: string): Promise<CompteRelie[]> {
+export async function listerComptesRelies(
+  userId: string,
+  plateforme: string = googleAds.id,
+): Promise<CompteRelie[]> {
   const lignes = await withUserScope(userId, (tx) =>
     tx.adsAccount.findMany({
-      where: { userId, plateforme: googleAds.id },
+      where: { userId, plateforme },
       orderBy: [{ gestionnaire: 'asc' }, { nom: 'asc' }],
     }),
   )
@@ -122,11 +137,12 @@ export async function listerComptesRelies(userId: string): Promise<CompteRelie[]
 export async function enregistrerComptes(
   userId: string,
   accessToken: string,
+  plateforme: AdPlatformAuth = googleAds,
 ): Promise<{ ok: true; comptes: CompteRelie[] } | { ok: false; raison: string }> {
-  const lecture = await googleAds.listerComptes(accessToken)
+  const lecture = await plateforme.listerComptes(accessToken)
   if (!lecture.ok) return lecture
 
-  const dejaActif = await compteActif(userId)
+  const dejaActif = await compteActif(userId, plateforme.id)
 
   for (const compte of lecture.valeur) {
     await withUserScope(userId, (tx) =>
@@ -134,13 +150,13 @@ export async function enregistrerComptes(
         where: {
           userId_plateforme_compteId: {
             userId,
-            plateforme: googleAds.id,
+            plateforme: plateforme.id,
             compteId: compte.compteId,
           },
         },
         create: {
           userId,
-          plateforme: googleAds.id,
+          plateforme: plateforme.id,
           compteId: compte.compteId,
           nom: compte.nom,
           devise: compte.devise,
@@ -174,15 +190,18 @@ export async function enregistrerComptes(
     if (seul !== undefined) {
       await withUserScope(userId, (tx) =>
         tx.adsAccount.updateMany({
-          where: { userId, plateforme: googleAds.id, compteId: seul.compteId },
+          where: { userId, plateforme: plateforme.id, compteId: seul.compteId },
           data: { actif: true },
         }),
       )
     }
   }
 
-  logger.info('comptes Google Ads enregistrés', { nombre: lecture.valeur.length })
-  return { ok: true, comptes: await listerComptesRelies(userId) }
+  logger.info('comptes publicitaires enregistrés', {
+    plateforme: plateforme.id,
+    nombre: lecture.valeur.length,
+  })
+  return { ok: true, comptes: await listerComptesRelies(userId, plateforme.id) }
 }
 
 /** Désigne le compte que Naya suit. Un seul à la fois, et il doit être à cette personne. */
@@ -212,8 +231,14 @@ export async function choisirCompte(userId: string, adsAccountId: string): Promi
   }
 
   await withUserScope(userId, async (tx) => {
+    /*
+     * La plateforme vient de la ligne choisie, jamais d'un défaut. Désactiver « les comptes
+     * actifs » sans cette borne ferait perdre son compte Google à quelqu'un qui vient de
+     * choisir son compte Meta — un tableau de bord vidé par un geste qui n'avait rien à voir,
+     * et dont personne ne ferait le rapprochement.
+     */
     await tx.adsAccount.updateMany({
-      where: { userId, plateforme: googleAds.id, actif: true },
+      where: { userId, plateforme: compte.plateforme, actif: true },
       data: { actif: false },
     })
     await tx.adsAccount.updateMany({ where: { id: adsAccountId, userId }, data: { actif: true } })
@@ -231,13 +256,14 @@ export async function choisirCompte(userId: string, adsAccountId: string): Promi
  */
 export async function accesCompteActif(
   userId: string,
+  plateforme: AdPlatformAuth = googleAds,
 ): Promise<{ ok: true; acces: AccesAds; compte: CompteRelie } | { ok: false; raison: string }> {
-  const compte = await compteActif(userId)
+  const compte = await compteActif(userId, plateforme.id)
   if (compte === null) {
-    return { ok: false, raison: 'Aucun compte Google Ads n’est suivi pour l’instant.' }
+    return { ok: false, raison: `Aucun compte ${plateforme.nom} n’est suivi pour l’instant.` }
   }
 
-  const acces = await useOAuthAccess(userId, googleAds.id, googleAds.rafraichir)
+  const acces = await useOAuthAccess(userId, plateforme.id, plateforme.rafraichir)
   if (!acces.ok) return { ok: false, raison: acces.raison }
 
   return {
