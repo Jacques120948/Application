@@ -180,6 +180,25 @@ const DIRECTIONS: Record<string, { fichier: string; trait: string; fond: string 
       ' one you trust with a budget.',
     fond: 'deep gold fading to pale champagne',
   },
+  /*
+   * MIRA prend le bleu, la teinte ajoutée pour elle. Néo porte déjà un dégradé indigo vers
+   * bleu électrique : le sien part donc du turquoise, franchement plus vert, sans quoi les
+   * deux pastilles seraient indiscernables à la taille où on les voit — quarante pixels
+   * dans une rangée.
+   *
+   * Son métier tient des deux autres : elle engage de l'argent comme Naya, mais elle juge
+   * des images comme Milo. D'où un regard posé et un œil vif plutôt que l'un ou l'autre.
+   */
+  meta: {
+    fichier: 'mira.webp',
+    trait:
+      'A professional woman in her early thirties, composed and visually sharp. A sculpted shoulder-length' +
+      ' cut with a bold side sweep, in a vivid gradient from deep teal at the roots to bright turquoise at' +
+      ' the tips. Steady attentive gaze with a quick creative spark, a fine silver ear cuff, a tailored' +
+      ' top in a deep blue-green with clean lines. She judges images for a living and she is careful' +
+      ' with a budget.',
+    fond: 'deep teal fading to soft aqua',
+  },
 }
 
 function construire(): Portrait[] {
