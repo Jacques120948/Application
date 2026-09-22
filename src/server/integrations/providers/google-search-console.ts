@@ -258,6 +258,83 @@ export async function requetesEtPages(
   return { ok: true, lignes }
 }
 
+/** Un jour de trafic naturel, tel que Google le compte. */
+export type JourRecherche = {
+  /** AAAA-MM-JJ, dans le fuseau de Search Console. */
+  jour: string
+  clics: number
+  impressions: number
+  /** La position moyenne, tous mots confondus. Zéro quand rien n'est sorti ce jour-là. */
+  position: number
+}
+
+/**
+ * Le trafic naturel, jour par jour.
+ *
+ * C'est ce qui permet d'afficher une courbe vraie dès le premier écran, au lieu d'en démarrer
+ * une aujourd'hui et d'attendre des mois qu'elle veuille dire quelque chose. Google garde
+ * seize mois ; Evoliia n'a pas à les recopier pour les montrer.
+ *
+ * Les relevés quotidiens qu'Evoliia écrit de son côté gardent leur raison d'être ailleurs :
+ * Google ne conserve pas l'historique de position **par requête**, et c'est lui qui permet de
+ * dire « cette recherche est passée de la page 3 à la page 1 ». La courbe vient d'ici, les
+ * mouvements de rang viennent de là.
+ *
+ * `rowLimit` est plus haut qu'ailleurs, et c'est nécessaire : une ligne par jour sur seize
+ * mois fait près de cinq cents lignes, et la valeur par défaut en couperait les deux tiers —
+ * silencieusement, en laissant croire à un trou dans l'historique.
+ */
+export async function parJour(
+  accessToken: string,
+  siteUrl: string,
+  jours: number,
+  pays?: string,
+): Promise<{ ok: true; lignes: JourRecherche[] } | { ok: false; raison: string }> {
+  const fin = new Date()
+  const debut = new Date(fin.getTime() - jours * 24 * 60 * 60 * 1000)
+  const jour = (date: Date): string => date.toISOString().slice(0, 10)
+
+  /* Même règle qu'ailleurs : trois lettres minuscules, et tout le reste vaut « aucun filtre ». */
+  const cible = pays !== undefined && /^[a-z]{3}$/i.test(pays) ? pays.toLowerCase() : undefined
+
+  const reponse = await appeler<{
+    rows?: { keys?: string[]; clicks?: number; impressions?: number; position?: number }[]
+  }>(`/sites/${encodeURIComponent(siteUrl)}/searchAnalytics/query`, accessToken, {
+    startDate: jour(debut),
+    endDate: jour(fin),
+    dimensions: ['date'],
+    rowLimit: JOURS_MAX,
+    ...(cible === undefined
+      ? {}
+      : {
+          dimensionFilterGroups: [
+            { filters: [{ dimension: 'country', operator: 'equals', expression: cible }] },
+          ],
+        }),
+  })
+  if (!reponse.ok) return { ok: false, raison: reponse.raison }
+
+  const lignes = (reponse.donnees.rows ?? [])
+    .map((ligne) => ({
+      jour: ligne.keys?.[0] ?? '',
+      clics: Math.round(ligne.clicks ?? 0),
+      impressions: Math.round(ligne.impressions ?? 0),
+      position: Number((ligne.position ?? 0).toFixed(1)),
+    }))
+    .filter((ligne) => /^\d{4}-\d{2}-\d{2}$/u.test(ligne.jour))
+    /*
+     * Google rend les jours dans un ordre qui lui appartient. Une courbe tracée dessus sans
+     * les trier ferait des allers-retours dans le temps — un graphique illisible dont on
+     * chercherait la cause dans les données plutôt que dans l'ordre.
+     */
+    .sort((une, autre) => une.jour.localeCompare(autre.jour))
+
+  return { ok: true, lignes }
+}
+
+/** Une ligne par jour sur seize mois. La limite de Google est bien au-dessus. */
+const JOURS_MAX = 500
+
 /** Ce qu'on demande au plus. Au-delà, l'écran ne se lit plus et l'appel s'alourdit. */
 export const LIGNES_MAX = 100
 
