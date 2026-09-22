@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { sujetsProches } from '@/lib/sujets-proches'
 
 /**
  * Les articles écrits par Milo.
@@ -297,6 +298,16 @@ export function ArticlesRediges({
   const [copie, setCopie] = useState(false)
 
   /*
+   * Les articles qui traitent déjà ce sujet, recalculés pendant qu'on tape.
+   *
+   * Rien ne partait vers le serveur et rien n'était dépensé : le calcul est un comptage de
+   * mots sur une liste déjà chargée. C'est ce qui permet de prévenir **avant** le clic
+   * plutôt qu'après l'article — un avertissement qui arrive après la dépense n'en est plus
+   * un, c'est un reproche.
+   */
+  const doublons = useMemo(() => sujetsProches(demande, liste), [demande, liste])
+
+  /*
    * Un seul chargement par visite, déclenché par l'ouverture d'un article pas encore
    * déposé. Le relire ensuite ne redemande rien : la liste des blogs d'une boutique ne
    * bouge pas pendant qu'on lit un article.
@@ -481,6 +492,40 @@ export function ArticlesRediges({
             dit pourquoi.
           </span>
         </label>
+
+        {doublons.length === 0 ? null : (
+          /*
+            Un avertissement, jamais un blocage.
+            
+            Écrire deux fois sur un sujet est parfois voulu — un angle vraiment différent,
+            une mise à jour, une autre langue — et Evoliia n'a pas à en décider à la place
+            de qui paie. Mais elle doit dire ce qu'elle voit : trois pages qui visent la
+            même recherche se concurrencent entre elles, et Google n'en classe qu'une.
+            C'est précisément le contenu dupliqué que l'analyse reproche ensuite au site.
+
+            Le rapprochement est approximatif et le dit : il nomme les articles concernés
+            plutôt que d'affirmer un doublon, pour qu'on puisse juger sur pièces.
+          */
+          <div className="mt-4 rounded-[var(--radius-control)] border border-[var(--color-caution,#b54708)]/30 bg-[var(--color-caution-soft,#fffaeb)] p-3">
+            <p className="m-0 text-sm font-medium">
+              Vous avez déjà {doublons.length === 1 ? 'un article' : `${doublons.length} articles`}{' '}
+              très {doublons.length === 1 ? 'proche' : 'proches'} de ce sujet
+            </p>
+            <ul className="mt-1.5 mb-0 grid list-none gap-1 p-0">
+              {doublons.slice(0, 3).map((article) => (
+                <li key={article.id} className="text-xs text-[var(--color-ink-soft)]">
+                  · {article.titre}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              Deux pages qui visent la même recherche se concurrencent entre elles, et Google
+              n’en classe qu’une — c’est le contenu dupliqué que l’analyse reproche ensuite à
+              votre site. Si votre angle est vraiment différent, écrivez quand même : ce
+              n’est qu’un rapprochement de mots, il ne lit pas vos articles.
+            </p>
+          </div>
+        )}
 
         <button
           type="button"

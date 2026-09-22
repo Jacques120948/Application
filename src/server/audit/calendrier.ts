@@ -1,7 +1,7 @@
 import { notFound } from '@/lib/errors'
 import { langueDuChemin } from '@/lib/langue-chemin'
 import { withUserScope } from '@/server/db/scope'
-import { normaliser } from '@/server/commerce/illustrations'
+import { motsUtiles, raretes, recouvrement, SEUIL_PROCHE } from '@/lib/sujets-proches'
 import { useOAuthAccess } from '@/server/integrations/service'
 import {
   listerProprietes,
@@ -61,8 +61,12 @@ const AFFICHAGES_MINIMUM = 20
 /** Les bornes de la deuxième page, en position moyenne. Identiques au reste du produit. */
 const PAGE_DEUX = { haut: 10.5, bas: 20.5 }
 
-/** Ce qu'il faut de mots en commun pour considérer qu'un article couvre déjà le sujet. */
-const RECOUVREMENT = 0.6
+/*
+ * Ce qu'il faut de mots en commun pour considérer qu'un article couvre déjà le sujet, et
+ * la façon de les compter, sont partagés avec l'écran de Milo : les deux répondent à la
+ * même question — « a-t-on déjà écrit là-dessus ? » — et deux calculs séparés donneraient
+ * un calendrier qui écarte un sujet pendant que l'écran voisin le propose sans un mot.
+ */
 
 /**
  * Le rythme de publication, choisi par la personne.
@@ -169,14 +173,11 @@ export type VueCalendrier = {
  * d'en taire un, jamais de casser quoi que ce soit.
  */
 export function dejaCouvert(requete: string, titres: readonly string[]): boolean {
-  const mots = normaliser(requete)
-  if (mots.length === 0) return false
-
-  return titres.some((titre) => {
-    const presents = new Set(normaliser(titre))
-    const communs = mots.filter((mot) => presents.has(mot)).length
-    return communs / mots.length >= RECOUVREMENT
-  })
+  if (motsUtiles(requete).length === 0) return false
+  // Pondéré par la rareté des mots dans ce que la personne a déjà écrit : « vertus » ne
+  // distingue rien sur un blog de pierres, « labradorite » distingue tout.
+  const rarete = raretes(titres)
+  return titres.some((titre) => recouvrement(requete, titre, rarete) >= SEUIL_PROCHE)
 }
 
 
