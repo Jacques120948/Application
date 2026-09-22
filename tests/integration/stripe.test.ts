@@ -298,6 +298,56 @@ describe('Abonnements Evoliia', () => {
     }
   })
 
+  /**
+   * L'année et le mois sont deux tarifs distincts chez Stripe, accrochés au même produit.
+   *
+   * Ce qui est protégé ici est ce qui coûterait le plus cher à réparer : créer le tarif
+   * annuel ne doit pas désactiver le mensuel — plus personne ne pourrait souscrire au mois
+   * — et les deux identifiants doivent rester dans leurs colonnes respectives, sous peine
+   * de faire payer douze fois le prix d'un mois à quelqu'un qui a choisi le mois.
+   */
+  it('crée un tarif annuel à part, sans éteindre le mensuel', async () => {
+    const avant = await prisma.plan.findUniqueOrThrow({ where: { id: PAID_PLAN } })
+    await prisma.plan.update({
+      where: { id: PAID_PLAN },
+      data: { priceYearCents: avant.priceCents * 10 },
+    })
+    const updatesAvant = vi.mocked(fake.prices.update).mock.calls.length
+    try {
+      const annuel = await ensureStripePrice(fake, PAID_PLAN, 'an')
+      expect(annuel).not.toBe(priceId)
+
+      const apres = await prisma.plan.findUniqueOrThrow({ where: { id: PAID_PLAN } })
+      expect(apres.stripePriceIdYear).toBe(annuel)
+      // Le mensuel n'a pas bougé d'un iota, et n'a pas été désactivé chez Stripe.
+      expect(apres.stripePriceId).toBe(priceId)
+      expect(apres.stripeProductId).toBe(avant.stripeProductId)
+      expect(vi.mocked(fake.prices.update).mock.calls.length).toBe(updatesAvant)
+      expect(apres.stripePriceFingerprintYear).toContain(':year')
+
+      // Redemandé, il est réutilisé : un tarif ne se recrée que si son montant change.
+      expect(await ensureStripePrice(fake, PAID_PLAN, 'an')).toBe(annuel)
+      // Et le mensuel reste servi par sa propre colonne.
+      expect(await ensureStripePrice(fake, PAID_PLAN, 'mois')).toBe(priceId)
+    } finally {
+      await prisma.plan.update({
+        where: { id: PAID_PLAN },
+        data: { priceYearCents: 0, stripePriceIdYear: null, stripePriceFingerprintYear: null },
+      })
+    }
+  })
+
+  /*
+   * Une offre sans tarif annuel refuse l'année plutôt que de retomber sur le mensuel : un
+   * paiement lancé sur un rythme qu'on n'a pas choisi est la pire façon de découvrir une
+   * erreur de réglage — on s'en aperçoit sur le relevé bancaire.
+   */
+  it('refuse l’année à une offre qui n’en a pas', async () => {
+    await expect(ensureStripePrice(fake, PAID_PLAN, 'an')).rejects.toMatchObject({
+      code: 'VALIDATION',
+    })
+  })
+
   it('refuse de faire payer l’offre gratuite', async () => {
     await expect(startCheckout(fake, subscriber, { planId: FREE_PLAN_ID, rythme: 'mois', locale: 'fr' })).rejects.toMatchObject({
       code: 'VALIDATION',
