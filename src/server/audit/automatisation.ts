@@ -17,6 +17,7 @@ import { synchroniserTous } from '@/server/ads/synchro'
 import { synchroniserTousMeta } from '@/server/ads/synchro-meta'
 import { synchroniserCreatifs } from '@/server/ads/creatif'
 import { evaluerTous } from '@/server/ads/recommandations'
+import { recompterConnecteurs } from '@/server/admin/compteurs'
 
 /**
  * Ce qui tourne seul, chaque nuit.
@@ -651,6 +652,15 @@ export async function tournerQuotidien(
       bilan.recommandationsAds = regles.ouvertes
       bilan.echecsAds += regles.echecs
     }
+
+    /*
+     * Le relevé des connecteurs, pour l'exploitant. Il passe chez chaque utilisateur parce
+     * que ces tables sont cloisonnées et qu'on ne contourne pas le cloisonnement : c'est le
+     * seul endroit du produit où l'on traverse tout le monde, et la nuit est le bon moment.
+     *
+     * Son échec n'est pas une panne de la nuit : personne n'attend ce chiffre à la minute.
+     */
+    await recompterConnecteurs().catch(() => null)
   }
 
   logger.info('automatisation quotidienne passée', { ...bilan })

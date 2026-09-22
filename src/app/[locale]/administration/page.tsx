@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getTranslator, resolveLocale } from "@/i18n";
 import { getCurrentUser } from "@/server/auth/session";
 import { getWallet } from "@/server/billing/credits";
+import { lireCompteursConnecteurs } from "@/server/admin/compteurs";
+import { RecompterConnecteurs } from "@/components/studio/CompteursConnecteurs";
 import {
   getAdminOverview,
   listAiFailures,
@@ -52,6 +54,7 @@ export default async function AdminPage({
   const t = getTranslator(locale);
   const [
     overview,
+    connecteurs,
     plans,
     users,
     identity,
@@ -64,6 +67,7 @@ export default async function AdminPage({
     unmet,
   ] = await Promise.all([
     getAdminOverview(),
+    lireCompteursConnecteurs(),
     listPlans(),
     listUsers({ query: "", take: 50 }),
     readLegalIdentity(),
@@ -109,6 +113,90 @@ export default async function AdminPage({
             </Card>
           ))}
         </div>
+
+        <h2 className="mb-1 text-lg font-semibold">Les connecteurs publicitaires</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          Une autorisation qui tombe ne fait aucun bruit : la personne s’en aperçoit en
+          trouvant son tableau de bord figé, un matin, et elle en conclut que le produit ne
+          marche plus. La colonne « en erreur » est le seul moyen de le voir avant elle.
+        </p>
+
+        {connecteurs === null ? (
+          <div className="mb-4 rounded-[var(--radius-card)] border border-[var(--color-line)] p-4">
+            <p className="m-0 text-sm">
+              Aucun relevé n’a encore été pris. La tournée de nuit s’en charge ; en attendant,
+              vous pouvez le demander.
+            </p>
+          </div>
+        ) : (
+          <div className="mb-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-line)]">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-ink-soft)]">
+                  <th className="px-4 py-2 font-medium">Plateforme</th>
+                  <th className="px-4 py-2 text-right font-medium">Connexions</th>
+                  <th className="px-4 py-2 text-right font-medium">En erreur</th>
+                  <th className="px-4 py-2 text-right font-medium">Comptes reliés</th>
+                  <th className="px-4 py-2 text-right font-medium">Comptes suivis</th>
+                  <th className="px-4 py-2 text-right font-medium">Lus sous 24 h</th>
+                </tr>
+              </thead>
+              <tbody>
+                {connecteurs.plateformes.map((ligne) => (
+                  <tr
+                    key={ligne.plateforme}
+                    className="border-t border-[var(--color-line)]"
+                  >
+                    <td className="px-4 py-2">{ligne.nom}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{ligne.connexions}</td>
+                    <td
+                      className="px-4 py-2 text-right tabular-nums"
+                      style={
+                        ligne.enErreur > 0
+                          ? { color: "var(--color-critical)" }
+                          : undefined
+                      }
+                    >
+                      {ligne.enErreur}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums">{ligne.comptes}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{ligne.suivis}</td>
+                    <td
+                      className="px-4 py-2 text-right tabular-nums"
+                      style={
+                        ligne.suivis > 0 && ligne.aJour < ligne.suivis
+                          ? { color: "var(--color-caution)" }
+                          : undefined
+                      }
+                    >
+                      {ligne.aJour}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mb-3">
+          <RecompterConnecteurs />
+        </div>
+
+        <p className="mb-10 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          {connecteurs === null
+            ? "Ce n’est pas du direct : ces nombres sont un relevé, pris la nuit."
+            : `Relevé du ${new Date(connecteurs.majAt).toLocaleString(locale)}, sur ${connecteurs.utilisateurs} comptes parcourus. Ce n’est pas du direct.`}{" "}
+          Ces tables sont cloisonnées : une administration ne parle au nom de personne et n’y
+          voit rien. Le relevé passe donc chez chacun, un par un — aucun privilège n’a été
+          accordé pour l’obtenir, et c’est pourquoi il n’est pas instantané. « Comptes
+          suivis » est le nombre qui multiplie les appels aux plateformes : un compte de plus,
+          c’est une lecture de plus chaque nuit sur un plafond partagé par tout Evoliia. La
+          consommation réelle chez Google et chez Meta n’y figure pas — elle appartient aux
+          plateformes, qui ne la rendent pas par compte, et l’estimer donnerait un chiffre qui
+          aurait l’air d’une mesure. Le coût des questions posées à l’équipe n’est pas non
+          plus séparé par agent : rien ne distingue aujourd’hui une question à MIRA d’une
+          question à Naya, et inventer une répartition serait pire que de ne rien dire.
+        </p>
 
         <h2 className="mb-1 text-lg font-semibold">Ce qui bloque vos clients</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
