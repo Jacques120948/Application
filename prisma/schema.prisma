@@ -1673,6 +1673,24 @@ model PointHebdo {
 /// Elle ne contient rien qui décrive le travail en cours — ni la demande envoyée au modèle,
 /// ni le sujet — parce que sa lecture est publique : elle est faite pour être servie au
 /// visiteur d'un blog. Voir la migration pour le détail du cloisonnement.
+/// Ce que MIRA a fait chez Meta, vu de l'exploitant — et rien de plus.
+///
+/// Aucune donnée de client : ni personne, ni compte, ni campagne, ni montant. Le geste, son
+/// issue, la réponse de Meta sur un refus. Elle existe parce que le journal, lui, est
+/// cloisonné par propriétaire et reste donc illisible depuis le back-office — ce qui est
+/// voulu. Voir la migration pour le raisonnement complet.
+model MetaSupervision {
+  id        String   @id @default(uuid()) @db.Uuid
+  quoi      String
+  resultat  String
+  detail    String   @default("")
+  /// Vrai quand le geste défaisait une modification précédente.
+  retour    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([createdAt(sort: Desc)])
+}
+
 model SiteImage {
   id     String @id @default(uuid()) @db.Uuid
   siteId String @db.Uuid

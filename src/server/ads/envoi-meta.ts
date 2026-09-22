@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { notFound, validation } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import { logger } from '@/server/observability/logger'
+import { noterSupervisionMeta } from './supervision-meta'
 import { isEnabled } from '@/server/settings/flags'
 import { accesCompteActif } from './comptes'
 import { droitsMeta } from './droits-meta'
@@ -191,6 +192,17 @@ export async function appliquerActionMeta(userId: string, recommandationId: stri
     }),
   )
 
+  /*
+   * Le compteur d'exploitation, en marge du journal. Il ne porte rien de ce client — le
+   * geste et son issue, c'est tout — parce qu'il sera lu depuis le back-office, où le
+   * journal, lui, reste cloisonné et illisible. Une panne ici ne coûte qu'une statistique.
+   */
+  await noterSupervisionMeta({
+    quoi: action.type,
+    resultat: issue.ok ? 'reussi' : 'refuse',
+    ...(issue.ok ? {} : { detail: issue.technique }),
+  })
+
   if (!issue.ok) return { ok: false, raison: issue.raison }
 
   /*
@@ -287,6 +299,19 @@ export async function restaurerActionMeta(userId: string, actionId: string): Pro
       },
     }),
   )
+
+  /*
+   * Noté comme un retour arrière, et c'est un signal en soi : un client qui défait ce que
+   * MIRA a fait n'est pas d'accord avec elle. Un seul ne veut rien dire ; beaucoup veulent
+   * dire qu'une règle propose de mauvais gestes, et c'est le genre de dérive qu'on ne voit
+   * qu'en comptant.
+   */
+  await noterSupervisionMeta({
+    quoi: ligne.quoi,
+    resultat: issue.ok ? 'reussi' : 'refuse',
+    retour: true,
+    ...(issue.ok ? {} : { detail: issue.technique }),
+  })
 
   if (!issue.ok) return { ok: false, raison: issue.raison }
 

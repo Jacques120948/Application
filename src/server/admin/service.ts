@@ -7,6 +7,7 @@ import { prisma } from '@/server/db/client'
 import { notFound } from '@/lib/errors'
 import { getCurrentUser } from '@/server/auth/session'
 import { logger } from '@/server/observability/logger'
+import { bilanSupervisionMeta, type SupervisionMeta } from '@/server/ads/supervision-meta'
 import { FREE_PLAN_ID, PLANNED_PLAN_CAPABILITIES } from '@/server/billing/plans'
 import {
   DEFAULT_MODEL_PRICING,
@@ -641,4 +642,24 @@ export async function listUnmetRequests(take = 40): Promise<UnmetRow[]> {
     explicit: row.explicit,
     createdAt: row.createdAt.toISOString(),
   }))
+}
+
+// ─────────────────────── Surveillance de ce que MIRA écrit ───────────────────
+
+/**
+ * Le bilan d'exploitation de MIRA, pour le back-office.
+ *
+ * Il ne lit pas le journal des clients, et ne le peut pas : celui-ci est cloisonné par
+ * propriétaire, sans exception pour l'administrateur — qui est un utilisateur comme un
+ * autre. Un comptage fait ici y rendrait zéro, en silence. Il lit donc les compteurs
+ * d'exploitation, qui ne portent aucune donnée de client : le geste, son issue, ce que Meta
+ * a répondu.
+ *
+ * Ce qu'on ne peut donc pas savoir depuis cet écran : **chez qui**. C'est le prix du
+ * cloisonnement, et il est assumé — la question à laquelle ce bilan répond est « MIRA
+ * fonctionne-t-elle », pas « que fait ce client ».
+ */
+export async function supervisionMeta(): Promise<SupervisionMeta> {
+  await requireAdmin()
+  return bilanSupervisionMeta()
 }

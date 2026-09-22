@@ -7,6 +7,7 @@ import { lireCompteursConnecteurs } from "@/server/admin/compteurs";
 import { RecompterConnecteurs } from "@/components/studio/CompteursConnecteurs";
 import {
   getAdminOverview,
+  supervisionMeta,
   listAiFailures,
   listFlags,
   listPlans,
@@ -65,6 +66,7 @@ export default async function AdminPage({
     agentLimits,
     reports,
     unmet,
+    mira,
   ] = await Promise.all([
     getAdminOverview(),
     lireCompteursConnecteurs(),
@@ -78,6 +80,7 @@ export default async function AdminPage({
     readAgentLimits(),
     listReports(),
     listUnmetRequests(),
+    supervisionMeta(),
   ]);
 
   const figures = [
@@ -197,6 +200,81 @@ export default async function AdminPage({
           plus séparé par agent : rien ne distingue aujourd’hui une question à MIRA d’une
           question à Naya, et inventer une répartition serait pire que de ne rien dire.
         </p>
+
+        {/*
+          La surveillance de la seule fonction du produit qui engage la dépense de quelqu'un
+          d'autre.
+
+          Elle ne lit pas le journal des clients, et ne le peut pas : celui-ci est cloisonné
+          par propriétaire, sans exception pour l'administrateur. Elle lit des compteurs qui
+          ne portent aucune donnée de client — le geste, son issue, ce que Meta a répondu.
+          On ne sait donc pas chez qui ; c'est le prix du cloisonnement, et il est assumé.
+
+          Les trois nombres ne disent pas la même chose. Les refus de Meta mesurent la santé
+          de l'intégration. Les retours arrière disent qu'un client n'était pas d'accord.
+          Les issues inconnues signalent des écritures coupées en plein vol.
+        */}
+        <h2 className="mb-1 text-lg font-semibold">Ce que MIRA modifie chez Meta</h2>
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          La seule fonction qui engage la dépense de quelqu’un d’autre, sur {mira.jours}{" "}
+          jours. Pour tout arrêter d’un coup, éteignez « Publicité — mode assisté (Meta
+          Ads) » dans les interrupteurs plus bas : plus aucune modification ne part, quel que
+          soit le mode de chaque compte. Chez qui ces gestes ont eu lieu ne figure pas ici :
+          le journal appartient à chaque client et lui reste.
+        </p>
+
+        <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: "Modifications envoyées", value: mira.reussies },
+            { label: "Refusées par Meta", value: mira.refusees },
+            { label: "Défaites par le client", value: mira.retours },
+            { label: "Issues inconnues", value: mira.inconnues },
+          ].map((figure) => (
+            <Card key={figure.label}>
+              <CardBody>
+                <p className="m-0 text-2xl font-semibold">{figure.value}</p>
+                <p className="m-0 mt-1 text-sm text-[var(--color-ink-soft)]">{figure.label}</p>
+              </CardBody>
+            </Card>
+          ))}
+        </div>
+
+        <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
+          {mira.total === 0
+            ? "Aucune modification n’est partie sur la période."
+            : `${mira.total} geste${mira.total > 1 ? "s" : ""} au total. Quelques refus sont normaux — une publicité supprimée entre-temps, un budget déjà modifié ailleurs. Une proportion qui monte veut dire que le produit propose des gestes que Meta n’accepte pas.`}
+        </p>
+
+        {mira.derniersRefus.length === 0 ? null : (
+          <div className="mb-10 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--color-line)]">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left text-xs text-[var(--color-ink-soft)]">
+                  <th className="border-b border-[var(--color-line)] px-4 py-2">Quand</th>
+                  <th className="border-b border-[var(--color-line)] px-4 py-2">Geste</th>
+                  <th className="border-b border-[var(--color-line)] px-4 py-2">
+                    Ce que Meta a refusé
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {mira.derniersRefus.map((ligne) => (
+                  <tr key={ligne.id}>
+                    <td className="border-b border-[var(--color-line)] px-4 py-2 whitespace-nowrap">
+                      {ligne.createdAt.toLocaleString("fr-CH")}
+                    </td>
+                    <td className="border-b border-[var(--color-line)] px-4 py-2">
+                      {ligne.quoi}
+                    </td>
+                    <td className="border-b border-[var(--color-line)] px-4 py-2">
+                      {ligne.detail}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <h2 className="mb-1 text-lg font-semibold">Ce qui bloque vos clients</h2>
         <p className="mb-4 text-sm text-[var(--color-ink-soft)]">
