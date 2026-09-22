@@ -195,12 +195,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
     handles: ['Campagnes', 'Ensembles', 'Créatives', 'Audiences', 'ROAS et CPA'],
     feature: 'visibility_meta_agent',
     atWork: null,
-    /*
-     * Aucun portrait déclaré, et c'est volontaire tant que le fichier n'existe pas : une
-     * adresse qui pointe vers un fichier manquant n'affiche pas un repli, elle affiche une
-     * image cassée. La pastille à initiale prend le relais, et la ligne `avatar` s'ajoutera
-     * le jour où `scripts/avatars-equipe.ts` aura produit `mira.webp` comme pour les autres.
-     */
+    avatar: '/equipe/mira.webp',
     tint: 'sea',
     starters: [
       'Pourquoi mon ROAS baisse ?',
