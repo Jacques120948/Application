@@ -20,6 +20,7 @@ import { droitsMeta } from '@/server/ads/droits-meta'
 import { autoriseMeta } from '@/server/ads/garde-fous-meta'
 import { contexteActionsMeta, proposerActionMeta } from '@/server/ads/actions-meta'
 import { journalMeta } from '@/server/ads/envoi-meta'
+import { lireBriefMeta } from '@/server/ads/brief-meta'
 import { isEnabled } from '@/server/settings/flags'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
@@ -27,6 +28,7 @@ import { ComptesAds } from '@/components/studio/ComptesAds'
 import { ProfilAds } from '@/components/studio/ProfilAds'
 import { ModeAds } from '@/components/studio/ModeAds'
 import { JournalMeta } from '@/components/studio/JournalMeta'
+import { BriefMeta } from '@/components/studio/BriefMeta'
 import { LireMeta } from '@/components/studio/LireMeta'
 import { ConstatsMeta } from '@/components/studio/ConstatsMeta'
 import { TableauMeta } from '@/components/studio/TableauMeta'
@@ -243,6 +245,14 @@ export default async function ComptesMetaPage({
           }
         : autoriseMeta({ ...cadre })
 
+  /*
+   * Le brief d'hier. Du comptage, donc gratuit : la règle du produit est que ce qui se
+   * compte ne se paie pas, et un brief quotidien rédigé par un modèle coûterait plus cher
+   * que tout le reste de la publicité réunie pour dire des chiffres qu'on sait additionner.
+   * Une panne de cette lecture n'emporte pas l'écran.
+   */
+  const brief = tableau === null ? null : await lireBriefMeta(user.id).catch(() => null)
+
   const journal =
     tableau === null
       ? { lignes: [], total: 0, encore: false }
@@ -368,6 +378,29 @@ export default async function ComptesMetaPage({
                   Le sélecteur de période est plus bas parce qu'il ne commande que le tableau —
                   les constats, eux, sont jugés sur une fenêtre fixe.
                 */}
+                {/*
+                  Le brief ouvre l'écran : « est-ce que quelque chose a bougé hier » est la
+                  question qu'on se pose en l'ouvrant le matin. Les constats disent ensuite
+                  ce qu'il y a à faire, et les tableaux, plus bas, où l'on en est.
+                */}
+                {brief === null ? null : (
+                  <BriefMeta
+                    brief={{
+                      jour: brief.jour,
+                      devise: brief.devise,
+                      depense: brief.hier.depense,
+                      repere: brief.repere.depense,
+                      conversions: brief.hier.conversions,
+                      valeur: brief.hier.valeur,
+                      ecartDepense: brief.ecartDepense,
+                      ecartNotable: brief.ecartNotable,
+                      modifications: brief.modifications,
+                      urgences: brief.urgences,
+                      silencieux: brief.silencieux,
+                    }}
+                  />
+                )}
+
                 <ConstatsMeta
                   initiaux={constats}
                   propositions={propositions}
