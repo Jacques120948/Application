@@ -526,23 +526,41 @@ export function ArticlesRediges({
                 key={article.id}
                 className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)]"
               >
+                {/*
+                  Le titre ouvrait déjà l'article, et rien ne le disait : pas de chevron,
+                  pas de libellé, du texte noir sur fond blanc. Le seul élément qui
+                  ressemblait à un bouton était « Retirer » — c'est-à-dire que la seule
+                  action visible sur un article payé huit à vingt crédits était de le
+                  supprimer. Personne ne clique sur ce qui ne se présente pas comme
+                  cliquable, et tout le monde finit par cliquer sur ce qui s'y présente.
+
+                  L'ouverture porte donc son libellé et son chevron, dans la zone
+                  cliquable ; le retrait redevient ce qu'il doit être, discret et à part.
+                */}
                 <div className="flex flex-wrap items-center gap-3 p-5">
                   <button
                     type="button"
                     onClick={() => void ouvrir(article.id)}
                     aria-expanded={deplie}
-                    className="min-w-0 flex-1 cursor-pointer border-0 bg-transparent p-0 text-left"
+                    className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left"
                   >
-                    <span className="block text-base font-semibold">{article.titre}</span>
-                    <span className="mt-1 block text-xs text-[var(--color-ink-faint)]">
-                      {article.wordCount} mots · {article.creditsSpent}{' '}
-                      {pluriel(article.creditsSpent, 'crédit')} · {enClair(article.createdAt, locale)}
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-base font-semibold">{article.titre}</span>
+                      <span className="mt-1 block text-xs text-[var(--color-ink-faint)]">
+                        {article.wordCount} mots · {article.creditsSpent}{' '}
+                        {pluriel(article.creditsSpent, 'crédit')} ·{' '}
+                        {enClair(article.createdAt, locale)}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5 rounded-[var(--radius-pill)] bg-[var(--color-brand-soft)] px-3 py-1.5 text-xs font-medium text-[var(--color-brand-strong)]">
+                      {deplie ? 'Fermer' : 'Lire l’article'}
+                      <span aria-hidden="true">{deplie ? '▴' : '▾'}</span>
                     </span>
                   </button>
                   <button
                     type="button"
                     onClick={() => void supprimer(article.id)}
-                    className="cursor-pointer rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-transparent px-3 py-1.5 text-xs text-[var(--color-ink-soft)]"
+                    className="cursor-pointer border-0 bg-transparent px-1 py-1.5 text-xs text-[var(--color-ink-faint)] underline"
                   >
                     Retirer
                   </button>

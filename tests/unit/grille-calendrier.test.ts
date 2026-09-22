@@ -30,7 +30,7 @@ function creneau(jour: string, requete = 'une requête'): Creneau {
     clics: 2,
     position: 12,
     pourquoi: '',
-    intention: 'comprendre',
+    intention: 'information',
   }
 }
 
