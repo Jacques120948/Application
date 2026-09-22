@@ -48,14 +48,7 @@ export const MEMBRES: readonly MembreEquipe[] = [
    * publicitaires laisserait croire qu'on optimise ce qu'on a payé, alors que son intérêt
    * est justement de passer avant — un visiteur qu'on convertit mieux ne se rachète pas.
    */
-  /*
-   * Cleo n'a pas encore son portrait : la pastille à initiale prend le relais, ce que le
-   * composant sait faire depuis toujours. Le jour où `public/equipe/cleo.webp` existera —
-   * 320 × 320, même facture 3D que les six autres — il suffira de rétablir la ligne
-   * `avatar` ci-dessous. Mieux vaut une initiale qu'un portrait d'une autre facture : une
-   * équipe dont un membre ne ressemble pas aux autres se lit comme une pièce rapportée.
-   */
-  { id: 'cro', name: 'Cleo', role: 'Conversion', tint: 'accent' },
+  { id: 'cro', name: 'Cleo', role: 'Conversion', avatar: '/equipe/cleo.webp', tint: 'accent' },
   { id: 'ads', name: 'Naya', role: 'Publicité', avatar: '/equipe/naya.webp', tint: 'sun' },
   { id: 'meta', name: 'MIRA', role: 'Meta Ads', avatar: '/equipe/mira.webp', tint: 'sea' },
 ] as const

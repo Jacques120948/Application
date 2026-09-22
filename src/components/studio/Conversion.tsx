@@ -1,3 +1,4 @@
+import { membre } from '@/lib/equipe'
 import { Card, CardBody } from '@/components/ui'
 
 /**
@@ -41,8 +42,9 @@ function pluriel(nombre: number, singulier: string, pluriel_ = `${singulier}s`):
  * date. C'est ce qui permet de l'écrire à la première personne sans rien inventer — il n'y
  * a là-dedans aucune phrase qu'un modèle aurait produite.
  *
- * Cleo n'a pas encore de portrait : la pastille à initiale prend le relais, comme dans le
- * menu. Mieux vaut une initiale qu'un portrait d'une autre facture.
+ * Le portrait vient de la fiche d'équipe plutôt que d'un chemin écrit ici : c'est le même
+ * visage que dans le menu, et il n'y a qu'un endroit à changer. Sans portrait, la pastille
+ * à initiale prend le relais, comme partout ailleurs.
  */
 export function MotDeCleo({
   hote,
@@ -61,15 +63,27 @@ export function MotDeCleo({
   href: string
 }) {
   const date = enClair(finishedAt, locale)
+  const portrait = membre('cro')?.avatar
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
-      <span
-        aria-hidden="true"
-        className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-semibold"
-        style={{ backgroundColor: 'var(--color-accent-soft, var(--color-brand-soft))' }}
-      >
-        C
-      </span>
+      {portrait === undefined ? (
+        <span
+          aria-hidden="true"
+          className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full text-lg font-semibold"
+          style={{ backgroundColor: 'var(--color-accent-soft, var(--color-brand-soft))' }}
+        >
+          C
+        </span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={portrait}
+          alt=""
+          width={56}
+          height={56}
+          className="h-14 w-14 shrink-0 rounded-full object-cover"
+        />
+      )}
       <div className="min-w-0 flex-1">
         <p className="m-0 text-base leading-relaxed">
           <strong>Cleo</strong> a relu {pages} {pluriel(pages, 'page')} de{' '}
