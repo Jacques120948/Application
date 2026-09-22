@@ -180,6 +180,9 @@ describe('ce que MIRA dit en une phrase', () => {
       total,
       totalPrecedent: total,
       ecarts: { cout: null, conversions: null, roas: null, cpa: null },
+      campagnesTotal: 0,
+      campagnesActives: 0,
+      derniereDepense: null,
       campagnes: [],
       ensembles: [],
       annonces: [],
@@ -217,12 +220,51 @@ describe('ce que MIRA dit en une phrase', () => {
     expect(synthese(vue(), [])).toContain('pas de geste à faire')
   })
 
-  it('ne parle pas de rendement quand rien n’a été dépensé', () => {
-    const rien = indicateursMeta({ ...cumul(), coutMicros: 0, conversions: 0, valeurConversion: 0 })
-    const dit = synthese(vue({ total: rien }), [])
+  /*
+   * Une fenêtre vide se lit comme une panne si l'écran ne sait pas dire pourquoi elle l'est.
+   *
+   * Le cas s'est produit en production : cent vingt-cinq campagnes en pause depuis deux
+   * semaines, et un tableau de bord qui affichait des zéros en suggérant qu'elles étaient
+   * « peut-être » en pause. Le produit connaissait la réponse et ne la donnait pas. Ces
+   * trois vérifications figent la distinction entre « rien », « je ne sais pas » et « ça ne
+   * va pas ».
+   */
+  const RIEN = indicateursMeta({ ...cumul(), coutMicros: 0, conversions: 0, valeurConversion: 0 })
 
-    expect(dit).toContain('aucune de vos campagnes Meta n’a dépensé')
+  it('ne parle pas de rendement quand rien n’a été dépensé', () => {
+    const dit = synthese(vue({ total: RIEN, campagnesTotal: 4, campagnesActives: 0 }), [])
+    expect(dit).toContain('n’a dépensé')
     expect(dit).not.toContain('retour de')
+  })
+
+  it('dit que les campagnes dorment, plutôt que de le supposer', () => {
+    const dit = synthese(
+      vue({
+        total: RIEN,
+        campagnesTotal: 125,
+        campagnesActives: 0,
+        derniereDepense: new Date('2026-09-05T00:00:00Z'),
+      }),
+      [],
+    )
+    expect(dit).toContain('125 campagnes sont toutes en pause')
+    // La date de la dernière dépense évite de chercher une panne là où il n'y en a pas.
+    expect(dit).toContain('5 septembre')
+    expect(dit).toContain('Rien n’est cassé')
+    expect(dit).not.toContain('peut-être')
+  })
+
+  it('alerte quand des campagnes actives ne dépensent rien', () => {
+    const dit = synthese(vue({ total: RIEN, campagnesTotal: 3, campagnesActives: 3 }), [])
+    // Là, c'est un vrai problème : actives et muettes ne vont pas ensemble.
+    expect(dit).toContain('3 sont actives')
+    expect(dit).toContain('gestionnaire de publicités')
+  })
+
+  it('ne parle pas de pause quand le compte n’a aucune campagne', () => {
+    const dit = synthese(vue({ total: RIEN, campagnesTotal: 0, campagnesActives: 0 }), [])
+    expect(dit).toContain('aucune campagne')
+    expect(dit).not.toContain('en pause')
   })
 
   it('accorde le singulier pour une seule journée', () => {

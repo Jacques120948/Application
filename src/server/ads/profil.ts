@@ -2,6 +2,7 @@ import { notFound } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
 import { seuilRentabilite } from '@/lib/rentabilite'
 import { compteActif, type CompteRelie } from './comptes'
+import { googleAds } from './google-ads'
 import { MICROS, moisCourant, type Indicateurs } from './metriques'
 import { NIVEAU_CAMPAGNE } from './niveaux'
 
@@ -271,8 +272,19 @@ function enMicros(unites: number): bigint {
 export async function enregistrerProfil(
   userId: string,
   saisie: ProfilAds,
+  /*
+   * La plateforme visée, parce que les objectifs appartiennent à un compte et non à une
+   * personne.
+   *
+   * Ils étaient enregistrés sur le compte Google, quelle que soit la page d'où venait la
+   * demande. Depuis l'écran de MIRA, on remplissait donc consciencieusement une marge et un
+   * ROAS cible qui partaient chez Naya — et MIRA continuait d'afficher « vous n'avez pas
+   * encore posé d'objectif » après le seul geste censé y remédier. Sans compte Google
+   * relié, le formulaire échouait même franchement, sur un compte introuvable.
+   */
+  plateforme: string = googleAds.id,
 ): Promise<{ profil: ProfilAds; compte: CompteRelie }> {
-  const compte = await compteActif(userId)
+  const compte = await compteActif(userId, plateforme)
   if (compte === null) throw notFound('Aucun compte publicitaire n’est suivi.')
 
   const donnees = {

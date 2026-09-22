@@ -63,11 +63,22 @@ export function ProfilAds({
   initial,
   devise,
   ouvert,
+  /*
+   * Le compte auquel ces objectifs appartiennent.
+   *
+   * Ils partaient toujours sur le compte Google, d'où que vienne le formulaire : depuis
+   * l'écran de MIRA, on renseignait donc une marge qui atterrissait chez Naya, et l'écran
+   * continuait d'afficher qu'il manquait des objectifs après le seul geste censé y remédier.
+   * Le serveur revérifie ce nom contre sa propre liste — ce qui arrive du navigateur désigne,
+   * il n'autorise pas.
+   */
+  plateforme = 'google-ads',
 }: {
   initial: ProfilVu
   devise: string
   /** Ouvert d'office tant que rien n'est renseigné : c'est la question de la page. */
   ouvert: boolean
+  plateforme?: 'google-ads' | 'meta-ads'
 }) {
   const [profil, setProfil] = useState<ProfilVu>(initial)
   const [marge, setMarge] = useState(texte(initial.margePourcent))
@@ -89,6 +100,7 @@ export function ProfilAds({
 
     const corpsEnvoye = {
       ...profil,
+      plateforme,
       margePourcent: Math.round(nombre(marge)),
       panierMoyen: nombre(panier),
       roasCible: Math.round(nombre(roas)),

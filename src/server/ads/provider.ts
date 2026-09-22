@@ -325,3 +325,15 @@ export type AdPlatformProvider = AdPlatformAuth & {
    */
   lireActionsConversion: (acces: AccesAds) => Promise<Lecture<number>>
 }
+
+/**
+ * Les plateformes publicitaires que le produit connaît, comme identifiants.
+ *
+ * Une liste fermée, ici plutôt que chez chaque appelant : ce qui arrive du navigateur ne
+ * désigne jamais qu'une de ces valeurs, et s'y compare en un mot. Ajouter une plateforme un
+ * jour, c'est l'ajouter là et nulle part ailleurs — un nom écrit en dur dans un formulaire
+ * survit toujours au renommage de ce qu'il désigne.
+ */
+export const PLATEFORMES_ADS = ['google-ads', 'meta-ads'] as const
+
+export type PlateformeAds = (typeof PLATEFORMES_ADS)[number]

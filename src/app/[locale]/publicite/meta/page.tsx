@@ -22,6 +22,7 @@ import { contexteActionsMeta, proposerActionMeta } from '@/server/ads/actions-me
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
+import { ProfilAds } from '@/components/studio/ProfilAds'
 import { LireMeta } from '@/components/studio/LireMeta'
 import { ConstatsMeta } from '@/components/studio/ConstatsMeta'
 import { TableauMeta } from '@/components/studio/TableauMeta'
@@ -318,14 +319,15 @@ export default async function ComptesMetaPage({
                     href: `/${locale}/publicite/meta#reglages`,
                   },
                 },
-                {
-                  nom: 'Objectifs posés',
-                  fait: objectifsPoses,
-                  action: {
-                    texte: 'Renseigner mes objectifs',
-                    href: `/${locale}/publicite`,
-                  },
-                },
+                /*
+                 * Les objectifs ne sont plus une étape de mise en route.
+                 *
+                 * Ils y figuraient, et le même bouton se retrouvait deux fois à l'écran : ici,
+                 * et dans le bandeau qui explique pourquoi ils comptent. Deux appels
+                 * identiques à quelques centimètres l'un de l'autre font hésiter au lieu de
+                 * guider — on cherche la différence, il n'y en a pas. Le bandeau reste, parce
+                 * que lui dit pourquoi ; celui-ci part, parce qu'il ne disait que quoi.
+                 */
               ]}
             />
 
@@ -376,7 +378,7 @@ export default async function ComptesMetaPage({
                       tant qu’on ignore votre marge et votre panier moyen.
                     </p>
                     <LinkButton
-                      href={`/${locale}/publicite`}
+                      href={`/${locale}/publicite/meta#objectifs`}
                       variant="secondary"
                       className="mt-3"
                     >
@@ -387,6 +389,30 @@ export default async function ComptesMetaPage({
 
                 <TableauMeta vue={tableau} />
               </>
+            )}
+
+            {/*
+              Les objectifs, et ils sont ceux de ce compte-ci.
+              
+              Le bouton du bandeau renvoyait vers la page de Naya, où le même formulaire
+              enregistrait sur le compte Google : on remplissait, le formulaire disait
+              « enregistré », et MIRA continuait d'afficher qu'il manquait des objectifs. Un
+              compte publicitaire porte ses propres chiffres — une marge Meta n'a aucune
+              raison d'être celle d'un compte Google, et les deux se saisissent là où on les
+              regarde.
+            */}
+            {tableau === null ? null : (
+              <section
+                id="objectifs"
+                className="min-w-0 scroll-mt-6 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5"
+              >
+                <ProfilAds
+                  initial={tableau.profil}
+                  devise={tableau.compte.devise}
+                  ouvert={!objectifsPoses}
+                  plateforme="meta-ads"
+                />
+              </section>
             )}
 
             {/*

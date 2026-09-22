@@ -265,6 +265,20 @@ export type VueMeta = {
   campagnes: LigneMeta[]
   ensembles: LigneMeta[]
   annonces: LigneMeta[]
+  /*
+   * Ce que le compte contient, indépendamment de la fenêtre regardée.
+   *
+   * Sans ces trois-là, une période sans dépense s'affiche « 0 campagnes » et se lit comme
+   * une panne : on croit que la lecture a échoué alors qu'elle a parfaitement réussi à
+   * constater qu'il n'y avait rien. Le cas s'est produit en vrai, sur un compte dont les
+   * cent vingt-cinq campagnes étaient en pause depuis deux semaines.
+   */
+  /** Campagnes connues du compte, en pause comprises. */
+  campagnesTotal: number
+  /** Celles qui diffusent réellement. Zéro explique une fenêtre vide bien mieux qu'un zéro. */
+  campagnesActives: number
+  /** Le dernier jour où quelque chose a été dépensé, quelle que soit la fenêtre. */
+  derniereDepense: Date | null
 }
 
 /**
@@ -292,7 +306,39 @@ export function synthese(
   const devise = vue.compte.devise === '' ? '' : ` ${vue.compte.devise}`
 
   if (vue.total.cout === 0) {
-    return `${quand}, aucune de vos campagnes Meta n’a dépensé. Il n’y a rien à analyser — vos campagnes sont peut-être en pause, ou leur budget est épuisé.`
+    /*
+     * Constater plutôt que supposer.
+     *
+     * Cette phrase disait « vos campagnes sont peut-être en pause » — une hypothèse, alors
+     * que la lecture connaît le statut de chaque campagne. Sur un compte dont les cent
+     * vingt-cinq campagnes dormaient depuis deux semaines, l'écran affichait des zéros et un
+     * « peut-être » : on y a lu une panne du produit, et on a eu raison de s'inquiéter,
+     * parce qu'un tableau de bord qui ne sait pas distinguer « rien » de « je ne sais pas »
+     * ne mérite pas qu'on lui confie un budget.
+     */
+    if (vue.campagnesTotal === 0) {
+      return `${quand}, Evoliia n’a trouvé aucune campagne sur ce compte Meta. Il n’y a rien à analyser.`
+    }
+
+    const quandDerniere =
+      vue.derniereDepense === null
+        ? ''
+        : ` La dernière dépense remonte au ${vue.derniereDepense.toLocaleDateString('fr-CH', { day: 'numeric', month: 'long' })}.`
+
+    if (vue.campagnesActives === 0) {
+      return (
+        `${quand}, aucune de vos campagnes Meta n’a dépensé, et la raison est simple :` +
+        ` vos ${vue.campagnesTotal} campagnes sont toutes en pause.${quandDerniere}` +
+        ' Rien n’est cassé — il n’y a simplement rien à mesurer tant qu’aucune ne diffuse.'
+      )
+    }
+
+    return (
+      `${quand}, aucune de vos campagnes Meta n’a dépensé, alors que` +
+      ` ${vue.campagnesActives} ${vue.campagnesActives > 1 ? 'sont actives' : 'est active'}.` +
+      `${quandDerniere} Vérifiez leur budget et leur diffusion dans le gestionnaire de publicités :` +
+      ' une campagne active qui ne dépense pas est souvent une campagne que Meta ne diffuse pas.'
+    )
   }
 
   const depense = `${quand}, vous avez dépensé ${vue.total.cout.toLocaleString('fr-CH')}${devise}`
@@ -428,7 +474,7 @@ export async function lireTableauMeta(userId: string, jours: number): Promise<Vu
   const precedentes = fenetre(jours * 2, compte.fuseau)
   const debut = new Date(`${bornes.depuis}T00:00:00Z`)
 
-  const [lignes, campagnes, ensembles, annonces] = await Promise.all([
+  const [lignes, campagnes, ensembles, annonces, derniere] = await Promise.all([
     withUserScope(userId, (tx) =>
       tx.adsReleve.findMany({
         where: {
@@ -471,6 +517,26 @@ export async function lireTableauMeta(userId: string, jours: number): Promise<Vu
         select: { id: true, annonceId: true, nom: true, statut: true },
       }),
     ),
+    /*
+     * Le dernier jour où quelque chose a été dépensé, hors de toute fenêtre.
+     *
+     * C'est ce qui permet de dire « la dernière dépense remonte au 5 septembre » plutôt que
+     * d'afficher un zéro muet et de laisser chercher la panne. Le filtre sur l'étage
+     * campagne évite de retomber sur la même journée comptée trois fois.
+     */
+    withUserScope(userId, (tx) =>
+      tx.adsReleve.findFirst({
+        where: {
+          userId,
+          accountId: compte.id,
+          groupeId: '',
+          annonceId: '',
+          coutMicros: { gt: 0 },
+        },
+        orderBy: { jour: 'desc' },
+        select: { jour: true },
+      }),
+    ),
   ])
 
   const nomsCampagnes = new Map(
@@ -510,6 +576,9 @@ export async function lireTableauMeta(userId: string, jours: number): Promise<Vu
     profil,
     total,
     totalPrecedent,
+    campagnesTotal: campagnes.length,
+    campagnesActives: campagnes.filter((une) => une.statut === 'ACTIVE').length,
+    derniereDepense: derniere?.jour ?? null,
     ecarts: ecartsDe(total, totalPrecedent),
     campagnes: grouper(deCampagne, (une) => une.campagneId, nomsCampagnes, { depuis: debut }, profil),
     ensembles: grouper(

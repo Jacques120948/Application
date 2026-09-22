@@ -160,3 +160,44 @@ describe('la lecture des objectifs', () => {
     expect(lecture.lecture.verdict).toBe('inconnu')
   })
 })
+
+describe('les objectifs suivent leur plateforme', () => {
+  /*
+   * Un compte publicitaire porte ses propres chiffres.
+   *
+   * `enregistrerProfil` visait toujours le compte Google, d'où que vienne la demande : une
+   * marge saisie sur l'écran de MIRA partait donc chez Naya, le formulaire répondait
+   * « enregistré », et l'écran de MIRA continuait d'afficher qu'il manquait des objectifs.
+   * Sans compte Google relié du tout, le formulaire échouait même franchement.
+   */
+  it('écrivent sur le compte de la plateforme demandée, et sur lui seul', async () => {
+    const meta = await withUserScope(userA, (tx) =>
+      tx.adsAccount.create({
+        data: {
+          userId: userA,
+          plateforme: 'meta-ads',
+          compteId: '664979634006686',
+          nom: 'Cap-Nature',
+          devise: 'CHF',
+          fuseau: 'Europe/Zurich',
+          actif: true,
+          synchroAt: new Date(),
+        },
+      }),
+    )
+
+    await enregistrerProfil(userA, { ...PROFIL_VIDE, margePourcent: 55 }, 'meta-ads')
+
+    // Le compte Meta porte la marge…
+    expect((await lireProfil(userA, meta.id)).margePourcent).toBe(55)
+    // …et le compte Google, qui n'a rien demandé, ne l'a pas.
+    expect((await lireProfil(userA, compteAId)).margePourcent).not.toBe(55)
+
+    await withUserScope(userA, (tx) => tx.adsAccount.deleteMany({ where: { id: meta.id } }))
+  })
+
+  it('visent Google par défaut, comme avant', async () => {
+    await enregistrerProfil(userA, { ...PROFIL_VIDE, margePourcent: 33 })
+    expect((await lireProfil(userA, compteAId)).margePourcent).toBe(33)
+  })
+})
