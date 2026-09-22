@@ -420,6 +420,13 @@ export function CreerCampagne({
                 groupe d’annonces, ses {plan.motsCles.length} mots-clés et l’annonce. Si l’un est
                 refusé, aucun n’est créé. Vous pourrez tout supprimer depuis le journal.
               </p>
+              <p className="mt-2 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                Evoliia déclarera à Google, en votre nom, que{' '}
+                <strong>cette campagne ne contient pas de publicité politique</strong> au sens du
+                règlement européen. Google l’exige pour toute création de campagne. Si ce n’est
+                pas exact, créez la campagne depuis Google Ads : la question vous y sera posée
+                directement.
+              </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -468,7 +475,7 @@ export function CreerCampagne({
         <p className="mt-3 mb-0 text-sm text-[var(--color-ink-soft)]">{message}</p>
       )}
       {erreur === null ? null : (
-        <p role="alert" className="mt-3 mb-0 text-sm text-[var(--color-critical)]">
+        <p role="alert" className="mt-3 mb-0 text-sm break-words text-[var(--color-critical)]">
           {erreur}
         </p>
       )}

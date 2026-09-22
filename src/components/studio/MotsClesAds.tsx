@@ -306,7 +306,7 @@ export function MotsClesAds({
         <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">{message}</p>
       )}
       {erreur === null ? null : (
-        <p role="alert" className="mt-2 mb-0 text-sm text-[var(--color-critical)]">
+        <p role="alert" className="mt-2 mb-0 text-sm break-words text-[var(--color-critical)]">
           {erreur}
         </p>
       )}

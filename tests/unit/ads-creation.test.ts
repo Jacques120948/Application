@@ -260,6 +260,20 @@ describe('la mécanique de la création', () => {
     expect(corps.slice(0, fin)).toContain("status: 'PAUSED'")
   })
 
+  it('déclare l’absence de publicité politique, et le dit à l’écran', () => {
+    /*
+     * Google l'exige depuis la v21 : sans cette déclaration, la création entière est
+     * refusée. Mais c'est une déclaration légale au nom de la personne, pas un réglage
+     * technique — la poser en silence reviendrait à la faire signer sans la lui montrer.
+     */
+    const source = readFileSync('src/server/ads/google-ads-ecriture.ts', 'utf8')
+    expect(source).toContain("containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING'")
+
+    const ecran = readFileSync('src/components/studio/CreerCampagne.tsx', 'utf8')
+    expect(ecran).toContain('publicité politique')
+    expect(ecran).toContain('en votre nom')
+  })
+
   it('coupe le Display, les partenaires, et l’intérêt géographique', () => {
     /*
      * Les trois réglages par lesquels un petit budget se vide sans qu'on comprenne. Le

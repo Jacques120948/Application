@@ -400,6 +400,18 @@ export async function creerCampagneComplete(
             positiveGeoTargetType: 'PRESENCE',
             negativeGeoTargetType: 'PRESENCE',
           },
+          /*
+           * Une déclaration légale, exigée par Google depuis la v21 au titre du règlement
+           * européen sur la publicité politique. Sans elle, la création entière est refusée.
+           *
+           * Evoliia la pose à « ne contient pas », et c'est vrai de tout ce qu'elle sait
+           * faire : elle bâtit des campagnes à partir d'un catalogue de produits et de
+           * recherches commerciales. Mais c'est une déclaration au nom de la personne, pas
+           * un réglage technique — elle est donc écrite en toutes lettres sur l'écran de
+           * confirmation. Quelqu'un qui diffuserait de la publicité politique doit le lire
+           * et passer par Google Ads, où la question lui sera posée directement.
+           */
+          containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
         },
       },
     },
