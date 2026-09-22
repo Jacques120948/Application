@@ -1,4 +1,5 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
+import { contexteMeta } from '@/server/ads/contexte-meta'
 import { listAudits, readPlan } from '@/server/audit/plan'
 import { JOURS_LUS, recherchesPourArticle } from '@/server/audit/recherches'
 import { withUserScope } from '@/server/db/scope'
@@ -254,6 +255,31 @@ export async function readSiteFacts(
         'DONNÉES PUBLICITAIRES : aucune. Aucun compte Google Ads n’est relié. Tu ne disposes' +
           ' d’aucune dépense, d’aucun ROAS, d’aucune conversion et d’aucune campagne : ne cite' +
           ' aucun chiffre publicitaire, et dis-le quand la question en demande.',
+    ].join('\n')
+  }
+  /*
+   * MIRA voit Meta, et rien de Google : les deux agents ont des comptes différents, des
+   * chiffres différents et des gestes différents. Lui donner les deux ferait un généraliste
+   * qui conseille la moyenne de deux métiers, c'est-à-dire le mauvais conseil deux fois.
+   *
+   * Elle garde le socle du site et ce que les gens y cherchent : une publicité qui renvoie
+   * vers une page qui ne convertit pas est un problème de publicité, et elle doit pouvoir le
+   * voir.
+   */
+  if (agent === 'meta') {
+    /*
+     * Même distinction que pour Naya, et pour la même raison : un compte non relié n'est pas
+     * un compte à zéro. Le premier appelle « reliez votre compte », le second « vos campagnes
+     * ne tournent plus ». Les confondre ferait dire à MIRA que la publicité ne rapporte rien
+     * à quelqu'un qui n'en a jamais fait.
+     */
+    const publicite = await contexteMeta(userId)
+    return [
+      ...base,
+      publicite ??
+        'DONNÉES META : aucune. Aucun compte Meta Ads n’est relié. Tu ne disposes d’aucune' +
+          ' dépense, d’aucun ROAS, d’aucune vente et d’aucune campagne : ne cite aucun chiffre' +
+          ' publicitaire, et dis-le quand la question en demande.',
     ].join('\n')
   }
   /*

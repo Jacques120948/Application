@@ -211,16 +211,17 @@ export const FEATURES: readonly Feature[] = [
     group: 'equipe',
     label: 'MIRA — Meta Ads',
     /*
-     * Même discipline que pour Naya : la fiche promet ce qui existe, et rien de plus. La
-     * connexion Meta n'est pas construite, et les colonnes qui l'accueilleront viennent
-     * seulement d'être posées. Annoncer « vos campagnes Facebook lues et expliquées »
-     * ferait espérer un tableau de bord à quelqu'un qui trouverait une conversation — la
-     * façon la plus sûre de décevoir quelqu'un qui vient de payer. La phrase s'élargira
-     * quand la connexion existera, pas avant.
+     * La fiche promet ce qui existe, et rien de plus — même discipline que pour Naya. Elle
+     * disait « la lecture de vos comptes Meta arrive ensuite » tant que c'était vrai ; elle
+     * ne l'est plus : MIRA lit les campagnes, les ensembles et les annonces, et les
+     * explique à partir de constats écrits.
+     *
+     * Ce qui n'est pas promis ici l'est délibérément : aucune modification n'est encore
+     * envoyée à Meta. Le jour où elle le sera, cette phrase le dira, pas avant.
      */
     summary:
-      'Les questions de publicité Facebook et Instagram : ce que veulent dire le ROAS, le CPM ou la fréquence, et ce qu’ils disent de vos campagnes. La lecture de vos comptes Meta arrive ensuite.',
-    status: 'prevu',
+      'Vos campagnes Facebook et Instagram lues et expliquées : où part votre budget, ce qui fonctionne, et ce qui mérite d’être changé. MIRA propose, elle ne modifie rien.',
+    status: 'live',
   },
 ]
 
