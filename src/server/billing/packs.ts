@@ -36,13 +36,28 @@ export type CreditPack = {
 /**
  * Valeurs de départ.
  *
- * Le prix par crédit baisse avec la taille, ce qui est le seul comportement qu'un acheteur
- * trouve normal : cinq centimes l'unité pour le petit, un peu plus de trois pour le grand.
+ * Deux règles, et la seconde a été apprise à ses dépens.
+ *
+ * **Le prix par crédit baisse avec la taille**, parce que c'est le seul comportement qu'un
+ * acheteur trouve normal.
+ *
+ * **Une recharge coûte toujours plus cher que le crédit d'un abonnement.** Elle ne le
+ * faisait pas : cinq centimes l'unité pour le petit pack, un peu plus de trois pour le
+ * grand, contre douze à dix-neuf centimes en abonnement. Un abonné Starter pouvait donc
+ * acheter dix fois sa dotation mensuelle pour moins du double de son abonnement, et n'avait
+ * plus aucune raison de passer à l'offre supérieure. Une recharge moins chère que
+ * l'abonnement n'est pas un service rendu, c'est une porte dérobée dans sa propre grille
+ * tarifaire — et elle s'ouvre d'autant plus grand que les offres montent.
+ *
+ * La recharge dépanne un mois chargé ; elle ne remplace pas un changement d'offre. Son prix
+ * doit le dire tout seul, sans qu'un écran ait à l'expliquer. Un test tient cette règle,
+ * parce qu'elle se rompt en silence : rien ne casse, on perd simplement les abonnements
+ * qu'on aurait dû gagner.
  */
 export const DEFAULT_CREDIT_PACKS: readonly CreditPack[] = [
-  { id: 'pack-100', credits: 100, priceCents: 500, currency: 'CHF', isRecommended: false },
-  { id: 'pack-500', credits: 500, priceCents: 1900, currency: 'CHF', isRecommended: true },
-  { id: 'pack-1500', credits: 1500, priceCents: 4900, currency: 'CHF', isRecommended: false },
+  { id: 'pack-100', credits: 100, priceCents: 2900, currency: 'CHF', isRecommended: false },
+  { id: 'pack-500', credits: 500, priceCents: 12_900, currency: 'CHF', isRecommended: true },
+  { id: 'pack-1500', credits: 1500, priceCents: 34_900, currency: 'CHF', isRecommended: false },
 ]
 
 /** Clé de réglage : le catalogue complet, en JSON, modifiable depuis l'administration. */
