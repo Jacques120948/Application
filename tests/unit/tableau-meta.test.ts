@@ -6,7 +6,9 @@ import {
   periodeMetaValide,
   PERIODES_META,
   SEUILS,
+  synthese,
   type CumulMeta,
+  type VueMeta,
 } from '@/server/ads/tableau-meta'
 
 /**
@@ -165,5 +167,67 @@ describe('la période demandée', () => {
      * s'expliquerait.
      */
     expect(PERIODES_META[0]).toBe(1)
+  })
+})
+
+describe('ce que MIRA dit en une phrase', () => {
+  function vue(patch: Partial<VueMeta> = {}): VueMeta {
+    const total = indicateursMeta(cumul())
+    return {
+      compte: { devise: 'CHF' } as VueMeta['compte'],
+      jours: 7,
+      profil: profil({ roasCible: 250 }),
+      total,
+      totalPrecedent: total,
+      ecarts: { cout: null, conversions: null, roas: null, cpa: null },
+      campagnes: [],
+      ensembles: [],
+      annonces: [],
+      ...patch,
+    }
+  }
+
+  it('n’invente aucun chiffre : ceux qu’elle cite sont ceux du tableau', () => {
+    const dit = synthese(vue(), [])
+
+    expect(dit).toContain('200')
+    expect(dit).toContain('300 %')
+    expect(dit).toContain('CHF')
+  })
+
+  it('dit qu’elle ne peut pas juger sans objectif, plutôt que de se taire', () => {
+    const dit = synthese(vue({ profil: profil() }), [])
+
+    expect(dit).toContain('marge')
+    expect(dit).not.toContain('objectifs : il n’y a pas de geste')
+  })
+
+  it('annonce le nombre de lignes à traiter et à surveiller', () => {
+    const priorites = [
+      { jugement: { verdict: 'agir' } },
+      { jugement: { verdict: 'agir' } },
+      { jugement: { verdict: 'surveiller' } },
+    ] as Parameters<typeof synthese>[1]
+
+    const dit = synthese(vue(), priorites)
+
+    expect(dit).toContain('2 demandent une décision')
+    expect(dit).toContain('1 est à surveiller')
+  })
+
+  it('dit le silence plutôt que de le laisser deviner', () => {
+    expect(synthese(vue(), [])).toContain('pas de geste à faire')
+  })
+
+  it('ne parle pas de rendement quand rien n’a été dépensé', () => {
+    const rien = indicateursMeta({ ...cumul(), coutMicros: 0, conversions: 0, valeurConversion: 0 })
+    const dit = synthese(vue({ total: rien }), [])
+
+    expect(dit).toContain('aucune de vos campagnes Meta n’a dépensé')
+    expect(dit).not.toContain('retour de')
+  })
+
+  it('accorde le singulier pour une seule journée', () => {
+    expect(synthese(vue({ jours: 1 }), [])).toContain('Hier')
   })
 })

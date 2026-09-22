@@ -305,6 +305,60 @@ export function aFaire(vue: VueMeta): APriorite[] {
     .slice(0, PRIORITES_MONTREES)
 }
 
+/**
+ * Ce que MIRA dit en une phrase, avant tout tableau.
+ *
+ * Écrite par du code, pas par un modèle — et c'est provisoire à dessein : quand MIRA saura
+ * parler, elle remplacera ce texte par le sien, à partir des mêmes chiffres. En attendant,
+ * une synthèse déterministe vaut mieux qu'un écran qui commence par une grille : on ouvre
+ * cette page pour savoir si tout va bien, et cette question mérite une phrase, pas un
+ * tableau à déchiffrer.
+ *
+ * Aucun chiffre n'y est inventé, aucun jugement n'y est porté que ceux déjà rendus ligne
+ * par ligne. C'est une lecture à voix haute, pas une opinion de plus.
+ */
+export function synthese(vue: VueMeta, priorites: readonly APriorite[]): string {
+  const quand =
+    vue.jours === 1 ? 'Hier' : `Sur les ${vue.jours} derniers jours`
+  const devise = vue.compte.devise === '' ? '' : ` ${vue.compte.devise}`
+
+  if (vue.total.cout === 0) {
+    return `${quand}, aucune de vos campagnes Meta n’a dépensé. Il n’y a rien à analyser — vos campagnes sont peut-être en pause, ou leur budget est épuisé.`
+  }
+
+  const depense = `${quand}, vous avez dépensé ${vue.total.cout.toLocaleString('fr-CH')}${devise}`
+  const rendement =
+    vue.total.roas === null
+      ? '.'
+      : ` pour un retour de ${vue.total.roas} %${
+          vue.total.conversions > 0
+            ? ` et ${vue.total.conversions} vente${vue.total.conversions > 1 ? 's' : ''}`
+            : ''
+        }.`
+
+  const sansObjectif = vue.profil.roasCible === 0 && vue.profil.cpaCible === 0
+  if (sansObjectif) {
+    return `${depense}${rendement} Je ne peux pas dire si c’est bon : sans votre marge ni votre coût par vente acceptable, ces chiffres ne se comparent à rien.`
+  }
+
+  const aTraiter = priorites.filter((une) => une.jugement.verdict === 'agir').length
+  const aSurveiller = priorites.length - aTraiter
+
+  if (priorites.length === 0) {
+    return `${depense}${rendement} Rien ne s’écarte de vos objectifs : il n’y a pas de geste à faire aujourd’hui.`
+  }
+
+  const morceaux: string[] = []
+  if (aTraiter > 0) {
+    morceaux.push(`${aTraiter} ${aTraiter > 1 ? 'demandent' : 'demande'} une décision`)
+  }
+  if (aSurveiller > 0) {
+    morceaux.push(`${aSurveiller} ${aSurveiller > 1 ? 'sont' : 'est'} à surveiller`)
+  }
+
+  return `${depense}${rendement} ${morceaux.join(', et ')} — la liste est juste en dessous.`
+}
+
 type Releve = {
   campagneId: string
   groupeId: string

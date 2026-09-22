@@ -19,11 +19,27 @@ import type { APriorite, IndicateursMeta, LigneMeta, Verdict, VueMeta } from '@/
  * constat.
  */
 
-const COULEURS: Record<Verdict, { point: string; nom: string }> = {
-  bon: { point: 'var(--color-positive)', nom: 'Conforme à vos objectifs' },
-  surveiller: { point: 'var(--color-caution)', nom: 'À surveiller' },
-  agir: { point: 'var(--color-critical)', nom: 'Intervention recommandée' },
-  insuffisant: { point: 'var(--color-ink-faint)', nom: 'Données insuffisantes' },
+const COULEURS: Record<Verdict, { point: string; fond: string; nom: string }> = {
+  bon: {
+    point: 'var(--color-positive)',
+    fond: 'var(--color-positive-soft)',
+    nom: 'Conforme à vos objectifs',
+  },
+  surveiller: {
+    point: 'var(--color-caution)',
+    fond: 'var(--color-caution-soft)',
+    nom: 'À surveiller',
+  },
+  agir: {
+    point: 'var(--color-critical)',
+    fond: 'var(--color-critical-soft)',
+    nom: 'Intervention recommandée',
+  },
+  insuffisant: {
+    point: 'var(--color-ink-faint)',
+    fond: 'var(--color-canvas)',
+    nom: 'Données insuffisantes',
+  },
 }
 
 function nombre(valeur: number): string {
@@ -225,22 +241,49 @@ function AFaire({ lignes, devise }: { lignes: APriorite[]; devise: string }) {
         {lignes.map((ligne) => (
           <li
             key={`${ligne.niveau}-${ligne.id}`}
-            className="rounded-[var(--radius-card)] border-l-4 border border-[var(--color-line)] p-4"
-            style={{ borderLeftColor: COULEURS[ligne.jugement.verdict].point }}
+            className="rounded-[var(--radius-card)] border border-[var(--color-line)] p-4"
           >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="m-0 text-sm font-medium break-words">{ligne.nom}</p>
-              <span className="rounded-[var(--radius-pill)] bg-[var(--color-canvas)] px-2 py-0.5 text-xs text-[var(--color-ink-soft)]">
-                {ligne.niveau}
-              </span>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                {/*
+                  Le badge porte le verdict, pas le nom de l'objet : c'est lui qu'on lit en
+                  premier en balayant la liste, et c'est lui qui décide si on s'arrête.
+                */}
+                <span
+                  className="inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] px-2 py-0.5 text-xs font-medium"
+                  style={{
+                    backgroundColor: COULEURS[ligne.jugement.verdict].fond,
+                    color: COULEURS[ligne.jugement.verdict].point,
+                  }}
+                >
+                  {COULEURS[ligne.jugement.verdict].nom}
+                </span>
+                <p className="mt-2 mb-0 text-sm font-medium break-words">{ligne.nom}</p>
+                <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+                  {ligne.jugement.motif}
+                </p>
+              </div>
+
+              {/* Les chiffres qui motivent, à droite : on les vérifie, on ne les cherche pas. */}
+              <div className="flex shrink-0 gap-5 text-right tabular-nums">
+                <div>
+                  <p className="m-0 text-xs text-[var(--color-ink-faint)]">{ligne.niveau}</p>
+                  <p className="mt-1 mb-0 text-sm font-medium">
+                    {argent(ligne.actuel.cout, devise)}
+                  </p>
+                </div>
+                <div>
+                  <p className="m-0 text-xs text-[var(--color-ink-faint)]">Ventes</p>
+                  <p className="mt-1 mb-0 text-sm font-medium">{ligne.actuel.conversions}</p>
+                </div>
+                <div>
+                  <p className="m-0 text-xs text-[var(--color-ink-faint)]">ROAS</p>
+                  <p className="mt-1 mb-0 text-sm font-medium">
+                    {ligne.actuel.roas === null ? '—' : `${ligne.actuel.roas} %`}
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              {ligne.jugement.motif}
-            </p>
-            <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)] tabular-nums">
-              {argent(ligne.actuel.cout, devise)} dépensés sur la période
-              {ligne.actuel.conversions > 0 ? ` · ${ligne.actuel.conversions} ventes` : ''}
-            </p>
           </li>
         ))}
       </ul>

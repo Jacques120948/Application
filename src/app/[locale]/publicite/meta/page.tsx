@@ -9,7 +9,13 @@ import { metaAds } from '@/server/ads/meta-ads'
 import { findVisibilityAgent } from '@/server/agents/visibility'
 import { withUserScope } from '@/server/db/scope'
 import { NIVEAU_CAMPAGNE } from '@/server/ads/niveaux'
-import { aFaire, lireTableauMeta, periodeMetaValide, PERIODES_META } from '@/server/ads/tableau-meta'
+import {
+  aFaire,
+  lireTableauMeta,
+  periodeMetaValide,
+  PERIODES_META,
+  synthese,
+} from '@/server/ads/tableau-meta'
 import { Shell } from '@/components/studio/Shell'
 import { AgentAvatar } from '@/components/marketing/visibility'
 import { ComptesAds } from '@/components/studio/ComptesAds'
@@ -175,14 +181,32 @@ export default async function ComptesMetaPage({
           ← Publicité
         </a>
 
-        <div className="mt-4 flex flex-wrap items-center gap-4">
-          {mira === undefined ? null : <AgentAvatar agent={mira} size="lg" />}
-          <div className="min-w-0">
-            <h1 className="m-0 text-2xl font-semibold tracking-tight">MIRA — Meta Ads</h1>
-            <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-              Elle surveille vos campagnes Facebook et Instagram et vous dit où va votre
-              budget, ce qui fonctionne, et ce qu’on peut améliorer.
+        <h1 className="mt-4 mb-0 text-2xl font-semibold tracking-tight">MIRA — Meta Ads</h1>
+
+        {/*
+          MIRA parle avant que l'écran ne montre quoi que ce soit.
+          
+          On ouvre cette page pour savoir si tout va bien, et cette question mérite une
+          phrase, pas une grille à déchiffrer. Le texte est écrit par du code aujourd'hui —
+          aucun chiffre inventé, aucun jugement que ceux déjà rendus ligne par ligne — et
+          MIRA le remplacera par le sien quand elle saura parler, à partir des mêmes chiffres.
+        */}
+        <div className="mt-4 flex flex-wrap items-start gap-4 rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">
+          {mira === undefined ? null : <AgentAvatar agent={mira} size="md" />}
+          <div className="min-w-0 flex-1">
+            <p className="m-0 text-sm font-medium">
+              {tableau === null ? 'MIRA vous accompagne' : 'MIRA surveille vos campagnes'}
             </p>
+            <p className="mt-1 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+              {tableau === null
+                ? 'Reliez votre compte Meta et lisez vos campagnes : je vous dirai alors où va votre budget, ce qui fonctionne, et ce qu’on peut améliorer.'
+                : synthese(tableau, aFaire(tableau))}
+            </p>
+            {actif?.synchroAt === undefined || actif.synchroAt === null ? null : (
+              <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
+                Chiffres lus le {actif.synchroAt.toLocaleDateString(locale)}
+              </p>
+            )}
           </div>
         </div>
 
