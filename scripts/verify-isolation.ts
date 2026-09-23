@@ -133,6 +133,44 @@ async function main(): Promise<void> {
     if (table.policies === 0n) problems.push(`La table « ${name} » n'a aucune politique d'accès.`)
   }
 
+  /*
+   * Ce que l'hébergeur ouvre pendant qu'on regarde ailleurs.
+   *
+   * Supabase expose le schéma « public » par une API web et y donne d'office tous les
+   * droits à ses deux rôles anonymes. La RLS est censée rattraper cela, mais elle ne
+   * protège que les tables qui en ont : User, Session, VerificationToken et les crédits
+   * n'en ont jamais eu, et se sont retrouvés lisibles — et inscriptibles — par quiconque
+   * connaissait l'adresse du projet. Un jeton de session vaut un mot de passe.
+   *
+   * Le contrôle ne vaut que là où ces rôles existent : ailleurs, il ne dit rien plutôt que
+   * d'inventer un problème. Il porte sur les droits et non sur la RLS, parce que c'est le
+   * droit qui a été donné, et que le retirer est ce qui ferme réellement la porte.
+   */
+  const anonymes = await prisma.$queryRaw<{ role: string; tables: bigint }[]>`
+    SELECT r.rolname AS role,
+           count(*) FILTER (
+             WHERE has_table_privilege(r.rolname, c.oid, 'SELECT')
+                OR has_table_privilege(r.rolname, c.oid, 'INSERT')
+                OR has_table_privilege(r.rolname, c.oid, 'UPDATE')
+                OR has_table_privilege(r.rolname, c.oid, 'DELETE')
+           ) AS tables
+    FROM pg_roles r
+    CROSS JOIN pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE r.rolname IN ('anon', 'authenticated')
+      AND n.nspname = 'public' AND c.relkind = 'r'
+    GROUP BY r.rolname
+  `
+
+  for (const ligne of anonymes) {
+    if (ligne.tables > 0n) {
+      problems.push(
+        `Le rôle anonyme « ${ligne.role} » de l'hébergeur a encore des droits sur ${ligne.tables} table(s) : ` +
+          `l'API publique les expose. Voir la migration 20260925090000_fermer_api_publique.`,
+      )
+    }
+  }
+
   if (problems.length > 0) {
     console.error('\n  MISE EN LIGNE INTERROMPUE : le cloisonnement des données n’est pas garanti.\n')
     for (const problem of problems) console.error(`   - ${problem}`)
@@ -142,7 +180,8 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Isolation vérifiée : ${PROTECTED_TABLES.length} tables protégées, rôle « ${role?.role} » sans contournement.`,
+    `Isolation vérifiée : ${PROTECTED_TABLES.length} tables protégées, rôle « ${role?.role} » sans contournement` +
+      `${anonymes.length === 0 ? '' : ', API publique fermée'}.`,
   )
 }
 

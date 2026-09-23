@@ -80,3 +80,38 @@ Le rôle applicatif (`appforge_app`) n'est pas propriétaire des tables et n'a p
 - L'AppSpec est publique par nature (elle est servie au navigateur) : le schéma **interdit**
   structurellement d'y stocker un secret. Les champs sensibles vivent dans une table
   séparée, jamais dans le JSON de spécification.
+
+## Barrière 5 — L'API publique de l'hébergeur
+
+Cette barrière est née d'une alerte, le 23 septembre 2026, et la façon dont le trou s'est
+ouvert mérite d'être écrite : il ne venait pas du code.
+
+Supabase expose le schéma `public` par une API web, et y donne d'office tous les droits —
+lecture **et écriture** — à ses deux rôles anonymes, `anon` et `authenticated`. La
+protection prévue par l'hébergeur est la RLS, table par table. Nos migrations l'activent
+sur les tables qui portent des données de locataire, et le script `verify-isolation.ts`
+vérifie qu'elle y est bien. Mais dix-huit tables n'en ont jamais eu, parce qu'elles n'en
+avaient pas besoin dans notre modèle : `User`, `Session`, `VerificationToken`, les trois
+tables de crédits, les réglages, les tarifs.
+
+Elles se sont donc retrouvées nues derrière une API que le produit n'utilise pas. En
+lecture, `Session` suffisait à se connecter à la place de n'importe qui — un jeton de
+session ne demande pas de mot de passe. En écriture, `CreditWallet` suffisait à s'offrir
+des crédits.
+
+Ce qu'il faut en retenir dépasse Supabase : **les quatre barrières supposaient que Postgres
+n'était joignable que par l'application.** Dès qu'un hébergeur pose une API devant la base,
+cette supposition tombe, et tout ce qui n'avait pas besoin de RLS devient public.
+
+Le correctif retire aux deux rôles anonymes ce qu'ils n'auraient jamais dû avoir, plutôt
+que d'ajouter de la RLS à des tables qui n'en veulent pas — les tables appartiennent à
+`postgres` chez l'hébergeur, et une RLS sans politique couperait le rôle applicatif net. Il
+tient dans `prisma/migrations/20260925090000_fermer_api_publique`, s'applique à chaque
+déploiement, et ne fait rien là où ces rôles n'existent pas.
+
+Sa moitié la plus importante est la moins visible : les **droits par défaut**. Sans eux, la
+prochaine table créée par une migration repartirait grande ouverte, et personne ne s'en
+apercevrait avant le courriel suivant.
+
+`verify-isolation.ts` le vérifie désormais : si `anon` ou `authenticated` retrouvent le
+moindre droit sur une table de `public`, la mise en ligne s'interrompt.
