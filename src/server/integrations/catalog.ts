@@ -745,6 +745,126 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     },
     reviewedOn: '2026-09-23',
   },
+  /*
+   * Klaviyo, pour Lina : les statistiques de vos campagnes, en lecture seule. Aucun
+   * destinataire n'est lu — ni liste, ni profil, ni courriel.
+   */
+  {
+    id: 'klaviyo',
+    name: 'Klaviyo',
+    category: 'commerce',
+    summary: 'Vos campagnes Klaviyo, pour Lina : résultats relus et comparés.',
+    usage:
+      'Lire les statistiques de vos campagnes envoyées (envois, ouvertures, clics, désinscriptions, commandes et chiffre d’affaires attribués) pour que Lina les compare et juge vos tests A/B. En lecture seule.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: ['campaigns:read', 'metrics:read'],
+    costToEvoliia: 'aucun',
+    costToCreator: 'compte-gratuit-suffisant',
+    costNotice: 'L’API de Klaviyo est incluse dans tous les comptes, y compris gratuits. Evoliia ne paie rien.',
+    freeQuota: 'Largement suffisant : Lina lit au plus toutes les douze heures, les cinquante dernières campagnes.',
+    webhooks: false,
+    providerReview: 'Aucune validation : la clé est créée par vous, dans votre compte, et se supprime d’un clic.',
+    risk:
+      'Evoliia lit seulement les statistiques agrégées de vos campagnes. Elle ne lit ni vos listes, ni vos contacts, ni leurs courriels, et n’envoie rien.',
+    keyHelp: {
+      label: 'La clé API privée',
+      hint: 'Elle commence par « pk_ ». Evoliia la chiffre et ne la réaffiche jamais.',
+    },
+    guide: {
+      url: 'https://www.klaviyo.com/settings/account/api-keys',
+      urlLabel: 'Ouvrir les clés API Klaviyo',
+      steps: [
+        'Dans Klaviyo, ouvrez Paramètres → Compte → Clés API, puis « Créer une clé API privée ».',
+        'Nom : « Evoliia ». Choisissez « Accès personnalisé » et donnez la lecture seule à Campagnes et à Métriques, rien d’autre.',
+        'Créez la clé et copiez-la : elle commence par « pk_ ».',
+        'Revenez ici et collez-la.',
+      ],
+      caution: 'Lecture seule : ne donnez aucun droit d’écriture, ni l’accès aux profils ou aux listes.',
+    },
+    reviewedOn: '2026-09-23',
+  },
+  /*
+   * Brevo, pour Lina : les statistiques de vos campagnes, en lecture seule. Aucun
+   * destinataire n'est lu — ni liste, ni profil, ni courriel.
+   */
+  {
+    id: 'brevo',
+    name: 'Brevo',
+    category: 'commerce',
+    summary: 'Vos campagnes Brevo, pour Lina : résultats relus et comparés.',
+    usage:
+      'Lire les statistiques de vos campagnes envoyées (envois, ouvertures, clics, désinscriptions) pour que Lina les compare et juge vos tests A/B. En lecture seule.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: [],
+    costToEvoliia: 'aucun',
+    costToCreator: 'compte-gratuit-suffisant',
+    costNotice: 'L’API de Brevo est incluse dans tous les comptes, y compris gratuits. Evoliia ne paie rien.',
+    freeQuota: 'Largement suffisant : Lina lit au plus toutes les douze heures, les cinquante dernières campagnes.',
+    webhooks: false,
+    providerReview: 'Aucune validation : la clé est créée par vous, dans votre compte, et se supprime d’un clic.',
+    risk:
+      'Evoliia lit seulement les statistiques agrégées de vos campagnes. Elle ne lit ni vos listes, ni vos contacts, ni leurs courriels, et n’envoie rien.',
+    keyHelp: {
+      label: 'La clé API',
+      hint: 'Elle commence par « xkeysib- ». Evoliia la chiffre et ne la réaffiche jamais.',
+    },
+    guide: {
+      url: 'https://app.brevo.com/settings/keys/api',
+      urlLabel: 'Ouvrir les clés API Brevo',
+      steps: [
+        'Dans Brevo, ouvrez votre profil → SMTP & API → onglet « Clés API ».',
+        'Cliquez « Générer une nouvelle clé API », nommez-la « Evoliia ».',
+        'Copiez la clé : elle commence par « xkeysib- ».',
+        'Revenez ici et collez-la.',
+      ],
+      caution: 'Brevo ne permet pas de restreindre une clé : elle donne un accès complet au compte. Evoliia ne s’en sert que pour lire les statistiques des campagnes, et vous pouvez la supprimer à tout moment dans Brevo.',
+    },
+    reviewedOn: '2026-09-23',
+  },
+  /*
+   * Mailchimp, pour Lina : les statistiques de vos campagnes, en lecture seule. Aucun
+   * destinataire n'est lu — ni liste, ni profil, ni courriel.
+   */
+  {
+    id: 'mailchimp',
+    name: 'Mailchimp',
+    category: 'commerce',
+    summary: 'Vos campagnes Mailchimp, pour Lina : résultats relus et comparés.',
+    usage:
+      'Lire les statistiques de vos campagnes envoyées (envois, ouvertures, clics, désinscriptions, commandes et chiffre d’affaires attribués) pour que Lina les compare et juge vos tests A/B. En lecture seule.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: [],
+    costToEvoliia: 'aucun',
+    costToCreator: 'compte-gratuit-suffisant',
+    costNotice: 'L’API de Mailchimp est incluse dans les comptes, y compris gratuits. Evoliia ne paie rien.',
+    freeQuota: 'Largement suffisant : Lina lit au plus toutes les douze heures, les cinquante dernières campagnes.',
+    webhooks: false,
+    providerReview: 'Aucune validation : la clé est créée par vous, dans votre compte, et se supprime d’un clic.',
+    risk:
+      'Evoliia lit seulement les statistiques agrégées de vos campagnes. Elle ne lit ni vos listes, ni vos contacts, ni leurs courriels, et n’envoie rien.',
+    keyHelp: {
+      label: 'La clé API',
+      hint: 'Elle se termine par « -us » suivi d’un nombre, par exemple « -us21 ». Evoliia la chiffre et ne la réaffiche jamais.',
+    },
+    guide: {
+      url: 'https://admin.mailchimp.com/account/api/',
+      urlLabel: 'Ouvrir les clés API Mailchimp',
+      steps: [
+        'Dans Mailchimp, ouvrez votre profil → Extras → Clés API.',
+        'Cliquez « Créer une clé », nommez-la « Evoliia ».',
+        'Copiez la clé : elle se termine par « -us » et un nombre.',
+        'Revenez ici et collez-la.',
+      ],
+      caution: 'Mailchimp ne permet pas de restreindre une clé : elle donne un accès complet au compte. Evoliia ne s’en sert que pour lire les rapports de campagnes, et vous pouvez la révoquer à tout moment dans Mailchimp.',
+    },
+    reviewedOn: '2026-09-23',
+  },
   {
     id: 'notion',
     name: 'Notion',

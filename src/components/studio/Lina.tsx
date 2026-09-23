@@ -94,12 +94,13 @@ export function EnteteLina({ versAnalyse, versSegments, versConversation }: { ve
   )
 }
 
-export type OngletLina = 'tableau' | 'segments' | 'produits' | 'valeur' | 'resultats'
+export type OngletLina = 'tableau' | 'bilan' | 'segments' | 'produits' | 'valeur' | 'resultats'
 
 export function OngletsLina({ courant, locale, siteId }: { courant: OngletLina; locale: string; siteId: string }) {
   const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
   const onglets: { cle: OngletLina; label: string; href: string }[] = [
     { cle: 'tableau', label: 'Tableau de bord', href: `/${locale}/lina${suffixe}` },
+    { cle: 'bilan', label: 'Bilan et objectifs', href: `/${locale}/lina/bilan${suffixe}` },
     { cle: 'segments', label: 'Segments clients', href: `/${locale}/lina/segments${suffixe}` },
     { cle: 'produits', label: 'Produits et réachat', href: `/${locale}/lina/produits${suffixe}` },
     { cle: 'valeur', label: 'Valeur client', href: `/${locale}/lina/valeur${suffixe}` },

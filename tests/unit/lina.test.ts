@@ -266,6 +266,14 @@ describe('Lina — ce que le modèle reçoit', () => {
       audiences: [],
       scenarios: [],
       produitsSegments: {},
+      releve: null,
+      releves: [],
+      bilan: null,
+      alertes: [],
+      score: null,
+      objectifs: { tauxReachat: null, caExistants30: null, reactives30: null, score: null },
+      progression: [],
+      pistesServices: [],
     }).join('\n')
     expect(faits).toContain('Clients dormants')
     expect(faits).not.toMatch(/demo\.myshopify|Client n°|gid:\/\//u)

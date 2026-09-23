@@ -18,6 +18,21 @@ function quand(date: Date | null): string {
   return date === null ? 'jamais' : date.toISOString().slice(0, 10)
 }
 
+/** V3 : services et SaaS, objectifs — ce qui se dit même sans boutique lue. */
+function faitsCommuns(vue: VueLina): string[] {
+  const lignes: string[] = []
+  if (vue.pistesServices.length > 0) {
+    lignes.push('Pistes pour une activité de services ou un SaaS (depuis Nova, totaux seulement) :', ...vue.pistesServices.map((piste) => `- ${piste.titre} : ${piste.constat} ${piste.mesure}`))
+  }
+  if (vue.progression.length > 0) {
+    lignes.push(
+      'Objectifs CRM fixés par la personne :',
+      ...vue.progression.map((un) => `- ${un.libelle} : cible ${un.cible}, actuel ${un.actuel ?? 'non mesuré'}${un.atteint ? ' (atteint)' : ''}.`),
+    )
+  }
+  return lignes
+}
+
 export function faitsLina(vue: VueLina, resultats: readonly ResultatVu[] = [], tests: readonly VerdictAB[] = []): string[] {
   const { etat, devise } = vue
   const lignes: string[] = []
@@ -38,7 +53,7 @@ export function faitsLina(vue: VueLina, resultats: readonly ResultatVu[] = [], t
         `Activité déclarée : ${vue.activite === 'services' ? 'services' : 'logiciel par abonnement'}. Lina lit aujourd’hui une base clients Shopify ; pour cette activité, les prospects (HubSpot) et les abonnements (Stripe) sont suivis par Nova.`,
       )
     }
-    return lignes
+    return [...lignes, ...faitsCommuns(vue)]
   }
   const i = vue.indicateurs
   lignes.push(
@@ -120,14 +135,27 @@ export function faitsLina(vue: VueLina, resultats: readonly ResultatVu[] = [], t
   if (resultats.length > 0) {
     lignes.push(
       'Résultats de campagnes saisis :',
-      ...resultats.slice(0, 8).map((r) => `- ${r.nom}${r.variante === '' ? '' : ` (variante ${r.variante})`} : ${nombreLisible(r.envoyes)} envois, conversion ${pourcent(r.tauxConversion)}, CA ${argent(r.caCents, devise)}, revenu par destinataire ${argent(r.revenuParDestinataireCents, devise)}${r.tauxDesinscription === null ? '' : `, désinscriptions ${pourcent(r.tauxDesinscription)}`}.`),
+      ...resultats.slice(0, 8).map((r) => `- ${r.nom}${r.variante === '' ? '' : ` (variante ${r.variante})`} : ${nombreLisible(r.envoyes)} envois, ${r.source === 'manuel' ? 'saisi' : `relu dans ${r.source}`}, ouverture ${pourcent(r.tauxOuverture)}, clic ${pourcent(r.tauxClic)}, conversion ${r.tauxConversion === null ? 'non mesurée' : pourcent(r.tauxConversion)}, CA ${r.caCents === null ? 'non mesuré' : argent(r.caCents, devise)}, revenu par destinataire ${r.revenuParDestinataireCents === null ? 'non mesuré' : argent(r.revenuParDestinataireCents, devise)}${r.tauxDesinscription === null ? '' : `, désinscriptions ${pourcent(r.tauxDesinscription)}`}.`),
+    )
+  }
+  // V3 : le bilan de la semaine, les alertes, le score.
+  if (vue.bilan !== null) {
+    lignes.push(
+      `Bilan de la semaine du ${vue.bilan.semaine}${vue.bilan.compareA === null ? ' (premier relevé : pas encore de comparaison)' : `, comparé au relevé de la semaine du ${vue.bilan.compareA}`} :`,
+      ...vue.bilan.lignes.map((ligne) => `- ${ligne.libelle} : ${ligne.valeur}${ligne.evolution === null ? '' : ` (${ligne.evolution})`}.`),
+    )
+  }
+  if (vue.alertes.length > 0) lignes.push('Alertes de la semaine :', ...vue.alertes.map((alerte) => `- ${alerte.titre} : ${alerte.texte}`))
+  if (vue.score !== null) {
+    lignes.push(
+      `Score de fidélité : ${vue.score.score}/100 (indicateur interne d’Evoliia, repères fixes, pas une norme du marché) — ${vue.score.composantes.map((un) => `${un.libelle} ${un.valeur} = ${nombreLisible(un.points, 1)}/${un.max}`).join(' ; ')}.`,
     )
   }
   if (tests.length > 0) lignes.push('Tests A/B :', ...tests.map((test) => `- ${test.groupe} : ${test.explication}`))
   if (vue.insights.length > 0) lignes.push('Ce que Lina a détecté :', ...vue.insights.map((insight) => `- ${insight.texte}`))
   const aVerifier = vue.sante.filter((ligne) => ligne.etat !== 'bon')
   if (aVerifier.length > 0) lignes.push('Santé de la base :', ...aVerifier.map((ligne) => `- ${ligne.texte}`))
-  return lignes
+  return [...lignes, ...faitsCommuns(vue)]
 }
 
 /** Ce qu'Oria reçoit de Lina : les opportunités, une par ligne, déjà chiffrées. */

@@ -1,5 +1,7 @@
 import { lireLina } from '@/server/lina/service'
 import { lireResultats, testsAB } from '@/server/lina/resultats'
+import { lireEtatEmailing } from '@/server/lina/emailing'
+import { EmailingLina } from '@/components/studio/LinaV3'
 import { ResultatsTableLina, TestsABLina } from '@/components/studio/LinaV2'
 import { SaisieResultatLina } from '@/components/studio/ResultatsLina'
 import { Card, CardBody } from '@/components/ui'
@@ -18,22 +20,26 @@ export default async function ResultatsLinaPage({
 }) {
   const demande = await searchParams
   const contexte = await ouvrirLina(params, demande.siteId)
-  const { user, ouvert } = contexte
-  const [vue, resultats] = ouvert ? await Promise.all([lireLina(user.id, { avecNova: false }), lireResultats(user.id)]) : [null, []]
+  const { locale, user, ouvert } = contexte
+  const [vue, resultats, emailing] = ouvert
+    ? await Promise.all([lireLina(user.id, { avecNova: false }), lireResultats(user.id), lireEtatEmailing(user.id).catch(() => null)])
+    : [null, [], null]
+  const campagnes = vue === null ? [] : vue.campagnes.map((campagne) => ({ cle: campagne.cle, titre: campagne.titre }))
   return (
     <CadreLina contexte={contexte} courant="resultats" onglets={vue !== null && !vue.vierge}>
       {vue === null ? null : (
         <>
+          <EmailingLina etat={emailing} versConnexions={`/${locale}/connexions`} />
           <TestsABLina tests={testsAB(resultats)} />
-          <ResultatsTableLina resultats={resultats} devise={vue.devise} />
+          <ResultatsTableLina resultats={resultats} devise={vue.devise} campagnes={campagnes} />
           <Card>
             <CardBody>
               <h2 className="m-0 text-base font-semibold">Ajouter les résultats d’un envoi</h2>
               <p className="mt-1 mb-3 text-xs leading-relaxed text-[var(--color-ink-soft)]">
-                Recopiez les chiffres de votre outil d’envoi (Shopify Email, Klaviyo, Brevo…). Pour un test A/B, donnez le même nom de test aux deux
+                Pour un envoi fait ailleurs (Shopify Email, par exemple), recopiez les chiffres de l’outil. Pour un test A/B, donnez le même nom de test aux deux
                 variantes.
               </p>
-              <SaisieResultatLina campagnes={vue.campagnes.map((campagne) => ({ cle: campagne.cle, titre: campagne.titre }))} />
+              <SaisieResultatLina campagnes={campagnes} />
             </CardBody>
           </Card>
         </>

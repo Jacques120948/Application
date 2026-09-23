@@ -71,6 +71,7 @@ model User {
   reglagesLina       LinaReglages?
   produitsLina       LinaProduit[]
   resultatsLina      LinaResultat[]
+  relevesLina        LinaReleve[]
   supportAlerts      Boolean             @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId   String?             @unique
@@ -2756,6 +2757,9 @@ model LinaSynchro {
   analyse          Json      @default("{}")
   commandesAt      DateTime?
   commandesMessage String    @default("")
+  /// V3 : la dernière lecture de l'outil d'emailing, et son dernier refus.
+  emailingAt       DateTime?
+  emailingMessage  String    @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2764,10 +2768,12 @@ model LinaSynchro {
 }
 
 model LinaReglages {
-  id       String @id @default(uuid()) @db.Uuid
-  userId   String @unique @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @unique @db.Uuid
   /// Les seuils des segments, réglables par la personne.
-  criteres Json   @default("{}")
+  criteres  Json   @default("{}")
+  /// V3 : les objectifs CRM que la personne se fixe.
+  objectifs Json   @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2812,13 +2818,34 @@ model LinaResultat {
   envoyes         Int
   ouvertures      Int?
   clics           Int?
-  conversions     Int       @default(0)
-  caCents         Int       @default(0)
+  /// `null` : l'outil d'envoi ne le mesure pas (Brevo n'attribue pas de commandes).
+  conversions     Int?
+  caCents         Int?
   desinscriptions Int?
+  /// V3 : manuel, ou l'outil d'où le résultat a été relu (klaviyo, brevo, mailchimp).
+  source          String    @default("manuel")
+  /// L'identifiant de la campagne chez l'outil : relire la met à jour au lieu de la dupliquer.
+  refExterne      String?
 
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, source, refExterne])
   @@index([userId, createdAt])
+}
+
+/// Lina V3 : un relevé par semaine des indicateurs clients, pour comparer et alerter.
+model LinaReleve {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  /// Le lundi de la semaine.
+  semaine   DateTime @db.Date
+  donnees   Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, semaine])
 }

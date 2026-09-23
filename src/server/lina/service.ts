@@ -1,6 +1,25 @@
 import { withUserScope } from '@/server/db/scope'
 import { lireNova } from '@/server/nova/service'
 import { reglagesNova, type Activite } from '@/server/nova/reglages'
+import type { LectureCrm } from '@/server/nova/crm'
+import { logger } from '@/server/observability/logger'
+import { lireObjectifs, progression, type ObjectifsLina, type ProgressionObjectif } from './objectifs'
+import {
+  alertesLina,
+  bilanSemaine,
+  construireReleve,
+  enregistrerReleve,
+  lireReleves,
+  lundiDe,
+  releveAvant,
+  scoreFidelite,
+  type AlerteLina,
+  type BilanLina,
+  type Releve,
+  type ReleveDate,
+  type ScoreFidelite,
+} from './releves'
+import { pistesServices, type AbonnementsPourLina, type PisteService } from './services'
 import { lireEtatLina, type EtatLina, type PaniersLina } from './collecte'
 import { criteresLina, type Criteres } from './criteres'
 import type { AnalyseCommandes, ProduitAnalyse } from './commandes'
@@ -46,6 +65,8 @@ import {
   type Segment,
 } from './segments'
 
+const JOUR_MS = 24 * 60 * 60 * 1000
+
 /**
  * La vue de Lina : tout ce que son écran, sa conversation et Oria lisent.
  *
@@ -60,6 +81,9 @@ export type DepuisNova = {
   cac: number | null
   chiffre30: number | null
   devise: string
+  /** V3 : ce que Nova lit du CRM et des abonnements, pour les services et les SaaS. */
+  crm: LectureCrm | null
+  abonnements: AbonnementsPourLina | null
 }
 
 export type VueLina = {
@@ -94,6 +118,16 @@ export type VueLina = {
   scenarios: Scenario[]
   /** Le produit le plus acheté par les clients à réactiver et par les dormants. */
   produitsSegments: Partial<Record<CleSegment, string>>
+  /** V3 : le relevé de la semaine, les précédents, et ce qu'on en tire. */
+  releve: Releve | null
+  releves: ReleveDate[]
+  bilan: BilanLina | null
+  alertes: AlerteLina[]
+  score: ScoreFidelite | null
+  objectifs: ObjectifsLina
+  progression: ProgressionObjectif[]
+  /** Services et SaaS : prospects à relancer, abonnés à garder — depuis Nova. */
+  pistesServices: PisteService[]
 }
 
 async function lireClients(userId: string): Promise<(ClientIndex & { devise: string })[]> {
@@ -137,7 +171,14 @@ async function depuisNova(userId: string): Promise<DepuisNova | null> {
   const vue = await lireNova(userId, 'fr', { periode: '30' }).catch(() => null)
   if (vue === null || vue.vierge) return null
   const valeur = (cle: string) => vue.kpis.find((kpi) => kpi.cle === cle)?.valeur ?? null
-  return { cac: valeur('cac'), chiffre30: valeur('chiffre'), devise: vue.devise }
+  const abos = vue.abonnements.indicateurs
+  return {
+    cac: valeur('cac'),
+    chiffre30: valeur('chiffre'),
+    devise: vue.devise,
+    crm: vue.lectureCrm,
+    abonnements: abos === null ? null : { indicateurs: abos, devise: vue.abonnements.etat.instantane?.devise || vue.devise },
+  }
 }
 
 /** Les opportunités transmises à Oria, écrites comme Lina les dirait. */
@@ -155,12 +196,19 @@ export function pourOria(campagnes: readonly Campagne[], segments: readonly Segm
  */
 export async function lireLina(userId: string, options: { avecNova?: boolean; maintenant?: Date } = {}): Promise<VueLina> {
   const maintenant = options.maintenant ?? new Date()
-  const [etat, criteres, reglages] = await Promise.all([lireEtatLina(userId), criteresLina(userId), reglagesNova(userId)])
+  const [etat, criteres, reglages, reglagesLina] = await Promise.all([
+    lireEtatLina(userId),
+    criteresLina(userId),
+    reglagesNova(userId),
+    withUserScope(userId, (tx) => tx.linaReglages.findUnique({ where: { userId }, select: { objectifs: true } })),
+  ])
   const lue = etat.synchroAt !== null
-  const [clients, nova] = await Promise.all([
+  const [clients, nova, releves] = await Promise.all([
     lue ? lireClients(userId) : Promise.resolve([]),
     options.avecNova === false ? Promise.resolve(null) : depuisNova(userId),
+    lue ? lireReleves(userId) : Promise.resolve([]),
   ])
+  const objectifs = lireObjectifs(reglagesLina?.objectifs ?? null)
   const devise = clients.find((client) => client.devise !== '')?.devise ?? etat.paniers?.devise ?? nova?.devise ?? ''
   const vide: VueLina = {
     etat,
@@ -190,6 +238,14 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     audiences: [],
     scenarios: [],
     produitsSegments: {},
+    releve: null,
+    releves,
+    bilan: null,
+    alertes: [],
+    score: null,
+    objectifs,
+    progression: progression(objectifs, null, devise),
+    pistesServices: pistesServices(reglages.activite, nova?.crm ?? null, nova?.abonnements ?? null),
   }
   if (!lue) return vide
 
@@ -221,6 +277,21 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     const titre = produitPrincipalSegment(clients, cle, contexte, produits)
     if (titre !== null) produitsSegments[cle] = titre
   }
+
+  // V3 : le relevé de la semaine, comparé aux précédents.
+  const actifDepuis = +maintenant - criteres.actifJours * JOUR_MS
+  const vipInactifs = membresSegment(clients, 'vip', contexte, Number.POSITIVE_INFINITY).filter(
+    (client) => client.derniereCommande === null || +client.derniereCommande < actifDepuis,
+  ).length
+  const releve = construireReleve({ indicateurs, segments, vipInactifs, paniers: etat.paniers, recents: etat.analyse?.recents ?? null, maintenant })
+  const semaine = lundiDe(maintenant)
+  const anterieurs = releves.filter((un) => un.semaine < semaine)
+  await enregistrerReleve(userId, releve, semaine).catch(() => logger.warn('relevé de Lina non enregistré', { userId }))
+  const premiereDe = (client: ClientIndex) => +(client.premiereCommande ?? client.creeLe)
+  const nouveauxEntre = (du: number, au: number) => clients.filter((client) => client.commandes > 0 && premiereDe(client) >= du && premiereDe(client) < au).length
+  const quickWins = gainsRapides(campagnes)
+  const topSegment = segments.find((segment) => segment.cle === campagnes[0]?.segment) ?? null
+
   const plusAncien = clients.reduce<Date | null>((min, client) => (min === null || client.creeLe < min ? client.creeLe : min), null)
   return {
     ...vide,
@@ -233,7 +304,7 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
       ...detecter(segments, indicateurs, etat.paniers, criteres, devise),
       ...(reachat[0] === undefined ? [] : [{ cle: 'reachat-produit', texte: `« ${reachat[0].titre} » est le produit le plus racheté : ${reachat[0].p25} à ${reachat[0].p75} jours entre deux achats.` }]),
     ].slice(0, 5),
-    quickWins: gainsRapides(campagnes),
+    quickWins,
     sante: santeCrm(segments, indicateurs, etat.paniers, {
       clients: clients.length,
       tronque: etat.tronque,
@@ -241,7 +312,7 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
       plusAncien,
       maintenant,
     }),
-    topSegment: segments.find((segment) => segment.cle === campagnes[0]?.segment) ?? null,
+    topSegment,
     pourOria: pourOria(campagnes, segments, devise),
     produits,
     reachat,
@@ -253,6 +324,23 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     audiences: audiencesPub(segments),
     scenarios: scenarios(segments, reachat, paniersRestants, criteres),
     produitsSegments,
+    releve,
+    releves: [{ ...releve, semaine }, ...anterieurs],
+    bilan: bilanSemaine({
+      semaine,
+      actuel: releve,
+      avant: releveAvant(anterieurs, semaine, 1),
+      nouveaux7: nouveauxEntre(+maintenant - 7 * JOUR_MS, +maintenant + 1),
+      nouveauxAvant7: nouveauxEntre(+maintenant - 14 * JOUR_MS, +maintenant - 7 * JOUR_MS),
+      reactives7: etat.analyse?.recents?.reactives7 ?? null,
+      campagnes,
+      quickWins,
+      topSegment,
+      devise,
+    }),
+    alertes: alertesLina({ actuel: releve, semaine, releves: anterieurs, paniers: etat.paniers, actifJours: criteres.actifJours }),
+    score: scoreFidelite(releve),
+    progression: progression(objectifs, releve, devise),
   }
 }
 

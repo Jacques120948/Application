@@ -114,11 +114,28 @@ faire.
 Coût pour Evoliia : aucun — un export en masse de plus par analyse, sur l'API Shopify de la
 personne. Aucun envoi d'email, aucune écriture dans Shopify.
 
+## V3 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Outils d'envoi | `integrations/providers/emailing.ts`, `lina/emailing.ts` | Klaviyo (clé privée `pk_…`, lecture des campagnes et des métriques), Brevo (clé `xkeysib-…`), Mailchimp (clé `…-usNN`). **Lecture seule, statistiques agrégées des 50 dernières campagnes envoyées** : envois, ouvertures et clics uniques, désinscriptions, commandes et CA quand l'outil les attribue (Klaviyo « Placed Order », Mailchimp e-commerce). Brevo ne mesure pas les commandes : « non mesuré », jamais zéro. Aucun destinataire, aucune liste, aucun profil. Un seul outil lu (le premier relié). Même rythme que le reste de Lina : 12 h à l'ouverture, 2 min entre deux clics. Une clé refusée met la connexion en erreur ; l'écran le dit et garde les résultats déjà relus. |
+| Import | `lina/resultats.ts` (`importerCampagnes`, `classerResultat`) | `LinaResultat.source` + `refExterne` (unique par personne) : une campagne relue deux fois est mise à jour, pas dédoublée. Le nom de test et la variante, que l'outil ne connaît pas, se donnent à la main (« Classer »). Un résultat relu ne se supprime pas (il reviendrait) ; un résultat saisi, si. |
+| Relevés hebdomadaires | `lina/releves.ts`, table `LinaReleve` (RLS forcée) | Un relevé par semaine (clé : le lundi), réécrit à chaque ouverture de la semaine. Des totaux seulement : acheteurs, actifs, récurrents, fidèles, taux de réachat, dormants, à risque, VIP et VIP inactifs, paniers, réactivations et CA des clients existants sur 30 jours (depuis les commandes), score. |
+| Commandes récentes | `lina/commandes.ts` (`recents`) | Réactivés sur 7 et 30 jours (retour après un silence > seuil « actif »), CA des 30 derniers jours venant de clients existants ou nouveaux. Rien de plus n'est écrit. |
+| Bilan de la semaine | `bilanSemaine` | Nouveaux clients (7 j contre les 7 j d'avant), récurrents, taux de réachat, CA des clients existants, paniers récupérés, réactivés, à risque, dormants, score — comparés au relevé de la semaine précédente. « Stable » sous 1 point ou 5 %. Ce qui progresse, ce qui baisse, segment prioritaire, opportunité principale (hypothèse de calcul), trois actions de la semaine. Une évolution est observée, jamais expliquée. |
+| Alertes | `alertesLina` | **Trois au plus**, baisses d'abord : réachat en baisse d'au moins 1 point sur 4 semaines ; VIP inactifs ≥ 5 et en hausse ; paniers abandonnés ≥ 20 et +25 % ; clients à risque ≥ 10 et +20 %. Bonnes nouvelles : réachat en hausse, VIP qui reviennent. Oria reçoit les baisses en signaux « important ». |
+| Score de fidélité | `scoreFidelite` | 0–100, dès 20 acheteurs. Réachat (repère 40 %, 25 pts), actifs (40 %, 20), fidèles (15 %, 15), part du CA récurrent (60 %, 15), non dormants (15), paniers récupérés (15 %, 10 — répartis ailleurs sous 10 paniers). **Indicateur interne**, repères fixes, pas une norme du marché ni une comparaison avec d'autres boutiques. |
+| Objectifs CRM | `lina/objectifs.ts`, `LinaReglages.objectifs`, `/api/lina/objectifs` | Taux de réachat, CA des clients existants sur 30 jours, réactivations sur 30 jours, score. Aucun par défaut : Lina n'en propose pas. Avancement affiché, « non mesuré » quand la mesure manque. |
+| Services et SaaS | `lina/services.ts` | Depuis Nova, déjà calculé : prospects des mois terminés qui n'ont pas signé (HubSpot, dès 20 prospects), demande d'avis aux clients signés (services), churn des abonnés (Stripe, dès 20 abonnés ; « prévenir les départs » dès 3 % par mois). Totaux seulement. Affiché même sans boutique Shopify. |
+| Écrans | `/lina/bilan` (nouvel onglet « Bilan et objectifs »), `/lina/resultats`, `/lina` | Alertes en tête du tableau de bord ; bilan, score semaine après semaine, objectifs ; carte « Outil d'envoi » sur les résultats. |
+| Conversation | `lina/contexte.ts`, `LINA_SYSTEM` | Bilan, alertes, score, objectifs et pistes services dans les faits ; règles ajoutées : évolution observée ≠ cause, score interne, « non mesuré », objectifs sans promesse. |
+
+Coût pour Evoliia : aucun. Les outils d'envoi sont lus avec la clé de la personne, sur son
+compte ; les relevés, le bilan, les alertes et le score sont du code. Seule la conversation
+coûte des crédits, sur un clic.
+
 ## Encore à venir
 
-Import automatique des résultats depuis un outil d'emailing (Klaviyo, Brevo, Mailchimp :
-lecture seule, clé de la personne, sans coût pour Evoliia — à valider avant construction),
-bilan hebdomadaire et alertes de Lina (qui demandent un historique des indicateurs),
-objectifs CRM et score de fidélité, WooCommerce et Stripe comme sources de clients, SMS et
-WhatsApp (le consentement SMS n'est pas exposé par Shopify dans cette version de l'API),
-niveau d'autonomie « automatique ».
+WooCommerce et Stripe comme sources de clients, SMS et WhatsApp (le consentement SMS n'est
+pas exposé par Shopify dans cette version de l'API), niveau d'autonomie « automatique »,
+envoi du bilan par courriel.

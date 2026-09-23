@@ -16,6 +16,7 @@ import {
   ReactivationLina,
   SanteLina,
 } from '@/components/studio/Lina'
+import { AlertesLina, PistesServicesLina } from '@/components/studio/LinaV3'
 import { CadreLina, ouvrirLina } from './cadre'
 
 /**
@@ -73,9 +74,12 @@ export default async function LinaPage({
   return (
     <CadreLina contexte={contexte} courant="tableau" onglets={vue !== null && !vue.vierge}>
       {vue === null ? null : vue.vierge || vue.indicateurs === null ? (
-        <AccueilLina etat={vue.etat} activite={vue.activite} versConnexions={`/${locale}/connexions`}>
-          {synchro}
-        </AccueilLina>
+        <>
+          <AccueilLina etat={vue.etat} activite={vue.activite} versConnexions={`/${locale}/connexions`}>
+            {synchro}
+          </AccueilLina>
+          <PistesServicesLina pistes={vue.pistesServices} activite={vue.activite} />
+        </>
       ) : (
         <>
           <div className="grid gap-2">
@@ -92,11 +96,16 @@ export default async function LinaPage({
             topSegment={vue.topSegment}
             opportunites={vue.campagnes.length}
           />
+          <AlertesLina
+            alertes={vue.alertes}
+            versOnglet={(onglet) => `/${locale}/lina${onglet === 'tableau' ? '/bilan' : `/${onglet}`}${suffixe}`}
+          />
           <InsightsLina insights={vue.insights} />
           <QuickWinsLina quickWins={vue.quickWins} />
           <ReactivationLina segments={vue.segments} devise={vue.devise} campagnes={vue.campagnes} produits={vue.produitsSegments} />
           <PaniersLina paniers={vue.paniers} devise={vue.devise} transmission={transmission} />
           <CampagnesLina campagnes={vue.campagnes} devise={vue.devise} transmission={transmission} />
+          <PistesServicesLina pistes={vue.pistesServices} activite={vue.activite} />
           <NovaLina nova={vue.nova} indicateurs={vue.indicateurs} devise={vue.devise} />
           <SanteLina lignes={vue.sante} />
           <PourOriaLina lignes={vue.pourOria} versOria={`/${locale}/oria${suffixe}`} />

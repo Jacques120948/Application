@@ -1,13 +1,14 @@
 import { z } from 'zod'
 import { notFound } from '@/lib/errors'
 import { withUserScope } from '@/server/db/scope'
+import type { CampagneEmail, OutilEmailing } from '@/server/integrations/providers/emailing'
 
 /**
  * Les résultats des campagnes, et leur comparaison.
  *
- * En V2, la personne les saisit : Lina ne lit encore aucun outil d'emailing. Les chiffres
- * saisis restent les siens ; Lina en tire des taux, le revenu par destinataire, et ne déclare
- * un gagnant d'un test A/B que si l'écart ne peut pas raisonnablement venir du hasard.
+ * Saisis à la main, ou relus depuis Klaviyo, Brevo ou Mailchimp (V3). Lina en tire des taux,
+ * le revenu par destinataire, et ne déclare un gagnant d'un test A/B que si l'écart ne peut
+ * pas raisonnablement venir du hasard. Ce qu'un outil ne mesure pas reste « non mesuré ».
  */
 
 export const resultatSchema = z
@@ -36,23 +37,32 @@ export const resultatSchema = z
 
 export type ResultatSaisi = z.infer<typeof resultatSchema>
 
-export type ResultatVu = ResultatSaisi & {
+/** Un résultat, saisi ou relu : un outil d'envoi peut ne pas mesurer les commandes. */
+export type Resultat = Omit<ResultatSaisi, 'conversions' | 'caCents'> & {
+  conversions: number | null
+  caCents: number | null
+  source: 'manuel' | OutilEmailing
+}
+
+export type ResultatVu = Resultat & {
   id: string
   tauxOuverture: number | null
   tauxClic: number | null
-  tauxConversion: number
-  revenuParDestinataireCents: number
+  tauxConversion: number | null
+  revenuParDestinataireCents: number | null
   tauxDesinscription: number | null
 }
 
-export function enrichir(id: string, r: ResultatSaisi): ResultatVu {
+export function enrichir(id: string, r: Resultat | ResultatSaisi): ResultatVu {
+  const source = 'source' in r ? r.source : 'manuel'
   return {
     ...r,
+    source,
     id,
     tauxOuverture: r.ouvertures === null ? null : r.ouvertures / r.envoyes,
     tauxClic: r.clics === null ? null : r.clics / r.envoyes,
-    tauxConversion: r.conversions / r.envoyes,
-    revenuParDestinataireCents: Math.round(r.caCents / r.envoyes),
+    tauxConversion: r.conversions === null ? null : r.conversions / r.envoyes,
+    revenuParDestinataireCents: r.caCents === null ? null : Math.round(r.caCents / r.envoyes),
     tauxDesinscription: r.desinscriptions === null ? null : r.desinscriptions / r.envoyes,
   }
 }
@@ -90,9 +100,13 @@ export function significatif(succesA: number, totalA: number, succesB: number, t
 }
 
 export function verdictAB(groupe: string, a: ResultatVu, b: ResultatVu): VerdictAB {
+  const conversionsConnues = a.conversions !== null && b.conversions !== null
   const critere: VerdictAB['critere'] =
-    a.conversions + b.conversions >= EVENEMENTS_MIN_AB || a.clics === null || b.clics === null ? 'conversions' : 'clics'
-  const succes = (r: ResultatVu) => (critere === 'conversions' ? r.conversions : (r.clics ?? 0))
+    conversionsConnues && ((a.conversions ?? 0) + (b.conversions ?? 0) >= EVENEMENTS_MIN_AB || a.clics === null || b.clics === null) ? 'conversions' : 'clics'
+  const succes = (r: ResultatVu) => (critere === 'conversions' ? (r.conversions ?? 0) : (r.clics ?? 0))
+  if (critere === 'clics' && (a.clics === null || b.clics === null)) {
+    return { groupe, a, b, critere, gagnant: null, ecart: null, explication: 'Pas de gagnant possible : ni les commandes ni les clics ne sont mesurés pour les deux variantes.' }
+  }
   const base = { groupe, a, b, critere }
   if (a.envoyes < ENVOIS_MIN_AB || b.envoyes < ENVOIS_MIN_AB) {
     return { ...base, gagnant: null, ecart: null, explication: `Pas encore de gagnant : il faut au moins ${ENVOIS_MIN_AB} envois par variante.` }
@@ -138,6 +152,7 @@ export async function lireResultats(userId: string): Promise<ResultatVu[]> {
   const lignes = await withUserScope(userId, (tx) => tx.linaResultat.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }))
   return lignes.map((ligne) =>
     enrichir(ligne.id, {
+      source: ligne.source as Resultat['source'],
       nom: ligne.nom,
       type: ligne.type,
       groupe: ligne.groupe,
@@ -159,6 +174,46 @@ export async function enregistrerResultat(userId: string, saisie: ResultatSaisi)
     tx.linaResultat.create({ data: { userId, ...propre, envoyeLe: propre.envoyeLe === null ? null : new Date(propre.envoyeLe) } }),
   )
   return enrichir(ligne.id, propre)
+}
+
+/**
+ * Relit les campagnes d'un outil d'envoi dans les résultats : une campagne déjà relue est mise
+ * à jour, une nouvelle est ajoutée. Le nom de test et la variante, que l'outil ne connaît pas,
+ * se renseignent ensuite à la main.
+ */
+export async function importerCampagnes(userId: string, outil: OutilEmailing, campagnes: readonly CampagneEmail[]): Promise<number> {
+  await withUserScope(userId, async (tx) => {
+    for (const campagne of campagnes) {
+      const donnees = {
+        nom: campagne.nom.slice(0, 120),
+        envoyeLe: campagne.envoyeLe === null ? null : new Date(campagne.envoyeLe),
+        envoyes: campagne.envoyes,
+        ouvertures: campagne.ouvertures,
+        clics: campagne.clics,
+        conversions: campagne.conversions,
+        caCents: campagne.caCents === null ? null : Math.min(campagne.caCents, 2_000_000_000),
+        desinscriptions: campagne.desinscriptions,
+      }
+      await tx.linaResultat.upsert({
+        where: { userId_source_refExterne: { userId, source: outil, refExterne: campagne.ref } },
+        create: { userId, source: outil, refExterne: campagne.ref, ...donnees },
+        update: donnees,
+      })
+    }
+  })
+  return campagnes.length
+}
+
+/** Le nom de test et la variante d'un résultat relu : ce que l'outil ne sait pas. */
+export const classementSchema = z
+  .object({ id: z.string().uuid(), groupe: z.string().trim().max(60), variante: z.enum(['', 'A', 'B']), type: z.string().trim().max(60) })
+  .strict()
+  .refine((r) => (r.variante === '') === (r.groupe === ''), { message: 'Une variante appartient à un test, et inversement.', path: ['groupe'] })
+
+export async function classerResultat(userId: string, entree: z.infer<typeof classementSchema>): Promise<void> {
+  const { id, ...donnees } = classementSchema.parse(entree)
+  const faits = await withUserScope(userId, (tx) => tx.linaResultat.updateMany({ where: { id, userId }, data: donnees }))
+  if (faits.count === 0) throw notFound('Ce résultat n’existe pas.')
 }
 
 export async function supprimerResultat(userId: string, id: string): Promise<void> {

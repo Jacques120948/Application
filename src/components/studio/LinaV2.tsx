@@ -4,7 +4,7 @@ import type { ResultatVu, VerdictAB } from '@/server/lina/resultats'
 import type { AudiencePub, NiveauRisque, PalierFidelite, ReachatProduit, Scenario, SuggestionProduit, ValeurClient } from '@/server/lina/valeur'
 import { CopierTexte } from './CopierTexte'
 import { DelegationOria } from './DelegationOria'
-import { SupprimerResultatLina } from './ResultatsLina'
+import { ClasserResultatLina, SupprimerResultatLina } from './ResultatsLina'
 import type { TransmissionLina } from './Lina'
 
 /**
@@ -330,7 +330,22 @@ export function ScenariosLina({ scenarios }: { scenarios: readonly Scenario[] })
 
 // ── Résultats de campagnes ──────────────────────────────────────────────────
 
-export function ResultatsTableLina({ resultats, devise }: { resultats: readonly ResultatVu[]; devise: string }) {
+const OUTIL: Record<string, string> = { klaviyo: 'Klaviyo', brevo: 'Brevo', mailchimp: 'Mailchimp' }
+
+/** Ce qu'un outil d'envoi ne mesure pas se dit « non mesuré », pas « 0 ». */
+function mesure(texte: string, valeur: number | null): string {
+  return valeur === null ? 'non mesuré' : texte
+}
+
+export function ResultatsTableLina({
+  resultats,
+  devise,
+  campagnes = [],
+}: {
+  resultats: readonly ResultatVu[]
+  devise: string
+  campagnes?: readonly { cle: string; titre: string }[]
+}) {
   if (resultats.length === 0) {
     return (
       <Card>
@@ -351,20 +366,22 @@ export function ResultatsTableLina({ resultats, devise }: { resultats: readonly 
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <strong className="text-sm">
                   {r.nom}
+                  {r.groupe === '' ? '' : ` · test « ${r.groupe} »`}
                   {r.variante === '' ? '' : ` · variante ${r.variante}`}
                 </strong>
-                <SupprimerResultatLina id={r.id} />
+                {r.source === 'manuel' ? <SupprimerResultatLina id={r.id} /> : <Badge>Relu dans {OUTIL[r.source] ?? r.source}</Badge>}
               </div>
               <dl className="m-0 mt-2 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
                 <Chiffre label="Envoyés" valeur={nombre(r.envoyes)} />
-                <Chiffre label="Ouvertures" valeur={pourcent(r.tauxOuverture)} />
-                <Chiffre label="Clics" valeur={pourcent(r.tauxClic)} />
-                <Chiffre label="Conversion" valeur={pourcent(r.tauxConversion)} />
-                <Chiffre label="Chiffre d’affaires" valeur={argent(r.caCents, devise)} />
-                <Chiffre label="Revenu par destinataire" valeur={argent(r.revenuParDestinataireCents, devise)} />
-                <Chiffre label="Désinscriptions" valeur={pourcent(r.tauxDesinscription)} />
+                <Chiffre label="Ouvertures" valeur={mesure(pourcent(r.tauxOuverture), r.tauxOuverture)} />
+                <Chiffre label="Clics" valeur={mesure(pourcent(r.tauxClic), r.tauxClic)} />
+                <Chiffre label="Conversion" valeur={mesure(pourcent(r.tauxConversion), r.tauxConversion)} />
+                <Chiffre label="Chiffre d’affaires" valeur={mesure(argent(r.caCents, devise), r.caCents)} />
+                <Chiffre label="Revenu par destinataire" valeur={mesure(argent(r.revenuParDestinataireCents, devise), r.revenuParDestinataireCents)} />
+                <Chiffre label="Désinscriptions" valeur={mesure(pourcent(r.tauxDesinscription), r.tauxDesinscription)} />
                 <Chiffre label="Envoyé le" valeur={r.envoyeLe === null ? '—' : r.envoyeLe.split('-').reverse().join('.')} />
               </dl>
+              {r.source === 'manuel' ? null : <ClasserResultatLina id={r.id} groupe={r.groupe} variante={r.variante} type={r.type} campagnes={campagnes} />}
             </li>
           ))}
         </ul>

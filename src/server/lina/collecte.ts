@@ -17,6 +17,7 @@ import { markConnectionError, useCredential } from '@/server/integrations/servic
 import { aRelire, JOUR_MS, jourIso, PAUSE_MANUELLE_MS } from '@/server/nova/collecte-commerce'
 import { logger } from '@/server/observability/logger'
 import { analyserCommandes, type AnalyseCommandes } from './commandes'
+import { criteresLina } from './criteres'
 
 /**
  * La collecte de Lina : la base clients de la boutique, relue au rythme de Nova.
@@ -303,6 +304,7 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
           historiqueComplet: false,
           fuseau: reglages?.fuseau || 'Europe/Zurich',
           maintenant,
+          seuilReactivation: (await criteresLina(userId)).actifJours,
         })
         await ecrireCommandes(userId, resultat, maintenant)
         logger.info('commandes analysées pour Lina', { commandes: commandes.length, produits: resultat.produits.length })

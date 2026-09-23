@@ -53,6 +53,17 @@ export type Reachat = {
   base: number
 }
 
+/** V3 : ce qui s'est passé récemment, pour le bilan de la semaine. */
+export type Recents = {
+  /** Clients revenus après un silence de plus de `seuilReactivation` jours : sur 7 et 30 jours. */
+  reactives7: number
+  reactives30: number
+  /** Chiffre d'affaires des 30 derniers jours venant de clients qui avaient déjà commandé. */
+  caExistants30Cents: number
+  caNouveaux30Cents: number
+  seuilReactivation: number
+}
+
 export type AnalyseCommandes = {
   au: string
   depuis: string
@@ -64,6 +75,8 @@ export type AnalyseCommandes = {
   ensemble: Paire[]
   montees: Paire[]
   reachat: Reachat
+  /** Absent des analyses écrites avant la V3. */
+  recents?: Recents
 }
 
 function quantile(tries: readonly number[], q: number): number | null {
@@ -85,7 +98,7 @@ function jours(de: string, a: string): number {
 export function analyserCommandes(
   commandes: readonly CommandeExport[],
   commandesConnues: ReadonlyMap<string, number>,
-  options: { depuis: string; tronque: boolean; historiqueComplet: boolean; fuseau: string; maintenant: Date },
+  options: { depuis: string; tronque: boolean; historiqueComplet: boolean; fuseau: string; maintenant: Date; seuilReactivation?: number },
 ): { parClient: ParClient[]; produits: ProduitAnalyse[]; analyse: AnalyseCommandes } {
   const triees = [...commandes].filter((commande) => commande.creeLe !== '').sort((a, b) => a.creeLe.localeCompare(b.creeLe))
   const parClientCommandes = new Map<string, CommandeExport[]>()
@@ -215,6 +228,26 @@ export function analyserCommandes(
     part: anciens.length === 0 ? 0 : anciens.filter(([, liste]) => liste.length >= 2 && jours(liste[0]!.creeLe, liste[1]!.creeLe) <= n).length / anciens.length,
   }))
 
+  // V3 : réactivations et chiffre d'affaires récent, clients existants contre nouveaux.
+  const seuilReactivation = options.seuilReactivation ?? 90
+  const recents: Recents = { reactives7: 0, reactives30: 0, caExistants30Cents: 0, caNouveaux30Cents: 0, seuilReactivation }
+  const debut30 = +options.maintenant - 30 * JOUR_MS
+  const debut7 = +options.maintenant - 7 * JOUR_MS
+  for (const [ref, liste] of parClientCommandes) {
+    const complet = options.historiqueComplet || (commandesConnues.get(ref) ?? Number.POSITIVE_INFINITY) <= liste.length
+    liste.forEach((commande, rang) => {
+      const quand = Date.parse(commande.creeLe)
+      if (quand < debut30) return
+      // La première commande de l'export n'est une première commande que si l'histoire est complète.
+      if (rang === 0 && complet) recents.caNouveaux30Cents += commande.totalCents
+      else recents.caExistants30Cents += commande.totalCents
+      if (rang > 0 && jours(liste[rang - 1]!.creeLe, commande.creeLe) > seuilReactivation) {
+        recents.reactives30 += 1
+        if (quand >= debut7) recents.reactives7 += 1
+      }
+    })
+  }
+
   // Cohortes : le calcul de Nova, sur les commandes de l'export.
   const pourCohortes: CommandeShopify[] = []
   for (const [ref, liste] of parClientCommandes) {
@@ -251,6 +284,7 @@ export function analyserCommandes(
       suivants: toutesSuivantes.slice(0, PAIRES_MAX),
       ensemble: enPaires(ensemble).slice(0, PAIRES_MAX),
       montees: montees.slice(0, PAIRES_MAX),
+      recents,
       reachat: {
         medianeJours: premiersEcarts.length >= INTERVALLES_MIN ? quantile(premiersEcarts, 0.5) : null,
         p25Jours: premiersEcarts.length >= INTERVALLES_MIN ? quantile(premiersEcarts, 0.25) : null,

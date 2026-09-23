@@ -4,6 +4,7 @@ import { consume, RULES } from '@/server/auth/rate-limit'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { requireFeature } from '@/server/billing/features'
 import { synchroniserLina } from '@/server/lina/collecte'
+import { synchroniserEmailing } from '@/server/lina/emailing'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -24,7 +25,11 @@ export async function POST(request: Request) {
     requireFeature(await getEntitlements(user.id), 'lina_agent')
     consume(`lina-synchro:${user.id}`, RULES.aiOperation)
     const { mode } = input.parse(await readJson(request))
-    const etat = await synchroniserLina(user.id, mode)
+    // La boutique et l'outil d'envoi se relisent ensemble ; « suivre » n'attend que la boutique.
+    const [etat] = await Promise.all([
+      synchroniserLina(user.id, mode),
+      mode === 'suivre' ? Promise.resolve(null) : synchroniserEmailing(user.id, mode).catch(() => null),
+    ])
     return ok({
       etat: etat.etat,
       message: etat.message,

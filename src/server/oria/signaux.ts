@@ -548,7 +548,23 @@ export function depuisNova(nova: VueNova | null, locale: string): Signal[] {
 export function depuisLina(lina: VueLina | null, locale: string, siteId: string): Signal[] {
   if (lina === null || lina.vierge) return []
   const href = `/${locale}/lina${siteId === '' ? '' : `?siteId=${siteId}`}`
-  return lina.campagnes.slice(0, 3).map((campagne) => {
+  // V3 : les alertes de la semaine (baisses seulement : une bonne nouvelle n'est pas une priorité).
+  const alertes: Signal[] = lina.alertes
+    .filter((alerte) => alerte.niveau === 'attention')
+    .map((alerte) => ({
+      cle: `lina:alerte:${alerte.cle}`,
+      sources: ['lina'],
+      titre: alerte.titre,
+      pourquoi: alerte.texte,
+      quoiFaire: 'Voir avec Lina quels clients sont concernés et quelle campagne préparer.',
+      mesure: `Relevés hebdomadaires de Lina sur la base clients Shopify (${nombreLisible(lina.etat.clients)} fiches).`,
+      impact: 'moyen',
+      effort: 'faible',
+      urgence: 'important',
+      confiance: lina.etat.tronque ? 'faible' : 'moyenne',
+      href,
+    }))
+  const campagnes = lina.campagnes.slice(0, 3).map((campagne): Signal => {
     const segment = lina.segments.find((un) => un.cle === campagne.segment)
     const historique = segment === undefined || segment.caCents === 0 ? '' : `, qui ont déjà rapporté ${argent(segment.caCents, lina.devise)}`
     return {
@@ -565,6 +581,7 @@ export function depuisLina(lina: VueLina | null, locale: string, siteId: string)
       href,
     }
   })
+  return [...alertes, ...campagnes]
 }
 
 /**

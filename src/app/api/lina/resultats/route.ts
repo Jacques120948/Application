@@ -3,7 +3,7 @@ import { requireUser } from '@/server/auth/session'
 import { consume, RULES } from '@/server/auth/rate-limit'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { requireFeature } from '@/server/billing/features'
-import { enregistrerResultat, resultatSchema, supprimerResultat } from '@/server/lina/resultats'
+import { classementSchema, classerResultat, enregistrerResultat, resultatSchema, supprimerResultat } from '@/server/lina/resultats'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
@@ -32,6 +32,20 @@ export async function DELETE(request: Request) {
     consume(`lina-resultats:${user.id}`, RULES.appWrite)
     await supprimerResultat(user.id, suppression.parse(await readJson(request)).id)
     return ok({ supprime: true })
+  } catch (error) {
+    return fail(error)
+  }
+}
+
+/** Donner un nom de test et une variante à un résultat relu depuis l'outil d'envoi. */
+export async function PATCH(request: Request) {
+  try {
+    assertSameOrigin(request)
+    const user = await requireUser()
+    requireFeature(await getEntitlements(user.id), 'lina_agent')
+    consume(`lina-resultats:${user.id}`, RULES.appWrite)
+    await classerResultat(user.id, classementSchema.parse(await readJson(request)))
+    return ok({ classe: true })
   } catch (error) {
     return fail(error)
   }
