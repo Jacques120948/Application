@@ -91,7 +91,9 @@ export default async function LinaPage({
             <p className="m-0 text-xs text-[var(--color-ink-faint)]">
               {vue.etat.source === 'woocommerce'
                 ? `Source : commandes WooCommerce des trois dernières années (${vue.etat.clients} clients${vue.etat.tronque ? ', lecture partielle' : ''}). Aucun nom ni adresse n’est lu ; le courriel d’un achat sans compte est transformé en empreinte et jamais gardé.`
-                : vue.etat.source === 'stripe'
+                : vue.etat.source === 'hubspot'
+                  ? `Source : affaires gagnées dans HubSpot sur trois ans (${vue.etat.clients} clients${vue.etat.tronque ? ', lecture partielle' : ''}). Aucun nom, courriel ni société n’est lu : seulement le contact associé, par son numéro.`
+                  : vue.etat.source === 'stripe'
                   ? `Source : paiements Stripe des trois dernières années (${vue.etat.clients} clients${vue.etat.tronque ? ', lecture partielle' : ''}). Aucun nom, courriel ni adresse n’est lu.`
                   : `Source : base clients Shopify (${vue.etat.clients} fiches${vue.etat.tronque ? ', lecture partielle' : ''}) et paniers abandonnés. Aucun nom, courriel ni adresse n’est lu.`}
             </p>

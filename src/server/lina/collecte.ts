@@ -42,6 +42,11 @@ const LIGNES_PAR_LOT = 2_000
 /** Le suffixe de l'opération dit si elle lit le consentement : `|c` oui, `|s` sans. */
 const AVEC_CONSENTEMENT = '|c'
 const SANS_CONSENTEMENT = '|s'
+/** V5 : le consentement email et SMS. Refusé, on retombe sur `|c` et on n'y revient qu'après sept jours. */
+const AVEC_SMS = '|p'
+const PAUSE_SMS_MS = 7 * 24 * 60 * 60 * 1000
+type Niveau = 'sms' | 'email' | 'aucun'
+const SUFFIXE: Record<Niveau, string> = { sms: AVEC_SMS, email: AVEC_CONSENTEMENT, aucun: SANS_CONSENTEMENT }
 /** V2 : la seconde phase, l'export des commandes, qui suit celui des clients. */
 const COMMANDES = '|o'
 /** Trois ans de commandes avec read_all_orders ; sans lui, Shopify n'en rend que soixante jours. */
@@ -78,6 +83,8 @@ export type EtatLina = {
   clients: number
   tronque: boolean
   consentement: boolean
+  /** V5 : le consentement SMS a été lu (Shopify, avec l'accès aux numéros). */
+  consentementSms: boolean
   paniers: PaniersLina | null
 }
 
@@ -96,6 +103,7 @@ const SANS: EtatLina = {
   clients: 0,
   tronque: false,
   consentement: false,
+  consentementSms: false,
   paniers: null,
 }
 
@@ -183,6 +191,7 @@ export async function lireEtatLina(userId: string): Promise<EtatLina> {
     clients: ligne.clients,
     tronque: ligne.tronque,
     consentement: ligne.consentement,
+    consentementSms: ligne.consentementSms,
     paniers: lirePaniers(ligne.paniers),
   }
 }
@@ -209,6 +218,7 @@ async function ecrireClients(userId: string, clients: readonly ClientShopify[]):
           caCents: Math.min(client.caCents, 2_000_000_000),
           devise: client.devise,
           consentement: client.consentement,
+          consentementSms: client.consentementSms ?? 'inconnu',
         })),
         skipDuplicates: true,
       }),
@@ -271,20 +281,27 @@ const MESSAGE_PROTEGEES =
 const MESSAGE_PORTEE =
   'L’autorisation « read_customers » manque à votre application Shopify. Ajoutez-la dans le Dev Dashboard (onglet « Versions »), publiez la version, puis relancez l’analyse.'
 
-/** Lance l'export, avec le consentement d'abord, sans lui si Shopify le refuse. */
-async function lancer(userId: string, acces: AccesShopify, jeton: string, maintenant: Date, consentement: boolean): Promise<void> {
-  const essai = await lancerExportClients(acces, jeton, consentement)
+/**
+ * Lance l'export : consentement email et SMS d'abord, email seul si Shopify refuse l'accès
+ * aux numéros, sans consentement du tout s'il refuse aussi l'accès aux courriels.
+ */
+async function lancer(userId: string, acces: AccesShopify, jeton: string, maintenant: Date, niveau: Niveau): Promise<void> {
+  const essai = await lancerExportClients(acces, jeton, niveau !== 'aucun', niveau === 'sms')
   if (essai.ok) {
     await noter(userId, {
       source: SOURCE,
       etat: 'en-cours',
       message: '',
-      operation: `${essai.operation}${consentement ? AVEC_CONSENTEMENT : SANS_CONSENTEMENT}`,
+      operation: `${essai.operation}${SUFFIXE[niveau]}`,
       lanceAt: maintenant,
     })
     return
   }
-  if (essai.protegees && consentement) return lancer(userId, acces, jeton, maintenant, false)
+  if (essai.protegees && niveau === 'sms') {
+    await noter(userId, { smsRefuseAt: maintenant })
+    return lancer(userId, acces, jeton, maintenant, 'email')
+  }
+  if (essai.protegees && niveau === 'email') return lancer(userId, acces, jeton, maintenant, 'aucun')
   await noter(userId, {
     etat: essai.protegees ? 'protegees' : /read_customers/u.test(essai.raison) ? 'portee' : 'erreur',
     message: essai.protegees ? MESSAGE_PROTEGEES : /read_customers/u.test(essai.raison) ? MESSAGE_PORTEE : essai.raison,
@@ -321,7 +338,8 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
         return lireEtatLina(userId)
       }
       const [operation, variante] = [ligne.operation.slice(0, -2), ligne.operation.slice(-2)]
-      const consentement = variante === AVEC_CONSENTEMENT
+      const consentement = variante === AVEC_CONSENTEMENT || variante === AVEC_SMS
+      const sms = variante === AVEC_SMS
       const suivi = await suivreExport(lu.acces, frappe.jeton, operation)
 
       // La seconde phase : ses échecs ne touchent pas à l'index des clients, déjà utilisable.
@@ -361,8 +379,11 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
         return lireEtatLina(userId)
       }
       if (suivi.statut === 'refuse') {
-        if (consentement) {
-          await lancer(userId, lu.acces, frappe.jeton, maintenant, false)
+        if (sms) {
+          await noter(userId, { smsRefuseAt: maintenant })
+          await lancer(userId, lu.acces, frappe.jeton, maintenant, 'email')
+        } else if (consentement) {
+          await lancer(userId, lu.acces, frappe.jeton, maintenant, 'aucun')
         } else {
           await noter(userId, { etat: 'protegees', message: MESSAGE_PROTEGEES, operation: null })
         }
@@ -373,7 +394,7 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
         return lireEtatLina(userId)
       }
       // Terminé : pas d'adresse veut dire aucun client.
-      const { clients, tronque } = suivi.url === null ? { clients: [], tronque: false } : await telechargerExport(suivi.url, consentement)
+      const { clients, tronque } = suivi.url === null ? { clients: [], tronque: false } : await telechargerExport(suivi.url, consentement, undefined, sms)
       await ecrireClients(userId, clients)
       await noter(userId, {
         etat: 'ok',
@@ -383,6 +404,7 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
         clients: clients.length,
         tronque,
         consentement,
+        consentementSms: sms,
       })
       logger.info('clients relus pour Lina', { clients: clients.length, tronque })
       // Les clients sont là : l'écran s'ouvre, et les commandes se lisent derrière.
@@ -429,7 +451,9 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
           : { ...agregerPaniers([], maintenant, false), erreur: lecture.raison }
     if (paniers !== null) await noter(userId, { paniers: paniers as unknown as Prisma.InputJsonValue })
 
-    await lancer(userId, lu.acces, frappe.jeton, maintenant, true)
+    // Le SMS se retente après sept jours : Shopify a pu accorder l'accès aux numéros depuis.
+    const smsRefuse = ligne?.smsRefuseAt != null && +maintenant - +ligne.smsRefuseAt < PAUSE_SMS_MS
+    await lancer(userId, lu.acces, frappe.jeton, maintenant, smsRefuse ? 'email' : 'sms')
   } catch (error) {
     const raison = error instanceof Error ? error.message : 'Shopify n’a pas répondu.'
     // Une panne pendant les commandes laisse l'index des clients intact et utilisable.

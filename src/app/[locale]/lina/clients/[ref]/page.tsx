@@ -15,6 +15,13 @@ const MOT_CONSENTEMENT: Record<string, string> = {
   inconnu: 'Inconnu : à vérifier dans votre outil d’envoi',
 }
 
+const MOT_SMS: Record<string, string> = {
+  oui: 'Accepte les SMS marketing',
+  non: 'N’accepte pas les SMS marketing',
+  'sans-telephone': 'Pas de numéro de téléphone',
+  inconnu: 'Inconnu : Shopify ne l’a pas donné',
+}
+
 function argent(cents: number | null, devise: string): string {
   if (cents === null) return '—'
   const valeur = cents / 100
@@ -103,7 +110,8 @@ export default async function FicheClientLinaPage({
                     : 'Estimation : son panier moyen × ses commandes par an × la durée de vie estimée de vos clients. Pas une garantie.'
                 }
               />
-              <Ligne label="Consentement marketing" valeur={MOT_CONSENTEMENT[fiche.consentement] ?? fiche.consentement} />
+              <Ligne label="Consentement marketing (email)" valeur={MOT_CONSENTEMENT[fiche.consentement] ?? fiche.consentement} />
+              <Ligne label="Consentement SMS" valeur={MOT_SMS[fiche.consentementSms] ?? fiche.consentementSms} />
             </dl>
             <p className="mt-4 mb-0 text-xs">
               <a href={retour}>← Retour aux segments</a>

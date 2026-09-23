@@ -175,3 +175,89 @@ export async function lireAffaires(
   }
   return { ok: true, affaires, tronque: lecture.tronque }
 }
+
+// ── Lina : les clients, reconnus par leurs affaires gagnées ─────────────────
+
+export type AffaireClient = { id: string; creeLe: string; clientRef: string | null; totalCents: number; devise: string; lignes: [] }
+
+/** Le numéro du portail HubSpot : de quoi ouvrir la fiche d'un contact, rien d'autre. */
+export async function lirePortailHubspot(jeton: string): Promise<string> {
+  const compte = await appeler(jeton, 'account-info/v3/details').catch(() => null)
+  const portail = compte?.status === 200 ? compte.corps?.portalId : null
+  return typeof portail === 'number' || typeof portail === 'string' ? String(portail) : ''
+}
+
+/**
+ * Pour Lina, dans une activité de services : chaque affaire gagnée est une « commande », et
+ * son client est le contact associé (le premier, quand il y en a plusieurs). On lit le
+ * montant, la date, la devise, et l'identifiant du contact — ni son nom, ni son courriel,
+ * ni sa société. Le droit de lecture des contacts suffit pour les associations.
+ */
+export async function lireAffairesClients(
+  jeton: string,
+  depuis: string,
+  options: { max: number; echeance: number },
+): Promise<{ ok: true; commandes: AffaireClient[]; tronque: boolean; sansClient: number } | { ok: false; raison: string }> {
+  type Brut = { id?: string; properties?: { amount?: string; closedate?: string; deal_currency_code?: string } }
+  const affaires: { id: string; gagnee: string; montantCents: number; devise: string }[] = []
+  let apres: string | undefined
+  let tronque = false
+  for (;;) {
+    if (affaires.length >= Math.min(options.max, RESULTATS_MAX) || Date.now() > options.echeance) {
+      tronque = true
+      break
+    }
+    const reponse = await appeler(jeton, 'crm/v3/objects/deals/search', {
+      filterGroups: [
+        {
+          filters: [
+            { propertyName: 'closedate', operator: 'GTE', value: String(Date.parse(`${depuis}T00:00:00Z`)) },
+            { propertyName: 'hs_is_closed_won', operator: 'EQ', value: 'true' },
+          ],
+        },
+      ],
+      properties: ['amount', 'closedate', 'deal_currency_code'],
+      sorts: [{ propertyName: 'closedate', direction: 'DESCENDING' }],
+      limit: PAR_PAGE,
+      ...(apres === undefined ? {} : { after: apres }),
+    })
+    if (reponse.status !== 200 || reponse.corps === null) return { ok: false, raison: refusHubspot(reponse, 'les transactions') }
+    const resultats = (reponse.corps.results ?? []) as Brut[]
+    for (const brut of resultats) {
+      const gagnee = iso(brut.properties?.closedate)
+      if (brut.id === undefined || gagnee === null) continue
+      const montant = Number(brut.properties?.amount)
+      affaires.push({
+        id: brut.id,
+        gagnee,
+        montantCents: Number.isFinite(montant) ? Math.max(0, Math.round(montant * 100)) : 0,
+        devise: (brut.properties?.deal_currency_code ?? '').toUpperCase(),
+      })
+    }
+    apres = (reponse.corps.paging as { next?: { after?: string } } | undefined)?.next?.after
+    if (apres === undefined || resultats.length === 0) break
+  }
+
+  // Le contact de chaque affaire, cent affaires à la fois.
+  const contactDe = new Map<string, string>()
+  for (let debut = 0; debut < affaires.length; debut += PAR_PAGE) {
+    if (Date.now() > options.echeance) {
+      tronque = true
+      break
+    }
+    const lot = affaires.slice(debut, debut + PAR_PAGE)
+    const reponse = await appeler(jeton, 'crm/v4/associations/deals/contacts/batch/read', { inputs: lot.map((affaire) => ({ id: affaire.id })) })
+    if (reponse.status !== 200 && reponse.status !== 207) return { ok: false, raison: refusHubspot(reponse, 'les contacts associés aux transactions') }
+    for (const resultat of (reponse.corps?.results ?? []) as { from?: { id?: string }; to?: { toObjectId?: number | string }[] }[]) {
+      const premier = resultat.to?.[0]?.toObjectId
+      if (resultat.from?.id !== undefined && premier !== undefined) contactDe.set(resultat.from.id, String(premier))
+    }
+  }
+  let sansClient = 0
+  const commandes = affaires.map((affaire) => {
+    const client = contactDe.get(affaire.id) ?? null
+    if (client === null) sansClient += 1
+    return { id: `hubspot:${affaire.id}`, creeLe: affaire.gagnee, clientRef: client, totalCents: affaire.montantCents, devise: affaire.devise, lignes: [] as [] }
+  })
+  return { ok: true, commandes, tronque, sansClient }
+}

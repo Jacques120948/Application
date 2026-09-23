@@ -17,6 +17,10 @@ export const LIMITES_SOURCE: Record<SourceLina, string[]> = {
     'WooCommerce ne donne pas le consentement marketing : vérifiez dans votre outil d’envoi qui accepte vos emails.',
     'WooCommerce ne donne pas les paniers abandonnés sans extension : ils ne sont pas comptés.',
   ],
+  hubspot: [
+    'Avec HubSpot, une « commande » est une affaire gagnée, et le client est le contact qui lui est associé.',
+    'Le consentement marketing n’est pas lu dans HubSpot : vérifiez dans votre outil d’envoi qui accepte vos emails. Ni paniers ni produits.',
+  ],
   stripe: [
     'Stripe ne donne ni le consentement marketing ni les paniers abandonnés : vérifiez dans votre outil d’envoi qui accepte vos emails.',
     'Un paiement Stripe ne dit pas quel produit a été acheté : ni réachat par produit, ni produits complémentaires.',

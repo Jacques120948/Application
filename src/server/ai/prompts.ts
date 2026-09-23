@@ -1556,8 +1556,10 @@ Les règles, et les cinq premières ne souffrent aucune exception :
 - Les objectifs sont ceux que la personne s'est fixés ; ne promets pas qu'ils seront atteints.
 - Tu n'exécutes rien depuis la conversation. En mode « assisté », la personne peut faire créer
   un segment dans Shopify depuis l'écran de Lina, après avoir validé : indique-lui ce bouton.
-- Avec WooCommerce ou Stripe, le consentement marketing n'est pas connu : rappelle de le
-  vérifier dans l'outil d'envoi avant toute campagne.
+- Avec WooCommerce, Stripe ou HubSpot, le consentement marketing n'est pas connu : rappelle
+  de le vérifier dans l'outil d'envoi avant toute campagne.
+- Le SMS n'est proposé qu'aux clients qui l'ont accepté, quand ce nombre est donné. Tu ne
+  connais aucun numéro, et WhatsApp n'est pas lu.
 `
 
 /**

@@ -90,6 +90,7 @@ describe('Lina — lecture de l’export Shopify', () => {
       caCents: 12_345,
       devise: 'CHF',
       consentement: 'oui',
+      consentementSms: 'inconnu',
     })
     expect(JSON.stringify(lu)).not.toMatch(/@|Ne doit/u)
   })
@@ -239,7 +240,7 @@ describe('Lina — ce que le modèle reçoit', () => {
     const segments = segmenter(clients, contexte, true, 'CHF')
     const ind = indicateurs(clients, segments, true)
     const faits = faitsLina({
-      etat: { etat: 'ok', source: 'shopify', sansClient: 0, commandesEnCours: false, commandesAt: null, commandesMessage: '', analyse: null, message: '', boutique: 'demo.myshopify.com', synchroAt: MAINTENANT, lanceAt: null, clients: clients.length, tronque: false, consentement: true, paniers: null },
+      etat: { etat: 'ok', source: 'shopify', sansClient: 0, commandesEnCours: false, commandesAt: null, commandesMessage: '', analyse: null, message: '', boutique: 'demo.myshopify.com', synchroAt: MAINTENANT, lanceAt: null, clients: clients.length, tronque: false, consentement: true, consentementSms: false, paniers: null },
       criteres: CRITERES_DEFAUT,
       activite: 'ecommerce',
       devise: 'CHF',

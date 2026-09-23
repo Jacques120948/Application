@@ -1,5 +1,7 @@
 import { lireLina } from '@/server/lina/service'
 import { CommandesAttenteLina, ProduitsReachatLina, ReachatGlobalLina, SuggestionsLina, TopProduitsLina } from '@/components/studio/LinaV2'
+import { VISIBILITY_ASK_ESTIMATED_CREDITS } from '@/server/agents/visibility-service'
+import { ComportementsLina } from '@/components/studio/LinaV3'
 import { CadreLina, ouvrirLina } from '../cadre'
 
 /** Ce que les produits disent du réachat : quoi, quand, et ce qu'on achète ensuite. */
@@ -37,6 +39,15 @@ export default async function ProduitsLinaPage({
             prefixe="upsell"
             versTableau={versTableau}
           />
+          {vue.reachat.length + vue.croisees.length + vue.montees.length === 0 ? null : (
+            <ComportementsLina
+              transmission={
+                siteId === ''
+                  ? undefined
+                  : { siteId, locale, cout: VISIBILITY_ASK_ESTIMATED_CREDITS, versConversation: `/${locale}/visibilite/equipe?siteId=${siteId}&agent=` }
+              }
+            />
+          )}
           <TopProduitsLina produits={vue.produits} devise={vue.devise} />
         </>
       )}

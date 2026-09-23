@@ -26,6 +26,8 @@ export const PANIERS_MAX = 2_000
 const PANIERS_PAR_PAGE = 100
 
 export type ConsentementClient = 'oui' | 'non' | 'sans-email' | 'inconnu'
+/** V5 : le consentement SMS, lu près du numéro — que Lina ne demande pas. */
+export type ConsentementSms = 'oui' | 'non' | 'sans-telephone' | 'inconnu'
 
 export type ClientShopify = {
   /** L'identifiant numérique du client dans Shopify : de quoi ouvrir sa fiche, rien d'autre. */
@@ -36,11 +38,18 @@ export type ClientShopify = {
   caCents: number
   devise: string
   consentement: ConsentementClient
+  /** Absent : l'export ne l'a pas demandé. */
+  consentementSms?: ConsentementSms
 }
 
 export type StatutExport = 'en-cours' | 'termine' | 'refuse' | 'echec'
 
-function requeteExport(consentement: boolean): string {
+/**
+ * V5 : avec `sms`, l'export demande aussi l'état du consentement SMS. Shopify le range sous
+ * le numéro de téléphone, que Lina ne demande pas ; l'accès aux numéros (« Protected
+ * customer data », niveau 2) reste pourtant exigé. Refusé, on relance sans lui.
+ */
+function requeteExport(consentement: boolean, sms = false): string {
   return `{
   customers {
     edges {
@@ -51,6 +60,7 @@ function requeteExport(consentement: boolean): string {
         amountSpent { amount currencyCode }
         lastOrder { createdAt }
         ${consentement ? 'defaultEmailAddress { marketingState }' : ''}
+        ${consentement && sms ? 'defaultPhoneNumber { marketingState }' : ''}
       }
     }
   }
@@ -83,8 +93,9 @@ export async function lancerExportClients(
   acces: AccesShopify,
   jeton: string,
   consentement: boolean,
+  sms = false,
 ): Promise<{ ok: true; operation: string } | { ok: false; raison: string; protegees: boolean }> {
-  const reponse = await appeler(acces.boutique, jeton, acces.version, LANCER, { q: requeteExport(consentement) })
+  const reponse = await appeler(acces.boutique, jeton, acces.version, LANCER, { q: requeteExport(consentement, sms) })
   const refus = [...reponse.erreurs, ...erreursUtilisateur(reponse)]
   const operation = (reponse.data?.bulkOperationRunQuery as { bulkOperation?: { id?: string } | null } | undefined)?.bulkOperation?.id
   if (reponse.status === 200 && typeof operation === 'string') return { ok: true, operation }
@@ -139,11 +150,17 @@ function consentementDe(brut: { marketingState?: string | null } | null | undefi
   return brut.marketingState === 'SUBSCRIBED' ? 'oui' : 'non'
 }
 
+function consentementSmsDe(brut: { marketingState?: string | null } | null | undefined, lu: boolean): ConsentementSms {
+  if (!lu) return 'inconnu'
+  if (brut == null) return 'sans-telephone'
+  return brut.marketingState === 'SUBSCRIBED' ? 'oui' : 'non'
+}
+
 /**
  * Une ligne du fichier d'export, convertie. `null` pour ce qui n'est pas un client : le
  * fichier peut porter d'autres objets si la requête en demandait.
  */
-export function lireLigneClient(ligne: string, consentementLu: boolean): ClientShopify | null {
+export function lireLigneClient(ligne: string, consentementLu: boolean, smsLu = false): ClientShopify | null {
   let brut: {
     id?: string
     createdAt?: string
@@ -151,6 +168,7 @@ export function lireLigneClient(ligne: string, consentementLu: boolean): ClientS
     amountSpent?: { amount?: string; currencyCode?: string } | null
     lastOrder?: { createdAt?: string } | null
     defaultEmailAddress?: { marketingState?: string | null } | null
+    defaultPhoneNumber?: { marketingState?: string | null } | null
   }
   try {
     brut = JSON.parse(ligne)
@@ -168,6 +186,7 @@ export function lireLigneClient(ligne: string, consentementLu: boolean): ClientS
     caCents: centimes(brut.amountSpent?.amount),
     devise: brut.amountSpent?.currencyCode ?? '',
     consentement: consentementDe(brut.defaultEmailAddress, consentementLu),
+    consentementSms: consentementSmsDe(brut.defaultPhoneNumber, smsLu),
   }
 }
 
@@ -204,11 +223,12 @@ export async function telechargerExport(
   url: string,
   consentementLu: boolean,
   max = CLIENTS_MAX,
+  smsLu = false,
 ): Promise<{ clients: ClientShopify[]; tronque: boolean }> {
   const clients: ClientShopify[] = []
   let tronque = false
   for await (const ligne of lignesExport(url)) {
-    const client = lireLigneClient(ligne, consentementLu)
+    const client = lireLigneClient(ligne, consentementLu, smsLu)
     if (client === null) continue
     if (clients.length >= max) {
       tronque = true

@@ -3,9 +3,9 @@
  * on nomme un client sans le nommer, où sa fiche se lit. Pur, sans dépendance.
  */
 
-export type SourceLina = 'shopify' | 'woocommerce' | 'stripe'
+export type SourceLina = 'shopify' | 'woocommerce' | 'stripe' | 'hubspot'
 
-export const NOM_SOURCE_LINA: Record<SourceLina, string> = { shopify: 'Shopify', woocommerce: 'WooCommerce', stripe: 'Stripe' }
+export const NOM_SOURCE_LINA: Record<SourceLina, string> = { shopify: 'Shopify', woocommerce: 'WooCommerce', stripe: 'Stripe', hubspot: 'HubSpot' }
 
 /** Le lien vers la fiche du client dans l'outil où son nom se lit. `null` quand il n'y en a pas. */
 export function lienFiche(source: SourceLina | null, boutique: string, ref: string): { href: string; libelle: string } | null {
@@ -14,6 +14,10 @@ export function lienFiche(source: SourceLina | null, boutique: string, ref: stri
     return { href: `${boutique}/wp-admin/user-edit.php?user_id=${ref.slice(1)}`, libelle: 'Ouvrir dans WordPress ↗' }
   }
   if (source === 'stripe' && /^cus_[A-Za-z0-9]+$/u.test(ref)) return { href: `https://dashboard.stripe.com/customers/${ref}`, libelle: 'Ouvrir dans Stripe ↗' }
+  // Pour HubSpot, `boutique` porte le numéro du portail.
+  if (source === 'hubspot' && /^\d+$/u.test(boutique) && /^\d+$/u.test(ref)) {
+    return { href: `https://app.hubspot.com/contacts/${boutique}/record/0-1/${ref}`, libelle: 'Ouvrir dans HubSpot ↗' }
+  }
   return null
 }
 

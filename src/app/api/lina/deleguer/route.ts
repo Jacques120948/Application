@@ -14,7 +14,7 @@ import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
  */
 const input = z.object({
   cle: z.string().min(1).max(120),
-  agent: z.enum(['content', 'cro', 'meta', 'ads']),
+  agent: z.enum(['content', 'cro', 'meta', 'ads', 'seo', 'geo']),
   siteId: z.string().uuid().optional(),
   locale: z.string().max(8).optional(),
 })

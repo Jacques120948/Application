@@ -94,7 +94,8 @@ describe('Lina — collecte', () => {
     vi.mocked(clientsShopify.lancerExportClients).mockResolvedValueOnce({ ok: true, operation: 'gid://shopify/BulkOperation/1' })
     const etat = await synchroniserLina(boutique, 'manuel')
     expect(etat).toMatchObject({ etat: 'en-cours', boutique: 'lina-test.myshopify.com' })
-    expect(clientsShopify.lancerExportClients).toHaveBeenCalledWith(expect.anything(), 'jeton-test', true)
+    // V5 : le consentement SMS est demandé avec celui des courriels.
+    expect(clientsShopify.lancerExportClients).toHaveBeenCalledWith(expect.anything(), 'jeton-test', true, true)
     expect(etat.paniers?.courant).toMatchObject({ nombre: 15, recuperes: 3 })
   })
 
@@ -111,7 +112,7 @@ describe('Lina — collecte', () => {
     const lignes = await withUserScope(boutique, (tx) => tx.linaClient.findMany({ where: { userId: boutique } }))
     expect(lignes).toHaveLength(125)
     // Rien qui dise qui est un client : ni nom, ni courriel, ni jeton.
-    expect(Object.keys(lignes[0]!).sort()).toEqual(['caCents', 'commandes', 'consentement', 'creeLe', 'derniereCommande', 'devise', 'id', 'intervalleJours', 'premiereCommande', 'produitPrincipal', 'ref', 'source', 'userId'])
+    expect(Object.keys(lignes[0]!).sort()).toEqual(['caCents', 'commandes', 'consentement', 'consentementSms', 'creeLe', 'derniereCommande', 'devise', 'id', 'intervalleJours', 'premiereCommande', 'produitPrincipal', 'ref', 'source', 'userId'])
     const synchro = await withUserScope(boutique, (tx) => tx.linaSynchro.findFirstOrThrow({ where: { userId: boutique } }))
     expect(JSON.stringify(synchro)).not.toMatch(/jeton-test|secret-de-test/u)
   })
@@ -133,8 +134,10 @@ describe('Lina — collecte', () => {
     vi.mocked(clientsShopify.lancerExportClients)
       .mockResolvedValueOnce({ ok: false, protegees: true, raison: 'protégées' })
       .mockResolvedValueOnce({ ok: false, protegees: true, raison: 'protégées' })
+      .mockResolvedValueOnce({ ok: false, protegees: true, raison: 'protégées' })
     const etat = await synchroniserLina(autre, 'manuel')
-    expect(clientsShopify.lancerExportClients).toHaveBeenLastCalledWith(expect.anything(), 'jeton-test', false)
+    // SMS et email, puis email seul, puis sans consentement.
+    expect(clientsShopify.lancerExportClients).toHaveBeenLastCalledWith(expect.anything(), 'jeton-test', false, false)
     expect(etat.etat).toBe('protegees')
     expect(etat.message).toContain('Protected customer data')
     expect(etat.paniers?.erreur).toBe('Paniers refusés.')
@@ -166,7 +169,7 @@ describe('Lina — la vue', () => {
     const membres = await lireMembres(boutique, 'recurrents', 10)
     expect(membres).toHaveLength(10)
     expect(membres[0]!.caCents).toBe(30_000)
-    expect(Object.keys(membres[0]!).sort()).toEqual(['caCents', 'commandes', 'consentement', 'derniereCommande', 'ref'])
+    expect(Object.keys(membres[0]!).sort()).toEqual(['caCents', 'commandes', 'consentement', 'consentementSms', 'derniereCommande', 'ref'])
   })
 
   it('confie la campagne à Milo avec des totaux, jamais un client', async () => {

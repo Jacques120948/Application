@@ -22,7 +22,7 @@ function couper(texte: string, longueur: number): string {
 
 export async function deleguerLina(
   userId: string,
-  entree: { siteId?: string; cle: string; agent: 'content' | 'cro' | 'meta' | 'ads' },
+  entree: { siteId?: string; cle: string; agent: 'content' | 'cro' | 'meta' | 'ads' | 'seo' | 'geo' },
   locale: string,
 ): Promise<VisibilityNoteView> {
   if (entree.siteId === undefined) throw validation('Lina ne transmet que sur un site analysé : lancez d’abord une analyse.')
@@ -38,6 +38,29 @@ export async function deleguerLina(
     if (audience === undefined) throw notFound('Cette audience n’est plus d’actualité.')
     const segment = vue.segments.find((un) => un.cle === audience.segment)
     const question = `Lina vous propose une audience : « ${audience.nom} », ${nombreLisible(audience.clients)} clients${segment === undefined ? '' : ` (${segment.critere.toLowerCase()}, panier moyen ${segment.panierMoyenCents === null ? 'inconnu' : argent(segment.panierMoyenCents, devise)})`}. Usage envisagé : ${audience.usage} Le segment existe dans Shopify, qui peut le synchroniser avec ${entree.agent === 'meta' ? 'Meta' : 'Google'} par son canal de vente, avec l’accord de la personne. Comment l’utiliser dans les campagnes actuelles, et qu’en attendre ? Ne modifiez rien sans accord.`
+    return askVisibility(userId, { siteId: entree.siteId, agent: entree.agent, question: couper(question, QUESTION_MAX), history: [] }, locale, {
+      demandePar: 'lina',
+    })
+  }
+
+  /*
+   * V5 : ce que les achats disent des questions que les clients se posent — quand racheter,
+   * quoi prendre avec. Néo en fait des pages et des maillages, Gia des réponses que les
+   * assistants IA peuvent reprendre. Des produits et des proportions, jamais un client.
+   */
+  if (entree.agent === 'seo' || entree.agent === 'geo') {
+    if (entree.cle !== 'comportements') throw notFound('Ce point n’est plus d’actualité.')
+    const faits = [
+      ...vue.reachat.slice(0, 3).map((un) => `« ${un.titre} » est racheté en général entre ${un.p25} et ${un.p75} jours`),
+      ...vue.croisees.slice(0, 3).map((un) => `${Math.round(un.part * 100)} % des acheteurs de « ${un.de.titre} » achètent ensuite « ${un.vers.titre} »`),
+      ...vue.montees.slice(0, 2).map((un) => `des acheteurs de « ${un.de.titre} » passent ensuite à « ${un.vers.titre} », plus cher`),
+    ]
+    if (faits.length === 0) throw notFound('Lina n’a pas encore assez de commandes pour en tirer des comportements.')
+    const consigne =
+      entree.agent === 'geo'
+        ? 'Quelles questions les clients se posent-ils sans doute (« quand racheter ? », « que prendre avec ? »), et comment le site peut-il y répondre clairement, pour que les assistants IA reprennent ces réponses ?'
+        : 'Quelles pages ou sections du site devraient répondre à ces besoins (fiches produits, guides, liens entre produits associés), et quelles recherches cela peut-il capter ?'
+    const question = `Lina vous transmet ce que les commandes de la boutique montrent (observé, une corrélation, pas une cause) : ${faits.join(' ; ')}. ${consigne} Ne modifiez rien sans accord.`
     return askVisibility(userId, { siteId: entree.siteId, agent: entree.agent, question: couper(question, QUESTION_MAX), history: [] }, locale, {
       demandePar: 'lina',
     })

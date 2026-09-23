@@ -146,6 +146,7 @@ async function lireClients(userId: string): Promise<(ClientIndex & { devise: str
         commandes: true,
         caCents: true,
         consentement: true,
+        consentementSms: true,
         devise: true,
         premiereCommande: true,
         intervalleJours: true,
@@ -255,8 +256,8 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
   if (!lue) return vide
 
   const contexte = contexteSegments(clients, criteres, maintenant)
-  const segments = segmenter(clients, contexte, etat.consentement, devise)
-  const indicateurs = calculerIndicateurs(clients, segments, etat.consentement)
+  const segments = segmenter(clients, contexte, etat.consentement, devise, etat.consentementSms)
+  const indicateurs = calculerIndicateurs(clients, segments, etat.consentement, etat.consentementSms)
   const produits = etat.analyse === null ? [] : await lireProduits(userId)
   const reachat = reachatParProduit(produits)
   const montees = etat.analyse === null ? [] : suggestions(etat.analyse.montees, produits, etat.analyse.ensemble, true)
@@ -275,7 +276,13 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
   const campagnes = [
     ...recommanderCampagnes(segments, indicateurs, etat.paniers, criteres, devise),
     ...campagnesProduits(reachat, croisees, montees, produits, devise),
-  ].sort((a, b) => b.potentielCents / poids[b.effort] - a.potentielCents / poids[a.effort])
+  ]
+    .sort((a, b) => b.potentielCents / poids[b.effort] - a.potentielCents / poids[a.effort])
+    // V5 : quand Shopify dit qui accepte les SMS, la campagne le mentionne — l'email reste le canal proposé.
+    .map((campagne) => {
+      const sms = segments.find((segment) => segment.cle === campagne.segment)?.contactablesSms ?? null
+      return sms === null || sms === 0 ? campagne : { ...campagne, canal: `${campagne.canal} · SMS possible pour ${nombreLisible(sms)} clients qui l’ont accepté` }
+    })
   const paniersRestants = etat.paniers === null || etat.paniers.erreur !== undefined ? null : etat.paniers.courant.nombre - etat.paniers.courant.recuperes
   const produitsSegments: Partial<Record<CleSegment, string>> = {}
   for (const cle of ['a-reactiver', 'dormants', 'vip', 'a-risque'] as const) {
@@ -370,6 +377,8 @@ function redireProfond<T>(valeur: T, source: SourceLina): T {
  * V4 : une base lue dans WooCommerce ou Stripe. Les recommandations valent pareil ; ce qui
  * change, c'est l'outil où on les applique, et ce que la source ne dit pas.
  */
+const MOT_ACHAT: Record<Exclude<SourceLina, 'shopify'>, string> = { woocommerce: 'commandes', stripe: 'paiements', hubspot: 'affaires gagnées' }
+
 function adapterSource(vue: VueLina): VueLina {
   const source = vue.etat.source
   if (source === null || source === 'shopify') return vue
@@ -382,14 +391,14 @@ function adapterSource(vue: VueLina): VueLina {
           {
             cle: 'sans-client',
             etat: 'verifier' as const,
-            texte: `${nombreLisible(vue.etat.sansClient)} ${source === 'stripe' ? 'paiements' : 'commandes'} sans client identifiable : ils ne sont rattachés à personne.`,
+            texte: `${nombreLisible(vue.etat.sansClient)} ${MOT_ACHAT[source]} sans client identifiable : ils ne sont rattachés à personne.`,
           },
         ]
       : []),
     {
       cle: 'fenetre',
       etat: 'bon' as const,
-      texte: `Lina reconstruit la base à partir des ${source === 'stripe' ? 'paiements' : 'commandes'} des trois dernières années : un client plus ancien y paraît plus récent qu’il ne l’est.`,
+      texte: `Lina reconstruit la base à partir des ${MOT_ACHAT[source]} des trois dernières années : un client plus ancien y paraît plus récent qu’il ne l’est.`,
     },
   ]
   return {
@@ -415,6 +424,7 @@ export type MembreVu = {
   caCents: number
   derniereCommande: string | null
   consentement: string
+  consentementSms: string
 }
 
 /** Les clients d'un segment, les plus gros d'abord — des identifiants, pas des personnes. */
@@ -427,6 +437,7 @@ export async function lireMembres(userId: string, cle: CleSegment, limite = 50, 
     caCents: client.caCents,
     derniereCommande: client.derniereCommande === null ? null : client.derniereCommande.toISOString().slice(0, 10),
     consentement: client.consentement,
+    consentementSms: client.consentementSms ?? 'inconnu',
   }))
 }
 
@@ -452,6 +463,7 @@ export type FicheClient = {
   /** Estimation : panier moyen du client × ses commandes par an × durée de vie estimée de la base. */
   valeurEstimeeCents: number | null
   consentement: string
+  consentementSms: string
 }
 
 /**
@@ -510,5 +522,6 @@ export async function lireFicheClient(userId: string, ref: string, maintenant = 
     statut,
     valeurEstimeeCents,
     consentement: client.consentement,
+    consentementSms: client.consentementSms ?? 'inconnu',
   }
 }

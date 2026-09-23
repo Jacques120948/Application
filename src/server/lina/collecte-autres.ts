@@ -4,6 +4,8 @@ import { env } from '@/lib/env'
 import { withUserScope } from '@/server/db/scope'
 import { lireAccesWoo, lireCommandesClientsWoo, lireFuseauWoo, type CommandeExportWoo } from '@/server/integrations/providers/woocommerce'
 import { lireEncaissementsClients } from '@/server/integrations/providers/stripe-lecture'
+import { lireAffairesClients, lirePortailHubspot } from '@/server/integrations/providers/hubspot'
+import { reglagesNova } from '@/server/nova/reglages'
 import { markConnectionError, useCredential } from '@/server/integrations/service'
 import { aRelire, JOUR_MS, jourIso, PAUSE_MANUELLE_MS } from '@/server/nova/collecte-commerce'
 import { FOURNISSEUR_SOURCE } from '@/server/nova/sources'
@@ -50,7 +52,8 @@ export function pseudonyme(courriel: string): string {
 }
 
 /**
- * WooCommerce d'abord, Stripe ensuite : une boutique vend rarement par les deux.
+ * WooCommerce d'abord ; puis HubSpot et Stripe, dans l'ordre qui convient à l'activité.
+ * Une boutique vend rarement par plusieurs canaux à la fois.
  * `enErreur` : une clé refusée reste une source reliée pour l'écran, qui doit dire pourquoi.
  */
 export async function sourceAutre(userId: string, enErreur = false): Promise<EtatAutre | null> {
@@ -73,6 +76,29 @@ export async function sourceAutre(userId: string, enErreur = false): Promise<Eta
       }
     }
   }
+  /*
+   * V5 : HubSpot, pour une activité de services — les clients y sont des contacts qui ont
+   * signé. Un SaaS garde Stripe d'abord : ses clients sont ses abonnés.
+   */
+  const activite = (await reglagesNova(userId).catch(() => null))?.activite ?? ''
+  const hubspot = async (): Promise<EtatAutre | null> => {
+    const connexion = await useCredential(userId, FOURNISSEUR_SOURCE.hubspot, { includePending: enErreur }).catch(() => null)
+    if (connexion === null) return null
+    return {
+      source: 'hubspot',
+      boutique: await lirePortailHubspot(connexion.secret).catch(() => ''),
+      connectionId: connexion.connectionId,
+      lire: async () => {
+        const depuis = jourIso(new Date(Date.now() - JOURS_HISTOIRE * JOUR_MS))
+        const lecture = await lireAffairesClients(connexion.secret, depuis, { max: COMMANDES_MAX, echeance: Date.now() + LECTURE_MS })
+        return lecture.ok ? { ...lecture, fuseau: 'Europe/Zurich' } : lecture
+      },
+    }
+  }
+  if (activite !== 'saas') {
+    const lu = await hubspot()
+    if (lu !== null) return lu
+  }
   const stripe = await useCredential(userId, FOURNISSEUR_SOURCE.stripe, { includePending: enErreur }).catch(() => null)
   if (stripe !== null) {
     return {
@@ -86,7 +112,7 @@ export async function sourceAutre(userId: string, enErreur = false): Promise<Eta
       },
     }
   }
-  return null
+  return activite === 'saas' ? hubspot() : null
 }
 
 export type ClientReconstruit = {

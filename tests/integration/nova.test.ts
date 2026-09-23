@@ -13,6 +13,7 @@ import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
 import { periodeDe, periodePrecedente } from '@/server/nova/metriques'
+import { jourDansFuseau } from '@/server/ads/metriques'
 import { enregistrerReglages, reglagesNova } from '@/server/nova/reglages'
 import { lireBilan } from '@/server/nova/bilan'
 import { ensureTestPlan, testPlanId } from '../helpers/plan'
@@ -265,7 +266,8 @@ describe('Nova — fenêtre de lecture', () => {
       tx.commerceSynchro.updateMany({ where: { userId: proprietaire }, data: { essaiAt: new Date(Date.now() - 10 * 60_000) } }),
     )
     const etat = await synchroniserVentes(proprietaire, 'manuel')
-    const aujourdhui = new Date().toISOString().slice(0, 10)
+    // Le jour de la boutique, pas celui d'UTC : entre minuit et deux heures à Zurich, ils diffèrent.
+    const aujourdhui = jourDansFuseau(new Date(), 'Europe/Zurich')
     const avant = periodePrecedente(periodeDe('90', aujourdhui))
     expect(etat.couvertureDepuis! <= avant.du).toBe(true)
     // Lue depuis la même date qu'annoncée : ce qui est couvert a bien été demandé.

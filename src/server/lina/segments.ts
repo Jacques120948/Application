@@ -20,6 +20,8 @@ export type ClientIndex = {
   commandes: number
   caCents: number
   consentement: string
+  /** V5 : le consentement SMS, quand Shopify l'a donné. */
+  consentementSms?: string
   /** V2, quand les commandes ont été lues : la vraie première commande et le rythme habituel. */
   premiereCommande?: Date | null
   intervalleJours?: number | null
@@ -62,6 +64,8 @@ export type Segment = {
   joursMedian: number | null
   /** Clients qui acceptent les courriels marketing. `null` : consentement non lu. */
   contactables: number | null
+  /** V5 : clients qui acceptent les SMS marketing. `null` ou absent : non lu. */
+  contactablesSms?: number | null
   tropPetit: boolean
   /** La même sélection, à coller dans Shopify (Clients → Segments). `null` : inexprimable. */
   requeteShopify: string | null
@@ -217,6 +221,7 @@ export function segmenter(
   contexte: ContexteSegments,
   consentementLu: boolean,
   devise: string,
+  smsLu = false,
 ): Segment[] {
   const caTotal = clients.reduce((total, client) => total + client.caCents, 0)
   return CLES_SEGMENTS.map((cle) => {
@@ -235,6 +240,7 @@ export function segmenter(
       partCa: caTotal === 0 || cle === 'sans-commande' ? null : caCents / caTotal,
       joursMedian: mediane(membres.flatMap((client) => (client.derniereCommande === null ? [] : [jours(client.derniereCommande, contexte.maintenant)]))),
       contactables: consentementLu ? membres.filter((client) => client.consentement === 'oui').length : null,
+      contactablesSms: smsLu ? membres.filter((client) => client.consentementSms === 'oui').length : null,
       tropPetit: membres.length > 0 && membres.length < SEGMENT_MIN,
       requeteShopify: requete,
     }
@@ -267,9 +273,11 @@ export type Indicateurs = {
   /** `null` : le consentement n'a pas pu être lu. */
   contactables: number | null
   sansEmail: number | null
+  /** V5 : clients qui acceptent les SMS marketing. `null` ou absent : non lu. */
+  contactablesSms?: number | null
 }
 
-export function indicateurs(clients: readonly ClientIndex[], segments: readonly Segment[], consentementLu: boolean): Indicateurs {
+export function indicateurs(clients: readonly ClientIndex[], segments: readonly Segment[], consentementLu: boolean, smsLu = false): Indicateurs {
   const trouver = (cle: CleSegment) => segments.find((segment) => segment.cle === cle)!
   const acheteurs = clients.filter((client) => client.commandes > 0)
   const commandes = acheteurs.reduce((total, client) => total + client.commandes, 0)
@@ -290,6 +298,7 @@ export function indicateurs(clients: readonly ClientIndex[], segments: readonly 
     sansCommande: trouver('sans-commande').nombre,
     contactables: consentementLu ? clients.filter((client) => client.consentement === 'oui').length : null,
     sansEmail: consentementLu ? clients.filter((client) => client.consentement === 'sans-email').length : null,
+    contactablesSms: smsLu ? clients.filter((client) => client.consentementSms === 'oui').length : null,
   }
 }
 

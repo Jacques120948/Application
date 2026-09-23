@@ -4,6 +4,8 @@ import type { ProgressionObjectif } from '@/server/lina/objectifs'
 import { semaineLisible } from '@/lib/lina'
 import type { AlerteLina, BilanLina, ReleveDate, ScoreFidelite } from '@/server/lina/releves'
 import type { PisteService } from '@/server/lina/services'
+import { DelegationOria } from './DelegationOria'
+import type { TransmissionLina } from './Lina'
 
 /**
  * Les blocs de la V3 de Lina : bilan de la semaine, alertes, score de fidélité, objectifs,
@@ -291,5 +293,38 @@ export function ActionsLina({
         ))}
       </ul>
     </nav>
+  )
+}
+
+/** V5 — ce que les achats disent des questions des clients, transmis à Néo et Gia sur un clic. */
+export function ComportementsLina({ transmission }: { transmission?: TransmissionLina }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Ce que vos clients cherchent</h2>
+        <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+          Les produits rachetés et achetés ensemble révèlent des questions : quand racheter, que prendre avec. Néo peut en faire des pages
+          et des liens entre produits, Gia des réponses reprises par les assistants IA. Seuls les produits et les proportions partent, jamais
+          un client.
+        </p>
+        {transmission === undefined ? (
+          <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">Analysez d’abord votre site pour pouvoir leur transmettre.</p>
+        ) : (
+          <DelegationOria
+            cle="comportements"
+            siteId={transmission.siteId}
+            locale={transmission.locale}
+            destinataires={[
+              { agent: 'seo', pour: 'en faire des pages et des liens' },
+              { agent: 'geo', pour: 'y répondre pour les assistants IA' },
+            ]}
+            cout={{ min: transmission.cout, max: transmission.cout }}
+            versConversation={transmission.versConversation}
+            route="/api/lina/deleguer"
+            expediteur="Lina"
+          />
+        )}
+      </CardBody>
+    </Card>
   )
 }

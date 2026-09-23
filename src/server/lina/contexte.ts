@@ -58,10 +58,11 @@ export function faitsLina(vue: VueLina, resultats: readonly ResultatVu[] = [], t
   }
   const i = vue.indicateurs
   lignes.push(
-    etat.source === 'woocommerce' || etat.source === 'stripe'
-      ? `Sources : ${etat.source === 'stripe' ? 'paiements Stripe' : 'commandes WooCommerce'} des trois dernières années (${nombreLisible(etat.clients)} clients reconstruits, lus le ${quand(etat.synchroAt)}${etat.tronque ? ', lecture partielle' : ''}). Paniers abandonnés non disponibles avec cette source.`
+    etat.source === 'woocommerce' || etat.source === 'stripe' || etat.source === 'hubspot'
+      ? `Sources : ${etat.source === 'stripe' ? 'paiements Stripe' : etat.source === 'hubspot' ? 'affaires gagnées HubSpot (une commande = une affaire)' : 'commandes WooCommerce'} des trois dernières années (${nombreLisible(etat.clients)} clients reconstruits, lus le ${quand(etat.synchroAt)}${etat.tronque ? ', lecture partielle' : ''}). Paniers abandonnés non disponibles avec cette source.`
       : `Sources : base clients Shopify (${nombreLisible(etat.clients)} fiches, lue le ${quand(etat.synchroAt)}${etat.tronque ? ', lecture partielle' : ''}), paniers abandonnés Shopify.`,
     `Consentement marketing : ${etat.consentement ? `lu — ${nombreLisible(i.contactables ?? 0)} clients acceptent les emails, ${nombreLisible(i.sansEmail ?? 0)} fiches sans email` : `non lu, à vérifier dans ${etat.source === 'shopify' || etat.source === null ? 'Shopify' : 'l’outil d’envoi'} avant tout envoi`}.`,
+    ...(i.contactablesSms == null ? [] : [`Consentement SMS : lu — ${nombreLisible(i.contactablesSms)} clients acceptent les SMS marketing. Lina ne connaît aucun numéro ; l’envoi se fait depuis l’outil de la boutique.`]),
     `Réglages : actif ≤ ${vue.criteres.actifJours} j, dormant > ${vue.criteres.dormantJours} j, nouveau ≤ ${vue.criteres.nouveauJours} j, fidèle ≥ ${vue.criteres.fideleCommandes} commandes, VIP = ${Math.round(vue.criteres.vipPart * 100)} % qui dépensent le plus.`,
     `Acheteurs : ${nombreLisible(i.acheteurs)} ; actifs ${nombreLisible(i.actifs)} ; nouveaux ${nombreLisible(i.nouveaux)} ; récurrents ${nombreLisible(i.recurrents)} ; taux de réachat ${pourcent(i.tauxReachat)} ; panier moyen ${i.panierMoyenCents === null ? 'inconnu' : argent(i.panierMoyenCents, devise)}.`,
     `Chiffre d’affaires cumulé des clients : ${argent(i.caTotalCents, devise)} ; dont clients récurrents ${argent(i.caRecurrentsCents, devise)} (${pourcent(i.partCaRecurrents)}).`,

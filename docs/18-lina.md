@@ -154,8 +154,18 @@ d'une fois toutes les douze heures). Le bilan par e-mail est le seul coût varia
 e-mail par personne abonnée et par semaine, via Resend (gratuit jusqu'à 3 000 par mois,
 puis facturé). L'interrupteur `linaBilanEmail` l'arrête pour tout le monde.
 
+## V5 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Consentement SMS | `shopify-clients.ts` (`defaultPhoneNumber { marketingState }`), `collecte.ts`, `LinaClient.consentementSms` | L'export demande d'abord le consentement email **et** SMS (`|p`). Shopify range l'état SMS sous le numéro : Lina ne demande pas le numéro, mais Shopify exige l'accès aux numéros (« Protected customer data », niveau 2). Refusé : on relance avec l'email seul (`|c`), puis sans consentement (`|s`) ; le SMS n'est retenté qu'après sept jours (`smsRefuseAt`). Segments et indicateurs comptent les « joignables par SMS » ; une campagne dit « SMS possible pour N clients » — l'email reste le canal proposé. WhatsApp : l'API ne l'expose pas dans cette version (vérifié sur le schéma). |
+| HubSpot comme source | `providers/hubspot.ts` (`lireAffairesClients`, `lirePortailHubspot`), `collecte-autres.ts` | Pour une activité de **services** : chaque affaire gagnée des trois dernières années est une « commande », son client est le **contact associé** (le premier), par son numéro. Ni nom, ni courriel, ni société. Mêmes droits que Nova (contacts et transactions en lecture). Ordre des sources : Shopify, WooCommerce, puis HubSpot avant Stripe — sauf un SaaS, où Stripe passe devant. Lien vers la fiche : `app.hubspot.com/contacts/{portail}/record/0-1/{contact}`. |
+| Néo et Gia | `delegation.ts` (`comportements`), `ComportementsLina` (onglet Produits) | Sur un clic, Lina transmet ce que les commandes montrent — produits rachetés et délais, achats associés, montées en gamme — à Néo (pages, maillage) ou à Gia (réponses reprises par les assistants IA). Des produits et des proportions, jamais un client ; au prix d'une question. |
+
+Coût pour Evoliia : aucun nouvel appel payant. HubSpot et Shopify sont lus avec les accès de
+la personne ; la transmission à Néo et Gia se paie en crédits, sur clic.
+
 ## Encore à venir
 
-SMS et WhatsApp (le consentement SMS
-Shopify demande l'accès aux numéros de téléphone), transmission des questions fréquentes à
-Néo et Gia.
+WhatsApp et notifications push (pas de source de consentement aujourd'hui), envoi réel de
+SMS (Lina prépare, l'outil de la boutique envoie).

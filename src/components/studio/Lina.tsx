@@ -620,6 +620,7 @@ export function SegmentsLina({
               <Chiffre label="Part du CA" valeur={pourcent(segment.partCa)} />
               <Chiffre label="Panier moyen" valeur={argent(segment.panierMoyenCents, devise)} />
               <Chiffre label="Joignables par email" valeur={segment.contactables === null ? 'à vérifier' : nombre(segment.contactables)} />
+              {segment.contactablesSms == null ? null : <Chiffre label="Joignables par SMS" valeur={nombre(segment.contactablesSms)} />}
             </dl>
             {segment.tropPetit ? <p className="mt-2 mb-0 text-[11px] text-[var(--color-caution)]">Segment trop petit pour en tirer une règle.</p> : null}
             {segment.nombre > 0 ? (
@@ -726,6 +727,7 @@ export function MembresLina({
                   · {nombre(client.commandes)} commande{client.commandes > 1 ? 's' : ''} · {argent(client.caCents, devise)}
                   {client.derniereCommande === null ? '' : ` · dernière le ${client.derniereCommande.split('-').reverse().join('.')}`} ·{' '}
                   {MOT_CONSENTEMENT[client.consentement] ?? client.consentement}
+                  {client.consentementSms === 'oui' ? ' · accepte les SMS' : ''}
                 </span>
               </span>
               {fiche === null ? null : (

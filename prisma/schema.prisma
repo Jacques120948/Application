@@ -2728,6 +2728,8 @@ model LinaClient {
   devise           String    @default("")
   /// oui | non | sans-email | inconnu — l’accord pour recevoir des courriels marketing.
   consentement     String    @default("inconnu")
+  /// V5 : le consentement SMS (« oui », « non », « sans-telephone », « inconnu »). Jamais le numéro.
+  consentementSms  String    @default("inconnu")
   /// V2, tirés des commandes : la vraie première commande (si toute l'histoire est lue), le
   /// rythme médian entre deux commandes, et le produit le plus acheté.
   premiereCommande DateTime?
@@ -2756,6 +2758,9 @@ model LinaSynchro {
   tronque          Boolean   @default(false)
   /// Le consentement marketing a-t-il pu être lu ? Sinon, il est « inconnu » pour tous.
   consentement     Boolean   @default(false)
+  /// V5 : le consentement SMS a été lu ; et quand Shopify l'a refusé (on réessaie après sept jours).
+  consentementSms  Boolean   @default(false)
+  smsRefuseAt      DateTime?
   /// Paniers abandonnés des trente derniers jours, en totaux.
   paniers          Json      @default("{}")
   /// V2 : ce que les commandes ont appris (cohortes, réachat, paires de produits), en totaux.
