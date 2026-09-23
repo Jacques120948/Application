@@ -15,14 +15,19 @@ import { Button } from '@/components/ui'
 export function SynchroNova({
   derniere,
   aRelire,
+  probleme,
 }: {
   /** Déjà formatée par le serveur : « 23 septembre à 07:32 », ou `null` si jamais lue. */
   derniere: string | null
   aRelire: boolean
+  /** Le dernier refus connu, tel que la collecte l'a noté : autorisation manquante, panne. */
+  probleme: string | null
 }) {
   const router = useRouter()
-  const [etat, setEtat] = useState<'repos' | 'lecture' | 'erreur'>(aRelire ? 'lecture' : 'repos')
-  const [message, setMessage] = useState('')
+  const [etat, setEtat] = useState<'repos' | 'lecture' | 'erreur'>(
+    aRelire ? 'lecture' : probleme !== null && probleme !== '' ? 'erreur' : 'repos',
+  )
+  const [message, setMessage] = useState(probleme ?? '')
   const lance = useRef(false)
 
   async function relire(mode: 'auto' | 'manuel'): Promise<void> {

@@ -302,7 +302,7 @@ function valeursKpi(ensemble: Ensemble): Record<Kpi['cle'], number | null> {
  * additionner celles de Google et de Meta est précisément l'erreur que Nova existe pour
  * éviter.
  */
-export function indicateursNova(actuel: Ensemble, precedent: Ensemble): Kpi[] {
+export function indicateursNova(actuel: Ensemble, precedent: Ensemble, manqueVentes: string = MANQUE_VENTES): Kpi[] {
   const a = valeursKpi(actuel)
   const p = valeursKpi(precedent)
   const avecVentes = actuel.ventes !== null
@@ -325,7 +325,7 @@ export function indicateursNova(actuel: Ensemble, precedent: Ensemble): Kpi[] {
     absent: a[cle] === null ? absent : '',
   })
   return [
-    kpi('chiffre', 'Chiffre d’affaires', 'argent', 'hausse', 'Shopify, remboursements déduits', MANQUE_VENTES),
+    kpi('chiffre', 'Chiffre d’affaires', 'argent', 'hausse', 'Shopify, remboursements déduits', manqueVentes),
     kpi('depenses', 'Dépenses marketing', 'argent', 'neutre', 'Google Ads et Meta Ads', MANQUE_PUB),
     kpi('roas', 'ROAS', 'pourcent', 'hausse', 'Revenu déclaré par les régies ÷ dépenses', pub ? 'Aucune dépense sur la période.' : MANQUE_PUB),
     kpi(
@@ -334,19 +334,19 @@ export function indicateursNova(actuel: Ensemble, precedent: Ensemble): Kpi[] {
       'pourcent',
       'hausse',
       'Chiffre d’affaires total ÷ dépenses marketing',
-      !avecVentes ? MANQUE_VENTES : pub ? 'Aucune dépense sur la période.' : MANQUE_PUB,
+      !avecVentes ? manqueVentes : pub ? 'Aucune dépense sur la période.' : MANQUE_PUB,
     ),
-    kpi('commandes', 'Commandes', 'nombre', 'hausse', 'Shopify', `${MANQUE_VENTES} Les conversions déclarées par chaque régie sont plus bas, par canal.`),
+    kpi('commandes', 'Commandes', 'nombre', 'hausse', 'Shopify', `${manqueVentes} Les conversions déclarées par chaque régie sont plus bas, par canal.`),
     kpi(
       'cpa',
       'Coût par commande',
       'argent',
       'baisse',
       'Dépenses ÷ commandes Shopify',
-      !pub ? MANQUE_PUB : !avecVentes ? `${MANQUE_VENTES} Le coût par conversion de chaque régie est plus bas, par canal.` : 'Aucune commande sur la période.',
+      !pub ? MANQUE_PUB : !avecVentes ? `${manqueVentes} Le coût par conversion de chaque régie est plus bas, par canal.` : 'Aucune commande sur la période.',
     ),
     kpi('cac', 'CAC', 'argent', 'baisse', 'Dépenses ÷ nouveaux clients Shopify', MANQUE_CAC),
-    kpi('panier', 'Panier moyen', 'argent', 'hausse', 'Chiffre d’affaires ÷ commandes', MANQUE_VENTES),
+    kpi('panier', 'Panier moyen', 'argent', 'hausse', 'Chiffre d’affaires ÷ commandes', manqueVentes),
     kpi('conversion', 'Taux de conversion', 'pourcent', 'hausse', 'Commandes ÷ visites', MANQUE_CONVERSION),
   ]
 }

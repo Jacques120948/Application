@@ -577,6 +577,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
         'Ouvrez le Dev Dashboard de Shopify et connectez-vous. Un compte partenaire gratuit suffit.',
         'Créez une application : donnez-lui un nom, par exemple « Evoliia ».',
         'Ouvrez l’onglet « Versions », déclarez les portées read_products, read_content, write_content et read_orders — cette dernière permet à Nova de lire vos ventes —, et rien d’autre, puis cliquez « Release ».',
+        'Pour que Nova lise vos ventes : dans « API access », demandez l’accès aux « Protected customer data ». Nova n’a besoin d’aucun nom, courriel ni adresse de client.',
         'Revenez sur « Home », faites défiler jusqu’à « Install app » et installez l’application sur votre boutique.',
         'Ouvrez l’onglet « Settings » : l’identifiant client et le secret client s’y trouvent.',
         'Revenez ici et collez l’adresse de votre boutique, l’identifiant client et le secret client.',

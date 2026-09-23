@@ -370,7 +370,15 @@ export function CanauxNova({ canaux, devise }: { canaux: readonly LigneCanal[]; 
 
 // ── Attribution ──────────────────────────────────────────────────────────────
 
-export function AttributionNova({ attribution, devise }: { attribution: Attribution; devise: string }) {
+export function AttributionNova({
+  attribution,
+  devise,
+  manqueVentes,
+}: {
+  attribution: Attribution
+  devise: string
+  manqueVentes: string
+}) {
   if (attribution.plateformes.length === 0 && attribution.reel === null) return null
   return (
     <Card>
@@ -395,7 +403,7 @@ export function AttributionNova({ attribution, devise }: { attribution: Attribut
           <div className="rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3">
             <p className="m-0 text-xs font-semibold tracking-wide text-[var(--color-ink-soft)] uppercase">Données réelles</p>
             {attribution.reel === null ? (
-              <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">Connectez Shopify pour comparer à vos ventes réelles.</p>
+              <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">{manqueVentes}</p>
             ) : (
               <p className="mt-2 mb-0 text-sm">
                 <strong>Shopify</strong> : {nombre(attribution.reel.commandes)} commandes · {argent(attribution.reel.chiffre, devise)}

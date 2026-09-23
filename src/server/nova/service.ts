@@ -23,6 +23,7 @@ import {
   type LigneProduit,
   type Periode,
   type PlateformePayante,
+  MANQUE_VENTES,
 } from './metriques'
 import {
   detecterAlertes,
@@ -84,6 +85,8 @@ export type VueNova = {
   opportunites: Opportunite[]
   sante: { global: 'bon' | 'verifier' | 'probleme'; lignes: LigneSante[] }
   ventes: EtatVentes
+  /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
+  manqueVentes: string
   pourOria: RapportOria
   siteId: string
 }
@@ -282,6 +285,28 @@ function santeVentes(ventes: EtatVentes, maintenant: Date): LigneSante {
 }
 
 /**
+ * Pourquoi il n'y a pas de ventes, selon ce qui se passe réellement.
+ *
+ * « Connectez Shopify » à quelqu'un dont la boutique est reliée l'enverrait refaire une
+ * connexion qui marche, alors que ce qui manque est une autorisation, ou un clic.
+ */
+export function raisonVentes(ventes: EtatVentes): string {
+  switch (ventes.etat) {
+    case 'absent':
+      return MANQUE_VENTES
+    case 'offre':
+      return 'Votre offre n’ouvre pas la lecture de votre boutique.'
+    case 'jamais':
+      return 'Boutique reliée, ventes pas encore lues : cliquez « Actualiser ».'
+    case 'portee':
+    case 'erreur':
+      return ventes.message === '' ? 'La lecture de votre boutique a échoué : cliquez « Actualiser ».' : ventes.message
+    case 'ok':
+      return 'Vos ventes ne sont connues que depuis le début de la lecture : choisissez une période plus courte.'
+  }
+}
+
+/**
  * Tout ce que l'écran de Nova affiche, pour une période.
  *
  * Aucune écriture, aucun appel extérieur : une lecture de la base et du calcul.
@@ -407,7 +432,7 @@ export async function lireNova(
     devise,
     vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null,
     sources,
-    kpis: indicateursNova(actuel, avant),
+    kpis: indicateursNova(actuel, avant, raisonVentes(ventes)),
     canaux: performanceCanaux(donnees, periode, ventesActuelles),
     attribution: lignesAttribution,
     campagnes: lignesCampagnes.slice(0, CAMPAGNES_MAX),
@@ -417,6 +442,7 @@ export async function lireNova(
     opportunites,
     sante: { global, lignes: lignesSante },
     ventes,
+    manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     pourOria: rapportPourOria(periode.libelle, sources, alertes, insights, opportunites),
     siteId,
   }

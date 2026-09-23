@@ -81,7 +81,9 @@ export default async function NovaPage({
   const ventes = vue?.ventes
   const lireVentes =
     ventes !== undefined &&
-    (ventes.etat === 'jamais' || ((ventes.etat === 'ok' || ventes.etat === 'erreur') && (ventes.synchroAt === null || +maintenant - +ventes.synchroAt >= FRAICHEUR_MS)))
+    (ventes.etat === 'jamais' ||
+      ((ventes.etat === 'ok' || ventes.etat === 'erreur' || ventes.etat === 'portee') &&
+        (ventes.synchroAt === null || +maintenant - +ventes.synchroAt >= FRAICHEUR_MS)))
 
   return (
     <Shell
@@ -122,7 +124,11 @@ export default async function NovaPage({
                 base={{ chemin: base, siteId }}
               />
               {ventes === undefined || ventes.etat === 'absent' || ventes.etat === 'offre' ? null : (
-                <SynchroNova derniere={ventes.synchroAt === null ? null : quandLisible(ventes.synchroAt)} aRelire={lireVentes} />
+                <SynchroNova
+                  derniere={ventes.synchroAt === null ? null : quandLisible(ventes.synchroAt)}
+                  aRelire={lireVentes}
+                  probleme={ventes.etat === 'portee' || ventes.etat === 'erreur' ? ventes.message : null}
+                />
               )}
               <p className="m-0 text-xs text-[var(--color-ink-faint)]">
                 Sources : {vue.sources.length === 0 ? 'aucune' : vue.sources.join(' + ')}
@@ -134,7 +140,7 @@ export default async function NovaPage({
             <AlertesNova alertes={vue.alertes} locale={locale} siteId={siteId} />
             <InsightsNova insights={vue.insights} />
             <CanauxNova canaux={vue.canaux} devise={vue.devise} />
-            <AttributionNova attribution={vue.attribution} devise={vue.devise} />
+            <AttributionNova attribution={vue.attribution} devise={vue.devise} manqueVentes={vue.manqueVentes} />
             <OpportunitesNova opportunites={vue.opportunites} />
             <CampagnesNova campagnes={vue.campagnes} devise={vue.devise} filtre={filtre} lien={lienRegie} />
             <ProduitsNova produits={vue.produits} devise={vue.devise} />

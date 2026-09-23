@@ -1209,8 +1209,13 @@ export async function lireCommandes(
       })
       if (reponse.status !== 200 || reponse.data === null || reponse.data.orders == null) {
         derniere = new Error(refusCommandes(reponse.status, reponse.erreurs))
-        // Les commandes elles-mêmes refusées, ou Shopify en panne : aucune variante n'y changera rien.
-        if (reponse.status !== 200 || commandesRefusees(reponse.erreurs)) throw derniere
+        /*
+         * Shopify en panne, ou les commandes refusées en entier : aucune variante n'y changera
+         * rien. Un refus « données protégées » peut ne viser que le client : on retente sans lui
+         * avant de conclure.
+         */
+        const protegees = donneesProtegees(reponse.erreurs)
+        if (reponse.status !== 200 || commandesRefusees(reponse.erreurs) || (protegees && !variante.client)) throw derniere
         refusee = true
         break
       }
@@ -1230,8 +1235,20 @@ function commandesRefusees(erreurs: readonly string[]): boolean {
   return erreurs.some((erreur) => /read_orders|access denied for orders|orders field/iu.test(erreur))
 }
 
+/**
+ * Shopify range les commandes parmi les « données client protégées » : même avec
+ * read_orders, une application doit déclarer qu'elle y accède. Le refus se reconnaît à sa
+ * formule, et il appelle un geste différent de celui d'une autorisation manquante.
+ */
+function donneesProtegees(erreurs: readonly string[]): boolean {
+  return erreurs.some((erreur) => /not approved to access|protected customer data/iu.test(erreur))
+}
+
 /** Le refus d'une lecture de commandes, dit pour quelqu'un qui peut y remédier. */
 function refusCommandes(status: number, erreurs: readonly string[]): string {
+  if (donneesProtegees(erreurs)) {
+    return 'Shopify demande de déclarer l’accès aux données client protégées. Dans le Dev Dashboard, section « API access », demandez l’accès aux « Protected customer data » (Nova n’a besoin d’aucun nom, courriel ni adresse), puis actualisez.'
+  }
   if (commandesRefusees(erreurs)) {
     return 'Shopify refuse la lecture des commandes : ajoutez l’autorisation « read_orders » à votre application Shopify, puis actualisez.'
   }
