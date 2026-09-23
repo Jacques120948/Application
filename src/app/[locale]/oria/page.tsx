@@ -15,8 +15,10 @@ import {
   CartePriorite,
   EnteteOria,
   EquipeOria,
+  OngletsOria,
   SanteMarketing,
 } from '@/components/studio/Oria'
+import { OBJECTIFS } from '@/lib/objectifs'
 
 /**
  * Le cockpit d'Oria.
@@ -59,6 +61,9 @@ export default async function OriaPage({
   const siteId = cockpit.site?.id ?? ''
   const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
   const maintenant = new Date()
+  const objectifs = cockpit.objectifs.objectifs
+    .map((id) => OBJECTIFS.find((un) => un.id === id)?.label.toLowerCase())
+    .filter((label): label is string => label !== undefined)
 
   /*
    * Rien à lire : ni site analysé, ni compte publicitaire relié. Oria le dit et propose une
@@ -84,6 +89,8 @@ export default async function OriaPage({
           versConversation={`/${locale}/visibilite/equipe${suffixe === '' ? '?agent=oria' : `${suffixe}&agent=oria`}`}
         />
 
+        {vierge ? null : <OngletsOria courant="cockpit" locale={locale} siteId={siteId} />}
+
         {vierge ? (
           <AccueilOria versAnalyse={`/${locale}/visibilite`} />
         ) : (
@@ -92,7 +99,13 @@ export default async function OriaPage({
               <h2 className="m-0 text-lg font-semibold">Mes 3 priorités</h2>
               <p className="mt-1 mb-4 text-sm text-[var(--color-ink-soft)]">
                 Classées par ce qu’elles coûtent, le travail qu’elles demandent, leur urgence et
-                la solidité des données derrière.
+                la solidité des données derrière
+                {objectifs.length === 0 ? '. ' : ` — et pour votre objectif : ${objectifs.join(', puis ')}. `}
+                {siteId === '' ? null : (
+                  <a href={`/${locale}/oria/plan${suffixe}`}>
+                    {objectifs.length === 0 ? 'Choisir un objectif' : 'Modifier'}
+                  </a>
+                )}
               </p>
               {cockpit.priorites.length === 0 ? (
                 <div className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-5">

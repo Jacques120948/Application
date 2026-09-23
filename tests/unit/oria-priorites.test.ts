@@ -5,6 +5,7 @@ import {
   POIDS_DEFAUT,
   URGENCES,
   classer,
+  effortDuCatalogue,
   scoreOria,
   type Signal,
 } from '@/server/oria/signaux'
@@ -125,6 +126,19 @@ describe('le score de priorité', () => {
             expect(Number.isFinite(score)).toBe(true)
             expect(score).toBeGreaterThan(0)
           }
+  })
+})
+
+describe('l’effort d’un constat d’audit', () => {
+  it('vient de ce que le catalogue déclare, jamais de la gravité', () => {
+    /*
+     * Une première version rangeait tout constat critique non déclaré en « effort élevé ».
+     * Un titre manquant — grave, corrigé en deux minutes — passait alors derrière tout le
+     * reste. Non déclaré veut dire qu'on ne sait pas.
+     */
+    expect(effortDuCatalogue(true)).toBe('faible')
+    expect(effortDuCatalogue(false)).toBe('eleve')
+    expect(effortDuCatalogue(null)).toBe('moyen')
   })
 })
 

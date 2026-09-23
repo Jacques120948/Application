@@ -85,7 +85,9 @@ export type Check = {
    * clients, une politique de retour, une grille de prix.
    *
    * L'écran s'en sert pour proposer « ce qui se règle aujourd'hui » sans prétendre que ce
-   * soit ce qui rapporte le plus. Absent : on ne sait pas, et le constat n'y figure pas.
+   * soit ce qui rapporte le plus. Absent : on ne sait pas, et ce n'est ni rapide ni lourd —
+   * surtout pas « lourd parce que grave » : un titre manquant est grave et se corrige en
+   * deux minutes.
    */
   rapide?: boolean
   /**

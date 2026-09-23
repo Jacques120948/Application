@@ -61,7 +61,7 @@ export async function lireConversion(
   const priorites = aTraiter.slice(0, PRIORITES_MAX)
   const dejaVues = new Set(priorites.map((ligne) => ligne.checkId))
   const rapides = aTraiter
-    .filter((ligne) => ligne.rapide && !dejaVues.has(ligne.checkId))
+    .filter((ligne) => ligne.rapide === true && !dejaVues.has(ligne.checkId))
     .slice(0, RAPIDES_MAX)
 
   return {

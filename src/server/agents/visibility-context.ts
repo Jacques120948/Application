@@ -1,5 +1,6 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
+import { OBJECTIFS } from '@/lib/objectifs'
 import { contexteMeta } from '@/server/ads/contexte-meta'
 import { listAudits, readPlan } from '@/server/audit/plan'
 import { JOURS_LUS, recherchesPourArticle } from '@/server/audit/recherches'
@@ -282,6 +283,21 @@ export async function readSiteFacts(
         `SOURCES ABSENTES : ${manquants.map(([, nom]) => nom).join(', ')}. Tu ne disposes` +
           ` d'aucune donnée de leur part. Ne suppose rien à leur sujet ; quand la question` +
           ` en dépend, dis ce qu'il faudrait relier.`,
+      )
+    }
+
+    const declares = vue.objectifs.objectifs
+      .map((id) => OBJECTIFS.find((un) => un.id === id)?.label)
+      .filter((label): label is string => label !== undefined)
+    lignes.push(
+      declares.length === 0
+        ? 'Objectifs : aucun déclaré. Le classement est neutre ; si la question en dépend, propose d’en choisir un.'
+        : `Objectifs déclarés, par ordre d'importance : ${declares.join(' ; ')}. Le classement en tient déjà compte.`,
+    )
+    if (vue.objectifs.activite !== '') {
+      lignes.push(
+        `Type d'activité : ${vue.objectifs.activite === 'boutique' ? 'boutique en ligne' : 'prestations de services'}` +
+          `${vue.objectifs.deduite ? ' (déduit d’une boutique Shopify reliée)' : ''}.`,
       )
     }
 

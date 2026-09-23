@@ -152,6 +152,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.reassurance.absente',
+    rapide: false,
     engine: 'cro',
     scope: 'page',
     label: 'Rien ne rassure avant d’acheter',
@@ -168,6 +169,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.livraison.absente',
+    rapide: false,
     engine: 'cro',
     scope: 'page',
     label: 'Le prix est là, la livraison n’y est pas',
@@ -183,6 +185,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.avis.absents',
+    rapide: false,
     engine: 'cro',
     scope: 'page',
     label: 'Aucun avis, aucun témoignage',
@@ -226,6 +229,7 @@ export const CRO_CHECKS: readonly Check[] = [
   },
   {
     id: 'cro.prix.absent',
+    rapide: false,
     engine: 'cro',
     scope: 'page',
     label: 'Aucun prix visible sur une page qui vend',

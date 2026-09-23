@@ -6,6 +6,8 @@ import { readDashboard } from '@/server/audit/service'
 import { listWatches } from '@/server/audit/surveillance'
 import { withUserScope } from '@/server/db/scope'
 import { readSetting } from '@/server/settings/store'
+import { biaisDesObjectifs } from '@/lib/objectifs'
+import { lireObjectifs, type VueObjectifs } from './objectifs'
 import { santeMarketing, type Canal } from './sante'
 import type { VisibilityAgentId } from '@/server/agents/visibility'
 
@@ -215,6 +217,13 @@ function ecranDuMoteur(locale: string, moteur: string, siteId: string): string {
   return `/${locale}/visibilite${site}`
 }
 
+/** L'effort d'un constat d'audit, tel que le catalogue le déclare. Non déclaré : moyen. */
+export function effortDuCatalogue(rapide: boolean | null): Ampleur {
+  if (rapide === true) return 'faible'
+  if (rapide === false) return 'eleve'
+  return 'moyen'
+}
+
 const AGENT_DU_MOTEUR: Record<string, VisibilityAgentId> = {
   seo: 'seo',
   geo: 'geo',
@@ -253,7 +262,13 @@ function depuisPlan(lignes: readonly LignePlan[], locale: string, siteId: string
             : 'Ouvrez le constat pour voir les pages concernées.',
         mesure: `Relevé par l’analyse du site, ${etendue}.`,
         impact: ligne.lost >= 8 ? 'eleve' : ligne.lost >= 4 ? 'moyen' : 'faible',
-        effort: ligne.rapide ? 'faible' : ligne.severity === 'critical' ? 'eleve' : 'moyen',
+        /*
+         * L'effort vient de ce que le catalogue déclare, jamais de la gravité. Une première
+         * version rangeait tout constat critique non déclaré en « effort élevé » — et un
+         * titre manquant, grave et corrigé en deux minutes, passait après tout le reste.
+         * Non déclaré veut dire qu'on ne sait pas : moyen.
+         */
+        effort: effortDuCatalogue(ligne.rapide),
         urgence: ligne.severity === 'improvement' ? 'information' : 'important',
         // Un contrôle est du calcul sur des pages réellement lues : rien n'est plus sûr ici.
         confiance: 'elevee',
@@ -471,6 +486,8 @@ export type Consolidation = {
    * n'est fabriquée pour remplir une case — `null` s'affiche « jamais ».
    */
   reperes: { audit: Date | null; ads: Date | null; meta: Date | null }
+  /** Ce que l'entreprise cherche. C'est ce qui a incliné le classement. */
+  objectifs: VueObjectifs
 }
 
 /**
@@ -584,9 +601,20 @@ export async function lireSignaux(
     },
   })
 
+  /*
+   * L'objectif incline le classement, il ne le décide pas : une panne reste devant une
+   * opportunité de conversion, même pour quelqu'un qui ne cherche que des ventes. Sans site,
+   * pas d'objectif — ils vivent sur le site.
+   */
+  const objectifs: VueObjectifs =
+    site === null
+      ? { objectifs: [], activite: '', deduite: false }
+      : await sans(lireObjectifs(userId, site.id), { objectifs: [], activite: '', deduite: false })
+
   const poids = await poidsOria()
   return {
-    signaux: classer(signaux, poids),
+    signaux: classer(signaux, poids, biaisDesObjectifs(objectifs.objectifs)),
+    objectifs,
     canaux,
     sourcesLues,
     site,

@@ -54,8 +54,11 @@ export type LignePlan = {
   note: string
   /** L'équipe sait rédiger la correction de ce constat. */
   corrigeable: boolean
-  /** La correction tient en une modification locale. Un jugement d'effort, pas de gain. */
-  rapide: boolean
+  /**
+   * La correction tient-elle en une modification locale ? Un jugement d'effort, pas de gain.
+   * `null` : le catalogue ne se prononce pas.
+   */
+  rapide: boolean | null
   /**
    * Ce qui a déjà été rédigé pour ce constat, et déjà payé.
    *
@@ -148,7 +151,7 @@ export async function readPlan(userId: string, siteId: string): Promise<Plan | n
       state: item !== undefined && estUnEtat(item.state) ? item.state : 'todo',
       note: item?.note ?? '',
       corrigeable: estCorrigeable(constat.checkId),
-      rapide: check?.rapide === true,
+      rapide: check?.rapide ?? null,
       corrections: corrections.get(constat.checkId) ?? [],
     })
   }

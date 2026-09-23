@@ -6,6 +6,7 @@ import { register } from '@/server/auth/service'
 import { withUserScope } from '@/server/db/scope'
 import { lireCockpit } from '@/server/oria/cockpit'
 import { lireActivite } from '@/server/oria/activite'
+import { enregistrerObjectifs, lireObjectifs } from '@/server/oria/objectifs'
 import { ensureTestPlan, subscribeToTestPlan } from '../helpers/plan'
 
 /**
@@ -24,6 +25,7 @@ let anne: string
 let bruno: string
 let emailAnne: string
 let emailBruno: string
+let siteAnne: string
 
 beforeAll(async () => {
   clearAll()
@@ -39,6 +41,33 @@ beforeAll(async () => {
   ).userId
   await subscribeToTestPlan(anne)
   await subscribeToTestPlan(bruno)
+
+  siteAnne = (
+    await withUserScope(anne, (tx) =>
+      tx.site.create({
+        data: { userId: anne, origin: 'https://anne-oria.ch', host: 'anne-oria.ch', label: 'Anne' },
+        select: { id: true },
+      }),
+    )
+  ).id
+  /*
+   * Une analyse terminée, sans constat. Oria ne regarde un site qu'une fois analysé : avant,
+   * elle n'a rien à classer, et ses objectifs n'ont rien à incliner.
+   */
+  await withUserScope(anne, (tx) =>
+    tx.audit.create({
+      data: {
+        userId: anne,
+        siteId: siteAnne,
+        status: 'done',
+        pagesCrawled: 3,
+        seoScore: 90,
+        geoScore: 90,
+        croScore: 90,
+        finishedAt: new Date(),
+      },
+    }),
+  )
 
   const compte = await withUserScope(anne, (tx) =>
     tx.adsAccount.create({
@@ -134,5 +163,36 @@ describe('le cockpit d’Oria', () => {
     )
     // Aucune mise en scène d'une coordination qui n'a pas eu lieu.
     expect(phrases.some((phrase) => phrase.startsWith('Oria'))).toBe(false)
+  })
+})
+
+describe('les objectifs', () => {
+  it('s’enregistrent dans l’ordre choisi, et Oria les relit', async () => {
+    await enregistrerObjectifs(anne, siteAnne, { objectifs: ['ventes', 'trafic-seo'], activite: 'boutique' })
+    const vue = await lireObjectifs(anne, siteAnne)
+    expect(vue.objectifs).toEqual(['ventes', 'trafic-seo'])
+    expect(vue.activite).toBe('boutique')
+    expect(vue.deduite).toBe(false)
+
+    const cockpit = await lireCockpit(anne, 'fr', siteAnne)
+    expect(cockpit.objectifs.objectifs).toEqual(['ventes', 'trafic-seo'])
+  })
+
+  it('refusent un objectif qu’aucun agent ne sait encore servir', async () => {
+    await expect(
+      enregistrerObjectifs(anne, siteAnne, { objectifs: ['reseaux-sociaux'] }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+    await expect(
+      enregistrerObjectifs(anne, siteAnne, { objectifs: ['invente'] }),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+  })
+
+  it('ne laissent pas Bruno régler ceux d’Anne, ni les lire', async () => {
+    await expect(
+      enregistrerObjectifs(bruno, siteAnne, { objectifs: ['leads'] }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(lireObjectifs(bruno, siteAnne)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    // Et ceux d'Anne n'ont pas bougé.
+    expect((await lireObjectifs(anne, siteAnne)).objectifs).toEqual(['ventes', 'trafic-seo'])
   })
 })

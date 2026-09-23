@@ -172,5 +172,8 @@ describe('ce que le catalogue déclare rapide', () => {
 
     for (const id of ['cro.reassurance.absente', 'cro.avis.absents', 'cro.prix.absent'])
       expect(rapide(id), id).toBe(false)
+
+    // Cleo se prononce sur chacun : un effort non déclaré compterait comme « moyen » chez Oria.
+    for (const check of CRO_CHECKS) expect(typeof check.rapide, check.id).toBe('boolean')
   })
 })

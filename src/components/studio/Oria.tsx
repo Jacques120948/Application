@@ -4,6 +4,7 @@ import type { Signal } from '@/server/oria/signaux'
 import type { Canal } from '@/server/oria/sante'
 import type { EtatAgent } from '@/server/oria/cockpit'
 import type { Evenement } from '@/server/oria/activite'
+import type { ActionPlan, JourSemaine, PlanMarketing } from '@/server/oria/plan-marketing'
 
 /**
  * Les blocs du cockpit d'Oria.
@@ -527,5 +528,160 @@ export function ActiviteEquipe({ activite, maintenant }: { activite: readonly Ev
         )}
       </CardBody>
     </Card>
+  )
+}
+
+// ── Plan ─────────────────────────────────────────────────────────────────────
+
+/** Qui décide, qui prépare. Aujourd'hui c'est toujours « vous, avec » un spécialiste. */
+function quiFait(uneAction: ActionPlan): string {
+  const aide = nommer(uneAction.aide)
+  const qui =
+    uneAction.responsable.type === 'collaborateur' ? uneAction.responsable.nom : 'Vous'
+  return aide === '' ? qui : `${qui}, avec ${aide}`
+}
+
+function LigneAction({ uneAction }: { uneAction: ActionPlan }) {
+  const urgence = URGENCE[uneAction.signal.urgence]
+  return (
+    <li className="flex items-start gap-3 border-t border-[var(--color-line)] py-3 first:border-t-0 first:pt-0">
+      <span className="flex shrink-0 -space-x-2 pt-0.5">
+        {uneAction.aide.map((source) => (
+          <Portrait key={source} id={source} taille={24} />
+        ))}
+      </span>
+      <div className="min-w-0 flex-1">
+        <a
+          href={uneAction.signal.href}
+          className="text-sm font-medium text-[var(--color-ink)] no-underline hover:underline"
+        >
+          {uneAction.signal.titre}
+        </a>
+        <p className="m-0 mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-ink-soft)]">
+          <span>{quiFait(uneAction)}</span>
+          <span aria-hidden="true">·</span>
+          <span>effort {AMPLEUR[uneAction.signal.effort]?.toLowerCase()}</span>
+          {urgence?.ton === 'critical' ? <Badge tone="critical">{urgence.label}</Badge> : null}
+        </p>
+      </div>
+    </li>
+  )
+}
+
+/**
+ * Le plan, en trois horizons.
+ *
+ * Une période vide s'affiche vide, avec une phrase : c'est une information — il n'y a rien
+ * d'urgent — et la remplir pour la symétrie serait précisément ce que le cahier des
+ * charges interdit.
+ */
+export function PlanOria({ plan }: { plan: PlanMarketing }) {
+  const periodes: { titre: string; vide: string; actions: ActionPlan[] }[] = [
+    { titre: 'Aujourd’hui', vide: 'Rien ne presse aujourd’hui.', actions: plan.aujourdhui },
+    {
+      titre: 'Cette semaine',
+      vide: 'Rien d’autre cette semaine : les points restants demandent plus de travail.',
+      actions: plan.semaine,
+    },
+    { titre: 'Ce mois', vide: 'Rien de plus pour ce mois.', actions: plan.mois },
+  ]
+  return (
+    <div className="grid gap-4">
+      {periodes.map((periode) => (
+        <Card key={periode.titre}>
+          <CardBody>
+            <h2 className="m-0 mb-3 text-base font-semibold">{periode.titre}</h2>
+            {periode.actions.length === 0 ? (
+              <p className="m-0 text-sm text-[var(--color-ink-soft)]">{periode.vide}</p>
+            ) : (
+              <ol className="m-0 grid list-none gap-0 p-0">
+                {periode.actions.map((uneAction) => (
+                  <LigneAction key={uneAction.signal.cle} uneAction={uneAction} />
+                ))}
+              </ol>
+            )}
+          </CardBody>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * « Ma semaine avec Oria » : les mêmes actions, posées sur les jours.
+ *
+ * Seuls les jours qui ont quelque chose s'affichent. Une semaine à deux actions montre
+ * deux jours, et c'est exactement ce qu'elle doit montrer.
+ */
+export function SemaineOria({ jours }: { jours: readonly JourSemaine[] }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Ma semaine avec Oria</h2>
+        <p className="mt-1 mb-4 text-sm text-[var(--color-ink-soft)]">
+          Ce qui compte cette semaine, réparti pour ne pas tout faire le lundi. Recalculé à
+          chaque visite : ce que vous réglez disparaît, la suite remonte.
+        </p>
+        {jours.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+            Rien à planifier cette semaine.
+          </p>
+        ) : (
+          <ol className="m-0 grid list-none gap-4 p-0">
+            {jours.map((jour) => (
+              <li key={jour.jour} className="grid gap-2 sm:grid-cols-[7rem_1fr]">
+                <p className="m-0 text-sm font-semibold">{jour.jour}</p>
+                <ul className="m-0 grid list-none gap-0 p-0">
+                  {jour.actions.map((uneAction) => (
+                    <LigneAction key={uneAction.signal.cle} uneAction={uneAction} />
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * Les onglets d'Oria.
+ *
+ * Deux pour l'instant, et l'adresse les porte : un onglet se met en favori et survit au
+ * rafraîchissement. Les écrans prévus plus tard — rapports, décisions — viendront s'y
+ * ajouter sans changer ceux-ci.
+ */
+export function OngletsOria({
+  courant,
+  locale,
+  siteId,
+}: {
+  courant: 'cockpit' | 'plan'
+  locale: string
+  siteId: string
+}) {
+  const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
+  const onglets = [
+    { cle: 'cockpit', label: 'Cockpit', href: `/${locale}/oria${suffixe}` },
+    { cle: 'plan', label: 'Objectifs et plan', href: `/${locale}/oria/plan${suffixe}` },
+  ] as const
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label="Oria">
+      {onglets.map((onglet) => (
+        <a
+          key={onglet.cle}
+          href={onglet.href}
+          aria-current={onglet.cle === courant ? 'page' : undefined}
+          className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
+            onglet.cle === courant
+              ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+              : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+          }`}
+        >
+          {onglet.label}
+        </a>
+      ))}
+    </nav>
   )
 }

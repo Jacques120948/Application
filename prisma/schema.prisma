@@ -1253,6 +1253,13 @@ model Site {
   /// Dernier passage de la surveillance. Vide tant qu'elle n'a jamais tourné sur ce site.
   watchedAt DateTime?
 
+  /// Ce que l'entreprise cherche, par ordre d'importance : deux au plus. Oria classe ses
+  /// priorités en conséquence. Vide : aucun objectif déclaré, le classement reste neutre.
+  objectifs String[] @default([])
+  /// « boutique » ou « services », quand la personne l'a dit. Vide : pas dit, et Oria le
+  /// déduit quand elle peut — une boutique Shopify reliée se passe de la question.
+  activite  String   @default("")
+
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   audits         Audit[]
   items          ActionItem[]
