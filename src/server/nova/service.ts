@@ -1,3 +1,4 @@
+import type { IdMembre } from '@/lib/equipe'
 import { NOM_CANAL } from '@/lib/nova'
 import { compteActif, type CompteRelie } from '@/server/ads/comptes'
 import { jourDansFuseau, enUnites, moisCourant } from '@/server/ads/metriques'
@@ -29,6 +30,7 @@ import {
   type CumulVisites,
   type CumulVentes,
   type JourVisites,
+  cumulPub,
 } from './metriques'
 import {
   detecterAlertes,
@@ -43,6 +45,8 @@ import {
 import { lireEtatVentes, SOURCE_SHOPIFY, type EtatVentes } from './collecte'
 import { lireEtatVisites, type EtatVisites } from './collecte-ga4'
 import { reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
+import { controlesSuivi } from './suivi'
+import { contenusQuiAttirent, type Contenus } from './contenus'
 import {
   indicateursAVenir,
   margeEstimee,
@@ -89,6 +93,11 @@ export type LigneSante = {
   etat: EtatSante
   texte: string
   action: { label: string; href: string } | null
+  /**
+   * À qui Nova peut transmettre ce point : Léa pour un suivi à auditer, la régie pour ses
+   * propres liens. Absent : rien à transmettre (une source à relier, par exemple).
+   */
+  agent?: IdMembre
 }
 
 export type VueNova = {
@@ -112,6 +121,8 @@ export type VueNova = {
   visites: EtatVisites
   /** Les visites de la période, pour les écrans qui détaillent appareils et pages. */
   visitesPeriode: CumulVisites | null
+  /** Les articles de blog par lesquels on entre, et leur engagement. */
+  contenus: Contenus
   /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
   manqueVentes: string
   /** Pourquoi les ventes ne se comparent pas à la période précédente, quand c'est le cas. */
@@ -214,7 +225,15 @@ async function lireVentes(userId: string, boutique: string, depuis: string, jusq
     )
   return lignes.map((ligne) => {
     const canaux = (ligne.canaux ?? {}) as CanalBrut
-    const produits = (ligne.produits ?? []) as { id: string; titre: string; commandes: number; quantite: number; chiffreCents: number }[]
+    const produits = (ligne.produits ?? []) as {
+      id: string
+      titre: string
+      commandes: number
+      quantite: number
+      chiffreCents: number
+      coutCents?: number
+      quantiteCoutee?: number
+    }[]
     return {
       jour: jourIso(ligne.jour),
       commandes: ligne.commandes,
@@ -224,7 +243,16 @@ async function lireVentes(userId: string, boutique: string, depuis: string, jusq
       clientsIdentifies: ligne.clientsIdentifies,
       canaux: enUnitesCanaux(canaux),
       canauxPremier: enUnitesCanaux((ligne.canauxPremier ?? {}) as CanalBrut),
-      produits: produits.map((produit) => ({ ...produit, chiffre: produit.chiffreCents / 100 })),
+      produits: produits.map(({ coutCents, chiffreCents, ...produit }) => ({
+        ...produit,
+        chiffre: chiffreCents / 100,
+        cout: (coutCents ?? 0) / 100,
+        quantiteCoutee: produit.quantiteCoutee ?? 0,
+      })),
+      coutsLus: ligne.coutsLus,
+      lignes: Number(ligne.lignesCents) / 100,
+      lignesCoutees: Number(ligne.lignesCouteesCents) / 100,
+      coutProduits: Number(ligne.coutProduitsCents) / 100,
     }
   })
 }
@@ -237,9 +265,15 @@ async function lireVisites(userId: string, propriete: string, depuis: string, ju
     }),
   )
   type Brut = { sessions: number; achats: number; revenuCents: number; origines: Record<string, number> }
-  type PageBrute = { page: string; sessions: number; achats: number; revenuCents: number }
+  type PageBrute = { page: string; sessions: number; achats: number; revenuCents: number; engagees?: number }
   const pages = (brut: unknown) =>
-    ((brut ?? []) as PageBrute[]).map((page) => ({ page: page.page, sessions: page.sessions, achats: page.achats, revenu: page.revenuCents / 100 }))
+    ((brut ?? []) as PageBrute[]).map((page) => ({
+      page: page.page,
+      sessions: page.sessions,
+      achats: page.achats,
+      revenu: page.revenuCents / 100,
+      ...(typeof page.engagees === 'number' ? { engagees: page.engagees } : {}),
+    }))
   return lignes.map((ligne) => ({
     jour: jourIso(ligne.jour),
     sessions: ligne.sessions,
@@ -358,6 +392,24 @@ function santeVentes(ventes: EtatVentes, maintenant: Date): LigneSante {
   }
 }
 
+/** Le coût des produits lu dans Shopify : de quoi calculer une marge réelle, ou ce qui manque. */
+export function santeCouts(ventes: EtatVentes): LigneSante | null {
+  if (ventes.etat !== 'ok' || ventes.couts.at === null) return null
+  const base = { cle: 'couts', source: 'Coût des produits', action: null }
+  if (ventes.couts.message !== '') return { ...base, etat: 'verifier', texte: ventes.couts.message }
+  const { variantes, renseignes } = ventes.couts
+  if (variantes === 0) return null
+  const part = renseignes / variantes
+  if (part >= 0.8) {
+    return { ...base, etat: 'bon', texte: `Coût d’achat renseigné pour ${renseignes} variante${renseignes > 1 ? 's' : ''} sur ${variantes} : la marge est calculée sur vos coûts réels.` }
+  }
+  return {
+    ...base,
+    etat: 'verifier',
+    texte: `Coût d’achat renseigné pour ${renseignes} variante${renseignes > 1 ? 's' : ''} sur ${variantes} seulement. Complétez « Coût par article » dans vos fiches Shopify pour une marge réelle.`,
+  }
+}
+
 function santeVisites(visites: EtatVisites, maintenant: Date): LigneSante {
   const base = { cle: 'ga4', source: 'Google Analytics 4' }
   switch (visites.etat) {
@@ -391,6 +443,7 @@ function coherenceVisites(visites: CumulVisites | null, ventes: CumulVentes | nu
       etat: 'probleme',
       texte: `La boutique compte ${ventes.commandes} commandes, GA4 aucun achat : l’événement « purchase » n’arrive pas dans Analytics. Le suivi e-commerce est à vérifier.`,
       action: null,
+      agent: 'audit',
     })
   } else if (ventes !== null && ventes.commandes >= 20 && visites.achats > 0) {
     const ecart = Math.abs(visites.achats - ventes.commandes) / ventes.commandes
@@ -401,6 +454,7 @@ function coherenceVisites(visites: CumulVisites | null, ventes: CumulVentes | nu
         etat: 'verifier',
         texte: `GA4 compte ${visites.achats} achats, la boutique ${ventes.commandes} commandes. Un écart de ${Math.round(ecart * 100)} % signale un suivi incomplet (bloqueurs, consentement, événement mal branché).`,
         action: null,
+        agent: 'audit',
       })
     }
   }
@@ -412,6 +466,7 @@ function coherenceVisites(visites: CumulVisites | null, ventes: CumulVentes | nu
       etat: 'verifier',
       texte: `${Math.round((sansCanal / visites.sessions) * 100)} % des visites n’ont pas de canal dans GA4 (« Unassigned »). Des liens sans paramètres UTM en sont souvent la cause.`,
       action: null,
+      agent: 'audit',
     })
   }
   return lignes
@@ -451,7 +506,7 @@ export async function lireNova(
   maintenant = new Date(),
 ): Promise<VueNova> {
   const [ventes, google, meta, sites, visites] = await Promise.all([
-    sans(lireEtatVentes(userId), { etat: 'absent', message: '', boutique: '', synchroAt: null, couvertureDepuis: null, tronque: false, devise: '', fuseau: '', clients: null } as EtatVentes),
+    sans(lireEtatVentes(userId), { etat: 'absent', message: '', boutique: '', synchroAt: null, couvertureDepuis: null, tronque: false, devise: '', fuseau: '', clients: null, couts: { at: null, message: '', variantes: 0, renseignes: 0 } } as EtatVentes),
     sans(compteActif(userId, 'google-ads'), null),
     sans(compteActif(userId, 'meta-ads'), null),
     sans(listSites(userId), []),
@@ -518,6 +573,7 @@ export async function lireNova(
     attribution: lignesAttribution,
     campagnes: lignesCampagnes,
     produits: lignesProduits,
+    merEquilibre: null as number | null,
   }
   // Le mois à date : le premier du mois, rien n'est encore écoulé, et zéro est alors la vérité.
   const ventesMois =
@@ -536,6 +592,8 @@ export async function lireNova(
   })
   const modeles = modelesAttribution(ventesActuelles)
 
+  const marge = margeEstimee(ventesActuelles, regies.length === 0 ? null : actuel.pub.depense, reglages.couts)
+  contexte.merEquilibre = marge.etat === 'calculee' ? marge.merEquilibre : null
   const insights = detecterInsights(contexte)
   /*
    * Un objectif mensuel en retard est un constat comme un autre, et il passe devant : c'est
@@ -574,6 +632,8 @@ export async function lireNova(
       : { cle: 'search-console', source: 'Search Console', etat: 'bon', texte: `Relevé du ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(recherche.au))}.`, action: null },
     santeVisites(visites, maintenant),
   ]
+  const couts = santeCouts(ventes)
+  if (couts !== null) lignesSante.push(couts)
   if (ventesActuelles !== null && ventesActuelles.commandes >= 20) {
     const inconnues = (ventesActuelles.canaux.inconnu?.commandes ?? 0) / ventesActuelles.commandes
     if (inconnues >= 0.3) {
@@ -583,6 +643,7 @@ export async function lireNova(
         etat: 'verifier',
         texte: `${Math.round(inconnues * 100)} % des commandes n’ont pas d’origine connue. Des liens sans paramètres UTM en sont souvent la cause.`,
         action: null,
+        agent: 'audit',
       })
     }
   }
@@ -594,7 +655,15 @@ export async function lireNova(
       etat: 'verifier',
       texte: 'Les régies revendiquent nettement plus de revenu que la boutique n’en encaisse : des ventes sont probablement comptées deux fois.',
       action: null,
+      agent: 'audit',
     })
+  }
+  for (const controle of controlesSuivi({
+    ventes: ventesActuelles,
+    regies: donnees.regies,
+    pub: (plateforme) => cumulPub(donnees.campagnes, periode, (ligne) => ligne.plateforme === plateforme),
+  })) {
+    lignesSante.push({ ...controle, action: null })
   }
   for (const ligne of lignesSante) {
     if (ligne.action !== null && ligne.action.href === '') ligne.action = { ...ligne.action, href: connexions }
@@ -627,6 +696,7 @@ export async function lireNova(
     ventes,
     visites,
     visitesPeriode: visitesActuelles,
+    contenus: contenusQuiAttirent(visitesActuelles),
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     /*
      * La période affichée est couverte, la précédente non : sans cette phrase, « pas de
@@ -641,7 +711,7 @@ export async function lireNova(
     reglages,
     ordre: ordreIndicateurs(reglages.activite),
     aVenir: indicateursAVenir(reglages.activite),
-    marge: margeEstimee(ventesActuelles, regies.length === 0 ? null : actuel.pub.depense, reglages.couts),
+    marge,
     objectifs: suivis,
     clients: repartitionClients(ventesActuelles),
     valeurClient: valeurClient(ventes.clients),

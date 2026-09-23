@@ -129,7 +129,16 @@ export type JourCampagne = {
 
 export type CanalVentes = { commandes: number; chiffre: number; origines: Record<string, number> }
 
-export type ProduitVentes = { id: string; titre: string; commandes: number; quantite: number; chiffre: number }
+export type ProduitVentes = {
+  id: string
+  titre: string
+  commandes: number
+  quantite: number
+  chiffre: number
+  /** Coût d'achat des unités dont le coût est connu, et combien d'unités. Absents avant la V4. */
+  cout?: number
+  quantiteCoutee?: number
+}
 
 /** Une journée de ventes, en unités de la devise de la boutique. */
 export type JourVentes = {
@@ -144,6 +153,12 @@ export type JourVentes = {
   /** Les mêmes commandes, par canal de première visite. Vide pour les jours lus avant la V2. */
   canauxPremier: Partial<Record<CanalNova, CanalVentes>>
   produits: ProduitVentes[]
+  /** Coûts produits lus avec ce jour ? Faux pour les jours lus avant la V4, ou si Shopify les a refusés. */
+  coutsLus?: boolean
+  /** Lignes de produits (hors livraison), celles dont le coût est connu, et ce coût. */
+  lignes?: number
+  lignesCoutees?: number
+  coutProduits?: number
 }
 
 export type Donnees = {
@@ -164,7 +179,8 @@ export type Donnees = {
 }
 
 export type CanalSessions = { sessions: number; achats: number; revenu: number; origines: Record<string, number> }
-export type PageSessions = { page: string; sessions: number; achats: number; revenu: number }
+/** `engagees` : sessions engagées sur la page ; absent quand un jour de la période ne le donne pas. */
+export type PageSessions = { page: string; sessions: number; achats: number; revenu: number; engagees?: number }
 
 /** Une journée de visites GA4, en unités de la devise de la propriété. */
 export type JourVisites = {
@@ -190,12 +206,15 @@ export type CumulVisites = {
   pagesSeo: PageSessions[]
 }
 
-function cumulerPages(cible: Map<string, PageSessions>, pages: readonly PageSessions[]): void {
+function cumulerPages(cible: Map<string, PageSessions>, pages: readonly PageSessions[], sansEngagement: Set<string>): void {
   for (const page of pages) {
-    const deja = cible.get(page.page) ?? { page: page.page, sessions: 0, achats: 0, revenu: 0 }
+    const deja = cible.get(page.page) ?? { page: page.page, sessions: 0, achats: 0, revenu: 0, engagees: 0 }
     deja.sessions += page.sessions
     deja.achats += page.achats
     deja.revenu += page.revenu
+    // Un seul jour sans la mesure, et le taux d'engagement de la page serait faux sans le dire.
+    if (page.engagees === undefined) sansEngagement.add(page.page)
+    else deja.engagees = (deja.engagees ?? 0) + page.engagees
     cible.set(page.page, deja)
   }
 }
@@ -208,6 +227,8 @@ export function cumulVisites(visites: Donnees['visites'], bornes: { du: string; 
   const total: CumulVisites = { sessions: 0, sessionsEngagees: 0, achats: 0, revenu: 0, canaux: {}, appareils: {}, pages: [], pagesSeo: [] }
   const pages = new Map<string, PageSessions>()
   const pagesSeo = new Map<string, PageSessions>()
+  const sansEngagement = new Set<string>()
+  const sansEngagementSeo = new Set<string>()
   for (const jour of visites.jours) {
     if (!dansPeriode(jour.jour, bornes)) continue
     total.sessions += jour.sessions
@@ -228,11 +249,15 @@ export function cumulVisites(visites: Donnees['visites'], bornes: { du: string; 
       deja.achats += ligne.achats
       total.appareils[appareil] = deja
     }
-    cumulerPages(pages, jour.pages)
-    cumulerPages(pagesSeo, jour.pagesSeo)
+    cumulerPages(pages, jour.pages, sansEngagement)
+    cumulerPages(pagesSeo, jour.pagesSeo, sansEngagementSeo)
   }
-  total.pages = [...pages.values()].sort((une, autre) => autre.revenu - une.revenu || autre.sessions - une.sessions)
-  total.pagesSeo = [...pagesSeo.values()].sort((une, autre) => autre.revenu - une.revenu || autre.sessions - une.sessions)
+  const nettoyer = (liste: Map<string, PageSessions>, sans: Set<string>) =>
+    [...liste.values()]
+      .map((page) => (sans.has(page.page) ? { page: page.page, sessions: page.sessions, achats: page.achats, revenu: page.revenu } : page))
+      .sort((une, autre) => autre.revenu - une.revenu || autre.sessions - une.sessions)
+  total.pages = nettoyer(pages, sansEngagement)
+  total.pagesSeo = nettoyer(pagesSeo, sansEngagementSeo)
   return total
 }
 
@@ -270,6 +295,11 @@ export type CumulVentes = {
   canaux: Partial<Record<CanalNova, CanalVentes>>
   canauxPremier: Partial<Record<CanalNova, CanalVentes>>
   produits: ProduitVentes[]
+  /**
+   * Les coûts produits de la période, ou `null` si un seul jour avec des ventes n'a pas ses
+   * coûts : une marge sur une période à moitié chiffrée serait fausse sans le dire.
+   */
+  couts: { lignes: number; lignesCoutees: number; coutProduits: number } | null
 }
 
 function additionner(
@@ -302,6 +332,7 @@ export function cumulVentes(ventes: Donnees['ventes'], bornes: { du: string; au:
     canaux: {},
     canauxPremier: {},
     produits: [],
+    couts: { lignes: 0, lignesCoutees: 0, coutProduits: 0 },
   }
   const produits = new Map<string, ProduitVentes>()
   for (const jour of ventes.jours) {
@@ -313,11 +344,19 @@ export function cumulVentes(ventes: Donnees['ventes'], bornes: { du: string; au:
     total.clientsIdentifies += jour.clientsIdentifies
     additionner(total.canaux, jour.canaux)
     additionner(total.canauxPremier, jour.canauxPremier)
+    if (jour.commandes > 0 && jour.coutsLus !== true) total.couts = null
+    if (total.couts !== null) {
+      total.couts.lignes += jour.lignes ?? 0
+      total.couts.lignesCoutees += jour.lignesCoutees ?? 0
+      total.couts.coutProduits += jour.coutProduits ?? 0
+    }
     for (const produit of jour.produits) {
-      const deja = produits.get(produit.id) ?? { ...produit, commandes: 0, quantite: 0, chiffre: 0 }
+      const deja = produits.get(produit.id) ?? { ...produit, commandes: 0, quantite: 0, chiffre: 0, cout: 0, quantiteCoutee: 0 }
       deja.commandes += produit.commandes
       deja.quantite += produit.quantite
       deja.chiffre += produit.chiffre
+      deja.cout = (deja.cout ?? 0) + (produit.cout ?? 0)
+      deja.quantiteCoutee = (deja.quantiteCoutee ?? 0) + (produit.quantiteCoutee ?? 0)
       produits.set(produit.id, deja)
     }
   }
@@ -665,6 +704,12 @@ export type LigneProduit = {
   /** Chiffre moyen par commande contenant ce produit. */
   panier: number | null
   evolution: number | null
+  /**
+   * Marge brute du produit (ventes − coût d'achat), seulement quand toutes ses unités de la
+   * période ont un coût connu et que ces coûts couvrent toute la période.
+   */
+  marge: number | null
+  tauxMarge: number | null
 }
 
 export function performanceProduits(actuel: CumulVentes | null, precedent: CumulVentes | null): LigneProduit[] {
@@ -679,5 +724,13 @@ export function performanceProduits(actuel: CumulVentes | null, precedent: Cumul
     part: actuel.chiffre === 0 ? 0 : produit.chiffre / actuel.chiffre,
     panier: produit.commandes === 0 ? null : arrondi(produit.chiffre / produit.commandes),
     evolution: precedent === null ? null : variation(produit.chiffre, avant.get(produit.id)?.chiffre ?? 0),
+    ...margeProduit(produit, actuel.couts !== null),
   }))
+}
+
+function margeProduit(produit: ProduitVentes, periodeCoutee: boolean): { marge: number | null; tauxMarge: number | null } {
+  const complet = periodeCoutee && produit.quantite > 0 && (produit.quantiteCoutee ?? 0) >= produit.quantite
+  if (!complet || produit.chiffre <= 0) return { marge: null, tauxMarge: null }
+  const marge = arrondi(produit.chiffre - (produit.cout ?? 0))
+  return { marge, tauxMarge: marge / produit.chiffre }
 }

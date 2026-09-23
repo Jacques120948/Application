@@ -1047,7 +1047,7 @@ export type CommandeShopify = {
    * calcul et n'est jamais écrit en base : seuls des comptes le sont.
    */
   clientId: string | null
-  lignes: { produitId: string | null; titre: string; quantite: number; totalCents: number }[]
+  lignes: { produitId: string | null; varianteId: string | null; titre: string; quantite: number; totalCents: number }[]
 }
 
 export type VisiteShopify = {
@@ -1099,7 +1099,7 @@ function requeteCommandes(depuis: string, { parcours, client }: Variante): strin
       ${client ? 'customer { id numberOfOrders }' : ''}
       ${parcours ? CHAMPS_PARCOURS : ''}
       lineItems(first: ${LIGNES_PAR_COMMANDE}) {
-        nodes { title currentQuantity product { id } discountedTotalSet { shopMoney { amount } } }
+        nodes { title currentQuantity product { id } variant { id } discountedTotalSet { shopMoney { amount } } }
       }
     }
     pageInfo { hasNextPage endCursor }
@@ -1154,6 +1154,7 @@ type CommandeBrute = {
       title: string
       currentQuantity: number
       product: { id: string } | null
+      variant?: { id: string } | null
       discountedTotalSet: ArgentBrut
     }[]
   }
@@ -1185,6 +1186,7 @@ function convertirCommande(brute: CommandeBrute): CommandeShopify {
     clientId: brute.customer?.id ?? null,
     lignes: brute.lineItems.nodes.map((ligne) => ({
       produitId: ligne.product?.id ?? null,
+      varianteId: ligne.variant?.id ?? null,
       titre: ligne.title,
       quantite: ligne.currentQuantity,
       totalCents: centimes(ligne.discountedTotalSet?.shopMoney?.amount),
@@ -1267,6 +1269,67 @@ function refusCommandes(status: number, erreurs: readonly string[]): string {
     return 'Shopify refuse la lecture des commandes : ajoutez l’autorisation « read_orders » à votre application Shopify, puis actualisez.'
   }
   return refus(status, erreurs)
+}
+
+/**
+ * Le coût d'achat de chaque variante, tel qu'il est saisi dans Shopify (« Coût par article »).
+ *
+ * C'est la seule façon de connaître une marge sans la demander : le pourcentage saisi dans
+ * Nova n'est qu'un repli. Le coût lu est le coût actuel ; Shopify ne garde pas celui du jour
+ * de la vente. Une variante sans coût, ou à zéro, est laissée de côté : un zéro est presque
+ * toujours un champ vide, et le compter ferait une marge de cent pour cent.
+ *
+ * Lecture séparée des commandes, et pour une raison : si la boutique refuse ce champ, les
+ * ventes, elles, doivent continuer d'arriver.
+ */
+export const VARIANTES_MAX = 5_000
+const VARIANTES_PAR_PAGE = 200
+
+const REQUETE_COUTS = `query($n: Int!, $apres: String) {
+  productVariants(first: $n, after: $apres) {
+    nodes { id inventoryItem { unitCost { amount currencyCode } } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`
+
+export type CoutsShopify =
+  | { ok: true; couts: Map<string, number>; variantes: number; tronque: boolean }
+  | { ok: false; raison: string }
+
+export async function lireCouts(acces: AccesShopify, jeton: string, max = VARIANTES_MAX): Promise<CoutsShopify> {
+  const couts = new Map<string, number>()
+  let variantes = 0
+  let apres: string | null = null
+  while (variantes < max) {
+    const reponse: Reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_COUTS, {
+      n: Math.min(VARIANTES_PAR_PAGE, max - variantes),
+      apres,
+    })
+    // Un champ refusé peut arriver avec des données partielles : le coût y serait vide, pas nul.
+    const refuse = reponse.erreurs.some((erreur) => /access denied|read_inventory|unitCost|inventoryItem/iu.test(erreur))
+    if (refuse || reponse.status !== 200 || reponse.data === null || reponse.data.productVariants == null) {
+      return {
+        ok: false,
+        raison: refuse
+          ? 'Shopify ne donne pas le coût de vos produits à Evoliia. Ajoutez l’autorisation « read_inventory » à votre application (Dev Dashboard, onglet « Versions »), publiez, puis actualisez.'
+          : refus(reponse.status, reponse.erreurs),
+      }
+    }
+    const page = reponse.data.productVariants as Page<{
+      id: string
+      inventoryItem?: { unitCost?: { amount?: string } | null } | null
+    }>
+    for (const variante of page.nodes) {
+      variantes += 1
+      const cout = centimes(variante.inventoryItem?.unitCost?.amount)
+      if (cout > 0) couts.set(variante.id, cout)
+    }
+    if (page.pageInfo?.hasNextPage !== true || (page.pageInfo.endCursor ?? null) === null) {
+      return { ok: true, couts, variantes, tronque: false }
+    }
+    apres = page.pageInfo?.endCursor ?? null
+  }
+  return { ok: true, couts, variantes, tronque: true }
 }
 
 const REQUETE_REGLAGES = `{ shop { ianaTimezone currencyCode } }`

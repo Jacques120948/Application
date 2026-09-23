@@ -8,6 +8,7 @@ import type { Marge, SuiviObjectif } from '@/server/nova/pilotage'
 import type { LigneModele, Modele, RepartitionClients, ValeurClient } from '@/server/nova/clients'
 import type { Bilan } from '@/server/nova/bilan'
 import type { CumulVisites } from '@/server/nova/metriques'
+import type { Contenus } from '@/server/nova/contenus'
 import { DelegationOria } from './DelegationOria'
 
 /**
@@ -559,11 +560,14 @@ export function CampagnesNova({
 
 export function ProduitsNova({ produits, devise }: { produits: readonly LigneProduit[]; devise: string }) {
   if (produits.length === 0) return null
+  const avecMarge = produits.some((produit) => produit.marge !== null)
   return (
     <section>
       <h2 className="m-0 text-lg font-semibold">Produits</h2>
       <p className="mt-1 mb-3 text-xs text-[var(--color-ink-soft)]">
-        Selon vos commandes Shopify. La marge viendra quand vos coûts pourront être renseignés.
+        {avecMarge
+          ? 'Selon vos commandes Shopify. Marge brute = ventes − coût d’achat saisi dans Shopify (coût actuel), hors livraison, frais et publicité. Estimation basée sur les coûts renseignés.'
+          : 'Selon vos commandes Shopify. Renseignez « Coût par article » dans vos fiches produits Shopify, puis actualisez : Nova affichera la marge de chaque produit.'}
       </p>
       <ul className="m-0 grid list-none gap-3 p-0">
         {produits.map((produit) => (
@@ -586,6 +590,16 @@ export function ProduitsNova({ produits, devise }: { produits: readonly LignePro
                   <Variation valeur={produit.evolution} mieux="hausse" />
                 </dd>
               </div>
+              {avecMarge ? (
+                <Chiffre
+                  label="Marge brute"
+                  valeur={
+                    produit.marge === null || produit.tauxMarge === null
+                      ? 'coût incomplet'
+                      : `${argent(produit.marge, devise)} · ${Math.round(produit.tauxMarge * 100)} %`
+                  }
+                />
+              ) : null}
             </dl>
           </li>
         ))}
@@ -604,7 +618,22 @@ const ETAT: Record<LigneSante['etat'], { label: string; ton: 'positive' | 'cauti
   bientot: { label: 'Bientôt', ton: 'neutral' },
 }
 
-export function SanteNova({ global, lignes }: { global: 'bon' | 'verifier' | 'probleme'; lignes: readonly LigneSante[] }) {
+/** Ce que chaque destinataire fait d'un point de suivi : Léa audite, les régies corrigent leurs liens. */
+const POUR_SUIVI: Record<string, string> = {
+  audit: 'auditer le suivi',
+  ads: 'vérifier le marquage',
+  meta: 'vérifier les liens',
+}
+
+export function SanteNova({
+  global,
+  lignes,
+  transmission,
+}: {
+  global: 'bon' | 'verifier' | 'probleme'
+  lignes: readonly LigneSante[]
+  transmission?: TransmissionNova
+}) {
   const etat = ETAT[global]
   return (
     <Card>
@@ -625,6 +654,11 @@ export function SanteNova({ global, lignes }: { global: 'bon' | 'verifier' | 'pr
                   <a href={ligne.action.href} className="text-xs font-medium">
                     {ligne.action.label}
                   </a>
+                )}
+                {ligne.agent === undefined || (ligne.etat !== 'verifier' && ligne.etat !== 'probleme') ? null : (
+                  <div className="basis-full">
+                    <Transmettre cle={ligne.cle} agent={ligne.agent} pour={POUR_SUIVI[ligne.agent] ?? 'regarder'} transmission={transmission} />
+                  </div>
                 )}
               </li>
             )
@@ -872,6 +906,16 @@ export function MargeNova({ marge, devise, mention }: { marge: Marge; devise: st
               <p className="mt-2 mb-0 text-xs text-[var(--color-caution)]">
                 Non renseignés : {marge.manquants.join(', ')}. La marge réelle est probablement plus basse.
               </p>
+            )}
+            {marge.note === null ? null : <p className="mt-2 mb-0 text-xs text-[var(--color-ink-soft)]">{marge.note}</p>}
+            {marge.merEquilibre === null ? null : (
+              <div className="mt-3 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3 text-sm">
+                <p className="m-0 font-medium">Seuil de rentabilité publicitaire : MER {nombre(marge.merEquilibre)} %</p>
+                <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
+                  Chaque {devise} de publicité doit amener au moins {nombre(marge.merEquilibre / 100, 2)} {devise} de ventes pour ne pas coûter plus
+                  qu’il ne laisse, avec les coûts ci-dessus. En dessous, la publicité fait perdre de l’argent — sauf si ces clients reviennent acheter.
+                </p>
+              </div>
             )}
             <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">{mention}</p>
           </>
@@ -1129,6 +1173,52 @@ export function VisitesNova({ visites, devise }: { visites: CumulVisites; devise
           {listePages('Pages d’entrée les plus visitées', pages, 'Aucune page relevée.')}
           {listePages('Pages qui vendent depuis Google', pagesSeo, 'Aucun achat venu de la recherche naturelle sur la période.')}
         </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── V4 : contenus ────────────────────────────────────────────────────────────
+
+/**
+ * Les articles par lesquels on entre sur le site, et ce qu'ils retiennent. L'engagement se lit
+ * contre la moyenne du site : un article à 70 % sur un site à 65 % n'a rien d'exceptionnel.
+ */
+export function ContenusNova({ contenus, devise, transmission }: { contenus: Contenus; devise: string; transmission?: TransmissionNova }) {
+  if (contenus.lignes.length === 0) return null
+  const site = contenus.engagementSite
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Contenus qui attirent</h2>
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
+          Articles de blog par lesquels les visiteurs arrivent, selon GA4.
+          {site === null ? '' : ` Engagement moyen du site : ${Math.round(site * 100)} %.`} Un article se lit souvent avant d’acheter, pas en achetant : ses ventes directes ne disent pas tout.
+        </p>
+        <ul className="m-0 mt-3 grid list-none gap-2 p-0">
+          {contenus.lignes.map((ligne) => {
+            const auDessus = site !== null && ligne.engagement !== null && ligne.engagement - site >= 0.1
+            return (
+              <li key={ligne.page} className="border-t border-[var(--color-line)] pt-2 first:border-t-0 first:pt-0">
+                <p className="m-0 text-sm break-all">{ligne.page}</p>
+                <p className="mt-0.5 mb-0 text-xs text-[var(--color-ink-soft)]">
+                  {nombre(ligne.sessions)} visites ·{' '}
+                  {ligne.engagement === null ? 'engagement pas encore mesuré' : `${Math.round(ligne.engagement * 100)} % engagées`}
+                  {auDessus ? ' · au-dessus du site' : ''}
+                  {ligne.achats > 0 ? ` · ${nombre(ligne.achats)} achat${ligne.achats > 1 ? 's' : ''} · ${argent(ligne.revenu, devise)}` : ''}
+                </p>
+              </li>
+            )
+          })}
+        </ul>
+        {transmission === undefined ? null : (
+          <Transmettre
+            cle={`contenus`}
+            agent="content"
+            pour="écrire dans la même veine"
+            transmission={transmission}
+          />
+        )}
       </CardBody>
     </Card>
   )

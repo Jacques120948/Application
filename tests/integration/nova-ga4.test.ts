@@ -7,10 +7,10 @@ import { register } from '@/server/auth/service'
 import { findProvider } from '@/server/integrations/catalog'
 import { storeConnection } from '@/server/integrations/service'
 import * as ga4 from '@/server/integrations/providers/google-analytics'
-import { lireEtatVisites, synchroniserVisites } from '@/server/nova/collecte-ga4'
+import { lireEtatVisites, synchroniserVisites, VERSION_JOURS } from '@/server/nova/collecte-ga4'
 import { lireNova } from '@/server/nova/service'
 import { faitsNova } from '@/server/nova/contexte'
-import { traficAssistantsPourGia } from '@/server/nova/transmission'
+import { contenusPourMilo, conversionPourCleo, traficAssistantsPourGia } from '@/server/nova/transmission'
 import { deleguerNova } from '@/server/nova/delegation'
 import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
@@ -67,7 +67,13 @@ beforeAll(async () => {
         ],
       }
     }
-    return { ok: true, lignes: [{ dimensions: [dateGa4(3), '/bougies'], metriques: [300, 4, 250] }] }
+    return {
+      ok: true,
+      lignes: [
+        { dimensions: [dateGa4(3), '/bougies'], metriques: [300, 4, 250, 150] },
+        { dimensions: [dateGa4(3), '/blogs/journal/rituel-du-soir'], metriques: [80, 0, 0, 70] },
+      ],
+    }
   })
 }, 60_000)
 
@@ -86,6 +92,22 @@ describe('Nova V3 — Google Analytics 4', () => {
     expect(jours[0]!.canaux).toMatchObject({ seo: { sessions: 500 }, ia: { sessions: 12 } })
   })
 
+  it('garde l’engagement par page, et relit tout quand la forme des jours a changé', async () => {
+    const jour = await withUserScope(proprietaire, (tx) => tx.analyticsJour.findFirstOrThrow({ where: { userId: proprietaire } }))
+    expect(jour.pages).toEqual(expect.arrayContaining([expect.objectContaining({ page: '/blogs/journal/rituel-du-soir', engagees: 70 })]))
+    const synchro = await withUserScope(proprietaire, (tx) => tx.analyticsSynchro.findFirstOrThrow({ where: { userId: proprietaire } }))
+    expect(synchro.version).toBe(VERSION_JOURS)
+
+    // Une ligne écrite par une version plus ancienne : la lecture automatique relit toute la fenêtre.
+    await withUserScope(proprietaire, (tx) =>
+      tx.analyticsSynchro.updateMany({ where: { userId: proprietaire }, data: { version: 1, synchroAt: new Date(Date.now() - 13 * 3_600_000) } }),
+    )
+    vi.mocked(ga4.rapport).mockClear()
+    await synchroniserVisites(proprietaire, 'auto')
+    const demande = vi.mocked(ga4.rapport).mock.calls[0]![2]
+    expect(demande.du <= new Date(Date.now() - 170 * 86_400_000).toISOString().slice(0, 10)).toBe(true)
+  })
+
   it('ne rappelle pas Google sur une lecture fraîche', async () => {
     vi.mocked(ga4.rapport).mockClear()
     await synchroniserVisites(proprietaire, 'auto')
@@ -102,6 +124,10 @@ describe('Nova V3 — Google Analytics 4', () => {
     expect(vue.sante.lignes.find((ligne) => ligne.cle === 'ga4')).toMatchObject({ etat: 'bon' })
     expect(faitsNova(vue).join('\n')).toContain('Visites venues d’assistants IA : 12')
     expect(await traficAssistantsPourGia(proprietaire)).toContain('12 visites venues d’assistants IA — chatgpt.com 12')
+    // Milo reçoit les articles qui retiennent, Cleo les taux par appareil — et Nova les affiche.
+    expect(vue.contenus.lignes).toEqual([expect.objectContaining({ page: '/blogs/journal/rituel-du-soir', sessions: 80 })])
+    expect(await contenusPourMilo(proprietaire)).toContain('/blogs/journal/rituel-du-soir — 80 visites, 88 % engagées')
+    expect(await conversionPourCleo(proprietaire)).toContain('mobile 0,5 % (400 visites)')
   })
 
   it('ne transmet rien sans site analysé, ni un point que Nova n’a pas calculé', async () => {

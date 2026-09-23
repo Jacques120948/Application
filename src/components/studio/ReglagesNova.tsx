@@ -16,7 +16,7 @@ const OBJECTIFS: Champ[] = [
 ]
 
 const COUTS: Champ[] = [
-  { cle: 'coutProduitPct', label: 'Coût des produits', aide: 'En pour cent de vos ventes : achat, matières, fabrication.', unite: '%' },
+  { cle: 'coutProduitPct', label: 'Coût des produits', aide: 'En pour cent de vos ventes : achat, matières, fabrication. Utilisé seulement si le « Coût par article » de vos fiches Shopify manque.', unite: '%' },
   { cle: 'livraisonParCommande', label: 'Livraison, par commande', aide: 'Ce que vous paie réellement une expédition.', unite: 'devise' },
   { cle: 'paiementPct', label: 'Frais de paiement', aide: 'La part prélevée par Shopify Payments, Stripe, TWINT…', unite: '%' },
   { cle: 'paiementFixe', label: 'Frais fixes par paiement', aide: '', unite: 'devise' },

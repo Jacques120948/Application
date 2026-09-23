@@ -113,8 +113,25 @@ compte Evoliia. Prérequis Google Cloud : activer « Google Analytics Admin API 
 « Google Analytics Data API », ajouter la portée `analytics.readonly` à l'écran de
 consentement OAuth.
 
+## V4 — ce qui est livré
+
+Trois chantiers, tous sur les connexions existantes : aucun coût nouveau, aucun crédit pour
+l'écran.
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Coût réel des produits | `integrations/providers/shopify.ts` (`lireCouts`), `nova/agregat.ts`, `nova/collecte.ts` | « Coût par article » de chaque variante (`inventoryItem.unitCost`, portée `read_products`), lu **à part** des commandes : un refus ne bloque jamais les ventes. Coût actuel, pas celui du jour de la vente. Un coût à zéro compte comme non renseigné. Par jour : lignes vendues, lignes au coût connu, coût d'achat (`CommerceJour`). La première synchronisation V4 relit toute la fenêtre. |
+| Marge réelle | `nova/pilotage.ts` (`margeEstimee`) | Coût Shopify d'abord, s'il couvre au moins 80 % des ventes de produits ; le reste est estimé au même taux, et c'est dit. Sinon le pourcentage saisi, sinon rien. Une période dont un jour n'a pas ses coûts ne donne pas de coût. |
+| Marge par produit | `metriques.ts` (`performanceProduits`) | Seulement quand toutes les unités du produit ont un coût. Constat quand un produit pèse ≥ 10 % du CA avec < 35 % de marge brute. |
+| Seuil de rentabilité publicitaire | `pilotage.ts`, `analyse.ts` (`marge.seuil`) | MER d'équilibre = CA ÷ (CA − coûts hors publicité). Alerte quand le MER réel passe dessous (rouge sous 80 % du seuil), transmise à la régie qui dépense le plus. |
+| Qualité du suivi | `nova/suivi.ts`, `service.ts` | Publicités Meta sans UTM (ventes Facebook/Instagram rangées en réseaux sociaux) → MIRA. Google Ads qui convertit sans commande attribuée (gclid) → Naya. Étiquettes UTM non reconnues → Léa. Achats GA4 absents, écart GA4/boutique, trafic non attribué, conversions en double → Léa. Chaque ligne de la santé des données peut être transmise. |
+| Contenus qui attirent | `nova/contenus.ts`, `agregat-ga4.ts` | Pages d'entrée de blog (`/blogs/…`, `/blog/…`), ≥ 30 visites, engagement GA4 par page comparé à celui du site. Opportunité pour Milo à ≥ 50 visites et + 10 points d'engagement. `AnalyticsSynchro.version` relit toute la fenêtre quand la forme des jours change. |
+| Collègues | `nova/transmission.ts`, `agents/visibility-context.ts` | Milo reçoit les articles qui retiennent ; Cleo reçoit les taux de conversion par appareil mesurés — l'interdiction de citer un taux ne vaut plus que sans GA4. |
+
+Prérequis : aucun. Le coût se saisit dans Shopify (fiche produit → « Coût par article ») ;
+la santé des données dit combien de variantes l'ont.
+
 ## Encore à venir
 
-WooCommerce, Stripe (MRR, churn), CRM (leads, CPL), modèles linéaire et en position à partir
-des chemins GA4, coûts par produit, cohortes mensuelles, prévisions au-delà du mois, analyse
-des audiences.
+WooCommerce, Stripe (MRR, churn), CRM (leads, CPL), cohortes et LTV (elles exigent l'accès
+aux données client protégées de Shopify), prévisions au-delà du mois, analyse des audiences.

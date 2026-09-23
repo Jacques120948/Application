@@ -64,6 +64,7 @@ const VENTES: CumulVentes = {
   canaux: {},
   canauxPremier: {},
   produits: [],
+  couts: null,
 }
 
 function donnees(visites: Donnees['visites']): Donnees {

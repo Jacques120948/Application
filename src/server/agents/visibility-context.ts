@@ -1,7 +1,7 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
 import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
-import { pagesSeoPourNeo, traficAssistantsPourGia } from '@/server/nova/transmission'
+import { contenusPourMilo, conversionPourCleo, pagesSeoPourNeo, traficAssistantsPourGia } from '@/server/nova/transmission'
 import { lireSignaux } from '@/server/oria/signaux'
 import { lireDecisions } from '@/server/oria/decisions'
 import { comparer, lireBudgets, lirePlateformes, repartition, NOM_POSTE } from '@/server/oria/budget'
@@ -424,20 +424,22 @@ export async function readSiteFacts(
    * constats des trois moteurs. Un spécialiste qui voit tout répond à côté, et celui-ci
    * aurait en plus commenté du référencement sous le titre « conversion ».
    *
-   * La dernière phrase n'est pas une précaution de style. Cleo porte un nom qui évoque la
-   * mesure des ventes, et aucune n'est reliée : sans cette ligne, un modèle comble, et il
-   * comble avec un taux de conversion inventé.
+   * La dernière ligne n'est pas une précaution de style. Sans Google Analytics, aucune mesure
+   * de conversion n'existe : on le dit, sinon un modèle comble, et il comble avec un taux
+   * inventé. Avec GA4, Nova donne les taux mesurés par appareil — et ceux-là seulement.
    */
   if (agent === 'cro') {
+    const conversion = await conversionPourCleo(userId)
     return [
       ...base,
       ...(await constats(userId, siteId, 'cro')),
       ...(await pages(userId, siteId, 'conversion')),
-      'AUCUNE DONNÉE DE VENTE : Evoliia n’est reliée à aucune source de conversion — ni' +
-        ' panier, ni chiffre d’affaires, ni taux d’abandon, ni parcours d’achat. Tu ne' +
-        ' disposes que de ce que les pages montrent. Ne cite aucun taux de conversion,' +
-        ' aucun chiffre de vente, aucune estimation de gain, et dis-le quand la question en' +
-        ' demande.',
+      conversion ??
+        'AUCUNE DONNÉE DE VENTE : Evoliia n’est reliée à aucune source de conversion — ni' +
+          ' panier, ni chiffre d’affaires, ni taux d’abandon, ni parcours d’achat. Tu ne' +
+          ' disposes que de ce que les pages montrent. Ne cite aucun taux de conversion,' +
+          ' aucun chiffre de vente, aucune estimation de gain, et dis-le quand la question en' +
+          ' demande.',
     ].join('\n')
   }
   /*
@@ -507,11 +509,13 @@ export async function readSiteFacts(
    * Milo écrit. Il voit les deux catalogues — un texte sert au référencement comme aux
    * assistants — mais il voit surtout le texte lui-même, ce que les autres n'ont pas.
    */
+  const nova = await contenusPourMilo(userId)
   return [
     ...base,
     ...(await constats(userId, siteId, null)),
     ...(await pages(userId, siteId, 'texte')),
     ...(await recherches(userId, siteId)),
+    ...(nova === null ? [] : [nova]),
   ].join('\n')
 }
 

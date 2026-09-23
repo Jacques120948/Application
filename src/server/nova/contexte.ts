@@ -79,7 +79,7 @@ export function faitsNova(vue: VueNova): string[] {
     lignes.push('Produits, par chiffre d’affaires :')
     for (const produit of vue.produits.slice(0, 5)) {
       lignes.push(
-        `- ${produit.titre} : ${vue.devise} ${nombre(produit.chiffre, 2)} (${Math.round(produit.part * 100)} % du CA), ${produit.commandes} commandes, ${produit.quantite} unités`,
+        `- ${produit.titre} : ${vue.devise} ${nombre(produit.chiffre, 2)} (${Math.round(produit.part * 100)} % du CA), ${produit.commandes} commandes, ${produit.quantite} unités${produit.marge === null || produit.tauxMarge === null ? '' : `, marge brute ${vue.devise} ${nombre(produit.marge, 2)} (${Math.round(produit.tauxMarge * 100)} %, coût d’achat Shopify actuel)`}`,
       )
     }
   }
@@ -111,7 +111,7 @@ export function faitsNova(vue: VueNova): string[] {
   lignes.push(
     vue.marge.etat === 'impossible'
       ? `Marge : non calculable — ${vue.marge.raison}`
-      : `Marge estimée sur la période (estimation basée sur les coûts renseignés) : ${vue.devise} ${nombre(vue.marge.marge, 2)}, soit ${nombre(vue.marge.taux * 100, 1)} % du CA${vue.marge.manquants.length === 0 ? '' : ` ; non renseignés : ${vue.marge.manquants.join(', ')} (marge réelle probablement plus basse)`}.`,
+      : `Marge estimée sur la période (estimation basée sur les coûts renseignés) : ${vue.devise} ${nombre(vue.marge.marge, 2)}, soit ${nombre(vue.marge.taux * 100, 1)} % du CA${vue.marge.manquants.length === 0 ? '' : ` ; non renseignés : ${vue.marge.manquants.join(', ')} (marge réelle probablement plus basse)`}. Coût des produits : ${vue.marge.source === 'shopify' ? 'lu dans Shopify' : 'pourcentage saisi'}${vue.marge.note === null ? '' : ` (${vue.marge.note})`}.${vue.marge.merEquilibre === null ? '' : ` Seuil de rentabilité publicitaire : MER ${vue.marge.merEquilibre} % (en dessous, la publicité coûte plus qu’elle ne laisse).`}`,
   )
   if (vue.clients !== null) {
     lignes.push(

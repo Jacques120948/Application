@@ -25,6 +25,9 @@ export type ProduitJour = {
   commandes: number
   quantite: number
   chiffreCents: number
+  /** Coût d'achat des unités dont le coût est connu, et combien d'unités cela couvre. */
+  coutCents: number
+  quantiteCoutee: number
 }
 
 export type JourVentes = {
@@ -40,6 +43,13 @@ export type JourVentes = {
   /** Les mêmes commandes, rangées par le canal de leur première visite. */
   canauxPremier: Partial<Record<CanalNova, CanalJour>>
   produits: ProduitJour[]
+  /** Les coûts ont-ils été lus pour ce jour ? Sans eux, les trois totaux suivants sont vides, pas nuls. */
+  coutsLus: boolean
+  /** Ce que rapportent toutes les lignes de produits (hors livraison), et celles dont le coût est connu. */
+  lignesCents: number
+  lignesCouteesCents: number
+  /** Le coût d'achat des lignes dont le coût est connu. */
+  coutProduitsCents: number
 }
 
 function ranger(
@@ -105,8 +115,15 @@ const PRODUITS_PAR_JOUR = 50
  *
  * Écartées : les commandes de test et les commandes annulées. Une commande remboursée en
  * partie reste, pour ce qu'elle a réellement rapporté.
+ *
+ * `couts` : le coût unitaire de chaque variante, en centimes, quand Shopify l'a donné.
+ * Absent, les jours sont marqués « coûts non lus » — une marge ne se calculera pas dessus.
  */
-export function agregerCommandes(commandes: readonly CommandeShopify[], fuseau: string): JourVentes[] {
+export function agregerCommandes(
+  commandes: readonly CommandeShopify[],
+  fuseau: string,
+  couts: ReadonlyMap<string, number> | null = null,
+): JourVentes[] {
   const jours = new Map<string, JourVentes>()
   const produits = new Map<string, Map<string, ProduitJour>>()
 
@@ -129,6 +146,10 @@ export function agregerCommandes(commandes: readonly CommandeShopify[], fuseau: 
         canaux: {},
         canauxPremier: {},
         produits: [],
+        coutsLus: couts !== null,
+        lignesCents: 0,
+        lignesCouteesCents: 0,
+        coutProduitsCents: 0,
       } satisfies JourVentes)
     courant.commandes += 1
     courant.chiffreCents += commande.totalCents
@@ -148,9 +169,18 @@ export function agregerCommandes(commandes: readonly CommandeShopify[], fuseau: 
     for (const article of commande.lignes) {
       if (article.quantite <= 0) continue
       const cle = article.produitId ?? `titre:${article.titre}`
-      const produit = duJour.get(cle) ?? { id: cle, titre: article.titre, commandes: 0, quantite: 0, chiffreCents: 0 }
+      const produit =
+        duJour.get(cle) ?? { id: cle, titre: article.titre, commandes: 0, quantite: 0, chiffreCents: 0, coutCents: 0, quantiteCoutee: 0 }
       produit.quantite += article.quantite
       produit.chiffreCents += article.totalCents
+      const unitaire = couts === null || article.varianteId === null ? undefined : couts.get(article.varianteId)
+      courant.lignesCents += article.totalCents
+      if (unitaire !== undefined) {
+        produit.coutCents += unitaire * article.quantite
+        produit.quantiteCoutee += article.quantite
+        courant.lignesCouteesCents += article.totalCents
+        courant.coutProduitsCents += unitaire * article.quantite
+      }
       // Une commande compte une fois par produit, même si le produit y figure sur deux lignes.
       if (!vus.has(cle)) produit.commandes += 1
       vus.add(cle)

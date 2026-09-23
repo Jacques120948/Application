@@ -31,6 +31,8 @@ vi.mock('@/server/integrations/providers/shopify', async (importOriginal) => ({
   lirePortees: vi.fn(async () => ['read_orders', 'read_products']),
   lireReglagesBoutique: vi.fn(async () => ({ fuseau: 'Europe/Zurich', devise: 'CHF' })),
   lireCommandes: vi.fn(),
+  // Une variante à 40 francs d'achat : la seule que les commandes de test contiennent.
+  lireCouts: vi.fn(async () => ({ ok: true, couts: new Map([['gid://shopify/ProductVariant/1', 4_000]]), variantes: 3, tronque: false })),
 }))
 
 const JOUR = 24 * 60 * 60 * 1000
@@ -53,7 +55,7 @@ function commande(partiel: Partial<CommandeShopify>): CommandeShopify {
     visite: null,
     premiereVisite: null,
     clientId: null,
-    lignes: [{ produitId: 'gid://shopify/Product/1', titre: 'Bougie citrine', quantite: 1, totalCents: 10_000 }],
+    lignes: [{ produitId: 'gid://shopify/Product/1', varianteId: 'gid://shopify/ProductVariant/1', titre: 'Bougie citrine', quantite: 1, totalCents: 10_000 }],
     ...partiel,
   }
 }
@@ -136,11 +138,44 @@ describe('Nova — collecte des ventes', () => {
     expect(jours[0]).toMatchObject({ commandes: 2, chiffreCents: BigInt(20_000), nouveauxClients: 1, clientsIdentifies: 2 })
     expect(jours[0]!.chiffreNouveauxCents).toBe(BigInt(12_000))
     expect(jours[0]!.canauxPremier).toMatchObject({ social: { commandes: 1 } })
+    // Le coût réel : deux lignes à 100 francs, chacune coûtant 40 francs à l'achat.
+    expect(jours[0]).toMatchObject({ coutsLus: true, lignesCents: BigInt(20_000), lignesCouteesCents: BigInt(20_000), coutProduitsCents: BigInt(8_000) })
+    expect(etat.couts).toMatchObject({ message: '', variantes: 3, renseignes: 1 })
     // Le compte des clients est gardé ; leurs identifiants, non.
     expect(etat.clients).toMatchObject({ clients: 2, recurrents: 0, commandes: 2 })
     const synchro = await withUserScope(proprietaire, (tx) => tx.commerceSynchro.findFirstOrThrow({ where: { userId: proprietaire } }))
     expect(JSON.stringify(synchro.clients)).not.toContain('Customer')
     expect(JSON.stringify(jours[0], (_, valeur: unknown) => (typeof valeur === 'bigint' ? String(valeur) : valeur))).not.toContain('gid://shopify/Order')
+  })
+
+  it('un refus sur les coûts ne coûte rien aux ventes', async () => {
+    vi.mocked(shopify.lireCouts).mockResolvedValueOnce({ ok: false, raison: 'Shopify ne donne pas le coût de vos produits à Evoliia.' })
+    vi.mocked(shopify.lireCommandes).mockResolvedValueOnce({ commandes: [commande({ totalCents: 5_000 })], tronque: false, parcours: true, client: false })
+    await withUserScope(proprietaire, (tx) => tx.commerceSynchro.updateMany({ where: { userId: proprietaire }, data: { essaiAt: null } }))
+    const etat = await synchroniserVentes(proprietaire, 'manuel')
+    expect(etat.etat).toBe('ok')
+    expect(etat.couts.message).toContain('coût de vos produits')
+    const jours = await withUserScope(proprietaire, (tx) => tx.commerceJour.findMany({ where: { userId: proprietaire } }))
+    expect(jours).toHaveLength(1)
+    expect(jours[0]).toMatchObject({ commandes: 1, coutsLus: false, coutProduitsCents: BigInt(0) })
+
+    // On remet l'état du premier test : les suivants s'appuient sur ces ventes.
+    vi.mocked(shopify.lireCommandes).mockResolvedValueOnce({
+      commandes: [
+        commande({
+          totalCents: 12_000,
+          clientId: 'gid://shopify/Customer/1',
+          visite: { source: '', referrer: 'https://www.google.com/?gclid=x', utm: { source: '', medium: '', campaign: '', content: '', term: '' } },
+          premiereVisite: { source: '', referrer: 'https://www.instagram.com/', utm: { source: '', medium: '', campaign: '', content: '', term: '' } },
+        }),
+        commande({ totalCents: 8_000, premiere: false, clientId: 'gid://shopify/Customer/2' }),
+      ],
+      tronque: false,
+      parcours: true,
+      client: true,
+    })
+    await withUserScope(proprietaire, (tx) => tx.commerceSynchro.updateMany({ where: { userId: proprietaire }, data: { essaiAt: null } }))
+    await synchroniserVentes(proprietaire, 'manuel')
   })
 
   it('ne relit pas une boutique fraîche à l’ouverture', async () => {

@@ -17,6 +17,7 @@ function ventes(partiel: Partial<CumulVentes> = {}): CumulVentes {
     canaux: {},
     canauxPremier: {},
     produits: [],
+    couts: null,
     ...partiel,
   }
 }

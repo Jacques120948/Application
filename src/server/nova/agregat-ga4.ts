@@ -12,7 +12,8 @@ import { canalGa4 } from './canaux'
 
 export type CanalVisites = { sessions: number; achats: number; revenuCents: number; origines: Record<string, number> }
 export type AppareilVisites = { sessions: number; achats: number }
-export type PageVisites = { page: string; sessions: number; achats: number; revenuCents: number }
+/** `engagees` : absent pour les jours lus avant la V4, où GA4 ne le donnait pas par page. */
+export type PageVisites = { page: string; sessions: number; achats: number; revenuCents: number; engagees?: number }
 
 export type JourVisites = {
   jour: string
@@ -30,7 +31,7 @@ export type JourVisites = {
 export const DIMENSIONS_CANAUX = ['date', 'sessionDefaultChannelGroup', 'sessionSource', 'sessionMedium', 'deviceCategory']
 export const DIMENSIONS_PAGES = ['date', 'landingPage']
 export const METRIQUES = ['sessions', 'engagedSessions', 'ecommercePurchases', 'purchaseRevenue']
-export const METRIQUES_PAGES = ['sessions', 'ecommercePurchases', 'purchaseRevenue']
+export const METRIQUES_PAGES = ['sessions', 'ecommercePurchases', 'purchaseRevenue', 'engagedSessions']
 
 /** Les pages gardées par jour : les plus visitées, et toutes celles qui ont vendu. */
 const PAGES_PAR_JOUR = 30
@@ -53,9 +54,12 @@ function garderPages(lignes: LigneRapport[]): Map<string, PageVisites[]> {
   for (const ligne of lignes) {
     const jour = dateGa4(ligne.dimensions[0] ?? '')
     if (jour === null) continue
-    const [sessions = 0, achats = 0, revenu = 0] = ligne.metriques
+    const [sessions = 0, achats = 0, revenu = 0, engagees] = ligne.metriques
     const page = (ligne.dimensions[1] ?? '').slice(0, 300) || '(inconnue)'
-    parJour.set(jour, [...(parJour.get(jour) ?? []), { page, sessions, achats, revenuCents: centimes(revenu) }])
+    parJour.set(jour, [
+      ...(parJour.get(jour) ?? []),
+      { page, sessions, achats, revenuCents: centimes(revenu), ...(engagees === undefined ? {} : { engagees }) },
+    ])
   }
   for (const [jour, pages] of parJour) {
     const triees = [...pages].sort((une, autre) => autre.sessions - une.sessions)

@@ -1,6 +1,7 @@
 import { ecranDuMembre, membre, type IdMembre } from '@/lib/equipe'
 import { NOM_CANAL } from '@/lib/nova'
 import { variation } from '@/server/ads/metriques'
+import { contenuQualifie, contenusQuiAttirent } from './contenus'
 import {
   cumulPub,
   enPourcent,
@@ -43,6 +44,8 @@ export type Contexte = {
   attribution: Attribution
   campagnes: LigneCampagne[]
   produits: LigneProduit[]
+  /** Le MER sous lequel la publicité coûte plus qu'elle ne laisse (voir pilotage.ts), s'il se calcule. */
+  merEquilibre?: number | null
 }
 
 const AGENT_DE: Record<PlateformePayante, IdMembre> = { 'google-ads': 'ads', 'meta-ads': 'meta' }
@@ -55,6 +58,9 @@ export const SEUILS = {
   partProduit: 0.2,
   nonAttribue: 0.3,
   sessionsAppareil: 200,
+  /** Un produit qui pèse au moins cette part du CA, et laisse moins que cette marge brute. */
+  partMarge: 0.1,
+  margeFaible: 0.35,
   sessionsTendance: 500,
 } as const
 
@@ -224,6 +230,19 @@ export function detecterInsights(ctx: Contexte): Insight[] {
     })
   }
 
+  // Un produit qui pèse dans le CA mais laisse peu : il fait du chiffre, pas forcément de l'argent.
+  const faible = ctx.produits
+    .filter((produit) => produit.part >= SEUILS.partMarge && produit.tauxMarge !== null && produit.commandes >= 5)
+    .sort((un, autre) => un.tauxMarge! - autre.tauxMarge!)[0]
+  if (faible !== undefined && faible.tauxMarge! < SEUILS.margeFaible) {
+    trouves.push({
+      cle: `marge.${faible.id}`,
+      texte: `« ${faible.titre} » pèse ${pourcent(faible.part * 100)} de votre chiffre d’affaires mais ne laisse que ${pourcent(faible.tauxMarge! * 100)} de marge brute.`,
+      fondement: `${argent(faible.chiffre, devise)} de ventes, ${argent(faible.marge!, devise)} de marge brute après coût d’achat (Shopify, coût actuel), hors livraison, frais et publicité. Estimation basée sur les coûts renseignés.`,
+      ton: 'attention',
+    })
+  }
+
   const iaVisites = ctx.visites?.canaux.ia
   if (iaVisites !== undefined && iaVisites.sessions > 0 && (ctx.ventes?.canaux.ia?.commandes ?? 0) === 0) {
     trouves.push({
@@ -282,6 +301,28 @@ export const ALERTES_MAX = 4
 export function detecterAlertes(ctx: Contexte): Alerte[] {
   const alertes: Alerte[] = []
   const devise = ctx.donnees.devise
+
+  /*
+   * La publicité sous le seuil de rentabilité : le MER (CA total ÷ dépense) ne couvre pas les
+   * coûts. Transmis à la régie qui dépense le plus, parce que c'est là que se joue l'ajustement.
+   */
+  if (ctx.merEquilibre != null && ctx.ventes !== null && ctx.donnees.regies.length > 0) {
+    const cumuls = ctx.donnees.regies.map((plateforme) => ({ plateforme, cumul: pub(ctx, plateforme, ctx.bornes) }))
+    const depense = cumuls.reduce((total, un) => total + un.cumul.depense, 0)
+    if (depense >= SEUILS.depenseMin && ctx.ventes.commandes >= 5) {
+      const mer = Math.round((ctx.ventes.chiffre / depense) * 100)
+      if (mer < ctx.merEquilibre) {
+        const principale = cumuls.sort((un, autre) => autre.cumul.depense - un.cumul.depense)[0]!.plateforme
+        alertes.push({
+          cle: 'marge.seuil',
+          niveau: mer < ctx.merEquilibre * 0.8 ? 'rouge' : 'orange',
+          texte: `Votre MER (${mer} %) est sous votre seuil de rentabilité publicitaire (${ctx.merEquilibre} %) : la publicité coûte plus qu’elle ne laisse.`,
+          fondement: `${argent(ctx.ventes.chiffre, devise)} de ventes Shopify pour ${argent(depense, devise)} de publicité. Seuil calculé avec vos coûts (produits, livraison, frais) — estimation basée sur les coûts renseignés. Des clients qui reviennent acheter peuvent le justifier.`,
+          agent: AGENT_DE[principale],
+        })
+      }
+    }
+  }
 
   for (const plateforme of ctx.donnees.regies) {
     const agent = AGENT_DE[plateforme]
@@ -551,6 +592,21 @@ export function detecterOpportunites(ctx: Contexte, locale: string, siteId: stri
   // La page de recherche naturelle qui vend le plus : ce que Néo doit protéger en premier.
   const pagesSeo = ctx.visites?.pagesSeo ?? []
   const revenuSeo = pagesSeo.reduce((total, page) => total + page.revenu, 0)
+  // Un article qui retient nettement mieux que le site : Milo peut écrire dans la même veine.
+  const contenus = contenusQuiAttirent(ctx.visites ?? null)
+  const article = contenuQualifie(contenus)
+  if (article !== null) {
+    const site = contenus.engagementSite!
+    trouvees.push({
+      cle: `contenu.${article.page}`,
+      titre: `L’article ${article.page} attire un trafic qualifié`,
+      pourquoi: `${article.sessions} visites y sont entrées, ${pourcent(article.engagement! * 100)} engagées contre ${pourcent(site * 100)} en moyenne sur le site${article.achats > 0 ? `, et ${article.achats} achat${article.achats > 1 ? 's' : ''} ont suivi` : ''} (GA4). Milo peut produire d’autres contenus dans la même veine.`,
+      impact: 'moyen',
+      agent: 'content',
+      cta: voirAvec('content', locale, siteId),
+    })
+  }
+
   const pageSeo = pagesSeo[0]
   if (pageSeo !== undefined && revenuSeo > 0 && pageSeo.achats >= 3 && pageSeo.revenu / revenuSeo >= 0.15) {
     trouvees.push({

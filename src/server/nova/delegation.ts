@@ -3,6 +3,7 @@ import { notFound, validation } from '@/lib/errors'
 import { askVisibility, type VisibilityNoteView } from '@/server/agents/visibility-service'
 import type { VisibilityAgentId } from '@/server/agents/visibility'
 import { lireNova } from './service'
+import type { Contenus } from './contenus'
 
 /**
  * Nova transmet une mesure au spécialiste qui peut agir.
@@ -41,6 +42,18 @@ export function questionNova(point: { titre: string; pourquoi: string }, agent: 
   )
 }
 
+/** Les trois articles les plus visités, avec leur engagement face à celui du site. */
+export function resumeContenus(contenus: Contenus): string {
+  const site = contenus.engagementSite
+  const lignes = contenus.lignes
+    .slice(0, 3)
+    .map(
+      (ligne) =>
+        `${ligne.page} : ${ligne.sessions} visites${ligne.engagement === null ? '' : `, ${Math.round(ligne.engagement * 100)} % engagées`}${ligne.achats > 0 ? `, ${ligne.achats} achats` : ''}`,
+    )
+  return `${lignes.join(' ; ')}.${site === null ? '' : ` Engagement moyen du site : ${Math.round(site * 100)} %.`} (GA4)`
+}
+
 export async function deleguerNova(
   userId: string,
   entree: { siteId?: string; cle: string; agent: VisibilityAgentId; periode?: string; du?: string; au?: string },
@@ -51,12 +64,18 @@ export async function deleguerNova(
   if (vue.siteId === '') throw validation('Nova ne transmet que sur un site analysé : lancez d’abord une analyse.')
   const opportunite = vue.opportunites.find((un) => un.cle === entree.cle)
   const alerte = vue.alertes.find((un) => un.cle === entree.cle)
+  // Un point de la santé des données : seulement ceux que Nova a jugés transmissibles.
+  const sante = vue.sante.lignes.find((un) => un.cle === entree.cle && un.agent !== undefined)
   const point =
     opportunite !== undefined
       ? { titre: opportunite.titre, pourquoi: opportunite.pourquoi, agent: opportunite.agent }
       : alerte !== undefined
         ? { titre: alerte.texte, pourquoi: alerte.fondement, agent: alerte.agent }
-        : null
+        : sante !== undefined
+          ? { titre: `Suivi à vérifier — ${sante.source}`, pourquoi: sante.texte, agent: sante.agent! }
+          : entree.cle === 'contenus' && vue.contenus.lignes.length > 0
+            ? { titre: 'Les articles par lesquels on entre sur le site', pourquoi: resumeContenus(vue.contenus), agent: 'content' as const }
+            : null
   if (point === null) throw notFound('Ce point n’est plus d’actualité.')
   if (point.agent !== entree.agent) {
     throw validation(`Nova transmet ce point à ${membre(point.agent)?.name ?? point.agent}, pas à ce spécialiste.`)

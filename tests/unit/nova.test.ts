@@ -97,14 +97,14 @@ describe('Nova — agrégation des commandes', () => {
       [
         commande({
           lignes: [
-            { produitId: 'p1', titre: 'Bougie', quantite: 2, totalCents: 4_000 },
-            { produitId: 'p1', titre: 'Bougie', quantite: 1, totalCents: 2_000 },
+            { produitId: 'p1', varianteId: null, titre: 'Bougie', quantite: 2, totalCents: 4_000 },
+            { produitId: 'p1', varianteId: null, titre: 'Bougie', quantite: 1, totalCents: 2_000 },
           ],
         }),
       ],
       'UTC',
     )
-    expect(jour!.produits).toEqual([{ id: 'p1', titre: 'Bougie', commandes: 1, quantite: 3, chiffreCents: 6_000 }])
+    expect(jour!.produits).toEqual([{ id: 'p1', titre: 'Bougie', commandes: 1, quantite: 3, chiffreCents: 6_000, coutCents: 0, quantiteCoutee: 0 }])
   })
 })
 

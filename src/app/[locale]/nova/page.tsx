@@ -18,6 +18,7 @@ import {
   PourOriaNova,
   ProduitsNova,
   SanteNova,
+  ContenusNova,
   VisitesNova,
 } from '@/components/studio/Nova'
 import { ProprieteGa4 } from '@/components/studio/ProprieteGa4'
@@ -141,11 +142,12 @@ export default async function NovaPage({
           )}
           <CanauxNova canaux={vue.canaux} devise={vue.devise} />
           {vue.visitesPeriode === null ? null : <VisitesNova visites={vue.visitesPeriode} devise={vue.devise} />}
+          <ContenusNova contenus={vue.contenus} devise={vue.devise} transmission={transmission} />
           <AttributionNova attribution={vue.attribution} devise={vue.devise} manqueVentes={vue.manqueVentes} />
           <OpportunitesNova opportunites={vue.opportunites} transmission={transmission} />
           <CampagnesNova campagnes={vue.campagnes} devise={vue.devise} filtre={filtre} lien={lienRegie} />
           <ProduitsNova produits={vue.produits} devise={vue.devise} />
-          <SanteNova global={vue.sante.global} lignes={vue.sante.lignes} />
+          <SanteNova global={vue.sante.global} lignes={vue.sante.lignes} transmission={transmission} />
           {vue.visites.etat === 'absent' ? null : <ProprieteGa4 actuelle={vue.visites.propriete} />}
           <PourOriaNova rapport={vue.pourOria} versOria={`/${locale}/oria${suffixe === '' ? '' : `?${suffixe}`}`} />
           <ParlerANova versConversation={versConversation} cout={VISIBILITY_ASK_ESTIMATED_CREDITS} />

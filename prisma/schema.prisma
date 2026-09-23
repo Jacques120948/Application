@@ -2475,6 +2475,13 @@ model CommerceJour {
   produits          Json   @default("[]")
   /// Même forme que `canaux`, au premier clic (première visite enregistrée).
   canauxPremier     Json   @default("{}")
+  /// Vrai quand le coût des produits a été lu avec ces ventes. Faux : les trois totaux suivants sont inconnus, pas nuls.
+  coutsLus           Boolean @default(false)
+  /// Ce que rapportent les lignes de produits (hors livraison), et celles dont le coût est connu, en centimes.
+  lignesCents        BigInt  @default(0)
+  lignesCouteesCents BigInt  @default(0)
+  /// Coût d'achat des lignes dont le coût est connu (coût actuel saisi dans Shopify), en centimes.
+  coutProduitsCents  BigInt  @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2509,6 +2516,12 @@ model CommerceSynchro {
   fuseau           String    @default("")
   /// Instantané des clients sur la fenêtre lue (voir nova/collecte.ts). Des comptes, jamais un identifiant.
   clients          Json      @default("{}")
+  /// Dernière lecture des coûts produits (réussie ou non), et ce qui l'a empêchée le cas échéant.
+  coutsAt          DateTime?
+  coutsMessage     String    @default("")
+  /// Variantes lues, et celles dont le coût est renseigné.
+  coutsVariantes   Int       @default(0)
+  coutsRenseignes  Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2579,6 +2592,8 @@ model AnalyticsSynchro {
   couvertureDepuis DateTime? @db.Date
   devise           String    @default("")
   fuseau           String    @default("")
+  /// La forme des jours écrits. Plus ancienne que celle du code : la prochaine lecture relit tout.
+  version          Int       @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

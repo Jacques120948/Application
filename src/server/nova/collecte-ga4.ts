@@ -28,6 +28,12 @@ const JOUR_MS = 24 * 60 * 60 * 1000
 const PAUSE_APRES_ECHEC_MS = 30 * 60 * 1000
 const PAUSE_MANUELLE_MS = 2 * 60 * 1000
 const JOURS_RATTRAPES = 3
+/**
+ * La forme des jours écrits. 1 : V3. 2 : l'engagement par page d'entrée. Une ligne plus
+ * ancienne que le code déclenche une relecture complète, sans quoi les anciens jours
+ * garderaient leur ancienne forme jusqu'à sortir de la fenêtre.
+ */
+export const VERSION_JOURS = 2
 const JOURS_GARDES = 400
 const FOURNISSEUR = 'google-analytics'
 
@@ -144,7 +150,11 @@ export async function synchroniserVisites(
     const fuseau = reglages?.fuseau || precedente?.fuseau || 'Europe/Zurich'
     const aujourdhui = jourDansFuseau(maintenant, fuseau)
     const debut = jourIso(new Date(Date.parse(aujourdhui) - JOURS_LUS * JOUR_MS))
-    const complete = mode === 'manuel' || precedente?.synchroAt == null || (precedente.propriete ?? '') !== propriete
+    const complete =
+      mode === 'manuel' ||
+      precedente?.synchroAt == null ||
+      (precedente.propriete ?? '') !== propriete ||
+      (precedente.version ?? 0) < VERSION_JOURS
     const depuis =
       complete || precedente?.synchroAt == null
         ? debut
@@ -196,6 +206,7 @@ export async function synchroniserVisites(
       etat: 'ok',
       message: '',
       synchroAt: maintenant,
+      ...(complete ? { version: VERSION_JOURS } : {}),
       couvertureDepuis: complete ? new Date(debut) : (precedente?.couvertureDepuis ?? new Date(debut)),
       devise: reglages?.devise ?? precedente?.devise ?? '',
       fuseau,

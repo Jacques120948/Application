@@ -7,6 +7,7 @@ import {
   frapperJeton,
   lireAcces,
   lireCommandes,
+  lireCouts,
   lirePortees,
   lireReglagesBoutique,
 } from '@/server/integrations/providers/shopify'
@@ -82,7 +83,13 @@ export type EtatVentes = {
   fuseau: string
   /** Le dernier compte des clients sur la fenêtre lue, ou `null` s'il n'a pas pu être fait. */
   clients: InstantaneClients | null
+  /** La dernière lecture des coûts produits : combien de variantes ont un coût, ou ce qui l'a empêchée. */
+  couts: EtatCouts
 }
+
+export type EtatCouts = { at: Date | null; message: string; variantes: number; renseignes: number }
+
+const COUTS_VIDES: EtatCouts = { at: null, message: '', variantes: 0, renseignes: 0 }
 
 /** L'instantané relu en base, vérifié champ par champ : un JSON n'est pas une promesse. */
 export function lireInstantane(brut: unknown): InstantaneClients | null {
@@ -104,6 +111,7 @@ const ABSENT: EtatVentes = {
   devise: '',
   fuseau: '',
   clients: null,
+  couts: COUTS_VIDES,
 }
 
 function jourIso(date: Date): string {
@@ -135,6 +143,7 @@ export async function lireEtatVentes(userId: string): Promise<EtatVentes> {
     devise: ligne.devise,
     fuseau: ligne.fuseau,
     clients: lireInstantane(ligne.clients),
+    couts: { at: ligne.coutsAt, message: ligne.coutsMessage, variantes: ligne.coutsVariantes, renseignes: ligne.coutsRenseignes },
   }
 }
 
@@ -232,14 +241,25 @@ export async function synchroniserVentes(
      * refait que sur toute la fenêtre, jamais sur trois jours relus.
      */
     const clientsPerimes = instantane === null || +maintenant - Date.parse(instantane.au) > CLIENTS_VALABLES_MS
-    const complete = mode === 'manuel' || derniereReussite === null || clientsPerimes
+    /*
+     * Première lecture depuis que Nova lit les coûts : toute la fenêtre est relue, sans quoi
+     * les jours anciens resteraient sans coût et la marge ne se calculerait sur aucune période.
+     */
+    const coutsJamaisLus = precedente?.coutsAt == null
+    const complete = mode === 'manuel' || derniereReussite === null || clientsPerimes || coutsJamaisLus
     const depuis =
       derniereReussite === null || complete
         ? debutFenetre
         : [debutFenetre, jourIso(new Date(+derniereReussite - JOURS_RATTRAPES * JOUR_MS))].sort().at(-1)!
 
     const lecture = await lireCommandes(acces, frappe.jeton, depuis)
-    const jours = agregerCommandes(lecture.commandes, fuseau)
+    /*
+     * Les coûts, lus à part : un refus ici ne doit rien coûter aux ventes. Les jours sont
+     * alors écrits « coûts non lus », et la marge retombe sur le pourcentage saisi.
+     */
+    const couts = lecture.commandes.length === 0 ? null : await lireCouts(acces, frappe.jeton).catch(() => null)
+    const coutsLus = couts !== null && couts.ok ? couts : null
+    const jours = agregerCommandes(lecture.commandes, fuseau, coutsLus === null ? null : coutsLus.couts)
 
     /*
      * Ce que Shopify accepte de rendre. Sans read_all_orders, rien avant soixante jours : ce
@@ -285,6 +305,10 @@ export async function synchroniserVentes(
             canaux: jour.canaux as Prisma.InputJsonValue,
             canauxPremier: jour.canauxPremier as Prisma.InputJsonValue,
             produits: jour.produits as unknown as Prisma.InputJsonValue,
+            coutsLus: jour.coutsLus,
+            lignesCents: BigInt(jour.lignesCents),
+            lignesCouteesCents: BigInt(jour.lignesCouteesCents),
+            coutProduitsCents: BigInt(jour.coutProduitsCents),
           })),
         })
       }
@@ -304,6 +328,14 @@ export async function synchroniserVentes(
         : null
     await noter(userId, acces.boutique, {
       ...(clients === null ? {} : { clients: clients as unknown as Prisma.InputJsonValue }),
+      ...(lecture.commandes.length === 0
+        ? {}
+        : {
+            coutsAt: maintenant,
+            coutsMessage: couts === null ? 'Shopify n’a pas rendu le coût des produits.' : couts.ok ? '' : couts.raison.slice(0, 300),
+            coutsVariantes: coutsLus?.variantes ?? 0,
+            coutsRenseignes: coutsLus?.couts.size ?? 0,
+          }),
       etat: 'ok',
       message: '',
       synchroAt: maintenant,

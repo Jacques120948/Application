@@ -18,10 +18,78 @@ function arrondi(valeur: number): number {
 export type LigneMarge = { quoi: string; montant: number }
 
 export type Marge =
-  | { etat: 'calculee'; chiffre: number; lignes: LigneMarge[]; marge: number; taux: number; manquants: string[] }
+  | {
+      etat: 'calculee'
+      chiffre: number
+      lignes: LigneMarge[]
+      marge: number
+      taux: number
+      manquants: string[]
+      /** D'où vient le coût des produits : lu dans Shopify, ou le pourcentage saisi. */
+      source: 'shopify' | 'pourcent'
+      /** Ce qu'il faut savoir sur ce coût (couverture partielle, repli sur le pourcentage). */
+      note: string | null
+      /**
+       * Le MER en dessous duquel la publicité coûte plus qu'elle ne laisse : CA ÷ (CA − coûts
+       * hors publicité), en pour cent entiers. `null` quand les coûts dépassent déjà le CA.
+       */
+      merEquilibre: number | null
+    }
   | { etat: 'impossible'; raison: string }
 
 export const MENTION_MARGE = 'Estimation basée sur les coûts renseignés.'
+
+/**
+ * En deçà, le coût lu dans Shopify couvre trop peu des ventes pour être étendu au reste :
+ * on retombe sur le pourcentage saisi, ou l'on ne calcule rien.
+ */
+export const COUVERTURE_COUTS_MIN = 0.8
+
+function pourcent(valeur: number): string {
+  return `${Math.round(valeur * 100)} %`
+}
+
+/**
+ * Le coût des produits d'une période, et d'où il vient.
+ *
+ * Le coût saisi dans Shopify (« Coût par article ») passe d'abord : c'est une mesure, le
+ * pourcentage n'est qu'une moyenne déclarée. Quand il ne couvre qu'une partie des ventes, le
+ * reste est estimé au même taux — et c'est dit. Shopify ne garde que le coût actuel : une
+ * hausse de prix d'achat se reporte sur les ventes passées, ce qui est dit aussi.
+ */
+function coutProduits(
+  ventes: CumulVentes,
+  couts: Couts,
+): { montant: number; source: 'shopify' | 'pourcent'; note: string | null } | { raison: string } {
+  const reel = ventes.couts
+  const couverture = reel === null || reel.lignes <= 0 ? null : reel.lignesCoutees / reel.lignes
+  if (reel !== null && couverture !== null && couverture >= COUVERTURE_COUTS_MIN) {
+    return {
+      montant: arrondi(reel.coutProduits / couverture),
+      source: 'shopify',
+      note:
+        couverture >= 0.995
+          ? 'Coût des produits lu dans Shopify (« Coût par article », coût actuel).'
+          : `Coût des produits lu dans Shopify pour ${pourcent(couverture)} des ventes ; le reste est estimé au même taux.`,
+    }
+  }
+  if (couts.coutProduitPct !== undefined) {
+    return {
+      montant: arrondi((ventes.chiffre * couts.coutProduitPct) / 100),
+      source: 'pourcent',
+      note:
+        couverture === null
+          ? null
+          : `Coût renseigné dans Shopify pour ${pourcent(couverture)} des ventes seulement : le pourcentage saisi est utilisé.`,
+    }
+  }
+  return {
+    raison:
+      couverture === null
+        ? 'Renseignez le coût de vos produits : « Coût par article » dans vos fiches Shopify, ou un pourcentage de vos ventes ici.'
+        : `Le coût d’achat n’est renseigné dans Shopify que pour ${pourcent(couverture)} de vos ventes. Complétez « Coût par article » sur vos fiches produits, ou saisissez un pourcentage ici.`,
+  }
+}
 
 /**
  * CA − coût des produits − frais variables − dépenses publicitaires = marge estimée.
@@ -33,12 +101,11 @@ export const MENTION_MARGE = 'Estimation basée sur les coûts renseignés.'
  */
 export function margeEstimee(ventes: CumulVentes | null, depensesPub: number | null, couts: Couts): Marge {
   if (ventes === null) return { etat: 'impossible', raison: 'Il faut les ventes de la boutique pour estimer une marge.' }
-  if (couts.coutProduitPct === undefined) {
-    return { etat: 'impossible', raison: 'Renseignez au moins le coût de vos produits, en pour cent de vos ventes.' }
-  }
+  const produits = coutProduits(ventes, couts)
+  if ('raison' in produits) return { etat: 'impossible', raison: produits.raison }
   const ca = ventes.chiffre
   const n = ventes.commandes
-  const lignes: LigneMarge[] = [{ quoi: 'Coût des produits', montant: arrondi((ca * couts.coutProduitPct) / 100) }]
+  const lignes: LigneMarge[] = [{ quoi: 'Coût des produits', montant: produits.montant }]
   const manquants: string[] = []
   const ajouter = (quoi: string, valeur: number | undefined, calcul: (v: number) => number) => {
     if (valeur === undefined) manquants.push(quoi.toLowerCase())
@@ -52,10 +119,21 @@ export function margeEstimee(ventes: CumulVentes | null, depensesPub: number | n
   }
   ajouter('Commissions', couts.commissionPct, (v) => (ca * v) / 100)
   ajouter('Autres coûts variables', couts.autresPct, (v) => (ca * v) / 100)
+  const avantPub = ca - lignes.reduce((total, ligne) => total + ligne.montant, 0)
   if (depensesPub !== null && depensesPub > 0) lignes.push({ quoi: 'Dépenses publicitaires', montant: arrondi(depensesPub) })
 
   const marge = arrondi(ca - lignes.reduce((total, ligne) => total + ligne.montant, 0))
-  return { etat: 'calculee', chiffre: arrondi(ca), lignes, marge, taux: ca === 0 ? 0 : marge / ca, manquants }
+  return {
+    etat: 'calculee',
+    chiffre: arrondi(ca),
+    lignes,
+    marge,
+    taux: ca === 0 ? 0 : marge / ca,
+    manquants,
+    source: produits.source,
+    note: produits.note,
+    merEquilibre: ca <= 0 || avantPub <= 0 ? null : Math.round((ca / avantPub) * 100),
+  }
 }
 
 // ── Objectifs ────────────────────────────────────────────────────────────────
