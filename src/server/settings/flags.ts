@@ -62,6 +62,19 @@ export const FLAGS = {
     help: "Autorise ce que chaque personne a allumé site par site : vérification d'indexation, relevé des chiffres de recherche, et rédaction au rythme du calendrier. La rédaction débite les crédits de la personne, au même tarif qu'un clic. Demande un planificateur qui appelle la route prévue.",
     fallback: false,
   },
+  /**
+   * Le bilan hebdomadaire de Lina par e-mail.
+   *
+   * Chaque envoi passe par Resend, gratuit jusqu'à son quota puis facturé : c'est un coût
+   * pour Evoliia, décidé et borné — seulement les personnes qui l'ont demandé, une fois par
+   * semaine, par lots de cent. L'éteindre arrête tout envoi sans déployer.
+   */
+  linaBilanEmail: {
+    key: 'flag.lina.bilan.email',
+    label: 'Lina — bilan hebdomadaire par e-mail',
+    help: 'Envoie le lundi le bilan de Lina aux personnes qui l’ont activé sur leur écran. Un e-mail par personne et par semaine, via Resend (facturé au-delà du quota gratuit). Demande un planificateur qui appelle la tournée quotidienne.',
+    fallback: true,
+  },
   radar: {
     key: 'flag.radar',
     label: 'Radar d’opportunités',

@@ -52,3 +52,36 @@ export async function sendEmail(email: Email): Promise<void> {
     throw new Error('email_refuse')
   }
 }
+
+/** Resend accepte jusqu'à cent e-mails par appel groupé. */
+export const LOT_EMAILS_MAX = 100
+
+/**
+ * Plusieurs e-mails en un appel : pour les envois hebdomadaires, qui partent à beaucoup de
+ * personnes à la fois. Même principe que `sendEmail` : sans fournisseur configuré, rien
+ * ne part et la fonction le dit (0). Rend le nombre d'e-mails acceptés.
+ */
+export async function sendEmails(emails: readonly Email[]): Promise<number> {
+  const apiKey = env.resendApiKey
+  const from = env.emailFrom
+  if (apiKey === undefined || from === undefined) {
+    logger.warn('envoi groupé impossible : aucun fournisseur configuré')
+    return 0
+  }
+  let envoyes = 0
+  for (let debut = 0; debut < emails.length; debut += LOT_EMAILS_MAX) {
+    const lot = emails.slice(debut, debut + LOT_EMAILS_MAX)
+    const response = await fetch('https://api.resend.com/emails/batch', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify(lot.map((email) => ({ from, to: [email.to], subject: email.subject, text: email.text }))),
+    })
+    if (!response.ok) {
+      // Le détail reste dans les journaux : il peut contenir des adresses.
+      logger.error('envoi groupé refusé par le fournisseur', { status: response.status })
+      throw new Error('email_refuse')
+    }
+    envoyes += lot.length
+  }
+  return envoyes
+}

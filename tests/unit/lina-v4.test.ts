@@ -162,3 +162,23 @@ describe('objectif de valeur client', () => {
     expect(ligne!.part).toBeCloseTo(0.75)
   })
 })
+
+describe('envoi groupé des bilans', () => {
+  it('découpe en lots de cent et ne part pas sans fournisseur', async () => {
+    const { sendEmails } = await import('@/server/email/send')
+    const appel = vi.fn(async () => Response.json({ data: [] }))
+    vi.stubGlobal('fetch', appel)
+    const emails = Array.from({ length: 250 }, (_, i) => ({ to: `p${i}@exemple.ch`, subject: 'Bilan', text: 'Totaux.' }))
+    vi.stubEnv('RESEND_API_KEY', ['re', 'test'].join('_'))
+    vi.stubEnv('EMAIL_FROM', 'Lina <lina@exemple.ch>')
+    expect(await sendEmails(emails)).toBe(250)
+    expect(appel).toHaveBeenCalledTimes(3)
+    expect(String((appel.mock.calls[0] as unknown as [string])[0])).toBe('https://api.resend.com/emails/batch')
+    // Une clé vide vaut une clé absente.
+    vi.stubEnv('RESEND_API_KEY', '')
+    appel.mockClear()
+    expect(await sendEmails(emails)).toBe(0)
+    expect(appel).not.toHaveBeenCalled()
+    vi.unstubAllEnvs()
+  })
+})

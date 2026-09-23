@@ -111,3 +111,43 @@ export function AutonomieLina({ niveau }: { niveau: 'conseil' | 'assiste' }) {
     </fieldset>
   )
 }
+
+/** Recevoir le bilan de la semaine par e-mail, le lundi. Éteint tant que la personne ne l'a pas demandé. */
+export function BilanEmailLina({ actif, disponible }: { actif: boolean; disponible: boolean }) {
+  const [coche, setCoche] = useState(actif)
+  const [etat, setEtat] = useState<'repos' | 'envoi' | 'ok' | 'erreur'>('repos')
+
+  async function changer(valeur: boolean) {
+    setCoche(valeur)
+    setEtat('envoi')
+    const reponse = await fetch('/api/lina/bilan-email', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ actif: valeur }),
+    }).catch(() => null)
+    if (reponse?.ok === true) {
+      setEtat('ok')
+    } else {
+      setCoche(!valeur)
+      setEtat('erreur')
+    }
+  }
+
+  return (
+    <div className="grid gap-1 text-sm">
+      <label className="flex cursor-pointer items-start gap-2">
+        <input type="checkbox" checked={coche} disabled={!disponible || etat === 'envoi'} onChange={(e) => void changer(e.target.checked)} className="mt-1" />
+        <span>
+          Recevoir le bilan par e-mail, chaque lundi
+          <span className="block text-xs text-[var(--color-ink-soft)]">
+            {disponible
+              ? 'Les mêmes chiffres qu’ici, à l’adresse de votre compte. Aucun client n’y est nommé.'
+              : 'L’envoi d’e-mails n’est pas encore ouvert sur Evoliia.'}
+          </span>
+        </span>
+      </label>
+      {etat === 'ok' ? <span className="text-xs text-[var(--color-positive)]">{coche ? 'C’est noté : prochain bilan lundi.' : 'Vous ne recevrez plus le bilan par e-mail.'}</span> : null}
+      {etat === 'erreur' ? <span className="text-xs text-[var(--color-critical)]">Ce réglage n’a pas pu être enregistré.</span> : null}
+    </div>
+  )
+}

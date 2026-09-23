@@ -146,15 +146,16 @@ coûte des crédits, sur un clic.
 | Mode assisté | `creerSegmentAssiste`, `creerSegmentShopify`, `/api/lina/executer`, table `LinaAction` (RLS) | Sur « Créer ce segment dans Shopify » puis « Confirmer », Lina crée le segment (`segmentCreate`) avec la requête **recalculée par le serveur**. C'est sa seule écriture : aucune fiche modifiée, aucun envoi. Shopify exige « write_customers » ; sans elle, Lina le dit et la requête reste à copier. Chaque création est journalisée (« Ce que Lina a exécuté »). |
 | Notifications | `signalerAlertes`, `LinaSynchro.alertesVues` | Une notification dans l'application par nouvelle baisse de la semaine, jamais deux fois la même. Aucun e-mail. |
 | Objectif valeur client | `lina/objectifs.ts` | Dépense moyenne observée d'un acheteur, visée par la personne. |
+| Bilan par e-mail | `lina/bilan-email.ts`, `email/send.ts` (`sendEmails`), `/api/lina/bilan-email`, tournée quotidienne | **Décidé par le propriétaire (coût accepté).** Le lundi, le bilan de la semaine (mêmes chiffres que l'écran, aucun client) part aux personnes qui ont coché « Recevoir le bilan par e-mail » — décoché par défaut. Trois verrous : l'interrupteur `linaBilanEmail` du back-office, le choix de la personne, une fois par semaine au plus (`User.linaBilanEnvoyeLe`). Envoi groupé Resend, cent par appel ; une tournée s'arrête après quatre minutes et reprend le lendemain. |
 
-Coût pour Evoliia : aucun appel payant. WooCommerce et Stripe sont lus avec les clés de la
-personne ; la seule charge est le temps de fonction (un passage de 40 s au plus, à
-l'ouverture de l'écran, pas plus d'une fois toutes les douze heures). Aucun e-mail n'est
-envoyé : un bilan hebdomadaire par e-mail passerait par Resend, qui facture au-delà de son
-quota gratuit — il attend une décision.
+Coût pour Evoliia : WooCommerce et Stripe sont lus avec les clés de la personne ; la charge
+est le temps de fonction (un passage de 40 s au plus, à l'ouverture de l'écran, pas plus
+d'une fois toutes les douze heures). Le bilan par e-mail est le seul coût variable : un
+e-mail par personne abonnée et par semaine, via Resend (gratuit jusqu'à 3 000 par mois,
+puis facturé). L'interrupteur `linaBilanEmail` l'arrête pour tout le monde.
 
 ## Encore à venir
 
-Bilan hebdomadaire par e-mail (coût d'envoi à décider), SMS et WhatsApp (le consentement SMS
+SMS et WhatsApp (le consentement SMS
 Shopify demande l'accès aux numéros de téléphone), transmission des questions fréquentes à
 Néo et Gia.

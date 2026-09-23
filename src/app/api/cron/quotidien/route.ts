@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { tournerQuotidien } from '@/server/audit/automatisation'
+import { envoyerBilansLina } from '@/server/lina/bilan-email'
 import { isEnabled } from '@/server/settings/flags'
 import { refusCron } from '@/server/http/cron'
 import { fail, ok, readJson } from '@/server/http/respond'
@@ -28,11 +29,16 @@ async function passer(request: Request, corps: boolean) {
   if (refus !== null) return refus
 
   try {
+    /*
+     * Le bilan de Lina a son propre interrupteur et ses propres opt-in : il passe avant la
+     * tournée des sites, et une panne de l'un n'empêche pas l'autre.
+     */
+    const lina = await envoyerBilansLina().catch(() => ({ examines: 0, envoyes: 0, ignores: 0, raison: 'échec' }))
     if (!(await isEnabled('automatisation'))) {
-      return ok({ sites: 0, indexations: 0, releves: 0, articles: 0, depots: 0, echecs: 0 })
+      return ok({ sites: 0, indexations: 0, releves: 0, articles: 0, depots: 0, echecs: 0, lina })
     }
     const body = corps ? input.parse(await readJson(request).catch(() => ({}))) : {}
-    return ok(await tournerQuotidien(body.limit))
+    return ok({ ...(await tournerQuotidien(body.limit)), lina })
   } catch (error) {
     return fail(error)
   }

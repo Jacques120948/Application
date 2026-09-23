@@ -55,6 +55,10 @@ model User {
   disabledAt         DateTime?
   /// Alertes du Radar : nouvelles opportunités correspondant au profil.
   radarAlerts        Boolean             @default(true)
+  /// Lina V4 : le bilan de la semaine par e-mail, sur demande de la personne.
+  linaBilanEmail     Boolean             @default(false)
+  /// Le lundi de la dernière semaine dont le bilan a été envoyé.
+  linaBilanEnvoyeLe  DateTime?           @db.Date
   /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
   resumesOria        OriaResume[]
   ventesJour         CommerceJour[]
