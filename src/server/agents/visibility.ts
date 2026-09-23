@@ -32,7 +32,16 @@ import { membre, type MembreEquipe } from '@/lib/equipe'
  * spécialiste ajouté plus tard sans portrait.
  */
 
-export const VISIBILITY_AGENT_IDS = ['audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta'] as const
+export const VISIBILITY_AGENT_IDS = [
+  'oria',
+  'audit',
+  'seo',
+  'geo',
+  'content',
+  'cro',
+  'ads',
+  'meta',
+] as const
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
 
@@ -75,6 +84,44 @@ function identite(id: string): MembreEquipe {
 }
 
 export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
+  /*
+   * Oria d'abord, parce qu'elle ne fait pas le même travail que les sept autres.
+   *
+   * Chacun d'eux regarde un sujet et le regarde bien. Aucun ne sait ce qu'il faut faire en
+   * premier, parce qu'aucun ne voit ce que les autres ont trouvé : Naya ne sait pas que les
+   * pages convertissent mal, Cleo ne sait pas qu'on paie pour y envoyer du monde. Oria lit
+   * leurs constats — déjà calculés, déjà enregistrés — et les classe. Elle n'en refait
+   * aucun : demander à Cleo est moins cher et plus juste que de redevenir Cleo.
+   */
+  {
+    ...identite('oria'),
+    summary:
+      'La vue d’ensemble : elle rassemble ce que vos spécialistes ont trouvé, le classe, et dit par quoi commencer cette semaine.',
+    handles: [
+      'Par quoi commencer',
+      'Priorités',
+      'Santé marketing',
+      'Répartition des efforts',
+      'Ce qui a bougé',
+      'Qui peut s’en charger',
+    ],
+    feature: 'oria_agent',
+    /*
+     * Ce qu'elle fait, et la limite qui compte : elle ne mesure rien elle-même. Tout ce
+     * qu'elle avance vient d'un constat qu'un spécialiste a déjà rendu. Laisser croire
+     * qu'elle observe le marché ou les ventes serait la façon la plus sûre de décevoir
+     * quelqu'un qui découvrirait qu'elle relit ses propres agents.
+     */
+    atWork:
+      'Elle lit les constats déjà rendus par votre équipe, les classe par ce qu’ils coûtent et ce qu’ils demandent, et dit par quoi commencer. Elle ne mesure rien par elle-même : tout ce qu’elle avance vient d’un de vos spécialistes.',
+    starters: [
+      'Que dois-je faire aujourd’hui ?',
+      'Quelle est ma priorité cette semaine ?',
+      'Où est-ce que je perds le plus ?',
+      'Dois-je augmenter mes budgets publicitaires ?',
+      'Qui dans l’équipe a trouvé quelque chose ?',
+    ],
+  },
   {
     ...identite('audit'),
     summary:

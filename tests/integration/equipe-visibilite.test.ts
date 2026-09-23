@@ -147,6 +147,36 @@ describe('chacun voit ce qui le regarde', () => {
     expect(contexte).toContain('début:')
   }, 30_000)
 
+  it('donne à Oria les constats de ses collègues, et jamais leur matière première', async () => {
+    /*
+     * La règle qui fait la différence entre une directrice et un généraliste avec un
+     * prénom. On lui donne des constats déjà rendus, déjà classés, avec le nom de celui qui
+     * les a rendus. Lui donner les pages, les balises ou les campagnes la ferait refaire le
+     * travail de ses spécialistes — plus mal, plus cher, et parfois en les contredisant sur
+     * l'écran d'à côté.
+     *
+     * La seconde moitié compte autant : elle doit savoir de qui elle n'a pas de nouvelles.
+     * Sans compte publicitaire relié, un silence serait comblé par une supposition.
+     */
+    const { askVisibility } = await import('@/server/agents/visibility-service')
+    await askVisibility(
+      userId,
+      { siteId, agent: 'oria', question: 'Par quoi je commence ?', history: [] },
+      'fr',
+    )
+
+    const contexte = dernierContexte()
+    // L'état de chaque canal, et l'ordre déjà fait.
+    expect(contexte).toContain('État de chaque canal')
+    // Elle sait qui n'a rien dit : aucun compte publicitaire n'est relié sur ce compte.
+    expect(contexte).toContain('SOURCES ABSENTES')
+    expect(contexte).toContain('Naya')
+    // Et rien de la matière première des autres.
+    expect(contexte).not.toContain('Pages relevées')
+    expect(contexte).not.toContain('données structurées:')
+    expect(contexte).not.toContain('| description:')
+  }, 30_000)
+
   it('donne à Cleo ce que la page offre pour décider, et lui dit qu’elle ne voit aucune vente', async () => {
     /*
      * Sa branche a bien failli ne pas exister : sans elle, Cleo tombait dans le périmètre de

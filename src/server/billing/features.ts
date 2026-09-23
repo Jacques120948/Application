@@ -183,6 +183,20 @@ export const FEATURES: readonly Feature[] = [
       'Ce que les gens tapent avant d’arriver chez vous, les pages qui sortent et à quelle place — les chiffres de Google sur vos propres pages, pas une estimation. En lecture seule.',
     status: 'live',
   },
+  /*
+   * Oria ouvre le groupe, comme dans le menu. Sa fiche dit exactement ce qu'elle fait, et
+   * surtout ce qu'elle ne fait pas : elle ne mesure rien par elle-même. Promettre une
+   * « directrice marketing » à quelqu'un qui découvrirait qu'elle relit ses propres agents
+   * serait le meilleur moyen de perdre la confiance gagnée par les sept autres.
+   */
+  {
+    id: 'oria_agent',
+    group: 'equipe',
+    label: 'Oria — Direction marketing',
+    summary:
+      'La vue d’ensemble : elle rassemble ce que vos spécialistes ont trouvé, le classe par ce qu’il coûte et ce qu’il demande, et dit par quoi commencer. Elle ne mesure rien elle-même.',
+    status: 'live',
+  },
   {
     id: 'visibility_content_agent',
     group: 'equipe',
@@ -329,6 +343,7 @@ export function liveFeatures(): Feature[] {
  */
 export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
   'vis-essai': [
+    'oria_agent',
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',
@@ -336,6 +351,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_cro_agent',
   ],
   'vis-starter': [
+    'oria_agent',
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',
@@ -345,6 +361,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'search_console',
   ],
   'vis-pro': [
+    'oria_agent',
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',
@@ -360,6 +377,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
    * cocher dans le back-office, pas un déploiement.
    */
   'vis-business': [
+    'oria_agent',
     'visibility_audit_agent',
     'visibility_seo_agent',
     'visibility_geo_agent',

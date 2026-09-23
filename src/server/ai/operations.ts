@@ -47,6 +47,7 @@ import {
   VALIDATION_SYSTEM,
   CORRECTIONS_SYSTEM,
   ARTICLE_SYSTEM,
+  ORIA_SYSTEM,
   LEA_SYSTEM,
   NEO_SYSTEM,
   GIA_SYSTEM,
@@ -1532,6 +1533,7 @@ export async function writeArticle(params: {
 // ══════════════════════ Visibilité — l'équipe qui répond ═════════════════════
 
 const VISIBILITE_SYSTEMS = {
+  oria: ORIA_SYSTEM,
   audit: LEA_SYSTEM,
   seo: NEO_SYSTEM,
   geo: GIA_SYSTEM,

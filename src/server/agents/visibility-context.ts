@@ -1,4 +1,5 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
+import { lireSignaux } from '@/server/oria/signaux'
 import { contexteMeta } from '@/server/ads/contexte-meta'
 import { listAudits, readPlan } from '@/server/audit/plan'
 import { JOURS_LUS, recherchesPourArticle } from '@/server/audit/recherches'
@@ -35,6 +36,25 @@ import type { VisibilityAgentId } from './visibility'
 
 /** Au-delà, le contexte coûte plus qu'il n'éclaire. */
 const CONSTATS_MAX = 10
+/**
+ * Les points qu'Oria reçoit.
+ *
+ * Douze, et pas trente : elle n'en citera jamais plus de trois, et lui en donner trente
+ * l'inviterait à en choisir trois au hasard plutôt que les trois premiers. Le compte total
+ * lui est dit à part, pour qu'elle puisse écrire « il en reste dix-neuf ».
+ */
+const SIGNAUX_MAX = 12
+
+/** Le prénom derrière chaque identifiant, pour qu'Oria nomme ses collègues. */
+const NOMS_AGENTS: readonly (readonly [string, string])[] = [
+  ['audit', 'Léa'],
+  ['seo', 'Néo'],
+  ['geo', 'Gia'],
+  ['content', 'Milo'],
+  ['cro', 'Cleo'],
+  ['ads', 'Naya'],
+  ['meta', 'MIRA'],
+]
 const PAGES_MAX = 12
 const ANALYSES_MAX = 6
 
@@ -228,6 +248,69 @@ export async function readSiteFacts(
 ): Promise<string> {
   const base = await enTete(userId, siteId)
 
+  /*
+   * Oria voit ce que les autres ont trouvé, et rien de ce qu'ils ont regardé.
+   *
+   * C'est la différence entre une directrice et un généraliste. On ne lui donne ni les
+   * pages, ni les balises, ni les campagnes : on lui donne des constats déjà rendus, déjà
+   * classés, avec le nom de celui qui les a rendus. Lui donner la matière première la
+   * ferait refaire — plus mal, plus cher, et parfois en contredisant le spécialiste sur
+   * l'écran d'à côté.
+   *
+   * L'ordre lui arrive fait. Il vient d'un calcul, pas d'un jugement : ce que le point
+   * coûte, le travail qu'il demande, son urgence, la solidité des données derrière. Elle
+   * l'explique, elle ne le refait pas — un classement refait à chaque question ne serait
+   * plus un classement.
+   *
+   * Ce qu'on ne lit pas compte autant que ce qu'on lit : les agents dont aucune donnée
+   * n'est arrivée sont nommés, pour qu'elle dise « aucun compte Meta n'est relié » plutôt
+   * que de laisser un silence qu'un modèle comble toujours.
+   */
+  if (agent === 'oria') {
+    /*
+     * La langue ne sert qu'aux adresses des écrans, et les adresses ne vont pas au modèle :
+     * Oria nomme un spécialiste, elle ne fabrique pas de lien.
+     */
+    const vue = await lireSignaux(userId, 'fr', siteId)
+    const lignes = [...base]
+
+    const manquants = NOMS_AGENTS.filter(
+      ([id]) => !vue.sourcesLues.includes(id as VisibilityAgentId),
+    )
+    if (manquants.length > 0) {
+      lignes.push(
+        `SOURCES ABSENTES : ${manquants.map(([, nom]) => nom).join(', ')}. Tu ne disposes` +
+          ` d'aucune donnée de leur part. Ne suppose rien à leur sujet ; quand la question` +
+          ` en dépend, dis ce qu'il faudrait relier.`,
+      )
+    }
+
+    lignes.push(
+      'État de chaque canal, calculé sur les notes et les constats ouverts :',
+      ...vue.canaux.map((canal) => `- ${canal.nom} : ${canal.etat} — ${canal.pourquoi}`),
+    )
+
+    if (vue.signaux.length === 0) {
+      lignes.push('Aucun point ouvert : rien n’attend de décision aujourd’hui.')
+    } else {
+      lignes.push(
+        `Points ouverts, déjà classés du plus pressant au moins (${vue.signaux.length} en tout,` +
+          ` les ${Math.min(vue.signaux.length, SIGNAUX_MAX)} premiers ici). Garde cet ordre.`,
+        ...vue.signaux.slice(0, SIGNAUX_MAX).map((signal) => {
+          const qui = signal.sources
+            .map((source) => NOMS_AGENTS.find(([id]) => id === source)?.[1] ?? source)
+            .join(' et ')
+          return (
+            `- [${qui}] ${signal.titre} | impact ${signal.impact}, effort ${signal.effort},` +
+            ` urgence ${signal.urgence}, confiance ${signal.confiance} | ${signal.pourquoi}` +
+            ` | ce qu'il y a à faire : ${signal.quoiFaire} | d'où ça sort : ${signal.mesure}`
+          )
+        }),
+      )
+    }
+
+    return lignes.join('\n')
+  }
   if (agent === 'audit') {
     // Léa voit tout, parce que son métier est de dire par quoi commencer. Elle ne voit
     // pas le détail des pages : ce n'est pas elle qui rédige.

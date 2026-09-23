@@ -21,7 +21,16 @@ export type TeinteMembre = 'brand' | 'accent' | 'warm' | 'night' | 'sun' | 'sea'
  * Un identifiant mal orthographié ailleurs dans le produit doit se voir à la compilation, pas
  * sur un écran vide : c'est ce que cette union achète.
  */
-export const IDS_MEMBRES = ['audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta'] as const
+export const IDS_MEMBRES = [
+  'oria',
+  'audit',
+  'seo',
+  'geo',
+  'content',
+  'cro',
+  'ads',
+  'meta',
+] as const
 
 export type IdMembre = (typeof IDS_MEMBRES)[number]
 
@@ -37,6 +46,17 @@ export type MembreEquipe = {
 }
 
 export const MEMBRES: readonly MembreEquipe[] = [
+  /*
+   * Oria ouvre la liste, et cette liste est l'ordre du menu.
+   *
+   * Ce n'est pas une préséance décorative : elle est la seule à répondre à « par quoi je
+   * commence », et les sept autres répondent à « où en suis-je sur mon sujet ». Quelqu'un
+   * qui ouvre le studio se pose la première question ; s'il faut d'abord choisir un
+   * spécialiste, on lui demande de savoir ce qu'il vient chercher avant de le lui avoir
+   * dit. Les spécialistes restent entiers derrière elle — elle oriente, elle ne remplace
+   * personne.
+   */
+  { id: 'oria', name: 'Oria', role: 'Direction marketing', avatar: '/equipe/oria.webp', tint: 'night' },
   { id: 'audit', name: 'Léa', role: 'Audit', avatar: '/equipe/lea.webp', tint: 'brand' },
   { id: 'seo', name: 'Néo', role: 'Référencement', avatar: '/equipe/neo.webp', tint: 'night' },
   { id: 'geo', name: 'Gia', role: 'Moteurs IA', avatar: '/equipe/gia.webp', tint: 'accent' },
