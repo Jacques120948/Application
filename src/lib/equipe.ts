@@ -76,3 +76,37 @@ export const MEMBRES: readonly MembreEquipe[] = [
 export function membre(id: string): MembreEquipe | undefined {
   return MEMBRES.find((un) => un.id === id)
 }
+
+/**
+ * Où mène chaque membre de l'équipe, et sous quel nom d'écran.
+ *
+ * Ici plutôt que dans le menu, parce que deux endroits en ont besoin — le menu et la vue
+ * d'équipe d'Oria — et que deux tables recopiées finissent par diverger : un jour, le menu
+ * envoie Cleo sur son écran et le cockpit sur la conversation.
+ *
+ * Ceux qui montrent des chiffres ont leur propre écran ; les autres mènent à la
+ * conversation, qui est tout ce qu'ils savent faire aujourd'hui. On ne fabrique pas
+ * d'écran vide pour l'uniformité.
+ */
+export function ecranDuMembre(
+  id: IdMembre,
+  locale: string,
+  siteId: string,
+): { href: string; ecran: string } {
+  const site = siteId === '' ? '' : `?siteId=${siteId}`
+  const propres: Partial<Record<IdMembre, { href: string; ecran: string }>> = {
+    oria: { href: `/${locale}/oria${site}`, ecran: 'oria' },
+    audit: { href: `/${locale}/visibilite${site}`, ecran: 'visibilite' },
+    geo: { href: `/${locale}/visibilite/assistants${site}`, ecran: 'assistants' },
+    content: { href: `/${locale}/visibilite/articles${site}`, ecran: 'articles' },
+    cro: { href: `/${locale}/visibilite/conversion${site}`, ecran: 'conversion' },
+    ads: { href: `/${locale}/publicite`, ecran: 'publicite' },
+    meta: { href: `/${locale}/publicite/meta`, ecran: 'publicite-meta' },
+  }
+  return (
+    propres[id] ?? {
+      href: `/${locale}/visibilite/equipe${site === '' ? `?agent=${id}` : `${site}&agent=${id}`}`,
+      ecran: `equipe-${id}`,
+    }
+  )
+}

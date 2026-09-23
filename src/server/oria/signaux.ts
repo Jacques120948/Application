@@ -463,6 +463,14 @@ export type Consolidation = {
   site: { id: string; host: string } | null
   /** Les trois notes du dernier audit, pour l'en-tête du cockpit. */
   notes: { seo: number | null; geo: number | null; cro: number | null }
+  /**
+   * Quand chaque source a été lue pour la dernière fois.
+   *
+   * C'est ce que « dernière analyse » veut dire pour chaque agent, et ce sont des dates
+   * réelles : la fin du dernier audit, la dernière synchronisation d'un compte. Aucune
+   * n'est fabriquée pour remplir une case — `null` s'affiche « jamais ».
+   */
+  reperes: { audit: Date | null; ads: Date | null; meta: Date | null }
 }
 
 /**
@@ -586,6 +594,11 @@ export async function lireSignaux(
       seo: tableau?.audit.seoScore ?? null,
       geo: tableau?.audit.geoScore ?? null,
       cro: tableau?.audit.croScore ?? null,
+    },
+    reperes: {
+      audit: tableau?.audit.finishedAt ?? null,
+      ads: compteAds?.synchroAt ?? null,
+      meta: compteMeta?.synchroAt ?? null,
     },
   }
 }

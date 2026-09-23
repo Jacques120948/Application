@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { MEMBRES } from '@/lib/equipe'
+import { MEMBRES, ecranDuMembre } from '@/lib/equipe'
 
 /**
  * Le menu du studio, et pourquoi il a remplacé une barre de liens.
@@ -130,35 +130,19 @@ function Groupe({
   )
 }
 
-/**
- * Où mène chaque membre de l'équipe.
- *
- * Ceux qui montrent des chiffres ont leur propre écran ; les autres mènent à la
- * conversation, qui est tout ce qu'ils savent faire aujourd'hui. On ne fabrique pas d'écran
- * vide pour l'uniformité du menu.
- */
+/** Les membres de l'équipe, chacun vers son écran. La table vit dans `lib/equipe.ts`. */
 function destinations(locale: string, siteId: string): Entree[] {
-  const site = siteId === '' ? '' : `?siteId=${siteId}`
-  const versEquipe = (id: string) =>
-    `/${locale}/visibilite/equipe${site === '' ? `?agent=${id}` : `${site}&agent=${id}`}`
-
-  const propres: Record<string, { href: string; ecran: string }> = {
-    audit: { href: `/${locale}/visibilite`, ecran: 'visibilite' },
-    geo: { href: `/${locale}/visibilite/assistants${site}`, ecran: 'assistants' },
-    content: { href: `/${locale}/visibilite/articles${site}`, ecran: 'articles' },
-    cro: { href: `/${locale}/visibilite/conversion${site}`, ecran: 'conversion' },
-    ads: { href: `/${locale}/publicite`, ecran: 'publicite' },
-    meta: { href: `/${locale}/publicite/meta`, ecran: 'publicite-meta' },
-  }
-
-  return MEMBRES.map((membre) => ({
-    nom: membre.name,
-    quoi: membre.role,
-    avatar: membre.avatar,
-    tint: membre.tint,
-    href: propres[membre.id]?.href ?? versEquipe(membre.id),
-    ecran: propres[membre.id]?.ecran ?? `equipe-${membre.id}`,
-  }))
+  return MEMBRES.map((membre) => {
+    const cible = ecranDuMembre(membre.id, locale, siteId)
+    return {
+      nom: membre.name,
+      quoi: membre.role,
+      avatar: membre.avatar,
+      tint: membre.tint,
+      href: cible.href,
+      ecran: cible.ecran,
+    }
+  })
 }
 
 export type SiteVu = { id: string; host: string }
