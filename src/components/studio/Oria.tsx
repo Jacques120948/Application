@@ -6,6 +6,7 @@ import type { EtatAgent } from '@/server/oria/cockpit'
 import type { Evenement } from '@/server/oria/activite'
 import type { ActionPlan, JourSemaine, PlanMarketing } from '@/server/oria/plan-marketing'
 import type { RapportSemaine, Resultat } from '@/server/oria/rapport'
+import type { Decision, Impact } from '@/server/oria/decisions'
 
 /**
  * Les blocs du cockpit d'Oria.
@@ -649,16 +650,14 @@ export function SemaineOria({ jours }: { jours: readonly JourSemaine[] }) {
 /**
  * Les onglets d'Oria.
  *
- * Trois pour l'instant, et l'adresse les porte : un onglet se met en favori et survit au
- * rafraîchissement. Les écrans prévus plus tard — les décisions — viendront s'y
- * ajouter sans changer ceux-ci.
+ * L'adresse les porte : un onglet se met en favori et survit au rafraîchissement.
  */
 export function OngletsOria({
   courant,
   locale,
   siteId,
 }: {
-  courant: 'cockpit' | 'plan' | 'rapports'
+  courant: 'cockpit' | 'plan' | 'rapports' | 'decisions'
   locale: string
   siteId: string
 }) {
@@ -667,6 +666,7 @@ export function OngletsOria({
     { cle: 'cockpit', label: 'Cockpit', href: `/${locale}/oria${suffixe}` },
     { cle: 'plan', label: 'Objectifs et plan', href: `/${locale}/oria/plan${suffixe}` },
     { cle: 'rapports', label: 'Rapport de la semaine', href: `/${locale}/oria/rapports${suffixe}` },
+    { cle: 'decisions', label: 'Décisions', href: `/${locale}/oria/decisions${suffixe}` },
   ] as const
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Oria">
@@ -861,5 +861,110 @@ export function RapportOria({ rapport, maintenant }: { rapport: RapportSemaine; 
         </p>
       )}
     </div>
+  )
+}
+
+// ── Décisions ────────────────────────────────────────────────────────────────
+
+const GENRE_DECISION: Record<string, { label: string; ton: 'positive' | 'neutral' | 'brand' | 'caution' }> = {
+  appliquee: { label: 'Appliquée', ton: 'brand' },
+  corrigee: { label: 'Corrigée', ton: 'brand' },
+  publiee: { label: 'Publiée', ton: 'brand' },
+  ecartee: { label: 'Écartée', ton: 'neutral' },
+  annulee: { label: 'Défaite ensuite', ton: 'caution' },
+}
+
+function ImpactVu({ impact }: { impact: Impact }) {
+  if (impact.etat === 'indisponible') {
+    return <p className="m-0 text-xs text-[var(--color-ink-faint)]">{impact.raison}</p>
+  }
+  if (impact.etat === 'en-attente') {
+    return (
+      <p className="m-0 text-xs text-[var(--color-ink-soft)]">
+        Mesure en attente{impact.disponibleLe === null ? '' : ` jusqu’au ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long' }).format(impact.disponibleLe)}`}.{' '}
+        {impact.raison}
+      </p>
+    )
+  }
+  return (
+    <div className="grid gap-1">
+      <p className="m-0 text-xs text-[var(--color-ink-soft)]">
+        Évolution observée après, sur {impact.portee} ({impact.fenetre}) :
+      </p>
+      <ul className="m-0 grid list-none gap-1 p-0">
+        {impact.mesures.map((mesure) => {
+          const sens = SENS[mesure.sens]
+          return (
+            <li key={mesure.quoi} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span className="text-[var(--color-ink-soft)]">{mesure.quoi} :</span>
+              <span className="tabular-nums">{chiffre(mesure.avant, mesure.unite)}</span>
+              <span aria-hidden="true">→</span>
+              <span className="font-medium tabular-nums">{chiffre(mesure.apres, mesure.unite)}</span>
+              {mesure.ecart === null ? null : (
+                <span className="text-xs text-[var(--color-ink-soft)] tabular-nums">({ecartLisible(mesure.ecart)})</span>
+              )}
+              {sens === undefined || sens.label === '' ? null : <Badge tone={sens.ton}>{sens.label}</Badge>}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+/**
+ * Le journal des décisions.
+ *
+ * Chaque ligne dit ce qui a été décidé, qui l'avait proposé, et ce qu'on a observé après —
+ * jamais ce que la décision a « produit ». Ce qui a été écarté y figure aussi : c'est une
+ * décision, et c'est ce qui empêche Oria de reproposer chaque matin ce qu'on a déjà refusé.
+ */
+export function DecisionsOria({ decisions }: { decisions: readonly Decision[] }) {
+  const date = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long' })
+  if (decisions.length === 0) {
+    return (
+      <Card>
+        <CardBody>
+          <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+            Aucune décision sur les trois derniers mois. Elles apparaîtront ici dès que vous
+            validerez une proposition d’un spécialiste, marquerez une correction faite ou
+            écarterez une recommandation.
+          </p>
+        </CardBody>
+      </Card>
+    )
+  }
+  return (
+    <ol className="m-0 grid list-none gap-3 p-0">
+      {decisions.map((decision) => {
+        const genre = GENRE_DECISION[decision.genre]
+        return (
+          <li key={decision.cle}>
+            <Card>
+              <CardBody>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-[var(--color-ink-faint)]">{date.format(decision.quand)}</span>
+                  {genre === undefined ? null : <Badge tone={genre.ton}>{genre.label}</Badge>}
+                </div>
+                <p className="mt-2 mb-0 text-sm font-medium leading-snug">{decision.quoi}</p>
+                <p className="mt-1 mb-0 flex items-center gap-2 text-xs text-[var(--color-ink-soft)]">
+                  <span className="flex -space-x-2">
+                    {decision.proposePar.map((source) => (
+                      <Portrait key={source} id={source} taille={20} />
+                    ))}
+                  </span>
+                  Proposé par {nommer(decision.proposePar)}
+                </p>
+                {decision.impact === null ? null : (
+                  <div className="mt-3 border-t border-[var(--color-line)] pt-3">
+                    <ImpactVu impact={decision.impact} />
+                  </div>
+                )}
+              </CardBody>
+            </Card>
+          </li>
+        )
+      })}
+    </ol>
   )
 }

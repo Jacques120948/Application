@@ -86,7 +86,7 @@ export function sensDe(
   return { ecart, sens: monte === plusEstMieux ? 'mieux' : 'moins-bien' }
 }
 
-type Cumul = { cout: number; clics: number; conversions: number; valeur: number }
+export type Cumul = { cout: number; clics: number; conversions: number; valeur: number }
 
 /**
  * Les chiffres d'un compte publicitaire sur une fenêtre, lus sur les relevés déjà en base.
@@ -94,10 +94,24 @@ type Cumul = { cout: number; clics: number; conversions: number; valeur: number 
  * Les seules lignes de campagne : Meta relève aussi par ensemble et par annonce, et tout
  * additionner compterait la même dépense trois fois.
  */
-async function cumulSur(userId: string, accountId: string, depuis: Date, jusqua: Date): Promise<Cumul> {
+export async function cumulSur(
+  userId: string,
+  accountId: string,
+  depuis: Date,
+  jusqua: Date,
+  /** Une seule campagne, quand on mesure ce qu'a donné une action sur elle. */
+  campagneId?: string,
+): Promise<Cumul> {
   const lignes = await withUserScope(userId, (tx) =>
     tx.adsReleve.findMany({
-      where: { userId, accountId, groupeId: '', annonceId: '', jour: { gte: depuis, lt: jusqua } },
+      where: {
+        userId,
+        accountId,
+        groupeId: '',
+        annonceId: '',
+        jour: { gte: depuis, lt: jusqua },
+        ...(campagneId === undefined ? {} : { campagneId }),
+      },
       select: { coutMicros: true, clics: true, conversions: true, valeurConversion: true },
     }),
   )

@@ -1,5 +1,6 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
+import { lireDecisions } from '@/server/oria/decisions'
 import { OBJECTIFS } from '@/lib/objectifs'
 import { contexteMeta } from '@/server/ads/contexte-meta'
 import { listAudits, readPlan } from '@/server/audit/plan'
@@ -45,6 +46,9 @@ const CONSTATS_MAX = 10
  * lui est dit à part, pour qu'elle puisse écrire « il en reste dix-neuf ».
  */
 const SIGNAUX_MAX = 12
+
+/** Les décisions qu'Oria garde en tête. Au-delà, c'est de l'histoire, pas du contexte. */
+const DECISIONS_MAX = 8
 
 /** Le prénom derrière chaque identifiant, pour qu'Oria nomme ses collègues. */
 const NOMS_AGENTS: readonly (readonly [string, string])[] = [
@@ -321,6 +325,31 @@ export async function readSiteFacts(
             ` urgence ${signal.urgence}, confiance ${signal.confiance} | ${signal.pourquoi}` +
             ` | ce qu'il y a à faire : ${signal.quoiFaire} | d'où ça sort : ${signal.mesure}`
           )
+        }),
+      )
+    }
+
+    /*
+     * Les décisions récentes, et ce qu'on a observé après. C'est sa mémoire : elle ne
+     * repropose pas ce qui a été écarté, et elle peut dire « depuis que vous avez baissé ce
+     * budget, on observe… » — avec le mot « observe », jamais « grâce à ».
+     */
+    const decisions = await lireDecisions(userId, vue.site?.id ?? null).catch(() => [])
+    if (decisions.length > 0) {
+      lignes.push(
+        'Décisions récentes (les plus récentes d’abord). Ce qui a été écarté ne se repropose pas ;' +
+          ' une évolution observée après une décision n’en est pas l’effet prouvé :',
+        ...decisions.slice(0, DECISIONS_MAX).map((decision) => {
+          const quand = decision.quand.toISOString().slice(0, 10)
+          const impact =
+            decision.impact === null
+              ? ''
+              : decision.impact.etat === 'mesure'
+                ? ` | observé après, sur ${decision.impact.portee} : ${decision.impact.mesures
+                    .map((mesure) => `${mesure.quoi} ${mesure.avant ?? '?'} → ${mesure.apres ?? '?'}`)
+                    .join(', ')}`
+                : ` | mesure : ${decision.impact.etat === 'en-attente' ? 'en attente' : 'indisponible'}`
+          return `- ${quand} [${decision.genre}] ${decision.quoi}${impact}`
         }),
       )
     }
