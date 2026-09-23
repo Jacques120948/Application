@@ -154,7 +154,7 @@ describe('Lina V3 — relevés, bilan, alertes, objectifs', () => {
 
   it('suit les objectifs fixés par la personne', async () => {
     expect((await objectifsLina(boutique)).tauxReachat).toBeNull()
-    await enregistrerObjectifs(boutique, { tauxReachat: 40, caExistants30: null, reactives30: null, score: 80 })
+    await enregistrerObjectifs(boutique, { tauxReachat: 40, caExistants30: null, reactives30: null, valeurClient: null, score: 80 })
     const vue = await lireLina(boutique, { avecNova: false })
     expect(vue.progression.map((un) => un.cle)).toEqual(['tauxReachat', 'score'])
     expect(vue.progression[0]).toMatchObject({ cible: '40 %', actuel: '30 %', atteint: false })

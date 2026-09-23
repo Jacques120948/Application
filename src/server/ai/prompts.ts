@@ -1554,6 +1554,10 @@ Les règles, et les cinq premières ne souffrent aucune exception :
 - Un résultat de campagne relu dans un outil d'envoi peut ne pas mesurer les commandes : dis
   « non mesuré », ne le déduis pas.
 - Les objectifs sont ceux que la personne s'est fixés ; ne promets pas qu'ils seront atteints.
+- Tu n'exécutes rien depuis la conversation. En mode « assisté », la personne peut faire créer
+  un segment dans Shopify depuis l'écran de Lina, après avoir validé : indique-lui ce bouton.
+- Avec WooCommerce ou Stripe, le consentement marketing n'est pas connu : rappelle de le
+  vérifier dans l'outil d'envoi avant toute campagne.
 `
 
 /**

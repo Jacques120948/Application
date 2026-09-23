@@ -4,7 +4,9 @@ import type { EtatLina, PaniersLina as Paniers } from '@/server/lina/collecte'
 import type { Campagne, InsightLina, LigneSanteCrm, Niveau } from '@/server/lina/recommandations'
 import type { Indicateurs, LigneRfm, Segment } from '@/server/lina/segments'
 import type { DepuisNova, MembreVu } from '@/server/lina/service'
+import { lienFiche, NOM_SOURCE_LINA, numeroClient, type SourceLina } from '@/lib/lina'
 import { CopierTexte } from './CopierTexte'
+import { CreerSegmentLina } from './AssisteLina'
 import { DelegationOria } from './DelegationOria'
 
 /**
@@ -143,7 +145,7 @@ export function AccueilLina({
 }) {
   const bloquant =
     etat.etat === 'absent'
-      ? 'Pour commencer, reliez votre boutique Shopify : c’est là que vivent vos clients.'
+      ? 'Pour commencer, reliez votre boutique Shopify ou WooCommerce, ou votre compte Stripe : c’est là que vivent vos clients.'
       : etat.etat === 'offre'
         ? 'La lecture de votre boutique n’est pas incluse dans votre offre actuelle.'
         : etat.etat === 'portee' || etat.etat === 'protegees' || etat.etat === 'erreur'
@@ -161,14 +163,14 @@ export function AccueilLina({
         </p>
         <p className="mt-3 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
           Commençons par analyser votre base clients. Je lis, pour chaque client, ses dates d’achat, son nombre de commandes,
-          ce qu’il a dépensé et s’il accepte vos emails — jamais son nom, son adresse ni son courriel, qui restent dans votre
-          boutique.
+          ce qu’il a dépensé et, quand la boutique le dit, s’il accepte vos emails — jamais son nom ni son adresse, et aucun
+          courriel n’est conservé : ils restent dans votre boutique.
         </p>
         {activite === 'services' || activite === 'saas' ? (
           <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
-            Vous avez déclaré une activité {activite === 'services' ? 'de services' : 'd’abonnement logiciel'}. Je lis
-            aujourd’hui une base clients Shopify ; vos prospects (HubSpot) et vos abonnements (Stripe) sont suivis par Nova,
-            et je m’appuierai sur eux dans une prochaine version.
+            Vous avez déclaré une activité {activite === 'services' ? 'de services' : 'd’abonnement logiciel'}. Je lis vos
+            clients dans Shopify, WooCommerce ou Stripe ; vos prospects (HubSpot) et vos abonnements sont suivis par Nova, et je
+            m’appuie sur ses chiffres pour vous proposer des relances.
           </p>
         ) : null}
         {bloquant === null ? null : <p className="mt-4 mb-0 text-sm leading-relaxed text-[var(--color-critical)]">{bloquant}</p>}
@@ -366,7 +368,18 @@ export function PaniersLina({ paniers, devise, transmission }: { paniers: Panier
 const TON_NIVEAU: Record<Niveau, 'positive' | 'caution' | 'neutral'> = { eleve: 'positive', moyen: 'caution', faible: 'neutral' }
 const MOT_NIVEAU: Record<Niveau, string> = { eleve: 'élevé', moyen: 'moyen', faible: 'faible' }
 
-export function CampagnesLina({ campagnes, devise, transmission }: { campagnes: readonly Campagne[]; devise: string; transmission?: TransmissionLina }) {
+export function CampagnesLina({
+  campagnes,
+  devise,
+  transmission,
+  assiste = false,
+}: {
+  campagnes: readonly Campagne[]
+  devise: string
+  transmission?: TransmissionLina
+  /** V4 : mode assisté — créer l'audience dans Shopify sur validation. */
+  assiste?: boolean
+}) {
   if (campagnes.length === 0) return null
   return (
     <section id="campagnes" className="grid scroll-mt-6 gap-3">
@@ -430,6 +443,11 @@ export function CampagnesLina({ campagnes, devise, transmission }: { campagnes: 
                     <code className="text-[11px] break-all">{campagne.requeteShopify}</code>
                     <CopierTexte texte={campagne.requeteShopify} />
                   </div>
+                  {assiste ? (
+                    <div className="mt-2">
+                      <CreerSegmentLina type="campagne" cle={campagne.cle} nom={campagne.titre} />
+                    </div>
+                  ) : null}
                 </div>
               )}
               <Transmettre cle={campagne.cle} agent="content" pour="rédiger les emails" transmission={transmission} />
@@ -655,12 +673,21 @@ export function MembresLina({
   membres,
   devise,
   boutique,
+  source,
+  versFiche,
+  assiste = false,
 }: {
   segment: Segment
   membres: readonly MembreVu[]
   devise: string
   boutique: string
+  source: SourceLina | null
+  /** V4 : la fiche du client dans Evoliia, sans nom. */
+  versFiche?: (ref: string) => string
+  /** V4 : mode assisté — Lina peut créer le segment dans Shopify sur validation. */
+  assiste?: boolean
 }) {
+  const outil = source === null ? 'votre boutique' : NOM_SOURCE_LINA[source]
   return (
     <Card>
       <CardBody>
@@ -668,7 +695,7 @@ export function MembresLina({
           {segment.nom} — {nombre(segment.nombre)} clients
         </h2>
         <p className="mt-1 mb-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">
-          Les {nombre(membres.length)} qui ont le plus dépensé. Lina ne connaît pas leur nom : ouvrez leur fiche dans Shopify pour le voir.
+          Les {nombre(membres.length)} qui ont le plus dépensé. Lina ne connaît pas leur nom : ouvrez leur fiche dans {outil} pour le voir.
         </p>
         {segment.requeteShopify === null ? null : (
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -676,11 +703,24 @@ export function MembresLina({
             <CopierTexte texte={segment.requeteShopify} libelle="Copier la requête Shopify" />
           </div>
         )}
+        {segment.requeteShopify === null || !assiste ? null : (
+          <div className="mt-2">
+            <CreerSegmentLina type="segment" cle={segment.cle} nom={segment.nom} />
+          </div>
+        )}
         <ul className="m-0 mt-3 grid list-none gap-2 p-0">
-          {membres.map((client) => (
+          {membres.map((client) => {
+            const fiche = lienFiche(source, boutique, client.ref)
+            return (
             <li key={client.ref} className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-line)] pb-2 text-xs">
               <span className="min-w-0">
-                <span className="font-medium">Client n° {client.ref}</span>
+                {versFiche === undefined ? (
+                  <span className="font-medium">{numeroClient(source, client.ref)}</span>
+                ) : (
+                  <a href={versFiche(client.ref)} className="font-medium underline">
+                    {numeroClient(source, client.ref)}
+                  </a>
+                )}
                 <span className="text-[var(--color-ink-soft)]">
                   {' '}
                   · {nombre(client.commandes)} commande{client.commandes > 1 ? 's' : ''} · {argent(client.caCents, devise)}
@@ -688,13 +728,14 @@ export function MembresLina({
                   {MOT_CONSENTEMENT[client.consentement] ?? client.consentement}
                 </span>
               </span>
-              {boutique === '' ? null : (
-                <a href={`https://${boutique}/admin/customers/${client.ref}`} target="_blank" rel="noopener noreferrer" className="shrink-0 font-medium">
-                  Ouvrir dans Shopify ↗
+              {fiche === null ? null : (
+                <a href={fiche.href} target="_blank" rel="noopener noreferrer" className="shrink-0 font-medium">
+                  {fiche.libelle}
                 </a>
               )}
             </li>
-          ))}
+            )
+          })}
         </ul>
       </CardBody>
     </Card>

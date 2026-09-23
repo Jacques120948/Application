@@ -18,6 +18,8 @@ import { aRelire, JOUR_MS, jourIso, PAUSE_MANUELLE_MS } from '@/server/nova/coll
 import { logger } from '@/server/observability/logger'
 import { analyserCommandes, type AnalyseCommandes } from './commandes'
 import { criteresLina } from './criteres'
+import { sourceAutre, synchroniserAutre } from './collecte-autres'
+import type { SourceLina } from './sources'
 
 /**
  * La collecte de Lina : la base clients de la boutique, relue au rythme de Nova.
@@ -60,6 +62,10 @@ export type PaniersLina = {
 
 export type EtatLina = {
   etat: 'absent' | 'offre' | 'jamais' | 'en-cours' | 'ok' | 'erreur' | 'portee' | 'protegees'
+  /** V4 : d'où viennent les clients. `null` : aucune source reliée. */
+  source: SourceLina | null
+  /** V4 : commandes ou paiements qui n'ont pu être rattachés à aucun client (WooCommerce, Stripe). */
+  sansClient: number
   /** V2 : la lecture des commandes suit celle des clients ; l'écran reste utilisable pendant. */
   commandesEnCours: boolean
   commandesAt: Date | null
@@ -77,6 +83,8 @@ export type EtatLina = {
 
 const SANS: EtatLina = {
   etat: 'absent',
+  source: null,
+  sansClient: 0,
   commandesEnCours: false,
   commandesAt: null,
   commandesMessage: '',
@@ -131,12 +139,38 @@ async function acces(userId: string): Promise<{ etat: EtatLina } | { acces: Acce
   return { acces: lu, connectionId: connexion.connectionId }
 }
 
+/** Sans Shopify : WooCommerce ou Stripe, lus d'un seul passage (collecte-autres.ts). */
+async function lireEtatAutre(userId: string): Promise<EtatLina> {
+  const autre = await sourceAutre(userId, true)
+  if (autre === null) return SANS
+  const ligne = await withUserScope(userId, (tx) => tx.linaSynchro.findUnique({ where: { userId } }))
+  const base = { ...SANS, source: autre.source, boutique: autre.boutique }
+  if (ligne === null || ligne.source !== autre.source) return { ...base, etat: 'jamais' }
+  const analyse = lireAnalyse(ligne.analyse)
+  // Une lecture d'un seul tenant qui dure plus de cinq minutes a été interrompue.
+  const interrompue = ligne.etat === 'en-cours' && (ligne.essaiAt === null || Date.now() - +ligne.essaiAt > 5 * 60_000)
+  return {
+    ...base,
+    etat: interrompue ? 'erreur' : (ligne.etat as EtatLina['etat']),
+    message: interrompue ? 'La lecture n’a pas abouti. Relancez l’analyse.' : ligne.message,
+    analyse,
+    sansClient: typeof (ligne.analyse as { sansClient?: unknown } | null)?.sansClient === 'number' ? (ligne.analyse as { sansClient: number }).sansClient : 0,
+    commandesAt: ligne.commandesAt,
+    synchroAt: ligne.synchroAt,
+    lanceAt: ligne.lanceAt,
+    clients: ligne.clients,
+    tronque: ligne.tronque,
+  }
+}
+
 export async function lireEtatLina(userId: string): Promise<EtatLina> {
   const lu = await acces(userId)
-  if ('etat' in lu) return lu.etat
+  if ('etat' in lu) return lu.etat.etat === 'absent' ? lireEtatAutre(userId) : lu.etat
   const ligne = await withUserScope(userId, (tx) => tx.linaSynchro.findUnique({ where: { userId } }))
-  if (ligne === null) return { ...SANS, etat: 'jamais', boutique: lu.acces.boutique }
+  if (ligne === null || ligne.source !== SOURCE) return { ...SANS, source: SOURCE, etat: 'jamais', boutique: lu.acces.boutique }
   return {
+    source: SOURCE,
+    sansClient: 0,
     etat: ligne.etat as EtatLina['etat'],
     message: ligne.message,
     commandesEnCours: ligne.operation?.endsWith(COMMANDES) === true,
@@ -159,7 +193,8 @@ async function noter(userId: string, data: Omit<Prisma.LinaSynchroUncheckedCreat
 
 /** Remplace l'index des clients de la source. Par lots : une transaction ne doit pas s'éterniser. */
 async function ecrireClients(userId: string, clients: readonly ClientShopify[]): Promise<void> {
-  await withUserScope(userId, (tx) => tx.linaClient.deleteMany({ where: { userId, source: SOURCE } }))
+  // Tout l'index de la personne : une autre source ne doit pas s'y mêler.
+  await withUserScope(userId, (tx) => tx.linaClient.deleteMany({ where: { userId } }))
   for (let debut = 0; debut < clients.length; debut += LIGNES_PAR_LOT) {
     const lot = clients.slice(debut, debut + LIGNES_PAR_LOT)
     await withUserScope(userId, (tx) =>
@@ -241,6 +276,7 @@ async function lancer(userId: string, acces: AccesShopify, jeton: string, mainte
   const essai = await lancerExportClients(acces, jeton, consentement)
   if (essai.ok) {
     await noter(userId, {
+      source: SOURCE,
       etat: 'en-cours',
       message: '',
       operation: `${essai.operation}${consentement ? AVEC_CONSENTEMENT : SANS_CONSENTEMENT}`,
@@ -265,8 +301,15 @@ async function lancer(userId: string, acces: AccesShopify, jeton: string, mainte
  */
 export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' | 'suivre', maintenant = new Date()): Promise<EtatLina> {
   const lu = await acces(userId)
-  if ('etat' in lu) return lu.etat
-  const ligne = await withUserScope(userId, (tx) => tx.linaSynchro.findUnique({ where: { userId } }))
+  if ('etat' in lu) {
+    if (lu.etat.etat !== 'absent') return lu.etat
+    const autre = await sourceAutre(userId)
+    if (autre !== null) await synchroniserAutre(userId, autre, mode, maintenant)
+    return lireEtatLina(userId)
+  }
+  // Une ligne laissée par une autre source (WooCommerce, Stripe) compte comme aucune.
+  const brute = await withUserScope(userId, (tx) => tx.linaSynchro.findUnique({ where: { userId } }))
+  const ligne = brute?.source === SOURCE ? brute : null
 
   try {
     // Un export est en route : on ne fait que le suivre.
@@ -361,7 +404,7 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
           )
         : !(essai !== null && +maintenant - +essai < PAUSE_MANUELLE_MS)
     if (!relire) return lireEtatLina(userId)
-    await noter(userId, { essaiAt: maintenant })
+    await noter(userId, brute !== null && ligne === null ? { source: SOURCE, essaiAt: maintenant, etat: 'jamais', synchroAt: null, clients: 0, analyse: {}, paniers: {} } : { essaiAt: maintenant })
 
     const frappe = await frapperJeton(lu.acces)
     if (!frappe.ok) {

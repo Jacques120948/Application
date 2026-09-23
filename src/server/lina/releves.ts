@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
 import { withUserScope } from '@/server/db/scope'
+import { semaineLisible } from '@/lib/lina'
+import { notify } from '@/server/notifications/service'
 import type { PaniersLina } from './collecte'
 import type { Recents } from './commandes'
 import { argent, nombreLisible, type Campagne } from './recommandations'
@@ -59,10 +61,7 @@ export const ACHETEURS_MIN_SCORE = 20
 /** Paniers en dessous desquels la récupération n'entre pas dans le score. */
 const PANIERS_MIN_SCORE = 10
 
-/** « 24 août » : une semaine se lit par son lundi, sans l'année. */
-export function semaineLisible(lundi: string): string {
-  return new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${lundi}T00:00:00Z`))
-}
+export { semaineLisible } from '@/lib/lina'
 
 const pourcent = (part: number) => `${nombreLisible(part * 100, part < 0.1 ? 1 : 0)} %`
 
@@ -326,4 +325,25 @@ export async function enregistrerReleve(userId: string, releve: Releve, semaine:
   await withUserScope(userId, (tx) =>
     tx.linaReleve.upsert({ where: { userId_semaine: { userId, semaine: date } }, create: { userId, semaine: date, donnees }, update: { donnees } }),
   )
+}
+
+/**
+ * Une notification dans l'application par alerte nouvelle de la semaine — une baisse, jamais
+ * une bonne nouvelle, et jamais deux fois la même la même semaine. Aucun e-mail : l'envoi
+ * coûterait à Evoliia, et il attend une décision.
+ */
+export async function signalerAlertes(userId: string, semaine: string, alertes: readonly AlerteLina[]): Promise<number> {
+  const baisses = alertes.filter((alerte) => alerte.niveau === 'attention')
+  if (baisses.length === 0) return 0
+  const ligne = await withUserScope(userId, (tx) => tx.linaSynchro.findUnique({ where: { userId }, select: { alertesVues: true } }))
+  const vues = (ligne?.alertesVues ?? {}) as { semaine?: string; cles?: string[] }
+  const deja = new Set(vues.semaine === semaine ? (vues.cles ?? []) : [])
+  const nouvelles = baisses.filter((alerte) => !deja.has(alerte.cle))
+  if (nouvelles.length === 0 || ligne === null) return 0
+  for (const alerte of nouvelles) {
+    await notify(userId, { kind: 'lina_alerte', title: `Lina : ${alerte.titre.toLowerCase()}`, body: alerte.texte.slice(0, 280), href: '/fr/lina/bilan' })
+  }
+  const cles = [...deja, ...nouvelles.map((alerte) => alerte.cle)]
+  await withUserScope(userId, (tx) => tx.linaSynchro.update({ where: { userId }, data: { alertesVues: { semaine, cles } } }))
+  return nouvelles.length
 }

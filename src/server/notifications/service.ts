@@ -23,6 +23,8 @@ export type NotificationKind =
   | 'creator_report'
   /** La surveillance a repéré qu'un site suivi a cessé de fonctionner ou d'être indexable. */
   | 'site_watch'
+  /** Lina a relevé une baisse dans la base clients (réachat, VIP, paniers, clients à risque). */
+  | 'lina_alerte'
 
 export type NotificationView = {
   id: string

@@ -65,6 +65,7 @@ const PROTECTED_TABLES = [
   'LinaProduit',
   'LinaResultat',
   'LinaReleve',
+  'LinaAction',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',

@@ -1,6 +1,7 @@
 import { argent, NOM_NIVEAU, nombreLisible } from './recommandations'
 import type { VueLina } from './service'
 import type { ResultatVu, VerdictAB } from './resultats'
+import { NOM_SOURCE_LINA } from './sources'
 
 /**
  * Ce que Lina sait quand on lui parle : des totaux et des segments, jamais un client.
@@ -39,26 +40,28 @@ export function faitsLina(vue: VueLina, resultats: readonly ResultatVu[] = [], t
   if (vue.vierge || vue.indicateurs === null) {
     const raison =
       etat.etat === 'absent'
-        ? 'Aucune boutique Shopify n’est reliée : il faut la relier dans Connexions.'
+        ? 'Aucune boutique (Shopify, WooCommerce) ni compte Stripe n’est relié : il faut les relier dans Connexions.'
         : etat.etat === 'offre'
           ? 'La lecture de la boutique n’est pas incluse dans l’offre actuelle.'
           : etat.etat === 'en-cours'
-            ? 'La lecture des clients est en cours chez Shopify.'
+            ? `La lecture des clients est en cours chez ${etat.source === null ? 'Shopify' : NOM_SOURCE_LINA[etat.source]}.`
             : etat.message !== ''
               ? etat.message
               : 'La base clients n’a pas encore été analysée : bouton « Analyser mes clients » sur l’écran de Lina.'
     lignes.push('Données de Lina : aucune base clients lue.', `Pourquoi : ${raison}`)
     if (vue.activite === 'services' || vue.activite === 'saas') {
       lignes.push(
-        `Activité déclarée : ${vue.activite === 'services' ? 'services' : 'logiciel par abonnement'}. Lina lit aujourd’hui une base clients Shopify ; pour cette activité, les prospects (HubSpot) et les abonnements (Stripe) sont suivis par Nova.`,
+        `Activité déclarée : ${vue.activite === 'services' ? 'services' : 'logiciel par abonnement'}. Lina lit les clients dans Shopify, WooCommerce ou Stripe ; les prospects (HubSpot) et les abonnements sont suivis par Nova.`,
       )
     }
     return [...lignes, ...faitsCommuns(vue)]
   }
   const i = vue.indicateurs
   lignes.push(
-    `Sources : base clients Shopify (${nombreLisible(etat.clients)} fiches, lue le ${quand(etat.synchroAt)}${etat.tronque ? ', lecture partielle' : ''}), paniers abandonnés Shopify.`,
-    `Consentement marketing : ${etat.consentement ? `lu — ${nombreLisible(i.contactables ?? 0)} clients acceptent les emails, ${nombreLisible(i.sansEmail ?? 0)} fiches sans email` : 'non lu, à vérifier dans Shopify avant tout envoi'}.`,
+    etat.source === 'woocommerce' || etat.source === 'stripe'
+      ? `Sources : ${etat.source === 'stripe' ? 'paiements Stripe' : 'commandes WooCommerce'} des trois dernières années (${nombreLisible(etat.clients)} clients reconstruits, lus le ${quand(etat.synchroAt)}${etat.tronque ? ', lecture partielle' : ''}). Paniers abandonnés non disponibles avec cette source.`
+      : `Sources : base clients Shopify (${nombreLisible(etat.clients)} fiches, lue le ${quand(etat.synchroAt)}${etat.tronque ? ', lecture partielle' : ''}), paniers abandonnés Shopify.`,
+    `Consentement marketing : ${etat.consentement ? `lu — ${nombreLisible(i.contactables ?? 0)} clients acceptent les emails, ${nombreLisible(i.sansEmail ?? 0)} fiches sans email` : `non lu, à vérifier dans ${etat.source === 'shopify' || etat.source === null ? 'Shopify' : 'l’outil d’envoi'} avant tout envoi`}.`,
     `Réglages : actif ≤ ${vue.criteres.actifJours} j, dormant > ${vue.criteres.dormantJours} j, nouveau ≤ ${vue.criteres.nouveauJours} j, fidèle ≥ ${vue.criteres.fideleCommandes} commandes, VIP = ${Math.round(vue.criteres.vipPart * 100)} % qui dépensent le plus.`,
     `Acheteurs : ${nombreLisible(i.acheteurs)} ; actifs ${nombreLisible(i.actifs)} ; nouveaux ${nombreLisible(i.nouveaux)} ; récurrents ${nombreLisible(i.recurrents)} ; taux de réachat ${pourcent(i.tauxReachat)} ; panier moyen ${i.panierMoyenCents === null ? 'inconnu' : argent(i.panierMoyenCents, devise)}.`,
     `Chiffre d’affaires cumulé des clients : ${argent(i.caTotalCents, devise)} ; dont clients récurrents ${argent(i.caRecurrentsCents, devise)} (${pourcent(i.partCaRecurrents)}).`,

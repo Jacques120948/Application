@@ -25,12 +25,15 @@ export function SynchroLina({
   aRelire,
   probleme,
   libelle = 'Analyser mes clients',
+  nomSource = 'Shopify',
 }: {
   derniere: string | null
   enCours: boolean
   aRelire: boolean
   probleme: string | null
   libelle?: string
+  /** V4 : Shopify, WooCommerce ou Stripe. */
+  nomSource?: string
 }) {
   const router = useRouter()
   const [etat, setEtat] = useState<'repos' | 'lecture' | 'commandes' | 'attente' | 'erreur'>(
@@ -96,7 +99,7 @@ export function SynchroLina({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[var(--color-ink-soft)]">
       <span>
         {etat === 'lecture'
-          ? 'Lecture de votre base clients chez Shopify…'
+          ? `Lecture de votre base clients chez ${nomSource}…`
           : etat === 'commandes'
             ? 'Clients lus. Lecture des commandes pour les produits et le réachat…'
           : etat === 'attente'

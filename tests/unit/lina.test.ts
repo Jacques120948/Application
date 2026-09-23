@@ -239,7 +239,7 @@ describe('Lina — ce que le modèle reçoit', () => {
     const segments = segmenter(clients, contexte, true, 'CHF')
     const ind = indicateurs(clients, segments, true)
     const faits = faitsLina({
-      etat: { etat: 'ok', commandesEnCours: false, commandesAt: null, commandesMessage: '', analyse: null, message: '', boutique: 'demo.myshopify.com', synchroAt: MAINTENANT, lanceAt: null, clients: clients.length, tronque: false, consentement: true, paniers: null },
+      etat: { etat: 'ok', source: 'shopify', sansClient: 0, commandesEnCours: false, commandesAt: null, commandesMessage: '', analyse: null, message: '', boutique: 'demo.myshopify.com', synchroAt: MAINTENANT, lanceAt: null, clients: clients.length, tronque: false, consentement: true, paniers: null },
       criteres: CRITERES_DEFAUT,
       activite: 'ecommerce',
       devise: 'CHF',
@@ -271,7 +271,7 @@ describe('Lina — ce que le modèle reçoit', () => {
       bilan: null,
       alertes: [],
       score: null,
-      objectifs: { tauxReachat: null, caExistants30: null, reactives30: null, score: null },
+      objectifs: { tauxReachat: null, caExistants30: null, reactives30: null, valeurClient: null, score: null },
       progression: [],
       pistesServices: [],
     }).join('\n')

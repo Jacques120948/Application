@@ -1,7 +1,8 @@
 import { Badge, Card, CardBody } from '@/components/ui'
 import type { EtatEmailing } from '@/server/lina/emailing'
 import type { ProgressionObjectif } from '@/server/lina/objectifs'
-import { semaineLisible, type AlerteLina, type BilanLina, type ReleveDate, type ScoreFidelite } from '@/server/lina/releves'
+import { semaineLisible } from '@/lib/lina'
+import type { AlerteLina, BilanLina, ReleveDate, ScoreFidelite } from '@/server/lina/releves'
 import type { PisteService } from '@/server/lina/services'
 
 /**
@@ -243,5 +244,52 @@ export function EmailingLina({ etat, versConnexions }: { etat: EtatEmailing; ver
         )}
       </CardBody>
     </Card>
+  )
+}
+
+/**
+ * V4 — les actions de Lina : un clic mène à ce qui est déjà préparé (la campagne, le segment).
+ * Une action dont la campagne n'existe pas n'est pas proposée : pas de bouton vers du vide.
+ */
+export function ActionsLina({
+  campagnes,
+  versCampagne,
+  versSegment,
+  versConversation,
+}: {
+  campagnes: readonly string[]
+  versCampagne: (cle: string) => string
+  versSegment: (cle: string) => string
+  versConversation: string | null
+}) {
+  const actions: { libelle: string; href: string }[] = [
+    ...[
+      { cle: 'reactivation', libelle: 'Créer une campagne de réactivation' },
+      { cle: 'panier-abandonne', libelle: 'Créer une campagne panier abandonné' },
+      { cle: 'post-achat', libelle: 'Créer un email post-achat' },
+      { cle: 'vip', libelle: 'Créer une campagne VIP' },
+    ]
+      .filter((un) => campagnes.includes(un.cle))
+      .map((un) => ({ libelle: un.libelle, href: versCampagne(un.cle) })),
+    { libelle: 'Analyser mes meilleurs clients', href: versSegment('vip') },
+    { libelle: 'Voir les clients à risque', href: versSegment('a-risque') },
+    ...(versConversation === null ? [] : [{ libelle: 'Poser une question à Lina', href: versConversation }]),
+  ]
+  return (
+    <nav aria-label="Actions Lina" className="grid gap-2">
+      <h2 className="m-0 text-base font-semibold">Actions Lina</h2>
+      <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+        {actions.map((action) => (
+          <li key={action.libelle}>
+            <a
+              href={action.href}
+              className="inline-block rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-1.5 text-xs no-underline"
+            >
+              {action.libelle}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   )
 }

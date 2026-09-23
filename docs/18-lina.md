@@ -4,7 +4,7 @@ Lina répond à une question : **quels clients contacter, pourquoi, quand et ave
 offre ?** Elle travaille sur les clients déjà acquis. Elle recommande et prépare ; elle
 n'envoie rien.
 
-Écran : `/[locale]/lina` (tableau de bord) et `/[locale]/lina/segments`. Conversation :
+Écran : `/[locale]/lina` (tableau de bord), `/lina/segments`, `/lina/clients/[ref]` (fiche client, V4). Conversation :
 l'écran d'équipe, `?agent=lina`. Fonction d'offre : `lina_agent`.
 
 ## Place dans l'équipe
@@ -134,8 +134,27 @@ Coût pour Evoliia : aucun. Les outils d'envoi sont lus avec la clé de la perso
 compte ; les relevés, le bilan, les alertes et le score sont du code. Seule la conversation
 coûte des crédits, sur un clic.
 
+## V4 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Sources WooCommerce et Stripe | `lina/collecte-autres.ts`, `providers/woocommerce.ts` (`lireCommandesClientsWoo`), `providers/stripe-lecture.ts` (`lireEncaissementsClients`) | Sans Shopify, Lina reconstruit la base à partir des commandes WooCommerce ou des paiements Stripe des trois dernières années, lus d'un seul passage (40 s au plus, les plus récents d'abord ; au-delà : « lecture partielle »). Ordre : Shopify, puis WooCommerce, puis Stripe. Les commandes ne sont pas gardées. Client WooCommerce inscrit : son numéro ; achat sans compte : **empreinte HMAC du courriel**, calculée en mémoire, le courriel n'est ni gardé, ni écrit, ni journalisé. Stripe : le client `cus_…` ; un paiement sans client est compté, pas rattaché ; aucun produit. Consentement « inconnu » (à vérifier dans l'outil d'envoi), pas de paniers abandonnés : dit dans la santé CRM. Changer de source remplace tout l'index. |
+| Textes selon la source | `lina/sources.ts` (`redire`), `lib/lina.ts` | Les recommandations valent pour toutes les sources ; « dans Shopify », « Shopify Flow », « segment Shopify » deviennent « votre outil d'envoi ». Les requêtes Shopify disparaissent hors Shopify. |
+| Fiche client | `lireFicheClient`, `/lina/clients/[ref]` | Première et dernière commande, nombre de commandes, CA observé, panier moyen, fréquence, produit le plus acheté, segments, statut (actif, à réactiver, dormant, risque estimé), valeur estimée (panier × commandes par an × durée de vie estimée de la base, dite estimation), consentement. **Ni nom, ni courriel, ni adresse** : un lien ouvre la fiche dans Shopify, WordPress ou Stripe. Rien n'est envoyé à un modèle. |
+| Actions Lina | `ActionsLina` | Raccourcis du tableau de bord vers les campagnes préparées (réactivation, panier, post-achat, VIP) et les segments (VIP, à risque). Une campagne absente n'a pas de bouton. |
+| Autonomie | `lina/assiste.ts`, `LinaReglages.autonomie`, `/api/lina/autonomie` | Deux niveaux : **Conseil** (Lina recommande) et **Assisté** (défaut : Lina exécute ce que la personne valide). Pas de niveau automatique. |
+| Mode assisté | `creerSegmentAssiste`, `creerSegmentShopify`, `/api/lina/executer`, table `LinaAction` (RLS) | Sur « Créer ce segment dans Shopify » puis « Confirmer », Lina crée le segment (`segmentCreate`) avec la requête **recalculée par le serveur**. C'est sa seule écriture : aucune fiche modifiée, aucun envoi. Shopify exige « write_customers » ; sans elle, Lina le dit et la requête reste à copier. Chaque création est journalisée (« Ce que Lina a exécuté »). |
+| Notifications | `signalerAlertes`, `LinaSynchro.alertesVues` | Une notification dans l'application par nouvelle baisse de la semaine, jamais deux fois la même. Aucun e-mail. |
+| Objectif valeur client | `lina/objectifs.ts` | Dépense moyenne observée d'un acheteur, visée par la personne. |
+
+Coût pour Evoliia : aucun appel payant. WooCommerce et Stripe sont lus avec les clés de la
+personne ; la seule charge est le temps de fonction (un passage de 40 s au plus, à
+l'ouverture de l'écran, pas plus d'une fois toutes les douze heures). Aucun e-mail n'est
+envoyé : un bilan hebdomadaire par e-mail passerait par Resend, qui facture au-delà de son
+quota gratuit — il attend une décision.
+
 ## Encore à venir
 
-WooCommerce et Stripe comme sources de clients, SMS et WhatsApp (le consentement SMS n'est
-pas exposé par Shopify dans cette version de l'API), niveau d'autonomie « automatique »,
-envoi du bilan par courriel.
+Bilan hebdomadaire par e-mail (coût d'envoi à décider), SMS et WhatsApp (le consentement SMS
+Shopify demande l'accès aux numéros de téléphone), transmission des questions fréquentes à
+Néo et Gia.

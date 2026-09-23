@@ -184,3 +184,42 @@ export async function lireEncaissements(
     })),
   }
 }
+
+// ── Lina : les clients, reconnus par leurs paiements ────────────────────────
+
+type PaiementClientBrut = PaiementBrut & { customer: string | null }
+
+/**
+ * Les paiements réussis rattachés à un client Stripe, les plus récents d'abord, jusqu'à
+ * l'échéance. Un paiement sans client (lien de paiement anonyme) est compté, pas rattaché :
+ * Lina ne lit ni courriel ni nom. Les produits ne sont pas lus : un paiement n'en dit rien.
+ */
+export async function lireEncaissementsClients(
+  cle: string,
+  depuis: string,
+  options: { max: number; echeance: number },
+): Promise<
+  | { ok: true; commandes: { id: string; creeLe: string; clientRef: string | null; totalCents: number; devise: string; lignes: [] }[]; tronque: boolean; sansClient: number }
+  | { ok: false; raison: string }
+> {
+  const depuisSecondes = Math.floor(Date.parse(`${depuis}T00:00:00Z`) / 1000)
+  const commandes: { id: string; creeLe: string; clientRef: string | null; totalCents: number; devise: string; lignes: [] }[] = []
+  let sansClient = 0
+  let apres: string | null = null
+  for (;;) {
+    if (commandes.length >= options.max || Date.now() > options.echeance) return { ok: true, commandes, tronque: true, sansClient }
+    const reponse = await appeler(cle, 'charges', { 'created[gte]': String(depuisSecondes), limit: String(PAR_PAGE), ...(apres === null ? {} : { starting_after: apres }) })
+    if (reponse.status !== 200 || reponse.corps === null) return { ok: false, raison: refusStripe(reponse, 'les paiements (Charges)') }
+    const page = (reponse.corps.data ?? []) as PaiementClientBrut[]
+    for (const paiement of page) {
+      if (paiement.status !== 'succeeded' || !paiement.paid) continue
+      const montant = Math.max(0, paiement.amount - paiement.amount_refunded)
+      if (montant === 0) continue
+      const client = typeof paiement.customer === 'string' && paiement.customer.startsWith('cus_') ? paiement.customer : null
+      if (client === null) sansClient += 1
+      commandes.push({ id: `stripe:${paiement.id}`, creeLe: new Date(paiement.created * 1000).toISOString(), clientRef: client, totalCents: montant, devise: paiement.currency.toUpperCase(), lignes: [] })
+    }
+    if (reponse.corps.has_more !== true || page.length === 0) return { ok: true, commandes, tronque: false, sansClient }
+    apres = page.at(-1)!.id
+  }
+}

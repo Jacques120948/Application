@@ -386,3 +386,40 @@ export async function lirePaniersAbandonnes(
   }
   return { ok: true, paniers, tronque: true }
 }
+
+// ── V4 : le mode assisté ────────────────────────────────────────────────────
+
+const CREER_SEGMENT = `mutation($nom: String!, $q: String!) {
+  segmentCreate(name: $nom, query: $q) {
+    segment { id name }
+    userErrors { field message }
+  }
+}`
+
+/**
+ * Crée un segment de clients dans Shopify — la seule écriture de Lina, et seulement sur la
+ * validation de la personne. Un segment est une requête enregistrée : aucune fiche client
+ * n'est modifiée, aucun message n'est envoyé. Shopify exige pour cela « write_customers ».
+ */
+export async function creerSegmentShopify(
+  acces: AccesShopify,
+  jeton: string,
+  nom: string,
+  requete: string,
+): Promise<{ ok: true; id: string } | { ok: false; raison: string; portee: boolean }> {
+  const reponse = await appeler(acces.boutique, jeton, acces.version, CREER_SEGMENT, { nom, q: requete })
+  const resultat = (reponse.data?.segmentCreate ?? null) as { segment?: { id?: string } | null; userErrors?: { message?: string }[] } | null
+  const id = resultat?.segment?.id
+  if (reponse.status === 200 && typeof id === 'string') return { ok: true, id }
+  const refus = [...reponse.erreurs, ...(resultat?.userErrors ?? []).map((erreur) => erreur.message ?? '')].filter((un) => un !== '')
+  const portee = /write_customers|access denied|ACCESS_DENIED/iu.test(refus.join(' '))
+  return {
+    ok: false,
+    portee,
+    raison: portee
+      ? 'Shopify demande l’autorisation « write_customers » pour créer un segment. Ajoutez-la à votre application (Dev Dashboard, onglet « Versions »), publiez, puis réessayez. Lina ne s’en sert que pour créer des segments.'
+      : /name.*taken|already exists|déjà/iu.test(refus.join(' '))
+        ? 'Un segment porte déjà ce nom dans Shopify.'
+        : `Shopify a refusé le segment${refus[0] === undefined ? ` (${reponse.status})` : ` : ${refus[0].slice(0, 200)}`}.`,
+  }
+}

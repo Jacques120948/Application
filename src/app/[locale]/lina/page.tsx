@@ -1,6 +1,7 @@
 import { VISIBILITY_ASK_ESTIMATED_CREDITS } from '@/server/agents/visibility-service'
 import { FRAICHEUR_MS } from '@/server/nova/collecte'
 import { lireLina } from '@/server/lina/service'
+import { lireAutonomie } from '@/server/lina/assiste'
 import { quandLisible } from '@/server/nova/service'
 import { SynchroLina } from '@/components/studio/SynchroLina'
 import {
@@ -16,7 +17,8 @@ import {
   ReactivationLina,
   SanteLina,
 } from '@/components/studio/Lina'
-import { AlertesLina, PistesServicesLina } from '@/components/studio/LinaV3'
+import { ActionsLina, AlertesLina, PistesServicesLina } from '@/components/studio/LinaV3'
+import { NOM_SOURCE_LINA } from '@/server/lina/sources'
 import { CadreLina, ouvrirLina } from './cadre'
 
 /**
@@ -41,7 +43,8 @@ export default async function LinaPage({
   const demande = await searchParams
   const contexte = await ouvrirLina(params, demande.siteId)
   const { locale, user, siteId, ouvert } = contexte
-  const vue = ouvert ? await lireLina(user.id) : null
+  const [vue, autonomie] = ouvert ? await Promise.all([lireLina(user.id), lireAutonomie(user.id)]) : [null, 'conseil' as const]
+  const assiste = autonomie === 'assiste' && vue?.etat.source === 'shopify'
   const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
   const versConversation = siteId === '' ? null : `/${locale}/visibilite/equipe${suffixe}&agent=lina`
   const transmission =
@@ -67,6 +70,7 @@ export default async function LinaPage({
           aRelire={aRelire}
           // Sur l'accueil, le problème est déjà dit en toutes lettres : pas deux fois.
           probleme={vue?.vierge !== true && (etat.etat === 'erreur' || etat.etat === 'portee' || etat.etat === 'protegees') ? etat.message : null}
+          nomSource={etat.source === null ? 'Shopify' : NOM_SOURCE_LINA[etat.source]}
         />
       </div>
     )
@@ -85,8 +89,11 @@ export default async function LinaPage({
           <div className="grid gap-2">
             {synchro}
             <p className="m-0 text-xs text-[var(--color-ink-faint)]">
-              Source : base clients Shopify ({vue.etat.clients} fiches{vue.etat.tronque ? ', lecture partielle' : ''}) et paniers abandonnés.
-              Aucun nom, courriel ni adresse n’est lu.
+              {vue.etat.source === 'woocommerce'
+                ? `Source : commandes WooCommerce des trois dernières années (${vue.etat.clients} clients${vue.etat.tronque ? ', lecture partielle' : ''}). Aucun nom ni adresse n’est lu ; le courriel d’un achat sans compte est transformé en empreinte et jamais gardé.`
+                : vue.etat.source === 'stripe'
+                  ? `Source : paiements Stripe des trois dernières années (${vue.etat.clients} clients${vue.etat.tronque ? ', lecture partielle' : ''}). Aucun nom, courriel ni adresse n’est lu.`
+                  : `Source : base clients Shopify (${vue.etat.clients} fiches${vue.etat.tronque ? ', lecture partielle' : ''}) et paniers abandonnés. Aucun nom, courriel ni adresse n’est lu.`}
             </p>
           </div>
           <IndicateursLina
@@ -96,6 +103,12 @@ export default async function LinaPage({
             topSegment={vue.topSegment}
             opportunites={vue.campagnes.length}
           />
+          <ActionsLina
+            campagnes={vue.campagnes.map((campagne) => campagne.cle)}
+            versCampagne={(cle) => `#campagne-${cle}`}
+            versSegment={(cle) => `/${locale}/lina/segments?${siteId === '' ? '' : `siteId=${siteId}&`}segment=${cle}#membres`}
+            versConversation={versConversation}
+          />
           <AlertesLina
             alertes={vue.alertes}
             versOnglet={(onglet) => `/${locale}/lina${onglet === 'tableau' ? '/bilan' : `/${onglet}`}${suffixe}`}
@@ -104,7 +117,7 @@ export default async function LinaPage({
           <QuickWinsLina quickWins={vue.quickWins} />
           <ReactivationLina segments={vue.segments} devise={vue.devise} campagnes={vue.campagnes} produits={vue.produitsSegments} />
           <PaniersLina paniers={vue.paniers} devise={vue.devise} transmission={transmission} />
-          <CampagnesLina campagnes={vue.campagnes} devise={vue.devise} transmission={transmission} />
+          <CampagnesLina campagnes={vue.campagnes} devise={vue.devise} transmission={transmission} assiste={assiste} />
           <PistesServicesLina pistes={vue.pistesServices} activite={vue.activite} />
           <NovaLina nova={vue.nova} indicateurs={vue.indicateurs} devise={vue.devise} />
           <SanteLina lignes={vue.sante} />

@@ -72,6 +72,7 @@ model User {
   produitsLina       LinaProduit[]
   resultatsLina      LinaResultat[]
   relevesLina        LinaReleve[]
+  actionsLina        LinaAction[]
   supportAlerts      Boolean             @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId   String?             @unique
@@ -2760,6 +2761,8 @@ model LinaSynchro {
   /// V3 : la dernière lecture de l'outil d'emailing, et son dernier refus.
   emailingAt       DateTime?
   emailingMessage  String    @default("")
+  /// V4 : les alertes déjà signalées par une notification, pour ne pas les répéter.
+  alertesVues      Json      @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2774,6 +2777,8 @@ model LinaReglages {
   criteres  Json   @default("{}")
   /// V3 : les objectifs CRM que la personne se fixe.
   objectifs Json   @default("{}")
+  /// V4 : « conseil » (Lina recommande) ou « assiste » (Lina exécute ce que la personne valide).
+  autonomie String @default("assiste")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2836,6 +2841,23 @@ model LinaResultat {
 }
 
 /// Lina V3 : un relevé par semaine des indicateurs clients, pour comparer et alerter.
+/// Lina V4 : ce que Lina a exécuté sur validation (un segment créé dans Shopify…).
+model LinaAction {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  type       String
+  /// Le segment ou la campagne de Lina d'où l'action vient.
+  cle        String
+  nom        String
+  /// L'identifiant de ce qui a été créé chez l'outil (segment Shopify).
+  refExterne String   @default("")
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
 model LinaReleve {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @db.Uuid

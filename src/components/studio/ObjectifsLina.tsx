@@ -9,13 +9,14 @@ import { Button } from '@/components/ui'
  * choisie par Evoliia serait une promesse. Un champ vide retire l'objectif.
  */
 
-type Cle = 'tauxReachat' | 'caExistants30' | 'reactives30' | 'score'
+type Cle = 'tauxReachat' | 'caExistants30' | 'reactives30' | 'valeurClient' | 'score'
 export type ObjectifsSaisis = Record<Cle, number | null>
 
 const CHAMPS: { cle: Cle; label: string; aide: string; pas: number; max: number }[] = [
   { cle: 'tauxReachat', label: 'Taux de réachat visé (%)', aide: 'Part des acheteurs qui ont commandé au moins deux fois.', pas: 0.1, max: 100 },
   { cle: 'caExistants30', label: 'CA des clients existants sur 30 jours', aide: 'Dans la devise de la boutique.', pas: 1, max: 100_000_000 },
   { cle: 'reactives30', label: 'Clients réactivés sur 30 jours', aide: 'Clients revenus après une longue absence.', pas: 1, max: 1_000_000 },
+  { cle: 'valeurClient', label: 'Valeur client visée', aide: 'Dépense moyenne d’un acheteur, dans la devise de la boutique.', pas: 1, max: 10_000_000 },
   { cle: 'score', label: 'Score de fidélité visé (sur 100)', aide: 'Indicateur interne d’Evoliia.', pas: 1, max: 100 },
 ]
 
@@ -25,6 +26,7 @@ export function ObjectifsFormLina({ objectifs }: { objectifs: ObjectifsSaisis })
     tauxReachat: objectifs.tauxReachat?.toString() ?? '',
     caExistants30: objectifs.caExistants30?.toString() ?? '',
     reactives30: objectifs.reactives30?.toString() ?? '',
+    valeurClient: objectifs.valeurClient?.toString() ?? '',
     score: objectifs.score?.toString() ?? '',
   }))
   const [etat, setEtat] = useState<'repos' | 'envoi' | 'ok' | 'erreur'>('repos')
@@ -41,6 +43,7 @@ export function ObjectifsFormLina({ objectifs }: { objectifs: ObjectifsSaisis })
         tauxReachat: lu(valeurs.tauxReachat, false),
         caExistants30: lu(valeurs.caExistants30, false),
         reactives30: lu(valeurs.reactives30, true),
+        valeurClient: lu(valeurs.valeurClient, false),
         score: lu(valeurs.score, true),
       }),
     }).catch(() => null)

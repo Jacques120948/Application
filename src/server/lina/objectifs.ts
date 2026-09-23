@@ -19,6 +19,8 @@ export const objectifsLinaSchema = z
     caExistants30: z.number().min(1).max(100_000_000).nullable().default(null),
     /** Clients réactivés sur trente jours. */
     reactives30: z.number().int().min(1).max(1_000_000).nullable().default(null),
+    /** V4 : dépense moyenne d'un acheteur visée (valeur client observée), en unités de la devise. */
+    valeurClient: z.number().min(1).max(10_000_000).nullable().default(null),
     /** Score de fidélité visé (indicateur interne). */
     score: z.number().int().min(1).max(100).nullable().default(null),
   })
@@ -26,7 +28,7 @@ export const objectifsLinaSchema = z
 
 export type ObjectifsLina = z.infer<typeof objectifsLinaSchema>
 
-export const OBJECTIFS_VIDES: ObjectifsLina = { tauxReachat: null, caExistants30: null, reactives30: null, score: null }
+export const OBJECTIFS_VIDES: ObjectifsLina = { tauxReachat: null, caExistants30: null, reactives30: null, valeurClient: null, score: null }
 
 export function lireObjectifs(brut: unknown): ObjectifsLina {
   const lu = objectifsLinaSchema.safeParse(brut !== null && typeof brut === 'object' ? brut : {})
@@ -58,7 +60,7 @@ export type ProgressionObjectif = {
   atteint: boolean
 }
 
-export function progression(objectifs: ObjectifsLina, releve: Releve | null, devise: string): ProgressionObjectif[] {
+export function progression(objectifs: ObjectifsLina, releve: Releve | null, devise: string, valeurObserveeCents: number | null = null): ProgressionObjectif[] {
   const lignes: ProgressionObjectif[] = []
   const ajouter = (cle: keyof ObjectifsLina, libelle: string, cible: number, actuel: number | null, format: (valeur: number) => string) => {
     const part = actuel === null ? null : Math.max(0, Math.min(1, actuel / cible))
@@ -75,6 +77,14 @@ export function progression(objectifs: ObjectifsLina, releve: Releve | null, dev
       (v) => argent(Math.round(v * 100), devise),
     )
   if (objectifs.reactives30 !== null) ajouter('reactives30', 'Clients réactivés sur 30 jours', objectifs.reactives30, releve?.reactives30 ?? null, (v) => nombreLisible(v))
+  if (objectifs.valeurClient !== null)
+    ajouter(
+      'valeurClient',
+      'Valeur client (dépense moyenne observée d’un acheteur)',
+      objectifs.valeurClient,
+      valeurObserveeCents === null ? null : valeurObserveeCents / 100,
+      (v) => argent(Math.round(v * 100), devise),
+    )
   if (objectifs.score !== null) ajouter('score', 'Score de fidélité (indicateur interne)', objectifs.score, releve?.score ?? null, (v) => `${nombreLisible(v)}/100`)
   return lignes
 }

@@ -191,3 +191,86 @@ export async function lireCommandesWoo(
   }
   return { ok: true, commandes, tronque: true }
 }
+
+// ── Lina : les clients, reconnus par leurs commandes ────────────────────────
+
+type CommandeClientWoo = {
+  id: number
+  status: string
+  currency: string
+  date_created_gmt: string | null
+  total: string
+  customer_id: number
+  billing?: { email?: string }
+  refunds?: { total: string }[]
+  line_items?: { product_id: number; name: string; quantity: number; total: string }[]
+}
+
+/**
+ * Les commandes vues par Lina, les plus récentes d'abord, jusqu'à l'échéance.
+ *
+ * WooCommerce n'a pas d'export en masse : on lit page après page, et l'on s'arrête à
+ * l'échéance plutôt que de laisser l'appel dépasser le temps d'une fonction. Ce qui reste
+ * alors est l'histoire la plus récente, dite « partielle ».
+ *
+ * Un client inscrit se reconnaît à son numéro. Un achat sans compte n'en a pas : il se
+ * reconnaît à son courriel, **transformé aussitôt** par `pseudonyme` en une empreinte qui ne
+ * se retourne pas. Le courriel n'est ni gardé, ni écrit, ni journalisé.
+ */
+export async function lireCommandesClientsWoo(
+  acces: AccesWoo,
+  depuis: string,
+  options: { max: number; echeance: number; pseudonyme: (courriel: string) => string },
+): Promise<{ ok: true; commandes: CommandeExportWoo[]; tronque: boolean; sansClient: number } | { ok: false; raison: string }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(depuis)) throw new Error('Date de début illisible.')
+  const commandes: CommandeExportWoo[] = []
+  let sansClient = 0
+  for (let page = 1; ; page++) {
+    if (commandes.length >= options.max || Date.now() > options.echeance) return { ok: true, commandes, tronque: true, sansClient }
+    const reponse = await appeler(acces, 'wc/v3/orders', {
+      after: `${depuis}T00:00:00`,
+      dates_are_gmt: 'true',
+      per_page: String(PAR_PAGE),
+      page: String(page),
+      orderby: 'date',
+      order: 'desc',
+      _fields: 'id,status,currency,date_created_gmt,total,customer_id,billing.email,refunds,line_items',
+    })
+    if (reponse.status !== 200 || !Array.isArray(reponse.corps)) return { ok: false, raison: refusWoo(reponse) }
+    for (const brute of reponse.corps as CommandeClientWoo[]) {
+      if (ECARTES.has(brute.status) || brute.status === 'refunded' || brute.date_created_gmt === null) continue
+      const courriel = brute.billing?.email?.trim().toLowerCase() ?? ''
+      const clientRef = brute.customer_id > 0 ? `c${brute.customer_id}` : courriel.includes('@') ? `g${options.pseudonyme(courriel)}` : null
+      if (clientRef === null) sansClient += 1
+      const rembourse = (brute.refunds ?? []).reduce((total, remboursement) => total + centimes(remboursement.total), 0)
+      commandes.push({
+        id: `woo:${brute.id}`,
+        creeLe: `${brute.date_created_gmt.replace(/Z$/u, '')}Z`,
+        clientRef,
+        totalCents: Math.max(0, centimes(brute.total) + rembourse),
+        devise: brute.currency,
+        lignes: (brute.line_items ?? [])
+          .filter((ligne) => ligne.product_id > 0 && ligne.quantity > 0)
+          .map((ligne) => ({
+            produitRef: String(ligne.product_id),
+            titre: ligne.name,
+            type: '',
+            quantite: ligne.quantity,
+            prixUnitaireCents: Math.round(centimes(ligne.total) / ligne.quantity),
+          })),
+      })
+    }
+    const pages = Number(reponse.entetes['x-wp-totalpages'] ?? '1')
+    if (reponse.corps.length < PAR_PAGE || page >= pages) return { ok: true, commandes, tronque: false, sansClient }
+  }
+}
+
+/** La forme des commandes que Lina analyse (celle de l'export Shopify). */
+export type CommandeExportWoo = {
+  id: string
+  creeLe: string
+  clientRef: string | null
+  totalCents: number
+  devise: string
+  lignes: { produitRef: string; titre: string; type: string; quantite: number; prixUnitaireCents: number }[]
+}

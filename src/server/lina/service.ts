@@ -13,6 +13,7 @@ import {
   lundiDe,
   releveAvant,
   scoreFidelite,
+  signalerAlertes,
   type AlerteLina,
   type BilanLina,
   type Releve,
@@ -20,6 +21,7 @@ import {
   type ScoreFidelite,
 } from './releves'
 import { pistesServices, type AbonnementsPourLina, type PisteService } from './services'
+import { LIMITES_SOURCE, lienFiche, numeroClient, redire, type SourceLina } from './sources'
 import { lireEtatLina, type EtatLina, type PaniersLina } from './collecte'
 import { criteresLina, type Criteres } from './criteres'
 import type { AnalyseCommandes, ProduitAnalyse } from './commandes'
@@ -53,6 +55,9 @@ import {
   type LigneSanteCrm,
 } from './recommandations'
 import {
+  appartient,
+  CLES_SEGMENTS,
+  intervalleEstime,
   contexteSegments,
   indicateurs as calculerIndicateurs,
   membresSegment,
@@ -290,10 +295,15 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
   const premiereDe = (client: ClientIndex) => +(client.premiereCommande ?? client.creeLe)
   const nouveauxEntre = (du: number, au: number) => clients.filter((client) => client.commandes > 0 && premiereDe(client) >= du && premiereDe(client) < au).length
   const quickWins = gainsRapides(campagnes)
+  const valeur = valeurClient(clients, maintenant)
+  const valeurObservee = valeur.observeeCents
+  const alertes = alertesLina({ actuel: releve, semaine, releves: anterieurs, paniers: etat.paniers, actifJours: criteres.actifJours })
+  // Les nouvelles baisses de la semaine, signalées une fois dans l'application. Jamais par e-mail.
+  await signalerAlertes(userId, semaine, alertes).catch(() => logger.warn('alertes de Lina non signalées', { userId }))
   const topSegment = segments.find((segment) => segment.cle === campagnes[0]?.segment) ?? null
 
   const plusAncien = clients.reduce<Date | null>((min, client) => (min === null || client.creeLe < min ? client.creeLe : min), null)
-  return {
+  return adapterSource({
     ...vide,
     vierge: false,
     indicateurs,
@@ -318,7 +328,7 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     reachat,
     croisees,
     montees,
-    valeur: valeurClient(clients, maintenant),
+    valeur,
     risques: risquesDepart(clients, contexte),
     fidelite: programmeFidelite(segments, clients, criteres),
     audiences: audiencesPub(segments),
@@ -338,9 +348,64 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
       topSegment,
       devise,
     }),
-    alertes: alertesLina({ actuel: releve, semaine, releves: anterieurs, paniers: etat.paniers, actifJours: criteres.actifJours }),
+    alertes,
     score: scoreFidelite(releve),
-    progression: progression(objectifs, releve, devise),
+    progression: progression(objectifs, releve, devise, valeurObservee),
+  })
+}
+
+/** Récrit en profondeur les textes préparés pour Shopify ; les requêtes Shopify tombent. */
+function redireProfond<T>(valeur: T, source: SourceLina): T {
+  if (typeof valeur === 'string') return redire(valeur, source) as T
+  if (Array.isArray(valeur)) return valeur.map((un) => redireProfond(un, source)) as T
+  if (valeur !== null && typeof valeur === 'object' && !(valeur instanceof Date)) {
+    return Object.fromEntries(
+      Object.entries(valeur).map(([cle, un]) => [cle, cle === 'requeteShopify' ? null : cle === 'cle' || cle === 'segment' || cle === 'ref' ? un : redireProfond(un, source)]),
+    ) as T
+  }
+  return valeur
+}
+
+/**
+ * V4 : une base lue dans WooCommerce ou Stripe. Les recommandations valent pareil ; ce qui
+ * change, c'est l'outil où on les applique, et ce que la source ne dit pas.
+ */
+function adapterSource(vue: VueLina): VueLina {
+  const source = vue.etat.source
+  if (source === null || source === 'shopify') return vue
+  const campagnes = redireProfond(vue.campagnes, source)
+  const sante = [
+    ...redireProfond(vue.sante, source).filter((ligne) => ligne.cle !== 'paniers' && ligne.cle !== 'consentement'),
+    ...LIMITES_SOURCE[source].map((texte, rang) => ({ cle: `limite-${rang}`, etat: 'verifier' as const, texte })),
+    ...(vue.etat.sansClient > 0
+      ? [
+          {
+            cle: 'sans-client',
+            etat: 'verifier' as const,
+            texte: `${nombreLisible(vue.etat.sansClient)} ${source === 'stripe' ? 'paiements' : 'commandes'} sans client identifiable : ils ne sont rattachés à personne.`,
+          },
+        ]
+      : []),
+    {
+      cle: 'fenetre',
+      etat: 'bon' as const,
+      texte: `Lina reconstruit la base à partir des ${source === 'stripe' ? 'paiements' : 'commandes'} des trois dernières années : un client plus ancien y paraît plus récent qu’il ne l’est.`,
+    },
+  ]
+  return {
+    ...vue,
+    segments: redireProfond(vue.segments, source),
+    campagnes,
+    insights: redireProfond(vue.insights, source),
+    quickWins: redireProfond(vue.quickWins, source),
+    sante,
+    croisees: redireProfond(vue.croisees, source),
+    montees: redireProfond(vue.montees, source),
+    reachat: redireProfond(vue.reachat, source),
+    audiences: redireProfond(vue.audiences, source),
+    scenarios: redireProfond(vue.scenarios, source),
+    pourOria: redireProfond(vue.pourOria, source),
+    bilan: redireProfond(vue.bilan, source),
   }
 }
 
@@ -363,4 +428,87 @@ export async function lireMembres(userId: string, cle: CleSegment, limite = 50, 
     derniereCommande: client.derniereCommande === null ? null : client.derniereCommande.toISOString().slice(0, 10),
     consentement: client.consentement,
   }))
+}
+
+// ── V4 : la fiche d'un client ───────────────────────────────────────────────
+
+export type FicheClient = {
+  ref: string
+  numero: string
+  source: SourceLina | null
+  lien: { href: string; libelle: string } | null
+  devise: string
+  premiereCommande: string | null
+  derniereCommande: string | null
+  joursDepuis: number | null
+  commandes: number
+  caCents: number
+  panierMoyenCents: number | null
+  /** Jours entre deux commandes, lus dans les commandes ou estimés. */
+  rythmeJours: number | null
+  produitPrincipal: string | null
+  segments: string[]
+  statut: string
+  /** Estimation : panier moyen du client × ses commandes par an × durée de vie estimée de la base. */
+  valeurEstimeeCents: number | null
+  consentement: string
+}
+
+/**
+ * Tout ce que Lina sait d'un client — sans nom, sans courriel, sans adresse : ceux-là se
+ * lisent dans l'outil de la boutique, par le lien fourni. Rien n'est envoyé à un modèle.
+ */
+export async function lireFicheClient(userId: string, ref: string, maintenant = new Date()): Promise<FicheClient | null> {
+  const [etat, criteres, clients] = await Promise.all([lireEtatLina(userId), criteresLina(userId), lireClients(userId)])
+  const client = clients.find((un) => un.ref === ref)
+  if (client === undefined) return null
+  const contexte = contexteSegments(clients, criteres, maintenant)
+  const segments = segmenter(clients, contexte, etat.consentement, client.devise)
+  const membre = CLES_SEGMENTS.filter((cle) => appartient(client, cle, contexte))
+  // Le produit principal est gardé par sa référence : son nom vient des totaux par produit.
+  const produit =
+    client.produitPrincipal == null
+      ? null
+      : await withUserScope(userId, (tx) => tx.linaProduit.findFirst({ where: { userId, ref: client.produitPrincipal! }, select: { titre: true } }))
+  const nom = (cle: CleSegment) => segments.find((segment) => segment.cle === cle)?.nom ?? cle
+  const joursDepuis = client.derniereCommande === null ? null : Math.floor((+maintenant - +client.derniereCommande) / JOUR_MS)
+  const rythme = intervalleEstime(client)
+  const statut =
+    client.commandes === 0
+      ? 'Inscrit, sans commande'
+      : membre.includes('a-risque')
+        ? rythme !== null && joursDepuis !== null && joursDepuis > 3 * rythme
+          ? 'Risque de départ estimé élevé : silence de plus de trois fois son rythme'
+          : 'Risque de départ estimé : silence inhabituel pour lui'
+        : membre.includes('dormants')
+          ? 'Dormant'
+          : membre.includes('a-reactiver')
+            ? 'À réactiver'
+            : membre.includes('actifs')
+              ? 'Actif'
+              : '—'
+  const valeur = valeurClient(clients, maintenant)
+  const panier = client.commandes === 0 ? null : Math.round(client.caCents / client.commandes)
+  const valeurEstimeeCents =
+    valeur.dureeVieAns === null || rythme === null || panier === null ? null : Math.round(panier * Math.min(365 / rythme, 52) * valeur.dureeVieAns)
+  return {
+    ref: client.ref,
+    numero: numeroClient(etat.source, client.ref),
+    source: etat.source,
+    lien: lienFiche(etat.source, etat.boutique, client.ref),
+    devise: client.devise,
+    premiereCommande: (client.premiereCommande ?? (client.commandes > 0 ? client.creeLe : null))?.toISOString().slice(0, 10) ?? null,
+    derniereCommande: client.derniereCommande?.toISOString().slice(0, 10) ?? null,
+    joursDepuis,
+    commandes: client.commandes,
+    caCents: client.caCents,
+    panierMoyenCents: panier,
+    rythmeJours: rythme === null ? null : Math.round(rythme),
+    produitPrincipal: produit?.titre ?? null,
+    // Le statut dit déjà actif, à réactiver, dormant ou à risque : pas deux fois.
+    segments: membre.filter((cle) => !['actifs', 'a-reactiver', 'dormants', 'a-risque'].includes(cle)).map(nom),
+    statut,
+    valeurEstimeeCents,
+    consentement: client.consentement,
+  }
 }
