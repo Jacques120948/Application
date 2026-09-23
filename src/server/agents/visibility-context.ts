@@ -1,6 +1,8 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
 import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
+import { lireLina } from '@/server/lina/service'
+import { faitsLina, transmissionOria as transmissionLina } from '@/server/lina/contexte'
 import { contenusPourMilo, conversionPourCleo, pagesSeoPourNeo, traficAssistantsPourGia } from '@/server/nova/transmission'
 import { lireSignaux } from '@/server/oria/signaux'
 import { lireDecisions } from '@/server/oria/decisions'
@@ -64,6 +66,7 @@ const NOMS_AGENTS: readonly (readonly [string, string])[] = [
   ['ads', 'Naya'],
   ['meta', 'MIRA'],
   ['nova', 'Nova'],
+  ['lina', 'Lina'],
 ]
 const PAGES_MAX = 12
 const ANALYSES_MAX = 6
@@ -316,6 +319,9 @@ export async function readSiteFacts(
      */
     const nova = await lireNova(userId, 'fr', { periode: '30', siteId }).catch(() => null)
     if (nova !== null && !nova.vierge) lignes.push(...transmissionOria(nova))
+    // Les opportunités de Lina sur les clients déjà acquis, chiffrées par elle.
+    const lina = await lireLina(userId, { avecNova: false }).catch(() => null)
+    if (lina !== null) lignes.push(...transmissionLina(lina))
 
     lignes.push(
       'État de chaque canal, calculé sur les notes et les constats ouverts :',
@@ -504,6 +510,14 @@ export async function readSiteFacts(
   if (agent === 'nova') {
     const vue = await lireNova(userId, 'fr', { periode: '30', siteId })
     return [...base, ...faitsNova(vue)].join('\n')
+  }
+  /*
+   * Lina voit la base clients en segments et en totaux, jamais une fiche : ce qu'il faut pour
+   * conseiller, rien qui permette de reconnaître quelqu'un.
+   */
+  if (agent === 'lina') {
+    const vue = await lireLina(userId)
+    return [...base, ...faitsLina(vue)].join('\n')
   }
   /*
    * Milo écrit. Il voit les deux catalogues — un texte sert au référencement comme aux

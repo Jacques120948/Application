@@ -42,6 +42,7 @@ export const VISIBILITY_AGENT_IDS = [
   'ads',
   'meta',
   'nova',
+  'lina',
 ] as const
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
@@ -324,6 +325,38 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Où est-ce que je perds de l’argent ?',
       'Qu’est-ce qui a changé cette semaine ?',
       'Quels sont mes 3 chiffres les plus importants aujourd’hui ?',
+    ],
+  },
+  /*
+   * Lina, et ce qu'elle ne fait pas.
+   *
+   * Elle travaille la base clients : qui revient, qui ne revient plus, qui vaut le plus, qui
+   * a laissé un panier. Elle lit un index de la boutique — dates, nombre de commandes,
+   * montants, consentement — jamais un nom ni un courriel, qui restent dans la boutique. Elle
+   * recommande et prépare ; elle n'envoie rien. Les textes sont écrits par Milo, sur sa
+   * demande et avec votre accord.
+   */
+  {
+    ...identite('lina'),
+    summary: 'Lina transforme vos clients existants en clients plus fidèles et plus rentables.',
+    handles: [
+      'Segments clients',
+      'Clients à réactiver',
+      'Clients fidèles et VIP',
+      'Paniers abandonnés',
+      'Taux de réachat',
+      'Campagnes de fidélisation',
+    ],
+    feature: 'lina_agent',
+    atWork:
+      'Elle lit votre base clients Shopify — dates, nombre de commandes, montants et consentement marketing, jamais un nom ni un courriel —, la segmente, repère qui relancer et quelle campagne lancer. Elle recommande et prépare ; rien n’est envoyé sans vous.',
+    starters: [
+      'Quels clients dois-je relancer ?',
+      'Combien de clients reviennent acheter ?',
+      'Quels sont mes meilleurs clients ?',
+      'Qui risque de ne plus revenir ?',
+      'Quelle campagne dois-je lancer cette semaine ?',
+      'Quels clients n’ont acheté qu’une fois ?',
     ],
   },
 ]

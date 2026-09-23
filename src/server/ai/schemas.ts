@@ -229,7 +229,7 @@ export const novaAnalyseSchema = z
             titre: z.string().min(3).max(160),
             pourquoi: z.string().min(10).max(500),
             chiffre: z.string().min(1).max(160),
-            agent: z.enum(['oria', 'audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta', 'nova']),
+            agent: z.enum(['oria', 'audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta', 'nova', 'lina']),
           })
           .strict(),
       )

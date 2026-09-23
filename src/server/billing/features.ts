@@ -265,6 +265,19 @@ export const FEATURES: readonly Feature[] = [
       'Vos ventes, vos visites, vos dépenses et ce que chaque canal rapporte réellement, calculés et comparés d’une période à l’autre. Nova confronte ce que déclarent Google et Meta à ce que votre boutique encaisse.',
     status: 'live',
   },
+  /*
+   * Lina ne promet que ce que la boutique lui donne : une base clients Shopify lue sans nom
+   * ni courriel, et les paniers abandonnés. Elle prépare les campagnes ; elle n'en envoie
+   * aucune — la fiche ne le laisse pas croire.
+   */
+  {
+    id: 'lina_agent',
+    group: 'equipe',
+    label: 'Lina — CRM & Fidélisation',
+    summary:
+      'Votre base clients segmentée : qui relancer, qui sont vos meilleurs clients, qui ne revient plus, les paniers abandonnés, et les campagnes à préparer. Lina recommande ; rien n’est envoyé sans vous.',
+    status: 'live',
+  },
 ]
 
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)
@@ -373,6 +386,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'shopify_read',
     'search_console',
     'nova_agent',
+    'lina_agent',
   ],
   'vis-pro': [
     'oria_agent',
@@ -384,6 +398,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'shopify_read',
     'search_console',
     'nova_agent',
+    'lina_agent',
   ],
   /*
    * Les deux publicitaires n'entrent que dans la plus haute offre, et ce choix recopie
@@ -403,6 +418,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_ads_agent',
     'visibility_meta_agent',
     'nova_agent',
+    'lina_agent',
   ],
 }
 

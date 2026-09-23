@@ -31,6 +31,7 @@ export const IDS_MEMBRES = [
   'ads',
   'meta',
   'nova',
+  'lina',
 ] as const
 
 export type IdMembre = (typeof IDS_MEMBRES)[number]
@@ -78,6 +79,13 @@ export const MEMBRES: readonly MembreEquipe[] = [
    * réellement rapporté. C'est d'elle qu'Oria tient ses chiffres.
    */
   { id: 'nova', name: 'Nova', role: 'Analytics', avatar: '/equipe/nova.webp', tint: 'brand' },
+  /*
+   * Lina vient après Nova parce qu'elle travaille sur ce que les autres ont déjà gagné : les
+   * clients. On attire, on convertit, on mesure — puis on fait revenir ceux qui ont acheté.
+   * Acquérir un client coûte cher ; le garder est la moitié du travail que personne d'autre
+   * dans l'équipe ne fait.
+   */
+  { id: 'lina', name: 'Lina', role: 'CRM & Fidélisation', avatar: '/equipe/lina.webp', tint: 'warm' },
 ] as const
 
 export function membre(id: string): MembreEquipe | undefined {
@@ -110,6 +118,7 @@ export function ecranDuMembre(
     ads: { href: `/${locale}/publicite`, ecran: 'publicite' },
     meta: { href: `/${locale}/publicite/meta`, ecran: 'publicite-meta' },
     nova: { href: `/${locale}/nova${site}`, ecran: 'nova' },
+    lina: { href: `/${locale}/lina${site}`, ecran: 'lina' },
   }
   return (
     propres[id] ?? {

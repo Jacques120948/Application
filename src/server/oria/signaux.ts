@@ -12,6 +12,8 @@ import { lireAnomalies } from './anomalies'
 import { santeMarketing, type Canal } from './sante'
 import type { VisibilityAgentId } from '@/server/agents/visibility'
 import { lireNova, type VueNova } from '@/server/nova/service'
+import { lireLina, type VueLina } from '@/server/lina/service'
+import { argent, nombreLisible } from '@/server/lina/recommandations'
 
 /**
  * Ce qu'Oria lit, et ce qu'elle en fait.
@@ -488,7 +490,7 @@ export type Consolidation = {
    * n'est fabriquée pour remplir une case — `null` s'affiche « jamais ».
    */
   /** `nova` : la dernière lecture des ventes. Absente quand Nova n'a rien lu. */
-  reperes: { audit: Date | null; ads: Date | null; meta: Date | null; nova?: Date | null }
+  reperes: { audit: Date | null; ads: Date | null; meta: Date | null; nova?: Date | null; lina?: Date | null }
   /** Ce que l'entreprise cherche. C'est ce qui a incliné le classement. */
   objectifs: VueObjectifs
 }
@@ -537,6 +539,35 @@ export function depuisNova(nova: VueNova | null, locale: string): Signal[] {
 }
 
 /**
+ * Ce que Lina transmet à Oria : ses trois meilleures campagnes, en opportunités.
+ *
+ * Toujours des « informations » : une base clients qu'on n'a pas relancée ne coûte rien de
+ * plus demain qu'aujourd'hui. Oria décide si elles passent avant le reste ; Lina ne fait que
+ * dire combien de clients elles touchent et ce qu'ils ont déjà rapporté.
+ */
+export function depuisLina(lina: VueLina | null, locale: string, siteId: string): Signal[] {
+  if (lina === null || lina.vierge) return []
+  const href = `/${locale}/lina${siteId === '' ? '' : `?siteId=${siteId}`}`
+  return lina.campagnes.slice(0, 3).map((campagne) => {
+    const segment = lina.segments.find((un) => un.cle === campagne.segment)
+    const historique = segment === undefined || segment.caCents === 0 ? '' : `, qui ont déjà rapporté ${argent(segment.caCents, lina.devise)}`
+    return {
+      cle: `lina:${campagne.cle}`,
+      sources: ['lina'],
+      titre: campagne.titre,
+      pourquoi: `${nombreLisible(campagne.audience)} ${campagne.audienceLibelle}${historique}. ${campagne.objectif}`,
+      quoiFaire: 'Préparer la campagne avec Lina, puis faire rédiger les emails par Milo.',
+      mesure: `Calculé par Lina sur la base clients Shopify (${nombreLisible(lina.etat.clients)} fiches). ${campagne.hypothese}`,
+      impact: campagne.impact,
+      effort: campagne.effort,
+      urgence: 'information',
+      confiance: lina.etat.tronque ? 'faible' : 'moyenne',
+      href,
+    }
+  })
+}
+
+/**
  * Tout ce qu'Oria sait, en un passage.
  *
  * Les lectures sont lancées ensemble parce qu'elles ne dépendent pas les unes des autres,
@@ -573,12 +604,14 @@ export async function lireSignaux(
 
   // Les chiffres de Nova, déjà calculés : Oria les lit, elle ne les refait pas.
   const nova = await sans(lireNova(userId, locale, { periode: '30', siteId: site?.id }), null)
+  const lina = await sans(lireLina(userId, { avecNova: false }), null)
 
   const sourcesLues: VisibilityAgentId[] = []
   if (site !== null) sourcesLues.push('audit', 'seo', 'geo', 'cro')
   if (compteAds !== null) sourcesLues.push('ads')
   if (compteMeta !== null) sourcesLues.push('meta')
   if (nova !== null && !nova.vierge) sourcesLues.push('nova')
+  if (lina !== null && !lina.vierge) sourcesLues.push('lina')
 
   const signaux: Signal[] = [
     ...(site === null ? [] : depuisSurveillance(pannes, locale, site.id)),
@@ -611,6 +644,7 @@ export async function lireSignaux(
       'Meta Ads',
     ),
     ...depuisNova(nova, locale),
+    ...depuisLina(lina, locale, site?.id ?? ''),
     ...croisementPayantConversion(
       [
         ...(compteAds === null
@@ -682,6 +716,7 @@ export async function lireSignaux(
       ads: compteAds?.synchroAt ?? null,
       meta: compteMeta?.synchroAt ?? null,
       nova: nova?.ventes.synchroAt ?? null,
+      lina: lina?.etat.synchroAt ?? null,
     },
   }
 }

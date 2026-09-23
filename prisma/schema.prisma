@@ -43,32 +43,35 @@ enum UserRole {
 }
 
 model User {
-  id               String    @id @default(uuid()) @db.Uuid
-  email            String    @unique
-  passwordHash     String
-  name             String?
-  locale           String    @default("fr")
-  role             UserRole  @default(USER)
-  emailVerifiedAt  DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  disabledAt       DateTime?
+  id                 String              @id @default(uuid()) @db.Uuid
+  email              String              @unique
+  passwordHash       String
+  name               String?
+  locale             String              @default("fr")
+  role               UserRole            @default(USER)
+  emailVerifiedAt    DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  disabledAt         DateTime?
   /// Alertes du Radar : nouvelles opportunités correspondant au profil.
-  radarAlerts      Boolean   @default(true)
+  radarAlerts        Boolean             @default(true)
   /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
-  resumesOria          OriaResume[]
-  ventesJour           CommerceJour[]
-  synchrosVentes       CommerceSynchro[]
-  reglagesNova         NovaReglages?
-  visitesJour          AnalyticsJour[]
-  synchroVisites       AnalyticsSynchro?
-  synchroAbonnements   AbonnementsSynchro?
-  analysesNova         NovaAnalyse[]
-  crmJours             CrmJour[]
-  synchroCrm           CrmSynchro?
-  supportAlerts    Boolean   @default(true)
+  resumesOria        OriaResume[]
+  ventesJour         CommerceJour[]
+  synchrosVentes     CommerceSynchro[]
+  reglagesNova       NovaReglages?
+  visitesJour        AnalyticsJour[]
+  synchroVisites     AnalyticsSynchro?
+  synchroAbonnements AbonnementsSynchro?
+  analysesNova       NovaAnalyse[]
+  crmJours           CrmJour[]
+  synchroCrm         CrmSynchro?
+  clientsLina        LinaClient[]
+  synchroLina        LinaSynchro?
+  reglagesLina       LinaReglages?
+  supportAlerts      Boolean             @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
-  stripeCustomerId String?   @unique
+  stripeCustomerId   String?             @unique
 
   sessions             Session[]
   projects             Project[]
@@ -178,64 +181,64 @@ model SiteSetting {
 }
 
 model Plan {
-  id                       String   @id
-  name                     String
-  description              String
-  priceCents               Int
-  currency                 String   @default("EUR")
-  interval                 String   @default("month")
-  maxProjects              Int
+  id                         String   @id
+  name                       String
+  description                String
+  priceCents                 Int
+  currency                   String   @default("EUR")
+  interval                   String   @default("month")
+  maxProjects                Int
   /// Connexions externes autorisées. Modifiable depuis le back-office, comme le reste.
-  maxConnections           Int      @default(0)
+  maxConnections             Int      @default(0)
   /// Fonctions ouvertes par cette offre, par identifiant (voir server/billing/features.ts).
   /// Source de vérité des droits : le code ne décide jamais d'après le nom de l'offre.
-  features                 String[] @default([])
+  features                   String[] @default([])
   /// Espace d'images autorisé, en octets. Borne la seule dépense qui grandirait sinon
   /// avec l'usage plutôt qu'avec le nombre de clients.
-  storageBytes             Int      @default(0)
+  storageBytes               Int      @default(0)
   /// Quotas mensuels des deux modules. Réglables depuis le back-office, comme le reste.
-  radarRunsPerMonth        Int      @default(1)
-  liaAnswersPerMonth       Int      @default(0)
-  liaConversationsPerMonth Int      @default(0)
+  radarRunsPerMonth          Int      @default(1)
+  liaAnswersPerMonth         Int      @default(0)
+  liaConversationsPerMonth   Int      @default(0)
   /// Alertes par courriel envoyées au créateur quand un visiteur saisit une fiche.
   /// Zéro par défaut : la fonction s'ouvre offre par offre, depuis le back-office.
-  alertsPerMonth           Int      @default(0)
+  alertsPerMonth             Int      @default(0)
   /// Images créées par l'IA sur le compte d'Evoliia, et non sur celui du créateur.
   /// Zéro par défaut : c'est une dépense réelle pour la plateforme, elle s'ouvre offre
   /// par offre. Le créateur qui connecte sa propre clé n'est pas concerné par ce quota.
-  imagesPerMonth           Int      @default(0)
+  imagesPerMonth             Int      @default(0)
   /// Sites qu'une offre permet de suivre, et pages analysées à chaque audit.
   /// Zéro par défaut : une offre d'une version précédente ne doit pas se retrouver à
   /// promettre un produit qui n'existait pas quand elle a été souscrite.
-  sitesMax                 Int      @default(0)
-  pagesPerAudit            Int      @default(0)
+  sitesMax                   Int      @default(0)
+  pagesPerAudit              Int      @default(0)
   /// Audits accordés par mois et par site. Borne la seule dépense qui grandirait avec
   /// l'usage : chaque audit est un parcours réel de pages sur le réseau.
-  auditsPerMonth           Int      @default(0)
-  monthlyCredits           Int
-  allowExport              Boolean  @default(false)
-  allowCustomDomain        Boolean  @default(false)
-  allowMobilePrep          Boolean  @default(false)
+  auditsPerMonth             Int      @default(0)
+  monthlyCredits             Int
+  allowExport                Boolean  @default(false)
+  allowCustomDomain          Boolean  @default(false)
+  allowMobilePrep            Boolean  @default(false)
   /// Permet de générer réellement une application. L'offre gratuite s'arrête avant.
-  allowBuild               Boolean  @default(true)
+  allowBuild                 Boolean  @default(true)
   /// Mise en avant dans la grille tarifaire.
-  isRecommended            Boolean  @default(false)
-  isActive                 Boolean  @default(true)
-  sortOrder                Int      @default(0)
+  isRecommended              Boolean  @default(false)
+  isActive                   Boolean  @default(true)
+  sortOrder                  Int      @default(0)
   /// Prix pour douze mois payés d'avance, en centimes. Zéro : cette offre ne se prend pas
   /// à l'année. La remise n'est écrite nulle part — elle se déduit des deux prix réglés.
-  priceYearCents           Int      @default(0)
+  priceYearCents             Int      @default(0)
   /// Produit et tarif Stripe, créés à la demande. L'empreinte dit pour quel prix, quelle
   /// monnaie et quelle période le tarif a été créé.
-  stripeProductId          String?
-  stripePriceId            String?
-  stripePriceFingerprint   String?
+  stripeProductId            String?
+  stripePriceId              String?
+  stripePriceFingerprint     String?
   /// Le tarif annuel, gardé à part : chez Stripe ce sont deux tarifs distincts, et une
   /// colonne unique ferait payer au mois quelqu'un qui a choisi l'année.
   stripePriceIdYear          String?
   stripePriceFingerprintYear String?
-  createdAt                DateTime @default(now())
-  updatedAt                DateTime @updatedAt
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
   subscriptions Subscription[]
 }
@@ -1501,23 +1504,23 @@ model SiteAutomatisation {
   userId String @db.Uuid
 
   /// Demander chaque nuit à Google l'état de quelques pages. Gratuit.
-  indexation Boolean @default(false)
+  indexation      Boolean  @default(false)
   /// Garder une trace quotidienne des chiffres de recherche. Gratuit.
-  releve     Boolean @default(false)
+  releve          Boolean  @default(false)
   /// Faire écrire les articles du calendrier sans les demander. Dépense des crédits.
-  redaction  Boolean @default(false)
+  redaction       Boolean  @default(false)
   /// Déposer l'article écrit en brouillon dans Shopify. Jamais publié.
-  depot      Boolean @default(false)
+  depot           Boolean  @default(false)
   /// Poser régulièrement les questions suivies aux assistants. Dépense des crédits.
-  assistants Boolean @default(false)
+  assistants      Boolean  @default(false)
   /// Tous les combien, en jours : 7, 14 ou 30. C'est la borne de la dépense la plus lourde
   /// du produit, et elle se règle parce que ce qu'un assistant répond bouge au mois.
-  assistantsJours Int @default(7)
+  assistantsJours Int      @default(7)
   /// Les assistants réellement interrogés pour ce site. Vide : tous ceux qui sont
   /// disponibles. Le prix suit cette liste — on ne facture que ce qu'on interroge.
-  plateformesIA String[] @default([])
+  plateformesIA   String[] @default([])
   /// Le point hebdomadaire de Léa sur l'ensemble du site. Dépense des crédits.
-  point      Boolean @default(false)
+  point           Boolean  @default(false)
 
   /// Le blog Shopify qui reçoit les dépôts. Vide : le premier de la boutique.
   blogId     String @default("")
@@ -1750,15 +1753,15 @@ model SiteImage {
   userId String @db.Uuid
 
   /// Toujours image/webp : c'est ce que le ré-encodage produit, quoi que le fournisseur rende.
-  mime   String
-  width  Int
-  height Int
-  bytes  Int
-  data   Bytes
+  mime         String
+  width        Int
+  height       Int
+  bytes        Int
+  data         Bytes
   /// Le texte de remplacement, qui part tel quel dans le blog.
-  alt    String @default("")
+  alt          String @default("")
   /// Crédits réellement débités, au coût constaté.
-  creditsSpent Int @default(0)
+  creditsSpent Int    @default(0)
 
   createdAt DateTime @default(now())
 
@@ -1860,11 +1863,11 @@ model VisibilityNote {
   userId String @db.Uuid
 
   /// audit | seo | geo | content
-  agent    String
-  question String
-  answer   String
+  agent      String
+  question   String
+  answer     String
   /// Ce que ce spécialiste retient pour ses collègues, en une phrase.
-  takeaway String?
+  takeaway   String?
   /// « oria » quand la question a été transmise par Oria plutôt que posée directement.
   /// C'est ce qui permet au fil d'activité de dire, vrai, « Oria a demandé à Cleo ».
   demandePar String?
@@ -2464,28 +2467,28 @@ model CommerceJour {
   jour     DateTime @db.Date
   devise   String   @default("")
 
-  commandes         Int    @default(0)
+  commandes            Int     @default(0)
   /// Le montant encaissé, remboursements déduits, en centimes de la devise.
-  chiffreCents      BigInt @default(0)
+  chiffreCents         BigInt  @default(0)
   /// Clients dont c'est la première commande. Voir nova/collecte.ts pour la méthode.
-  nouveauxClients   Int    @default(0)
+  nouveauxClients      Int     @default(0)
   /// Ce qu'ont rapporté ces premières commandes, en centimes.
-  chiffreNouveauxCents BigInt @default(0)
+  chiffreNouveauxCents BigInt  @default(0)
   /// Commandes dont le client est identifié : sans lui, on ne sait pas s'il est nouveau.
-  clientsIdentifies Int    @default(0)
+  clientsIdentifies    Int     @default(0)
   /// { canal: { commandes, chiffreCents, origines: { "source / medium": n } } }
-  canaux            Json   @default("{}")
+  canaux               Json    @default("{}")
   /// [{ id, titre, commandes, quantite, chiffreCents }]
-  produits          Json   @default("[]")
+  produits             Json    @default("[]")
   /// Même forme que `canaux`, au premier clic (première visite enregistrée).
-  canauxPremier     Json   @default("{}")
+  canauxPremier        Json    @default("{}")
   /// Vrai quand le coût des produits a été lu avec ces ventes. Faux : les trois totaux suivants sont inconnus, pas nuls.
-  coutsLus           Boolean @default(false)
+  coutsLus             Boolean @default(false)
   /// Ce que rapportent les lignes de produits (hors livraison), et celles dont le coût est connu, en centimes.
-  lignesCents        BigInt  @default(0)
-  lignesCouteesCents BigInt  @default(0)
+  lignesCents          BigInt  @default(0)
+  lignesCouteesCents   BigInt  @default(0)
   /// Coût d'achat des lignes dont le coût est connu (coût actuel saisi dans Shopify), en centimes.
-  coutProduitsCents  BigInt  @default(0)
+  coutProduitsCents    BigInt  @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2620,18 +2623,18 @@ model AnalyticsSynchro {
 /// Nova : les abonnements Stripe de la personne, réduits à des chiffres (voir nova/abonnements.ts).
 /// Recalculé à chaque lecture depuis la liste des abonnements ; aucun client, aucun identifiant.
 model AbonnementsSynchro {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @unique @db.Uuid
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @unique @db.Uuid
   /// jamais | ok | erreur
-  etat      String    @default("jamais")
-  message   String    @default("")
-  synchroAt DateTime?
-  essaiAt   DateTime?
-  devise    String    @default("")
+  etat       String    @default("jamais")
+  message    String    @default("")
+  synchroAt  DateTime?
+  essaiAt    DateTime?
+  devise     String    @default("")
   /// Vrai quand le plafond d'abonnements lus a été atteint.
-  tronque   Boolean   @default(false)
+  tronque    Boolean   @default(false)
   /// { mrr, actifs, essais, serie: [{ mois, mrr, actifs, nouveaux, perdus, … }], cohortes: [...] }
-  instantane Json     @default("{}")
+  instantane Json      @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2690,6 +2693,70 @@ model CrmSynchro {
   devise           String    @default("")
   tronque          Boolean   @default(false)
   instantane       Json      @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Lina : un index de la base clients, pour segmenter sans refaire un CRM.
+///
+/// Une ligne par client de la boutique, et seulement ce qui sert à le classer : dates,
+/// nombre de commandes, montant cumulé, consentement marketing. Ni nom, ni courriel, ni
+/// téléphone, ni adresse — ils restent dans la boutique, qui reste la source. `ref` est
+/// l'identifiant du client chez la source : il sert à ouvrir sa fiche là-bas, rien d'autre.
+model LinaClient {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  /// shopify (d'autres sources viendront)
+  source           String
+  ref              String
+  /// Création de la fiche chez la source : le premier contact, souvent la première commande.
+  creeLe           DateTime
+  derniereCommande DateTime?
+  commandes        Int       @default(0)
+  caCents          Int       @default(0)
+  devise           String    @default("")
+  /// oui | non | sans-email | inconnu — l’accord pour recevoir des courriels marketing.
+  consentement     String    @default("inconnu")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, ref])
+  @@index([userId, derniereCommande])
+}
+
+model LinaSynchro {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @unique @db.Uuid
+  /// jamais | en-cours | ok | erreur | portee | protegees
+  etat         String    @default("jamais")
+  message      String    @default("")
+  source       String    @default("shopify")
+  /// L'export en masse lancé chez Shopify, tant qu'il n'est pas relu.
+  operation    String?
+  lanceAt      DateTime?
+  synchroAt    DateTime?
+  essaiAt      DateTime?
+  clients      Int       @default(0)
+  tronque      Boolean   @default(false)
+  /// Le consentement marketing a-t-il pu être lu ? Sinon, il est « inconnu » pour tous.
+  consentement Boolean   @default(false)
+  /// Paniers abandonnés des trente derniers jours, en totaux.
+  paniers      Json      @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model LinaReglages {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @unique @db.Uuid
+  /// Les seuils des segments, réglables par la personne.
+  criteres Json   @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -62,10 +62,12 @@ export function etatsEquipe(vue: Pick<Consolidation, 'signaux' | 'sourcesLues' |
           ? vue.reperes.meta
           : id === 'nova'
             ? (vue.reperes.nova ?? null)
-            : vue.reperes.audit
+            : id === 'lina'
+              ? (vue.reperes.lina ?? null)
+              : vue.reperes.audit
 
     let statut: StatutAgent
-    if ((id === 'ads' || id === 'meta' || id === 'nova') && !vue.sourcesLues.includes(id)) statut = 'connexion'
+    if ((id === 'ads' || id === 'meta' || id === 'nova' || id === 'lina') && !vue.sourcesLues.includes(id)) statut = 'connexion'
     else if (siteAgents.includes(id) && vue.site === null) statut = 'a-lancer'
     else if (critiques > 0) statut = 'action'
     else statut = 'actif'

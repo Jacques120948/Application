@@ -71,5 +71,6 @@ export async function lireAutonomie(userId: string): Promise<AutonomieAgent[]> {
     publicitaire('ads', google, ecritureGoogle, 'Google Ads'),
     publicitaire('meta', meta, ecritureMeta, 'Meta Ads'),
     { agent: 'nova', niveau: 'conseil', pourquoi: 'Elle mesure et signale ; elle ne modifie rien, nulle part.', reglable: false },
+    { agent: 'lina', niveau: 'assiste', pourquoi: 'Elle segmente et prépare les campagnes ; rien n’est envoyé à un client sans vous.', reglable: false },
   ]
 }

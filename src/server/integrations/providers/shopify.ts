@@ -124,7 +124,7 @@ export function lireAcces(secret: string): AccesShopify | null {
   }
 }
 
-type Reponse = {
+export type Reponse = {
   status: number
   /** Les données, ou `null` quand la réponse n'en portait pas. */
   data: Record<string, unknown> | null
@@ -208,7 +208,7 @@ export async function frapperJeton(acces: AccesShopify): Promise<
  * GraphQL, parce que l'API REST est officiellement héritée depuis octobre 2024 et que les
  * champs qui nous intéressent n'y sont plus tous exposés.
  */
-async function appeler(
+export async function appeler(
   boutique: string,
   jeton: string,
   version: string,

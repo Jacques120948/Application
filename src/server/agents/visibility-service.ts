@@ -161,7 +161,7 @@ export async function askVisibility(
    * passe par exactement le même chemin — droits, crédits, contexte du spécialiste — et
    * n'en diffère que par cette trace.
    */
-  options: { demandePar?: 'oria' | 'nova' } = {},
+  options: { demandePar?: 'oria' | 'nova' | 'lina' } = {},
 ): Promise<VisibilityNoteView> {
   const agent = findVisibilityAgent(input.agent)
   if (agent === undefined) throw notFound("Ce spécialiste n'existe pas.")

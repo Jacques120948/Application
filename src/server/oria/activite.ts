@@ -57,6 +57,7 @@ const NOMS: Record<string, string> = {
   ads: 'Naya',
   meta: 'MIRA',
   nova: 'Nova',
+  lina: 'Lina',
 }
 
 /** Ce qu'une modification envoyée à une plateforme a touché, dit en mots. */
@@ -157,7 +158,7 @@ export async function lireActivite(
       : sans(
           withUserScope(userId, (tx) =>
             tx.visibilityNote.findMany({
-              where: { userId, siteId, demandePar: { in: ['oria', 'nova'] } },
+              where: { userId, siteId, demandePar: { in: ['oria', 'nova', 'lina'] } },
               orderBy: { createdAt: 'desc' },
               take: limite,
               select: { createdAt: true, agent: true, demandePar: true },
@@ -223,14 +224,17 @@ export async function lireActivite(
   for (const delegation of delegations) {
     const destinataire = NOMS[delegation.agent]
     if (destinataire === undefined) continue
-    const nova = delegation.demandePar === 'nova'
+    const qui = delegation.demandePar === 'nova' ? 'nova' : delegation.demandePar === 'lina' ? 'lina' : 'oria'
     fil.push({
       quand: delegation.createdAt,
-      qui: nova ? 'nova' : 'oria',
+      qui,
       genre: 'action',
-      quoi: nova
-        ? `Nova a transmis une mesure à ${destinataire}, qui a répondu.`
-        : `Oria a transmis une priorité à ${destinataire}, qui a répondu.`,
+      quoi:
+        qui === 'nova'
+          ? `Nova a transmis une mesure à ${destinataire}, qui a répondu.`
+          : qui === 'lina'
+            ? `Lina a confié une campagne à ${destinataire}, qui a répondu.`
+            : `Oria a transmis une priorité à ${destinataire}, qui a répondu.`,
     })
   }
 
