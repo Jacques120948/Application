@@ -48,6 +48,7 @@ import {
   CORRECTIONS_SYSTEM,
   ARTICLE_SYSTEM,
   ORIA_SYSTEM,
+  ORIA_RESUME_SYSTEM,
   LEA_SYSTEM,
   NEO_SYSTEM,
   GIA_SYSTEM,
@@ -62,9 +63,11 @@ import {
   editResponseSchema,
   ideasSchema,
   pointHebdoSchema,
+  oriaResumeSchema,
   elementsProposesSchema,
   questionsSuggereesSchema,
   type PointHebdoIA,
+  type OriaResumeIA,
   type ElementsProposes,
   type QuestionsSuggerees,
   pageContentSchemaFor,
@@ -1730,6 +1733,33 @@ export async function writePoint(params: {
         ? "C'est le premier point sur ce site : il n'y a rien à comparer, ne fais pas semblant."
         : asUserData('point_precedent', params.precedent),
       'Fais le point.',
+    ].join('\n\n'),
+  })
+}
+
+/**
+ * Le résumé d'Oria, du jour ou de la semaine.
+ *
+ * Les faits sont transmis comme des données, jamais comme des consignes : ils contiennent
+ * des titres de campagnes et d'articles écrits par la personne ou par des plateformes, et
+ * un titre ne doit pas pouvoir se faire passer pour une instruction.
+ */
+export async function resumerOria(params: {
+  userId: string
+  locale: string
+  genre: 'jour' | 'semaine'
+  faits: Record<string, unknown>
+}): Promise<RunResult<OriaResumeIA>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'oriaResume' },
+    system: ORIA_RESUME_SYSTEM,
+    schema: oriaResumeSchema,
+    userContent: [
+      `Langue du résumé : ${params.locale}.`,
+      params.genre === 'jour'
+        ? 'Résume ce que tu vois aujourd’hui.'
+        : 'Résume la semaine écoulée : ce qui a progressé, ce qui a baissé, ce qu’il faut surveiller, et par quoi continuer.',
+      asUserData('faits', JSON.stringify(params.faits, null, 2)),
     ].join('\n\n'),
   })
 }

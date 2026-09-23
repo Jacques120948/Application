@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/server/db/client'
 import { clearAll } from '@/server/auth/rate-limit'
@@ -7,7 +7,16 @@ import { withUserScope } from '@/server/db/scope'
 import { lireCockpit } from '@/server/oria/cockpit'
 import { lireActivite } from '@/server/oria/activite'
 import { enregistrerObjectifs, lireObjectifs } from '@/server/oria/objectifs'
+import { dernierResume, ecrireResume } from '@/server/oria/resume'
+import * as operations from '@/server/ai/operations'
 import { ensureTestPlan, subscribeToTestPlan } from '../helpers/plan'
+
+vi.mock('@/server/ai/operations', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/server/ai/operations')>()),
+  resumerOria: vi.fn(),
+}))
+
+const resumer = vi.mocked(operations.resumerOria)
 
 /**
  * Le cockpit d'Oria, sur une vraie base.
@@ -194,5 +203,50 @@ describe('les objectifs', () => {
     await expect(lireObjectifs(bruno, siteAnne)).rejects.toMatchObject({ code: 'NOT_FOUND' })
     // Et ceux d'Anne n'ont pas bougé.
     expect((await lireObjectifs(anne, siteAnne)).objectifs).toEqual(['ventes', 'trafic-seo'])
+  })
+})
+
+describe('le résumé d’Oria', () => {
+  it('s’écrit sur demande, se conserve, et ne se paie pas deux fois dans la minute', async () => {
+    resumer.mockReset()
+    resumer.mockResolvedValue({
+      value: { phrases: ['MIRA constate qu’un ensemble dépense sans vendre.', 'Commencez par là.'] },
+      creditsSpent: 3,
+      balance: 100,
+    })
+
+    const premier = await ecrireResume(anne, 'jour', 'fr', siteAnne)
+    expect(premier.phrases).toHaveLength(2)
+    expect(premier.creditsSpent).toBe(3)
+
+    // Un second clic rend le premier au lieu d'en payer un autre.
+    const second = await ecrireResume(anne, 'jour', 'fr', siteAnne)
+    expect(second.createdAt).toEqual(premier.createdAt)
+    expect(resumer).toHaveBeenCalledTimes(1)
+
+    // Et il se relit gratuitement.
+    expect((await dernierResume(anne, 'jour', siteAnne))?.phrases).toEqual(premier.phrases)
+  })
+
+  it('ne transmet au modèle que des faits, sans adresse ni identifiant', async () => {
+    const faits = JSON.stringify(resumer.mock.calls[0]?.[0]?.faits ?? {})
+    expect(faits).toContain('Un ensemble dépense sans vendre')
+    expect(faits).not.toContain(siteAnne)
+    expect(faits).not.toContain('/fr/')
+  })
+
+  it('ne laisse pas Bruno lire le résumé d’Anne', async () => {
+    expect(await dernierResume(bruno, 'jour', siteAnne)).toBeNull()
+    await expect(ecrireResume(bruno, 'jour', 'fr', siteAnne)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+
+  it('refuse avant tout appel quand l’offre n’ouvre pas Oria', async () => {
+    resumer.mockClear()
+    await prisma.subscription.deleteMany({ where: { userId: bruno } })
+    await expect(ecrireResume(bruno, 'jour', 'fr')).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
+    expect(resumer).not.toHaveBeenCalled()
+    await subscribeToTestPlan(bruno)
   })
 })

@@ -49,6 +49,7 @@ const PROTECTED_TABLES = [
   'VisibilityNote',
   'SiteArticle',
   'SiteImage',
+  'OriaResume',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',

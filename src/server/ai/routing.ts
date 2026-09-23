@@ -123,6 +123,13 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
   // Le point regarde tout et doit trancher : c'est du raisonnement, sur un long contexte et
   // une réponse courte. C'est exactement le cas où le modèle de raisonnement se justifie.
   visibilityPoint: { model: MODELS.reasoning, maxTokens: 4_000, effort: 'medium' },
+  /*
+   * Le résumé d'Oria est un exercice de formulation sur des faits déjà classés : rien n'y
+   * est à trancher, l'ordre lui arrive fait. Le modèle de raisonnement serait payé pour un
+   * raisonnement qui a déjà eu lieu, dans du code. Le modèle rapide, et un plafond court :
+   * cinq phrases.
+   */
+  oriaResume: { model: MODELS.fast, maxTokens: 1_200, effort: 'low' },
 }
 
 export type TokenUsage = {

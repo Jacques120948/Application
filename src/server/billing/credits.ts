@@ -88,6 +88,14 @@ export type CreditedOperation =
    * contexte lu, pas d'une longue réponse écrite.
    */
   | 'visibilityPoint'
+  /**
+   * Le résumé d'Oria : ce qu'elle voit aujourd'hui, ou ce qu'a donné la semaine.
+   *
+   * Un appel court sur des faits déjà comptés et déjà classés. Le modèle n'y décide rien —
+   * l'ordre et les chiffres lui arrivent faits — il met en cinq phrases ce que le cockpit
+   * montre en blocs. C'est la seule opération d'Oria qui coûte : le reste est de la lecture.
+   */
+  | 'oriaResume'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -169,6 +177,7 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
    */
   adsElements: 2,
   visibilityPoint: 3,
+  oriaResume: 2,
 }
 
 /**

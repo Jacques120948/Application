@@ -5,6 +5,9 @@ import { availableCredits } from '@/server/billing/credits'
 import { listSites } from '@/server/audit/service'
 import { lireCockpit } from '@/server/oria/cockpit'
 import { canauxInconnus } from '@/server/oria/sante'
+import { dernierResume } from '@/server/oria/resume'
+import { actionCosts } from '@/server/billing/action-costs'
+import { ResumeOria } from '@/components/studio/ResumeOria'
 import { Shell } from '@/components/studio/Shell'
 import {
   AccueilOria,
@@ -59,6 +62,11 @@ export default async function OriaPage({
   ])
 
   const siteId = cockpit.site?.id ?? ''
+  const [resume, couts] = await Promise.all([
+    dernierResume(user.id, 'jour', cockpit.site?.id ?? null).catch(() => null),
+    actionCosts(),
+  ])
+  const coutResume = couts.find((ligne) => ligne.id === 'oria-resume') ?? null
   const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
   const maintenant = new Date()
   const objectifs = cockpit.objectifs.objectifs
@@ -132,6 +140,19 @@ export default async function OriaPage({
               critiques={cockpit.signaux.filter((signal) => signal.urgence === 'critique').length}
               ouverts={cockpit.signaux.length}
               inconnus={canauxInconnus(cockpit.canaux).length}
+            />
+
+            <ResumeOria
+              titre="Ce qu’Oria voit aujourd’hui"
+              genre="jour"
+              siteId={siteId}
+              locale={locale}
+              cout={coutResume === null ? null : { min: coutResume.min, max: coutResume.max }}
+              initial={
+                resume === null
+                  ? null
+                  : { ...resume, createdAt: resume.createdAt.toISOString() }
+              }
             />
 
             <SanteMarketing canaux={cockpit.canaux} versConnexions={`/${locale}/connexions`} />

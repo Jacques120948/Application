@@ -5,6 +5,7 @@ import type { Canal } from '@/server/oria/sante'
 import type { EtatAgent } from '@/server/oria/cockpit'
 import type { Evenement } from '@/server/oria/activite'
 import type { ActionPlan, JourSemaine, PlanMarketing } from '@/server/oria/plan-marketing'
+import type { RapportSemaine, Resultat } from '@/server/oria/rapport'
 
 /**
  * Les blocs du cockpit d'Oria.
@@ -648,8 +649,8 @@ export function SemaineOria({ jours }: { jours: readonly JourSemaine[] }) {
 /**
  * Les onglets d'Oria.
  *
- * Deux pour l'instant, et l'adresse les porte : un onglet se met en favori et survit au
- * rafraîchissement. Les écrans prévus plus tard — rapports, décisions — viendront s'y
+ * Trois pour l'instant, et l'adresse les porte : un onglet se met en favori et survit au
+ * rafraîchissement. Les écrans prévus plus tard — les décisions — viendront s'y
  * ajouter sans changer ceux-ci.
  */
 export function OngletsOria({
@@ -657,7 +658,7 @@ export function OngletsOria({
   locale,
   siteId,
 }: {
-  courant: 'cockpit' | 'plan'
+  courant: 'cockpit' | 'plan' | 'rapports'
   locale: string
   siteId: string
 }) {
@@ -665,6 +666,7 @@ export function OngletsOria({
   const onglets = [
     { cle: 'cockpit', label: 'Cockpit', href: `/${locale}/oria${suffixe}` },
     { cle: 'plan', label: 'Objectifs et plan', href: `/${locale}/oria/plan${suffixe}` },
+    { cle: 'rapports', label: 'Rapport de la semaine', href: `/${locale}/oria/rapports${suffixe}` },
   ] as const
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Oria">
@@ -683,5 +685,181 @@ export function OngletsOria({
         </a>
       ))}
     </nav>
+  )
+}
+
+// ── Rapport ──────────────────────────────────────────────────────────────────
+
+function chiffre(valeur: number | null, unite: string): string {
+  if (valeur === null) return '—'
+  const texte = new Intl.NumberFormat('fr-CH', {
+    maximumFractionDigits: unite === '' ? 0 : 2,
+    minimumFractionDigits: 0,
+  }).format(valeur)
+  return unite === '' ? texte : `${texte} ${unite}`
+}
+
+/** Un écart en pour cent, sans « −0 % » : ce qui ne bouge pas n'a pas de signe. */
+function ecartLisible(ecart: number): string {
+  const pourcent = Math.round(Math.abs(ecart) * 100)
+  if (pourcent === 0) return '0 %'
+  return `${ecart > 0 ? '+' : '−'}${pourcent} %`
+}
+
+const SENS: Record<string, { label: string; ton: 'positive' | 'critical' | 'neutral' | 'brand' }> = {
+  mieux: { label: 'En mieux', ton: 'positive' },
+  'moins-bien': { label: 'En moins bien', ton: 'critical' },
+  stable: { label: 'Stable', ton: 'neutral' },
+  neutre: { label: '', ton: 'neutral' },
+  nouveau: { label: 'Nouveau', ton: 'brand' },
+}
+
+function LigneResultat({ resultat }: { resultat: Resultat }) {
+  const sens = SENS[resultat.sens]
+  return (
+    <tr className="border-t border-[var(--color-line)]">
+      <th scope="row" className="py-2 pr-3 text-left text-sm font-normal">
+        {resultat.quoi}
+      </th>
+      <td className="py-2 pr-3 text-right text-sm text-[var(--color-ink-soft)] tabular-nums">
+        {chiffre(resultat.avant, resultat.unite)}
+      </td>
+      <td className="py-2 pr-3 text-right text-sm font-medium tabular-nums">
+        {chiffre(resultat.apres, resultat.unite)}
+      </td>
+      <td className="py-2 text-right text-sm">
+        {resultat.ecart === null ? null : (
+          <span className="mr-2 text-xs text-[var(--color-ink-soft)] tabular-nums">
+            {ecartLisible(resultat.ecart)}
+          </span>
+        )}
+        {sens === undefined || sens.label === '' ? null : <Badge tone={sens.ton}>{sens.label}</Badge>}
+      </td>
+    </tr>
+  )
+}
+
+function Liste({ titre, lignes, vide }: { titre: string; lignes: readonly string[]; vide: string }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 mb-3 text-base font-semibold">{titre}</h2>
+        {lignes.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">{vide}</p>
+        ) : (
+          <ul className="m-0 grid list-disc gap-1.5 pl-5 text-sm leading-relaxed">
+            {lignes.map((ligne) => (
+              <li key={ligne}>{ligne}</li>
+            ))}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * Le rapport de la semaine, entièrement calculé.
+ *
+ * Les résultats sont un tableau parce que ce sont des chiffres qu'on compare : une ligne
+ * par mesure, la semaine d'avant, celle-ci, l'écart. Le reste est en listes courtes.
+ * Actions et résultats sont présentés séparément, sans flèche de l'un vers l'autre : on ne
+ * sait pas ce qui a causé quoi, et la mise en page ne doit pas le suggérer.
+ */
+export function RapportOria({ rapport, maintenant }: { rapport: RapportSemaine; maintenant: Date }) {
+  const periode = new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long' })
+  return (
+    <div className="grid gap-4">
+      <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+        Du {periode.format(rapport.depuis)} au {periode.format(rapport.jusqua)}, comparé aux
+        sept jours d’avant.
+      </p>
+
+      <Card>
+        <CardBody>
+          <h2 className="m-0 mb-3 text-base font-semibold">Résultats</h2>
+          {rapport.resultats.length === 0 ? (
+            <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+              Aucun chiffre à comparer cette semaine : aucune publicité n’est reliée.
+            </p>
+          ) : (
+            <div className="-mx-1 overflow-x-auto px-1">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-xs text-[var(--color-ink-faint)]">
+                    <th scope="col" className="pb-2 text-left font-normal">Mesure</th>
+                    <th scope="col" className="pb-2 pr-3 text-right font-normal">Semaine d’avant</th>
+                    <th scope="col" className="pb-2 pr-3 text-right font-normal">Cette semaine</th>
+                    <th scope="col" className="pb-2 text-right font-normal">Écart</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rapport.resultats.map((resultat) => (
+                    <LigneResultat key={resultat.quoi} resultat={resultat} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+            Un écart de moins d’un quart d’une semaine sur l’autre est affiché « stable » : c’est
+            du bruit. La dépense n’est jamais jugée — c’est une décision, pas un résultat.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Liste titre="Victoires" lignes={rapport.victoires} vide="Rien de notable en mieux cette semaine." />
+      <Liste
+        titre="Points d’attention"
+        lignes={rapport.attention}
+        vide="Rien de notable en moins bien cette semaine."
+      />
+
+      <Card>
+        <CardBody>
+          <h2 className="m-0 mb-3 text-base font-semibold">Actions réalisées</h2>
+          {rapport.actions.length === 0 ? (
+            <p className="m-0 text-sm text-[var(--color-ink-soft)]">Aucune action enregistrée cette semaine.</p>
+          ) : (
+            <ol className="m-0 grid list-none gap-3 p-0">
+              {rapport.actions.map((action, rang) => (
+                <li key={`${+action.quand}-${rang}`} className="flex items-start gap-3">
+                  <Portrait id={action.qui} taille={24} />
+                  <div className="min-w-0 flex-1">
+                    <p className="m-0 text-sm leading-snug">{action.quoi}</p>
+                    <p className="m-0 text-[11px] text-[var(--color-ink-faint)]">{depuis(action.quand, maintenant)}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 mb-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+            Les résultats ci-dessus sont des évolutions observées, pas des effets démontrés : sur
+            une semaine, personne ne peut isoler ce qu’une modification a produit.
+          </p>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardBody>
+          <h2 className="m-0 mb-3 text-base font-semibold">Priorités de la semaine prochaine</h2>
+          {rapport.priorites.length === 0 ? (
+            <p className="m-0 text-sm text-[var(--color-ink-soft)]">Rien n’attend de décision.</p>
+          ) : (
+            <ol className="m-0 grid list-none gap-0 p-0">
+              {rapport.priorites.map((uneAction) => (
+                <LigneAction key={uneAction.signal.cle} uneAction={uneAction} />
+              ))}
+            </ol>
+          )}
+        </CardBody>
+      </Card>
+
+      {rapport.absents.length === 0 ? null : (
+        <p className="m-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          Ce que ce rapport ne couvre pas : {rapport.absents.join(' ')}
+        </p>
+      )}
+    </div>
   )
 }

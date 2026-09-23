@@ -3,6 +3,7 @@ import { DEFAULT_PLANS, PLANNED_PLAN_CAPABILITIES } from '../src/server/billing/
 import { DEFAULT_MODEL_PRICING } from '../src/server/billing/ai-pricing'
 import {
   activerRadarEtLiaUneFois,
+  ouvrirCleoEtOriaUneFois,
   ouvrirSearchConsoleUneFois,
 } from '../src/server/billing/activation'
 
@@ -88,6 +89,12 @@ async function main(): Promise<void> {
   if (recherches === null) {
     console.log('Chiffres de recherche : ouverture déjà faite, offres laissées telles quelles.')
   } else for (const ligne of recherches) console.log(`Chiffres de recherche — ${ligne}`)
+
+  // Cleo et Oria : même geste. Sans lui, leurs écrans s'affichent et leurs conversations
+  // refusent de répondre, dans toute offre créée avant leur arrivée.
+  const agents = await ouvrirCleoEtOriaUneFois(prisma)
+  if (agents === null) console.log('Cleo et Oria : ouverture déjà faite, offres laissées telles quelles.')
+  else for (const ligne of agents) console.log(`Cleo et Oria — ${ligne}`)
 
   await seedTarifsIa()
   /*

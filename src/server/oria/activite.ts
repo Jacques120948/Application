@@ -25,6 +25,14 @@ export type Evenement = {
   qui: VisibilityAgentId
   /** Ce qui s'est passé, en une phrase. */
   quoi: string
+  /**
+   * Un travail fait, ou une chose constatée.
+   *
+   * Le rapport de la semaine ne compte comme « actions réalisées » que les premières : un
+   * constat ouvert par une règle n'est pas une action, et le compter comme tel gonflerait
+   * la semaine d'un travail qui n'a pas eu lieu.
+   */
+  genre: 'action' | 'constat'
 }
 
 /** Au-delà, un fil d'activité devient un journal, et un journal ne se lit pas. */
@@ -137,6 +145,7 @@ export async function lireActivite(
             {
               quand: audit.finishedAt,
               qui: 'audit' as const,
+              genre: 'action' as const,
               quoi: `Léa a terminé une analyse du site : ${audit.pagesCrawled} page${audit.pagesCrawled > 1 ? 's' : ''} lue${audit.pagesCrawled > 1 ? 's' : ''}.`,
             },
           ],
@@ -144,18 +153,27 @@ export async function lireActivite(
     ...articles.map((article) => ({
       quand: article.createdAt,
       qui: 'content' as const,
+      genre: 'action' as const,
       quoi: `Milo a rédigé « ${article.titre} ».`,
     })),
     ...pannes.map((panne) => ({
       quand: panne.openedAt,
       qui: 'audit' as const,
+      genre: 'constat' as const,
       quoi: `Léa a repéré un problème sur ${panne.url === '' ? 'le site' : panne.url}.`,
     })),
     ...constats.flatMap((constat) => {
       const qui = PLATEFORME_AGENT[constat.account.plateforme]
       if (qui === undefined) return []
       const nom = qui === 'ads' ? 'Naya' : 'MIRA'
-      return [{ quand: constat.createdAt, qui, quoi: `${nom} a relevé : ${constat.titre}.` }]
+      return [
+        {
+          quand: constat.createdAt,
+          qui,
+          genre: 'constat' as const,
+          quoi: `${nom} a relevé : ${constat.titre}.`,
+        },
+      ]
     }),
     ...actions.flatMap((action) => {
       const qui = PLATEFORME_AGENT[action.account.plateforme]
@@ -165,6 +183,7 @@ export async function lireActivite(
         {
           quand: action.createdAt,
           qui,
+          genre: 'action' as const,
           quoi: `${nom} a appliqué une modification validée sur ${OBJETS[action.quoi] ?? 'la plateforme'}.`,
         },
       ]

@@ -192,6 +192,21 @@ export const pointHebdoSchema = z
 export type PointHebdoIA = z.infer<typeof pointHebdoSchema>
 
 /**
+ * Le résumé d'Oria.
+ *
+ * Des phrases plutôt qu'un paragraphe : c'est ce qui rend « cinq au plus » vérifiable par
+ * le schéma au lieu d'être une consigne qu'un modèle peut oublier. Une sixième phrase est
+ * un refus de la réponse, pas une tolérance.
+ */
+export const oriaResumeSchema = z
+  .object({
+    phrases: z.array(z.string().min(3).max(320)).min(1).max(5),
+  })
+  .strict()
+
+export type OriaResumeIA = z.infer<typeof oriaResumeSchema>
+
+/**
  * Une opportunité du Radar.
  *
  * C'est une idée, avec ce qui la rend explicable : pourquoi elle convient à CETTE

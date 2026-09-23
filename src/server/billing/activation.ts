@@ -99,3 +99,49 @@ export async function ouvrirSearchConsoleUneFois(prisma: PrismaClient): Promise<
   })
   return lignes
 }
+
+/**
+ * Ouverture de Cleo et d'Oria dans les offres existantes.
+ *
+ * Même geste que pour les chiffres de recherche, et pour la même raison : une fonction
+ * ajoutée au catalogue n'atteint jamais une offre déjà en base, parce que la colonne
+ * `features` appartient à l'exploitant. Sans ce geste, les deux agents s'affichent mais
+ * refusent de répondre — leur écran est ouvert, leur conversation non.
+ *
+ * On ajoute, on ne retire rien, et on suit la répartition par défaut. Relançable sans
+ * effet de bord. Ce n'est jamais fait au démarrage : c'est l'amorçage qui le propose, et
+ * l'exploitant qui le lance.
+ */
+export const CLEO_ORIA_KEY = 'offres.cleo-oria.ouvertes'
+
+const AGENTS_A_OUVRIR = ['visibility_cro_agent', 'oria_agent'] as const
+
+export async function ouvrirCleoEtOria(prisma: PrismaClient): Promise<string[]> {
+  const lignes: string[] = []
+  for (const defaults of DEFAULT_PLANS) {
+    const plan = await prisma.plan.findUnique({ where: { id: defaults.id } })
+    if (plan === null) continue
+    const manquants = AGENTS_A_OUVRIR.filter(
+      (id) => defaults.features.includes(id) && !plan.features.includes(id),
+    )
+    if (manquants.length === 0) continue
+    await prisma.plan.update({
+      where: { id: plan.id },
+      data: { features: [...plan.features, ...manquants] },
+    })
+    lignes.push(`${plan.name} : ${manquants.join(', ')} ouverts`)
+  }
+  return lignes
+}
+
+export async function ouvrirCleoEtOriaUneFois(prisma: PrismaClient): Promise<string[] | null> {
+  const done = await prisma.siteSetting.findUnique({ where: { key: CLEO_ORIA_KEY } })
+  if (done !== null) return null
+  const lignes = await ouvrirCleoEtOria(prisma)
+  await prisma.siteSetting.upsert({
+    where: { key: CLEO_ORIA_KEY },
+    update: { value: new Date().toISOString() },
+    create: { key: CLEO_ORIA_KEY, value: new Date().toISOString() },
+  })
+  return lignes
+}

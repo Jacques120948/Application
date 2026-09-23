@@ -56,6 +56,7 @@ model User {
   /// Alertes du Radar : nouvelles opportunités correspondant au profil.
   radarAlerts      Boolean   @default(true)
   /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
+  resumesOria          OriaResume[]
   supportAlerts    Boolean   @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId String?   @unique
@@ -1272,6 +1273,7 @@ model Site {
   promptsIa      PromptIA[]
   relevesIa      ReleveIA[]
   points         PointHebdo[]
+  resumesOria    OriaResume[]
   releves        ReleveRecherche[]
   volumes        VolumeRecherche[]
 
@@ -1657,6 +1659,30 @@ model ReleveIA {
 ///
 /// Conservé plutôt que recalculé : il coûte un appel, et il date — « voilà où vous en étiez
 /// lundi » se compare au lundi suivant.
+/// Un résumé écrit par Oria : ce qu'elle voit aujourd'hui, ou ce qu'a donné la semaine.
+/// Conservé parce qu'il est payé : un texte payé une fois ne se repaie pas au rechargement.
+model OriaResume {
+  id     String  @id @default(uuid()) @db.Uuid
+  userId String  @db.Uuid
+  /// Vide pour quelqu'un qui n'a encore qu'un compte publicitaire relié, sans site.
+  siteId String? @db.Uuid
+
+  /// « jour » ou « semaine ».
+  genre     String
+  /// Les phrases, une par ligne. Cinq au plus : le schéma de la réponse l'impose.
+  texte     String
+  /// Les faits qui ont servi à l'écrire, pour relire un résumé ancien sans deviner.
+  fondement Json   @default("{}")
+
+  creditsSpent Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site Site? @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([userId, genre, createdAt(sort: Desc)])
+}
+
 model PointHebdo {
   id     String @id @default(uuid()) @db.Uuid
   siteId String @db.Uuid

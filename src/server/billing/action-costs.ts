@@ -79,6 +79,11 @@ export const DEFAULT_ACTION_COSTS: readonly ActionCost[] = [
    * la lecture, pas de l'écriture — d'où une fourchette étroite malgré la portée.
    */
   { id: 'point', label: 'Le point hebdomadaire de Léa', min: 3, max: 6 },
+  /*
+   * Le résumé d'Oria : un appel court sur des faits déjà comptés. Tout le reste d'Oria —
+   * cockpit, priorités, plan, rapport chiffré — est gratuit, parce que c'est de la lecture.
+   */
+  { id: 'oria-resume', label: 'Le résumé d’Oria', min: 2, max: 4 },
 ]
 
 /** Clé de réglage : les fourchettes annoncées, en JSON. */
