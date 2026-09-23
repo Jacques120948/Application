@@ -1260,6 +1260,10 @@ model Site {
   /// « boutique » ou « services », quand la personne l'a dit. Vide : pas dit, et Oria le
   /// déduit quand elle peut — une boutique Shopify reliée se passe de la question.
   activite  String   @default("")
+  /// Les budgets mensuels déclarés, par poste : { meta, google, contenu, autres }, en
+  /// unités de la devise. Déclarés et non mesurés — la dépense publicitaire réelle, elle,
+  /// se lit dans les relevés. Vide : rien de déclaré.
+  budgets   Json     @default("{}")
 
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   audits         Audit[]

@@ -8,6 +8,7 @@ import type { ActionPlan, JourSemaine, PlanMarketing } from '@/server/oria/plan-
 import type { RapportSemaine, Resultat } from '@/server/oria/rapport'
 import type { Decision, Impact } from '@/server/oria/decisions'
 import type { Destinataire } from '@/server/oria/delegation'
+import type { Plateforme, Recommandation, Simulation } from '@/server/oria/budget'
 import { DelegationOria } from './DelegationOria'
 
 /**
@@ -687,7 +688,7 @@ export function OngletsOria({
   locale,
   siteId,
 }: {
-  courant: 'cockpit' | 'plan' | 'rapports' | 'decisions'
+  courant: 'cockpit' | 'plan' | 'rapports' | 'decisions' | 'budget'
   locale: string
   siteId: string
 }) {
@@ -697,6 +698,7 @@ export function OngletsOria({
     { cle: 'plan', label: 'Objectifs et plan', href: `/${locale}/oria/plan${suffixe}` },
     { cle: 'rapports', label: 'Rapport de la semaine', href: `/${locale}/oria/rapports${suffixe}` },
     { cle: 'decisions', label: 'Décisions', href: `/${locale}/oria/decisions${suffixe}` },
+    { cle: 'budget', label: 'Budget', href: `/${locale}/oria/budget${suffixe}` },
   ] as const
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Oria">
@@ -996,5 +998,259 @@ export function DecisionsOria({ decisions }: { decisions: readonly Decision[] })
         )
       })}
     </ol>
+  )
+}
+
+// ── Budget ───────────────────────────────────────────────────────────────────
+
+const NOM_POSTE_VU: Record<string, string> = {
+  google: 'Google Ads',
+  meta: 'Meta Ads',
+  contenu: 'Contenu',
+  autres: 'Autres',
+}
+
+function pourcent(part: number): string {
+  return `${Math.round(part * 100)} %`
+}
+
+/** Une barre de répartition : la longueur est proportionnelle, le chiffre est écrit. */
+function Barre({ part, teinte }: { part: number; teinte: string }) {
+  return (
+    <span className="block h-2 w-full overflow-hidden rounded-full bg-[var(--color-canvas)]">
+      <span className="block h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, part * 100))}%`, background: teinte }} />
+    </span>
+  )
+}
+
+export function RepartitionOria({
+  parts,
+}: {
+  parts: readonly { poste: string; montant: number; part: number }[]
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 mb-3 text-base font-semibold">Répartition déclarée</h2>
+        {parts.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">Aucun budget déclaré pour l’instant.</p>
+        ) : (
+          <ul className="m-0 grid list-none gap-3 p-0">
+            {parts.map((ligne) => (
+              <li key={ligne.poste} className="grid gap-1">
+                <span className="flex justify-between text-sm">
+                  <span>{NOM_POSTE_VU[ligne.poste] ?? ligne.poste}</span>
+                  <span className="tabular-nums text-[var(--color-ink-soft)]">
+                    {chiffre(ligne.montant, '')} · {pourcent(ligne.part)}
+                  </span>
+                </span>
+                <Barre part={ligne.part} teinte="var(--color-brand)" />
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/** Ce que chaque régie a réellement fait sur quatre semaines : lu dans les relevés. */
+export function DepenseReelleOria({ plateformes }: { plateformes: readonly Plateforme[] }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 mb-3 text-base font-semibold">Ce qui a été dépensé (28 jours)</h2>
+        {plateformes.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+            Aucune régie publicitaire n’est reliée : je ne peux rien dire de la dépense réelle.
+          </p>
+        ) : (
+          <div className="-mx-1 overflow-x-auto px-1">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="text-xs text-[var(--color-ink-faint)]">
+                  <th scope="col" className="pb-2 text-left font-normal">Régie</th>
+                  <th scope="col" className="pb-2 pr-3 text-right font-normal">Dépense</th>
+                  <th scope="col" className="pb-2 pr-3 text-right font-normal">Conversions</th>
+                  <th scope="col" className="pb-2 text-right font-normal">Coût par conversion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {plateformes.map((regie) => (
+                  <tr key={regie.poste} className="border-t border-[var(--color-line)]">
+                    <th scope="row" className="py-2 pr-3 text-left text-sm font-normal">{regie.nom}</th>
+                    <td className="py-2 pr-3 text-right text-sm tabular-nums">{chiffre(regie.total.cout, regie.devise)}</td>
+                    <td className="py-2 pr-3 text-right text-sm tabular-nums">{chiffre(regie.total.conversions, '')}</td>
+                    <td className="py-2 text-right text-sm tabular-nums">
+                      {regie.total.conversions > 0 ? chiffre(regie.total.cout / regie.total.conversions, regie.devise) : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * La répartition recommandée, ou la raison pour laquelle il n'y en a pas.
+ *
+ * L'absence de recommandation est une réponse, et elle est affichée comme telle : « les
+ * données ne suffisent pas » est plus utile qu'une recommandation tirée de quatre
+ * conversions.
+ */
+export function RecommandationBudgetOria({
+  observation,
+  recommandation,
+  raison,
+}: {
+  observation: string | null
+  recommandation: Recommandation | null
+  raison: string
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 mb-3 text-base font-semibold">Répartition recommandée</h2>
+        {observation === null ? null : <p className="mt-0 mb-3 text-sm leading-relaxed">{observation}</p>}
+        {recommandation === null ? (
+          <p className="m-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">{raison}</p>
+        ) : (
+          <>
+            <ul className="m-0 grid list-none gap-3 p-0">
+              {recommandation.parts.map((ligne) => (
+                <li key={ligne.poste} className="grid gap-1">
+                  <span className="flex justify-between text-sm">
+                    <span>{NOM_POSTE_VU[ligne.poste] ?? ligne.poste}</span>
+                    <span className="tabular-nums">
+                      <span className="text-[var(--color-ink-soft)]">{pourcent(ligne.actuelle)}</span>
+                      {' → '}
+                      <span className="font-medium">{pourcent(ligne.proposee)}</span>
+                    </span>
+                  </span>
+                  <Barre part={ligne.proposee} teinte="var(--color-accent)" />
+                </li>
+              ))}
+            </ul>
+            <details className="mt-4">
+              <summary className="cursor-pointer text-sm text-[var(--color-ink-soft)]">Pourquoi cette recommandation ?</summary>
+              <p className="mt-2 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">{recommandation.pourquoi}</p>
+            </details>
+            <p className="mt-3 mb-0 flex flex-wrap items-center gap-2 text-xs text-[var(--color-ink-faint)]">
+              <Badge tone="neutral">{CONFIANCE[recommandation.confiance]}</Badge>
+              Aucun budget n’est modifié : pour appliquer, passez par Naya ou MIRA, qui demandent
+              confirmation.
+            </p>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * La simulation, en fourchette sous hypothèses. Un simple formulaire sans script : le
+ * calcul se fait au serveur, sur l'adresse, et se relit ou se partage tel quel.
+ */
+export function SimulationOria({
+  action,
+  siteId,
+  plateformes,
+  choix,
+  resultat,
+}: {
+  action: string
+  siteId: string
+  plateformes: readonly Plateforme[]
+  choix: { poste: string; pourcent: number } | null
+  resultat: Simulation | null
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Simuler une décision</h2>
+        <p className="mt-1 mb-4 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+          Et si vous changiez un budget ? Oria donne une fourchette et les hypothèses derrière,
+          jamais un chiffre sûr.
+        </p>
+        {plateformes.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--color-ink-soft)]">Il faut une régie reliée pour simuler.</p>
+        ) : (
+          <form action={action} method="get" className="flex flex-wrap items-end gap-3">
+            {siteId === '' ? null : <input type="hidden" name="siteId" value={siteId} />}
+            <label className="grid gap-1 text-sm">
+              <span>Régie</span>
+              <select
+                name="regie"
+                defaultValue={choix?.poste ?? plateformes[0]?.poste}
+                className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+              >
+                {plateformes.map((regie) => (
+                  <option key={regie.poste} value={regie.poste}>
+                    {regie.nom}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Variation du budget</span>
+              <select
+                name="variation"
+                defaultValue={String(choix?.pourcent ?? 30)}
+                className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-3 py-2 text-sm"
+              >
+                {[-50, -30, -20, -10, 10, 20, 30, 50, 100].map((valeur) => (
+                  <option key={valeur} value={valeur}>
+                    {valeur > 0 ? '+' : ''}
+                    {valeur} %
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="submit"
+              className="rounded-[var(--radius-control)] border border-[var(--color-line)] bg-[var(--color-surface)] px-4 py-2 text-sm font-medium hover:border-[var(--color-brand)]"
+            >
+              Simuler
+            </button>
+          </form>
+        )}
+
+        {resultat === null || choix === null ? null : resultat.possible ? (
+          <div className="mt-5 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-4">
+            <p className="m-0 text-sm font-medium">Estimation</p>
+            <p className="mt-1 mb-0 text-sm leading-relaxed">
+              Environ{' '}
+              <strong>
+                {chiffre(Math.abs(resultat.ecartDepense), resultat.devise)} {choix.pourcent > 0 ? 'de plus' : 'de moins'}
+              </strong>{' '}
+              par mois, pour{' '}
+              <strong>
+                {resultat.conversions.bas === resultat.conversions.haut
+                  ? Math.abs(resultat.conversions.bas)
+                  : `${Math.abs(resultat.conversions.bas)} à ${Math.abs(resultat.conversions.haut)}`}{' '}
+                conversions {choix.pourcent > 0 ? 'en plus' : 'en moins'}
+              </strong>
+              .
+            </p>
+            <p className="mt-3 mb-1 text-xs font-medium text-[var(--color-ink-soft)]">Hypothèses</p>
+            <ul className="m-0 grid list-disc gap-1 pl-5 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+              {resultat.hypotheses.map((hypothese) => (
+                <li key={hypothese}>{hypothese}</li>
+              ))}
+            </ul>
+            <p className="mt-3 mb-0 flex flex-wrap items-center gap-2 text-xs text-[var(--color-ink-faint)]">
+              <Badge tone="neutral">{CONFIANCE[resultat.confiance]}</Badge>
+              Une projection n’est jamais certaine.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-4 mb-0 text-sm text-[var(--color-ink-soft)]">{resultat.raison}</p>
+        )}
+      </CardBody>
+    </Card>
   )
 }

@@ -1,6 +1,7 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
 import { lireDecisions } from '@/server/oria/decisions'
+import { comparer, lireBudgets, lirePlateformes, repartition, NOM_POSTE } from '@/server/oria/budget'
 import { OBJECTIFS } from '@/lib/objectifs'
 import { contexteMeta } from '@/server/ads/contexte-meta'
 import { listAudits, readPlan } from '@/server/audit/plan'
@@ -326,6 +327,30 @@ export async function readSiteFacts(
             ` | ce qu'il y a à faire : ${signal.quoiFaire} | d'où ça sort : ${signal.mesure}`
           )
         }),
+      )
+    }
+
+    /*
+     * Le budget : ce qui est déclaré, et ce que la comparaison des régies permet de dire —
+     * ou pourquoi elle ne le permet pas. Oria ne répond à « dois-je augmenter mes budgets ? »
+     * qu'à partir de là, et renvoie à l'écran Budget pour la simulation.
+     */
+    if (vue.site !== null) {
+      const [budgets, plateformes] = await Promise.all([
+        lireBudgets(userId, vue.site.id).catch(() => ({})),
+        lirePlateformes(userId).catch(() => []),
+      ])
+      const parts = repartition(budgets)
+      lignes.push(
+        parts.length === 0
+          ? 'Budgets déclarés : aucun.'
+          : `Budgets mensuels déclarés : ${parts.map((un) => `${NOM_POSTE[un.poste]} ${un.montant} (${Math.round(un.part * 100)} %)`).join(', ')}.`,
+      )
+      const comparaison = comparer(plateformes)
+      lignes.push(
+        comparaison.possible
+          ? `Rentabilité comparée des régies : ${comparaison.fondement} ${comparaison.meilleure === null ? 'Rentabilités comparables.' : `Plus rentable : ${NOM_POSTE[comparaison.meilleure]}.`} Confiance ${comparaison.confiance}. Ne recommande jamais de modifier un budget sans renvoyer à l'écran Budget et à la confirmation chez Naya ou MIRA.`
+          : `Rentabilité comparée des régies : impossible — ${comparaison.raison} Ne te prononce pas sur une réallocation.`,
       )
     }
 

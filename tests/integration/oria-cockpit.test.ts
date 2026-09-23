@@ -9,6 +9,7 @@ import { lireActivite } from '@/server/oria/activite'
 import { enregistrerObjectifs, lireObjectifs } from '@/server/oria/objectifs'
 import { dernierResume, ecrireResume } from '@/server/oria/resume'
 import { deleguer } from '@/server/oria/delegation'
+import { enregistrerBudgets, lireBudgets } from '@/server/oria/budget'
 import * as operations from '@/server/ai/operations'
 import { ensureTestPlan, subscribeToTestPlan } from '../helpers/plan'
 
@@ -304,5 +305,16 @@ describe('la délégation d’Oria', () => {
       deleguer(bruno, { siteId: siteAnne, cle: point?.cle ?? '', agent: 'cro' }, 'fr'),
     ).rejects.toBeDefined()
     expect(demander).not.toHaveBeenCalled()
+  })
+})
+
+describe('les budgets déclarés', () => {
+  it('s’enregistrent pour Anne, et Bruno ne peut ni les lire ni les changer', async () => {
+    await enregistrerBudgets(anne, siteAnne, { google: 300, meta: 700 })
+    expect(await lireBudgets(anne, siteAnne)).toEqual({ google: 300, meta: 700 })
+
+    await expect(lireBudgets(bruno, siteAnne)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(enregistrerBudgets(bruno, siteAnne, { meta: 1 })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(await lireBudgets(anne, siteAnne)).toEqual({ google: 300, meta: 700 })
   })
 })

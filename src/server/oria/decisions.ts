@@ -1,6 +1,7 @@
 import { findCheck } from '@/server/audit/scoring'
 import { withUserScope } from '@/server/db/scope'
 import type { VisibilityAgentId } from '@/server/agents/visibility'
+import { OBJETS_MODIFIES } from './activite'
 import { cumulSur, sensDe, type Cumul, type Resultat } from './rapport'
 
 /**
@@ -274,7 +275,7 @@ export async function lireDecisions(
     const quoi =
       action.recommandation?.recommandation ||
       action.recommandation?.titre ||
-      `Modification ${action.quoi}${action.campagne?.nom ? ` sur « ${action.campagne.nom} »` : ''}`
+      `Modification de ${OBJETS_MODIFIES[action.quoi] ?? 'la campagne'}${action.campagne?.nom ? ` sur « ${action.campagne.nom} »` : ''}`
 
     let impact: Impact
     if (action.annulees.length > 0) {

@@ -1,0 +1,11 @@
+-- Les budgets marketing mensuels que l'entreprise déclare, poste par poste.
+--
+-- Sur le site, comme les objectifs, pour la même raison : c'est l'activité, et le site a
+-- déjà sa politique d'isolation. Un objet JSON plutôt que quatre colonnes : les postes
+-- évolueront (Postelya, d'autres régies), et une colonne par poste obligerait à une
+-- migration à chaque fois.
+--
+-- Déclarés, pas mesurés. La dépense publicitaire réelle est lue dans les relevés de Naya et
+-- de MIRA ; ce qui est déclaré sert à voir la répartition voulue, et à couvrir ce qu'aucun
+-- relevé ne mesure — le contenu, le reste.
+ALTER TABLE "Site" ADD COLUMN "budgets" JSONB NOT NULL DEFAULT '{}';

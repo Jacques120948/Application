@@ -59,7 +59,7 @@ const NOMS: Record<string, string> = {
 }
 
 /** Ce qu'une modification envoyée à une plateforme a touché, dit en mots. */
-const OBJETS: Record<string, string> = {
+export const OBJETS_MODIFIES: Record<string, string> = {
   budget: 'un budget',
   'budget-ensemble': 'le budget d’un ensemble de publicités',
   campagne: 'une campagne',
@@ -213,7 +213,7 @@ export async function lireActivite(
           quand: action.createdAt,
           qui,
           genre: 'action' as const,
-          quoi: `${nom} a appliqué une modification validée sur ${OBJETS[action.quoi] ?? 'la plateforme'}.`,
+          quoi: `${nom} a appliqué une modification validée sur ${OBJETS_MODIFIES[action.quoi] ?? 'la plateforme'}.`,
         },
       ]
     }),
