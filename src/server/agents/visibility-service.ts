@@ -156,6 +156,12 @@ export async function askVisibility(
   userId: string,
   input: AskVisibilityInput,
   locale: string,
+  /**
+   * Qui pose la question. Absent : la personne elle-même. « oria » : une délégation, qui
+   * passe par exactement le même chemin — droits, crédits, contexte du spécialiste — et
+   * n'en diffère que par cette trace.
+   */
+  options: { demandePar?: 'oria' } = {},
 ): Promise<VisibilityNoteView> {
   const agent = findVisibilityAgent(input.agent)
   if (agent === undefined) throw notFound("Ce spécialiste n'existe pas.")
@@ -194,6 +200,7 @@ export async function askVisibility(
         answer: result.answer,
         takeaway: result.takeaway,
         creditsSpent: result.creditsSpent,
+        demandePar: options.demandePar ?? null,
       },
       select: {
         id: true,

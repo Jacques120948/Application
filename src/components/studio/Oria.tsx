@@ -7,6 +7,8 @@ import type { Evenement } from '@/server/oria/activite'
 import type { ActionPlan, JourSemaine, PlanMarketing } from '@/server/oria/plan-marketing'
 import type { RapportSemaine, Resultat } from '@/server/oria/rapport'
 import type { Decision, Impact } from '@/server/oria/decisions'
+import type { Destinataire } from '@/server/oria/delegation'
+import { DelegationOria } from './DelegationOria'
 
 /**
  * Les blocs du cockpit d'Oria.
@@ -220,7 +222,25 @@ export function Aujourdhui({
  * calcul. Une priorité sans justification se lit comme un ordre ; avec, elle se discute,
  * et c'est ce qu'on veut.
  */
-export function CartePriorite({ signal, rang }: { signal: Signal; rang: number }) {
+export function CartePriorite({
+  signal,
+  rang,
+  delegation,
+}: {
+  signal: Signal
+  rang: number
+  /**
+   * À qui Oria peut transmettre ce point. Absent : pas de délégation possible — pas de
+   * site analysé, ou l'offre ne l'ouvre pas.
+   */
+  delegation?: {
+    destinataires: readonly Destinataire[]
+    siteId: string
+    locale: string
+    cout: number
+    versConversation: string
+  }
+}) {
   const urgence = URGENCE[signal.urgence]
   return (
     <Card>
@@ -278,6 +298,17 @@ export function CartePriorite({ signal, rang }: { signal: Signal; rang: number }
             Voir l’analyse
           </LinkButton>
         </div>
+
+        {delegation === undefined ? null : (
+          <DelegationOria
+            cle={signal.cle}
+            siteId={delegation.siteId}
+            locale={delegation.locale}
+            destinataires={delegation.destinataires}
+            cout={{ min: delegation.cout, max: delegation.cout }}
+            versConversation={delegation.versConversation}
+          />
+        )}
 
         <details className="mt-3">
           <summary className="cursor-pointer text-sm text-[var(--color-ink-soft)]">Pourquoi ?</summary>
@@ -500,9 +531,8 @@ export function EquipeOria({
 /**
  * Ce que l'équipe a fait, avec l'heure réelle.
  *
- * Uniquement des événements enregistrés. Aucune ligne du type « Oria a demandé à Cleo… » :
- * Oria ne demande encore rien à personne, et l'écrire serait mettre en scène un travail
- * qui n'a pas eu lieu.
+ * Uniquement des événements enregistrés. « Oria a transmis à Cleo » n'apparaît que
+ * lorsque la délégation a réellement eu lieu, réponse comprise.
  */
 export function ActiviteEquipe({ activite, maintenant }: { activite: readonly Evenement[]; maintenant: Date }) {
   return (

@@ -6,6 +6,8 @@ import { listSites } from '@/server/audit/service'
 import { lireCockpit } from '@/server/oria/cockpit'
 import { canauxInconnus } from '@/server/oria/sante'
 import { dernierResume } from '@/server/oria/resume'
+import { destinataires } from '@/server/oria/delegation'
+import { VISIBILITY_ASK_ESTIMATED_CREDITS } from '@/server/agents/visibility-service'
 import { actionCosts } from '@/server/billing/action-costs'
 import { ResumeOria } from '@/components/studio/ResumeOria'
 import { Shell } from '@/components/studio/Shell'
@@ -126,7 +128,21 @@ export default async function OriaPage({
                 <ol className="m-0 grid list-none gap-4 p-0">
                   {cockpit.priorites.map((signal, rang) => (
                     <li key={signal.cle}>
-                      <CartePriorite signal={signal} rang={rang + 1} />
+                      <CartePriorite
+                        signal={signal}
+                        rang={rang + 1}
+                        delegation={
+                          siteId === ''
+                            ? undefined
+                            : {
+                                destinataires: destinataires(signal),
+                                siteId,
+                                locale,
+                                cout: VISIBILITY_ASK_ESTIMATED_CREDITS,
+                                versConversation: `/${locale}/visibilite/equipe?siteId=${siteId}&agent=`,
+                              }
+                        }
+                      />
                     </li>
                   ))}
                 </ol>

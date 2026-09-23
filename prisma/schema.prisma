@@ -1848,6 +1848,9 @@ model VisibilityNote {
   answer   String
   /// Ce que ce spécialiste retient pour ses collègues, en une phrase.
   takeaway String?
+  /// « oria » quand la question a été transmise par Oria plutôt que posée directement.
+  /// C'est ce qui permet au fil d'activité de dire, vrai, « Oria a demandé à Cleo ».
+  demandePar String?
 
   creditsSpent Int      @default(0)
   createdAt    DateTime @default(now())

@@ -6,15 +6,15 @@ import type { VisibilityAgentId } from '@/server/agents/visibility'
  *
  * Le cahier des charges voulait « donner l'impression d'une équipe qui travaille
  * ensemble », avec des lignes comme « Oria a demandé à Cleo d'analyser la landing page ».
- * Cette ligne-là n'est pas écrite ici, et c'est délibéré : Oria ne demande encore rien à
- * personne — l'orchestration entre agents est pour plus tard. L'afficher serait mettre en
- * scène un travail qui n'a pas eu lieu, et une équipe qu'on découvre factice ne se croit
- * plus, même quand elle dit vrai.
+ * Cette ligne n'apparaît que lorsque c'est arrivé : une délégation réellement faite, avec
+ * la réponse du spécialiste enregistrée. Avant que les délégations existent, elle n'était
+ * pas écrite du tout — mettre en scène un travail qui n'a pas eu lieu donne une équipe
+ * qu'on découvre factice, et qu'on ne croit plus même quand elle dit vrai.
  *
  * Le fil ne contient donc que des événements enregistrés, avec leur heure réelle : une
  * analyse terminée, un article rédigé, un constat ouvert par une règle publicitaire, une
- * panne repérée, une modification envoyée à une plateforme. C'est moins spectaculaire, et
- * c'est déjà une équipe qui travaille — la preuve est dans les dates.
+ * panne repérée, une modification envoyée à une plateforme, une priorité transmise par
+ * Oria. La preuve est dans les dates.
  *
  * Chaque lecture est isolée : une table qui répond mal retire ses lignes du fil, elle ne
  * le fait pas tomber.
@@ -47,6 +47,17 @@ const PLATEFORME_AGENT: Record<string, VisibilityAgentId> = {
   'meta-ads': 'meta',
 }
 
+/** Le prénom derrière chaque identifiant d'agent. */
+const NOMS: Record<string, string> = {
+  audit: 'Léa',
+  seo: 'Néo',
+  geo: 'Gia',
+  content: 'Milo',
+  cro: 'Cleo',
+  ads: 'Naya',
+  meta: 'MIRA',
+}
+
 /** Ce qu'une modification envoyée à une plateforme a touché, dit en mots. */
 const OBJETS: Record<string, string> = {
   budget: 'un budget',
@@ -71,7 +82,7 @@ export async function lireActivite(
   siteId: string | null,
   limite = ACTIVITE_MAX,
 ): Promise<Evenement[]> {
-  const [audits, articles, pannes, constats, actions] = await Promise.all([
+  const [audits, articles, pannes, constats, actions, delegations] = await Promise.all([
     siteId === null
       ? Promise.resolve([])
       : sans(
@@ -135,6 +146,24 @@ export async function lireActivite(
       ),
       [],
     ),
+    /*
+     * Les délégations d'Oria : des questions réellement posées à un spécialiste, et
+     * réellement répondues. C'est la seule façon dont le fil peut dire « Oria a demandé à
+     * Cleo » sans mentir — il ne le disait pas avant qu'elles existent.
+     */
+    siteId === null
+      ? Promise.resolve([])
+      : sans(
+          withUserScope(userId, (tx) =>
+            tx.visibilityNote.findMany({
+              where: { userId, siteId, demandePar: 'oria' },
+              orderBy: { createdAt: 'desc' },
+              take: limite,
+              select: { createdAt: true, agent: true },
+            }),
+          ),
+          [],
+        ),
   ])
 
   const fil: Evenement[] = [
@@ -189,6 +218,17 @@ export async function lireActivite(
       ]
     }),
   ]
+
+  for (const delegation of delegations) {
+    const destinataire = NOMS[delegation.agent]
+    if (destinataire === undefined) continue
+    fil.push({
+      quand: delegation.createdAt,
+      qui: 'oria',
+      genre: 'action',
+      quoi: `Oria a transmis une priorité à ${destinataire}, qui a répondu.`,
+    })
+  }
 
   return fil.sort((a, b) => +b.quand - +a.quand).slice(0, limite)
 }

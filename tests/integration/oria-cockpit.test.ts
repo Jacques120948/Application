@@ -8,15 +8,18 @@ import { lireCockpit } from '@/server/oria/cockpit'
 import { lireActivite } from '@/server/oria/activite'
 import { enregistrerObjectifs, lireObjectifs } from '@/server/oria/objectifs'
 import { dernierResume, ecrireResume } from '@/server/oria/resume'
+import { deleguer } from '@/server/oria/delegation'
 import * as operations from '@/server/ai/operations'
 import { ensureTestPlan, subscribeToTestPlan } from '../helpers/plan'
 
 vi.mock('@/server/ai/operations', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/ai/operations')>()),
   resumerOria: vi.fn(),
+  askVisibilityAgent: vi.fn(),
 }))
 
 const resumer = vi.mocked(operations.resumerOria)
+const demander = vi.mocked(operations.askVisibilityAgent)
 
 /**
  * Le cockpit d'Oria, sur une vraie base.
@@ -248,5 +251,58 @@ describe('le résumé d’Oria', () => {
     await expect(ecrireResume(bruno, 'jour', 'fr')).rejects.toMatchObject({ code: 'PLAN_LIMIT' })
     expect(resumer).not.toHaveBeenCalled()
     await subscribeToTestPlan(bruno)
+  })
+})
+
+describe('la délégation d’Oria', () => {
+  it('transmet à Cleo le point de MIRA, avec une question écrite côté serveur', async () => {
+    demander.mockReset()
+    demander.mockResolvedValue({ answer: 'La page n’affiche pas de livraison.', takeaway: null, creditsSpent: 2 })
+
+    const cockpit = await lireCockpit(anne, 'fr', siteAnne)
+    const point = cockpit.signaux.find((un) => un.sources.includes('meta'))
+    expect(point).toBeDefined()
+
+    const note = await deleguer(anne, { siteId: siteAnne, cle: point?.cle ?? '', agent: 'cro' }, 'fr')
+    expect(note.agent).toBe('cro')
+    expect(note.answer).toBe('La page n’affiche pas de livraison.')
+
+    const appel = demander.mock.calls[0]?.[0]
+    expect(appel?.agent).toBe('cro')
+    expect(appel?.question).toContain('MIRA a relevé')
+    // Cleo répond avec son propre contexte, pas celui d'Oria.
+    expect(appel?.facts).toContain('AUCUNE DONNÉE DE VENTE')
+    expect(appel?.facts).not.toContain('SOURCES ABSENTES')
+
+    // Et la délégation est tracée comme telle.
+    const trace = await withUserScope(anne, (tx) =>
+      tx.visibilityNote.findFirst({ where: { id: note.id }, select: { demandePar: true } }),
+    )
+    expect(trace?.demandePar).toBe('oria')
+  })
+
+  it('le raconte, vrai, dans le fil d’activité', async () => {
+    const activite = await lireActivite(anne, siteAnne)
+    expect(activite.map((un) => un.quoi)).toContain('Oria a transmis une priorité à Cleo, qui a répondu.')
+  })
+
+  it('refuse un destinataire qu’elle ne propose pas pour ce point', async () => {
+    demander.mockClear()
+    const cockpit = await lireCockpit(anne, 'fr', siteAnne)
+    const point = cockpit.signaux.find((un) => un.sources.includes('meta'))
+    await expect(
+      deleguer(anne, { siteId: siteAnne, cle: point?.cle ?? '', agent: 'geo' }, 'fr'),
+    ).rejects.toMatchObject({ code: 'VALIDATION' })
+    expect(demander).not.toHaveBeenCalled()
+  })
+
+  it('ne laisse pas Bruno transmettre un point d’Anne', async () => {
+    demander.mockClear()
+    const cockpit = await lireCockpit(anne, 'fr', siteAnne)
+    const point = cockpit.signaux.find((un) => un.sources.includes('meta'))
+    await expect(
+      deleguer(bruno, { siteId: siteAnne, cle: point?.cle ?? '', agent: 'cro' }, 'fr'),
+    ).rejects.toBeDefined()
+    expect(demander).not.toHaveBeenCalled()
   })
 })
