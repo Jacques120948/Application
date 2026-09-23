@@ -106,6 +106,8 @@ export type VueNova = {
   ventes: EtatVentes
   /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
   manqueVentes: string
+  /** Pourquoi les ventes ne se comparent pas à la période précédente, quand c'est le cas. */
+  sansComparaison: string | null
   pourOria: RapportOria
   siteId: string
   reglages: Reglages
@@ -524,6 +526,14 @@ export async function lireNova(
     sante: { global, lignes: lignesSante },
     ventes,
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
+    /*
+     * La période affichée est couverte, la précédente non : sans cette phrase, « pas de
+     * comparaison » sur chaque carte laisserait croire à une panne.
+     */
+    sansComparaison:
+      ventesActuelles !== null && ventesAvant === null && ventes.couvertureDepuis !== null
+        ? `Ventes connues depuis le ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(ventes.couvertureDepuis))} : la période précédente commence avant, elle n’est donc pas comparée. Sans l’autorisation « read_all_orders », Shopify ne donne que les 60 derniers jours ; avec elle, tout l’historique.`
+        : null,
     pourOria: rapportPourOria(periode.libelle, sources, alertes, insights, opportunites),
     siteId,
     reglages,

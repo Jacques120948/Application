@@ -96,6 +96,9 @@ export default async function NovaPage({
                 probleme={ventes.etat === 'portee' || ventes.etat === 'erreur' ? ventes.message : null}
               />
             )}
+            {vue.sansComparaison === null ? null : (
+              <p className="m-0 text-xs leading-relaxed text-[var(--color-ink-soft)]">{vue.sansComparaison}</p>
+            )}
             <p className="m-0 text-xs text-[var(--color-ink-faint)]">
               Sources : {vue.sources.length === 0 ? 'aucune' : vue.sources.join(' + ')}
               {siteAnalyse === undefined ? '' : ` · site ${siteAnalyse.host}`}
