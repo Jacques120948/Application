@@ -41,6 +41,7 @@ export const VISIBILITY_AGENT_IDS = [
   'cro',
   'ads',
   'meta',
+  'nova',
 ] as const
 
 export type VisibilityAgentId = (typeof VISIBILITY_AGENT_IDS)[number]
@@ -284,6 +285,45 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
       'Pourquoi mon ROAS baisse ?',
       'Quelle publicité fonctionne le mieux ?',
       'Où est-ce que je perds de l’argent ?',
+    ],
+  },
+  /*
+   * Nova, et la frontière qu'elle ne franchit pas.
+   *
+   * Les autres travaillent ; elle mesure ce que leur travail a donné. Elle lit les ventes de
+   * la boutique, les dépenses et les déclarations des régies, et les confronte — c'est la
+   * seule de l'équipe à pouvoir dire que Google et Meta revendiquent ensemble plus que ce
+   * qui a été vendu. Elle ne touche à rien : ni budget, ni campagne, ni page.
+   *
+   * Elle n'est pas un tableau de bord de plus. Chaque chiffre est calculé par du code, et
+   * elle en tire ce qui a changé, ce qui marche mieux que le reste, et qui peut s'en occuper.
+   */
+  {
+    ...identite('nova'),
+    summary:
+      'Nova rassemble vos données marketing et vous montre ce qui génère réellement des résultats.',
+    handles: [
+      'Chiffre d’affaires',
+      'Dépenses marketing',
+      'ROAS et MER',
+      'Coût d’acquisition',
+      'Performance par canal',
+      'Attribution',
+    ],
+    feature: 'nova_agent',
+    /*
+     * Ce qu'elle fait aujourd'hui, et ce qu'il lui faut pour le faire. Sans boutique reliée,
+     * elle n'a que les déclarations des régies : la phrase le dit plutôt que de laisser
+     * attendre un chiffre d'affaires qui n'arrivera pas.
+     */
+    atWork:
+      'Elle rassemble vos ventes Shopify, vos dépenses Google Ads et Meta Ads et vos clics Google, calcule ce qui rapporte réellement et signale ce qui change. Sans boutique reliée, elle ne voit que ce que déclarent les régies.',
+    starters: [
+      'Quel canal me rapporte le plus ?',
+      'Quel est mon vrai ROAS ?',
+      'Où est-ce que je perds de l’argent ?',
+      'Qu’est-ce qui a changé cette semaine ?',
+      'Quels sont mes 3 chiffres les plus importants aujourd’hui ?',
     ],
   },
 ]

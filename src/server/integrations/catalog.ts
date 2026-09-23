@@ -540,7 +540,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
      * dans le connecteur. La portée permettrait de publier ; le produit ne le fait pas, et
      * c'est une décision qui se relit dans src/server/commerce/publication.ts.
      */
-    scopes: ['read_products', 'read_content', 'write_content'],
+    scopes: ['read_products', 'read_content', 'write_content', 'read_orders'],
     costToEvoliia: 'aucun',
     costToCreator: 'gratuit',
     costNotice:
@@ -551,7 +551,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     providerReview:
       'Aucune validation à obtenir : l’application reste privée et ne sert que vos propres boutiques. Une application publique, nécessaire pour figurer sur la place de marché Shopify, demanderait en revanche une revue de Shopify.',
     risk:
-      'Evoliia lit vos fiches et vos articles, et dépose les articles rédigés en brouillon non publié. Elle ne publie jamais : c’est vous qui relisez et publiez dans Shopify. La portée d’écriture qu’elle demande permettrait techniquement de publier — c’est le code qui s’y refuse, pas la permission. Ne déclarez aucune autre portée d’écriture sur cette application : Evoliia en hériterait.',
+      'Evoliia lit vos fiches, vos articles et vos commandes — pour en tirer des totaux par jour, sans jamais conserver le nom, l’adresse ou le courriel d’un client —, et dépose les articles rédigés en brouillon non publié. Elle ne publie jamais : c’est vous qui relisez et publiez dans Shopify. La portée d’écriture qu’elle demande permettrait techniquement de publier — c’est le code qui s’y refuse, pas la permission. Ne déclarez aucune autre portée d’écriture sur cette application : Evoliia en hériterait.',
     extraFields: [
       {
         name: 'boutique',
@@ -576,7 +576,7 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
       steps: [
         'Ouvrez le Dev Dashboard de Shopify et connectez-vous. Un compte partenaire gratuit suffit.',
         'Créez une application : donnez-lui un nom, par exemple « Evoliia ».',
-        'Ouvrez l’onglet « Versions », déclarez les portées read_products, read_content et write_content, et rien d’autre, puis cliquez « Release ».',
+        'Ouvrez l’onglet « Versions », déclarez les portées read_products, read_content, write_content et read_orders — cette dernière permet à Nova de lire vos ventes —, et rien d’autre, puis cliquez « Release ».',
         'Revenez sur « Home », faites défiler jusqu’à « Install app » et installez l’application sur votre boutique.',
         'Ouvrez l’onglet « Settings » : l’identifiant client et le secret client s’y trouvent.',
         'Revenez ici et collez l’adresse de votre boutique, l’identifiant client et le secret client.',

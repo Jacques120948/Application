@@ -1,4 +1,6 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
+import { lireNova } from '@/server/nova/service'
+import { faitsNova, transmissionOria } from '@/server/nova/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
 import { lireDecisions } from '@/server/oria/decisions'
 import { comparer, lireBudgets, lirePlateformes, repartition, NOM_POSTE } from '@/server/oria/budget'
@@ -60,6 +62,7 @@ const NOMS_AGENTS: readonly (readonly [string, string])[] = [
   ['cro', 'Cleo'],
   ['ads', 'Naya'],
   ['meta', 'MIRA'],
+  ['nova', 'Nova'],
 ]
 const PAGES_MAX = 12
 const ANALYSES_MAX = 6
@@ -306,6 +309,13 @@ export async function readSiteFacts(
       )
     }
 
+    /*
+     * Les chiffres de Nova, tels qu'elle les a calculés. Oria les cite et les classe ; elle
+     * ne les recalcule jamais — deux calculs du même chiffre finissent toujours par diverger.
+     */
+    const nova = await lireNova(userId, 'fr', { periode: '30', siteId }).catch(() => null)
+    if (nova !== null && !nova.vierge) lignes.push(...transmissionOria(nova))
+
     lignes.push(
       'État de chaque canal, calculé sur les notes et les constats ouverts :',
       ...vue.canaux.map((canal) => `- ${canal.nom} : ${canal.etat} — ${canal.pourquoi}`),
@@ -477,6 +487,16 @@ export async function readSiteFacts(
           ' dépense, d’aucun ROAS, d’aucune vente et d’aucune campagne : ne cite aucun chiffre' +
           ' publicitaire, et dis-le quand la question en demande.',
     ].join('\n')
+  }
+  /*
+   * Nova voit les chiffres, et rien des pages : ventes, dépenses, déclarations des régies,
+   * clics Google. Tous calculés avant de lui arriver ; elle les explique. Trente jours,
+   * parce que c'est la période qui répond à la plupart des questions — « cette semaine »
+   * se lit dans les variations, et une autre période se choisit sur son écran.
+   */
+  if (agent === 'nova') {
+    const vue = await lireNova(userId, 'fr', { periode: '30', siteId })
+    return [...base, ...faitsNova(vue)].join('\n')
   }
   /*
    * Milo écrit. Il voit les deux catalogues — un texte sert au référencement comme aux

@@ -70,5 +70,6 @@ export async function lireAutonomie(userId: string): Promise<AutonomieAgent[]> {
     { agent: 'content', niveau: 'assiste', pourquoi: 'Il rédige les articles ; ils sont déposés en brouillon, jamais publiés sans vous.', reglable: false },
     publicitaire('ads', google, ecritureGoogle, 'Google Ads'),
     publicitaire('meta', meta, ecritureMeta, 'Meta Ads'),
+    { agent: 'nova', niveau: 'conseil', pourquoi: 'Elle mesure et signale ; elle ne modifie rien, nulle part.', reglable: false },
   ]
 }

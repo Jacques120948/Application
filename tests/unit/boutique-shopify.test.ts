@@ -366,7 +366,8 @@ describe('la fiche du catalogue', () => {
      * Toute portée d'écriture supplémentaire élargirait ce qu'Evoliia pourrait faire dans la
      * boutique de quelqu'un, et c'est une décision qui ne se prend pas en passant.
      */
-    expect(shopify.scopes).toEqual(['read_products', 'read_content', 'write_content'])
+    // read_orders est une lecture : elle permet à Nova de compter les ventes, rien de plus.
+    expect(shopify.scopes).toEqual(['read_products', 'read_content', 'write_content', 'read_orders'])
     expect(shopify.scopes.filter((scope) => scope.startsWith('write_'))).toEqual([
       'write_content',
     ])

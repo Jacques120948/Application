@@ -30,6 +30,7 @@ export const IDS_MEMBRES = [
   'cro',
   'ads',
   'meta',
+  'nova',
 ] as const
 
 export type IdMembre = (typeof IDS_MEMBRES)[number]
@@ -71,6 +72,12 @@ export const MEMBRES: readonly MembreEquipe[] = [
   { id: 'cro', name: 'Cleo', role: 'Conversion', avatar: '/equipe/cleo.webp', tint: 'accent' },
   { id: 'ads', name: 'Naya', role: 'Publicité', avatar: '/equipe/naya.webp', tint: 'sun' },
   { id: 'meta', name: 'MIRA', role: 'Meta Ads', avatar: '/equipe/mira.webp', tint: 'sea' },
+  /*
+   * Nova ferme la liste, parce qu'elle vient après le travail des autres : elle mesure ce
+   * qu'il a donné. On attire, on convertit, on achète du trafic — puis on regarde ce qui a
+   * réellement rapporté. C'est d'elle qu'Oria tient ses chiffres.
+   */
+  { id: 'nova', name: 'Nova', role: 'Analytics', avatar: '/equipe/nova.webp', tint: 'brand' },
 ] as const
 
 export function membre(id: string): MembreEquipe | undefined {
@@ -102,6 +109,7 @@ export function ecranDuMembre(
     cro: { href: `/${locale}/visibilite/conversion${site}`, ecran: 'conversion' },
     ads: { href: `/${locale}/publicite`, ecran: 'publicite' },
     meta: { href: `/${locale}/publicite/meta`, ecran: 'publicite-meta' },
+    nova: { href: `/${locale}/nova${site}`, ecran: 'nova' },
   }
   return (
     propres[id] ?? {

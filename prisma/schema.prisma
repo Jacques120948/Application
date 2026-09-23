@@ -57,6 +57,8 @@ model User {
   radarAlerts      Boolean   @default(true)
   /// Alertes de Lia : question qui revient, ticket ouvert, question sans réponse.
   resumesOria          OriaResume[]
+  ventesJour           CommerceJour[]
+  synchrosVentes       CommerceSynchro[]
   supportAlerts    Boolean   @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId String?   @unique
@@ -2438,4 +2440,71 @@ model AdsPlanCampagne {
   account AdsAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, etat])
+}
+
+/// Les ventes d'une boutique, un jour, agrégées pour Nova.
+///
+/// Aucune donnée personnelle de client : des totaux, et la répartition par canal et par
+/// produit. Écrites par une synchronisation, relues gratuitement par l'écran.
+model CommerceJour {
+  id       String   @id @default(uuid()) @db.Uuid
+  userId   String   @db.Uuid
+  /// « shopify » aujourd'hui ; WooCommerce et Stripe s'y rangeront.
+  source   String
+  /// L'adresse de la boutique chez la source. Deux boutiques ne se mélangent pas.
+  boutique String
+  /// Le jour, dans le fuseau de la boutique.
+  jour     DateTime @db.Date
+  devise   String   @default("")
+
+  commandes         Int    @default(0)
+  /// Le montant encaissé, remboursements déduits, en centimes de la devise.
+  chiffreCents      BigInt @default(0)
+  /// Clients dont c'est la première commande. Voir nova/collecte.ts pour la méthode.
+  nouveauxClients   Int    @default(0)
+  /// Commandes dont le client est identifié : sans lui, on ne sait pas s'il est nouveau.
+  clientsIdentifies Int    @default(0)
+  /// { canal: { commandes, chiffreCents, origines: { "source / medium": n } } }
+  canaux            Json   @default("{}")
+  /// [{ id, titre, commandes, quantite, chiffreCents }]
+  produits          Json   @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, boutique, jour])
+  @@index([userId, jour(sort: Desc)])
+}
+
+/// L'état de la dernière synchronisation d'une source de ventes.
+model CommerceSynchro {
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @db.Uuid
+  source   String
+  boutique String
+
+  /// jamais | ok | erreur | portee (une autorisation manque chez la source)
+  etat             String    @default("jamais")
+  /// Ce qui a échoué, dans les mots de la personne. Jamais un identifiant ni un secret.
+  message          String    @default("")
+  /// Dernière synchronisation réussie : la date des données affichées.
+  synchroAt        DateTime?
+  /// Dernière tentative, réussie ou non : c'est elle qui espace les nouvelles tentatives.
+  essaiAt          DateTime?
+  /// Le premier jour que la source a bien voulu rendre. Shopify ne donne que soixante jours
+  /// sans autorisation particulière : ce qui précède n'est pas zéro, c'est inconnu.
+  couvertureDepuis DateTime? @db.Date
+  /// Vrai quand le plafond de commandes lues a été atteint.
+  tronque          Boolean   @default(false)
+  devise           String    @default("")
+  fuseau           String    @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source, boutique])
 }

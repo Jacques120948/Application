@@ -56,10 +56,16 @@ export function etatsEquipe(vue: Pick<Consolidation, 'signaux' | 'sourcesLues' |
     const critiques = siens.filter((signal) => signal.urgence === 'critique').length
 
     const derniere =
-      id === 'ads' ? vue.reperes.ads : id === 'meta' ? vue.reperes.meta : vue.reperes.audit
+      id === 'ads'
+        ? vue.reperes.ads
+        : id === 'meta'
+          ? vue.reperes.meta
+          : id === 'nova'
+            ? (vue.reperes.nova ?? null)
+            : vue.reperes.audit
 
     let statut: StatutAgent
-    if ((id === 'ads' || id === 'meta') && !vue.sourcesLues.includes(id)) statut = 'connexion'
+    if ((id === 'ads' || id === 'meta' || id === 'nova') && !vue.sourcesLues.includes(id)) statut = 'connexion'
     else if (siteAgents.includes(id) && vue.site === null) statut = 'a-lancer'
     else if (critiques > 0) statut = 'action'
     else statut = 'actif'

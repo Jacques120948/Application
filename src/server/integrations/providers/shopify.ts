@@ -1014,3 +1014,239 @@ export async function articleExisteEncore(
   if (noeud === null) return false
   return noeud?.id !== undefined ? true : null
 }
+
+// ── Commandes, pour Nova ─────────────────────────────────────────────────────
+
+/**
+ * Ce qu'on lit d'une commande, et rien de plus.
+ *
+ * Nova compte des ventes ; elle ne tient pas de fichier clients. On ne demande donc ni nom,
+ * ni courriel, ni adresse : l'identifiant du client ne sert qu'à savoir si c'est sa première
+ * commande, et il n'est jamais conservé — seuls des totaux par jour le sont.
+ */
+export type CommandeShopify = {
+  id: string
+  /** Horodatage ISO de la commande, tel que Shopify le rend. */
+  creeLe: string
+  /** Encaissé, remboursements et modifications déduits, en centimes. */
+  totalCents: number
+  devise: string
+  annulee: boolean
+  test: boolean
+  /**
+   * Première commande de ce client ? `null` : on ne sait pas — commande sans client, ou
+   * Shopify qui ne l'a pas encore calculé. Ce n'est pas « non ».
+   */
+  premiere: boolean | null
+  /** La dernière visite avant l'achat : ce qui sert au « dernier clic ». `null` : inconnue. */
+  visite: VisiteShopify | null
+  lignes: { produitId: string | null; titre: string; quantite: number; totalCents: number }[]
+}
+
+export type VisiteShopify = {
+  source: string
+  referrer: string
+  utm: { source: string; medium: string; campaign: string; content: string; term: string }
+}
+
+/** Au-delà, on s'arrête et on le dit : une synchronisation doit tenir dans une requête. */
+export const COMMANDES_MAX = 1_500
+
+/** Par page. Chaque commande porte ses lignes : des pages plus grosses dépassent le coût permis. */
+const COMMANDES_PAR_PAGE = 50
+
+/** Les lignes lues par commande. Au-delà, le détail produit est tronqué, pas le total. */
+const LIGNES_PAR_COMMANDE = 10
+
+const CHAMPS_PARCOURS = `customerJourneySummary {
+        customerOrderIndex
+        lastVisit { source referrerUrl utmParameters { source medium campaign content term } }
+      }`
+
+/**
+ * Les variantes de la requête, de la plus riche à la plus sobre.
+ *
+ * Le parcours d'achat et l'identifiant du client sont les deux champs qu'une boutique peut
+ * refuser sans refuser les commandes : le premier selon la version d'API, le second parce que
+ * Shopify range le client parmi les « données client protégées », qu'une application doit
+ * déclarer. Plutôt que de tout perdre sur un refus partiel, on retire ce qui est refusé.
+ */
+type Variante = { parcours: boolean; client: boolean }
+
+const VARIANTES: readonly Variante[] = [
+  { parcours: true, client: true },
+  { parcours: true, client: false },
+  { parcours: false, client: false },
+]
+
+function requeteCommandes(depuis: string, { parcours, client }: Variante): string {
+  return `query($n: Int!, $apres: String) {
+  orders(first: $n, after: $apres, sortKey: CREATED_AT, query: "created_at:>=${depuis}") {
+    nodes {
+      id
+      createdAt
+      cancelledAt
+      test
+      currentTotalPriceSet { shopMoney { amount currencyCode } }
+      ${client ? 'customer { id numberOfOrders }' : ''}
+      ${parcours ? CHAMPS_PARCOURS : ''}
+      lineItems(first: ${LIGNES_PAR_COMMANDE}) {
+        nodes { title currentQuantity product { id } discountedTotalSet { shopMoney { amount } } }
+      }
+    }
+    pageInfo { hasNextPage endCursor }
+  }
+}`
+}
+
+/** Un montant Shopify (« 123.45 ») en centimes entiers. Illisible : zéro, jamais NaN. */
+function centimes(montant: unknown): number {
+  const valeur = typeof montant === 'string' ? Number(montant) : typeof montant === 'number' ? montant : NaN
+  return Number.isFinite(valeur) ? Math.round(valeur * 100) : 0
+}
+
+type ArgentBrut = { shopMoney?: { amount?: string; currencyCode?: string } } | null
+
+type CommandeBrute = {
+  id: string
+  createdAt: string
+  cancelledAt: string | null
+  test: boolean
+  currentTotalPriceSet: ArgentBrut
+  customer?: { id: string; numberOfOrders: string | number } | null
+  customerJourneySummary?: {
+    customerOrderIndex?: number | null
+    lastVisit?: {
+      source?: string | null
+      referrerUrl?: string | null
+      utmParameters?: Partial<Record<'source' | 'medium' | 'campaign' | 'content' | 'term', string | null>> | null
+    } | null
+  } | null
+  lineItems: {
+    nodes: {
+      title: string
+      currentQuantity: number
+      product: { id: string } | null
+      discountedTotalSet: ArgentBrut
+    }[]
+  }
+}
+
+function convertirCommande(brute: CommandeBrute): CommandeShopify {
+  const parcours = brute.customerJourneySummary ?? null
+  const visite = parcours?.lastVisit ?? null
+  const utm = visite?.utmParameters ?? null
+  const index = parcours?.customerOrderIndex
+  const nombre = brute.customer == null ? NaN : Number(brute.customer.numberOfOrders)
+  /*
+   * Première commande : le rang de la commande dans l'historique du client, quand Shopify le
+   * donne. À défaut, un client qui n'a qu'une commande en tout en est forcément à sa
+   * première. Le second chemin sous-compte — un nouveau client revenu depuis n'y est plus —
+   * et c'est le bon sens de l'erreur : un coût d'acquisition surestimé n'invite personne à
+   * dépenser davantage.
+   */
+  const premiere =
+    typeof index === 'number' ? index === 1 : Number.isFinite(nombre) ? (nombre === 1 ? true : null) : null
+  return {
+    id: brute.id,
+    creeLe: brute.createdAt,
+    totalCents: centimes(brute.currentTotalPriceSet?.shopMoney?.amount),
+    devise: brute.currentTotalPriceSet?.shopMoney?.currencyCode ?? '',
+    annulee: brute.cancelledAt !== null,
+    test: brute.test === true,
+    premiere,
+    visite:
+      visite === null
+        ? null
+        : {
+            source: visite.source ?? '',
+            referrer: visite.referrerUrl ?? '',
+            utm: {
+              source: utm?.source ?? '',
+              medium: utm?.medium ?? '',
+              campaign: utm?.campaign ?? '',
+              content: utm?.content ?? '',
+              term: utm?.term ?? '',
+            },
+          },
+    lignes: brute.lineItems.nodes.map((ligne) => ({
+      produitId: ligne.product?.id ?? null,
+      titre: ligne.title,
+      quantite: ligne.currentQuantity,
+      totalCents: centimes(ligne.discountedTotalSet?.shopMoney?.amount),
+    })),
+  }
+}
+
+/**
+ * Les commandes passées depuis une date, les plus anciennes d'abord.
+ *
+ * `depuis` est une date AAAA-MM-JJ calculée par le serveur ; elle est vérifiée avant d'entrer
+ * dans la requête, qui ne reçoit jamais rien d'autre de l'extérieur.
+ *
+ * Le parcours d'achat (dernière visite, rang de la commande) est demandé d'abord. Si
+ * Shopify le refuse — champ absent d'une version, boutique qui ne le calcule pas — on relit
+ * sans lui plutôt que de ne rien rendre : un chiffre d'affaires sans canal vaut mieux
+ * qu'aucun chiffre d'affaires.
+ */
+export async function lireCommandes(
+  acces: AccesShopify,
+  jeton: string,
+  depuis: string,
+  max = COMMANDES_MAX,
+): Promise<{ commandes: CommandeShopify[]; tronque: boolean; parcours: boolean; client: boolean }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(depuis)) throw new Error('Date de début illisible.')
+
+  let derniere: Error | null = null
+  for (const variante of VARIANTES) {
+    const commandes: CommandeShopify[] = []
+    let apres: string | null = null
+    let refusee = false
+    while (commandes.length < max) {
+      const reponse: Reponse = await appeler(acces.boutique, jeton, acces.version, requeteCommandes(depuis, variante), {
+        n: Math.min(COMMANDES_PAR_PAGE, max - commandes.length),
+        apres,
+      })
+      if (reponse.status !== 200 || reponse.data === null || reponse.data.orders == null) {
+        derniere = new Error(refusCommandes(reponse.status, reponse.erreurs))
+        // Les commandes elles-mêmes refusées, ou Shopify en panne : aucune variante n'y changera rien.
+        if (reponse.status !== 200 || commandesRefusees(reponse.erreurs)) throw derniere
+        refusee = true
+        break
+      }
+      const page = reponse.data.orders as Page<CommandeBrute>
+      for (const brute of page.nodes) commandes.push(convertirCommande(brute))
+      const fin = page.pageInfo?.hasNextPage !== true || (page.pageInfo.endCursor ?? null) === null
+      if (fin) return { commandes, tronque: false, ...variante }
+      apres = page.pageInfo?.endCursor ?? null
+    }
+    if (!refusee) return { commandes, tronque: true, ...variante }
+    logger.info('lecture des commandes Shopify allégée', { parcours: variante.parcours, client: variante.client })
+  }
+  throw derniere ?? new Error('Shopify n’a pas rendu les commandes.')
+}
+
+function commandesRefusees(erreurs: readonly string[]): boolean {
+  return erreurs.some((erreur) => /read_orders|access denied for orders|orders field/iu.test(erreur))
+}
+
+/** Le refus d'une lecture de commandes, dit pour quelqu'un qui peut y remédier. */
+function refusCommandes(status: number, erreurs: readonly string[]): string {
+  if (commandesRefusees(erreurs)) {
+    return 'Shopify refuse la lecture des commandes : ajoutez l’autorisation « read_orders » à votre application Shopify, puis actualisez.'
+  }
+  return refus(status, erreurs)
+}
+
+const REQUETE_REGLAGES = `{ shop { ianaTimezone currencyCode } }`
+
+/** Le fuseau et la devise de la boutique : c'est son fuseau qui découpe les journées. */
+export async function lireReglagesBoutique(
+  acces: AccesShopify,
+  jeton: string,
+): Promise<{ fuseau: string; devise: string } | null> {
+  const reponse = await appeler(acces.boutique, jeton, acces.version, REQUETE_REGLAGES).catch(() => null)
+  if (reponse === null || reponse.status !== 200 || reponse.data === null) return null
+  const shop = reponse.data.shop as { ianaTimezone?: string; currencyCode?: string } | undefined
+  return { fuseau: shop?.ianaTimezone ?? '', devise: shop?.currencyCode ?? '' }
+}

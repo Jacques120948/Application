@@ -252,6 +252,19 @@ export const FEATURES: readonly Feature[] = [
       'Vos campagnes Facebook et Instagram lues et expliquées : où part votre budget, ce qui fonctionne, et ce qui mérite d’être changé. MIRA propose, elle ne modifie rien.',
     status: 'live',
   },
+  /*
+   * Nova ne promet que ce qu'elle mesure : les ventes d'une boutique reliée, les dépenses
+   * des régies reliées, les clics Google. Pas de visites ni de taux de conversion : Google
+   * Analytics n'est pas relié à Evoliia, et la fiche ne le laisse pas croire.
+   */
+  {
+    id: 'nova_agent',
+    group: 'equipe',
+    label: 'Nova — Analytics',
+    summary:
+      'Vos ventes, vos dépenses et ce que chaque canal rapporte réellement, calculés et comparés d’une période à l’autre. Nova confronte ce que déclarent Google et Meta à ce que votre boutique encaisse.',
+    status: 'live',
+  },
 ]
 
 export const FEATURE_IDS = FEATURES.map((feature) => feature.id)
@@ -359,6 +372,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_cro_agent',
     'shopify_read',
     'search_console',
+    'nova_agent',
   ],
   'vis-pro': [
     'oria_agent',
@@ -369,6 +383,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'visibility_cro_agent',
     'shopify_read',
     'search_console',
+    'nova_agent',
   ],
   /*
    * Les deux publicitaires n'entrent que dans la plus haute offre, et ce choix recopie
@@ -387,6 +402,7 @@ export const DEFAULT_PLAN_FEATURES: Record<string, readonly string[]> = {
     'search_console',
     'visibility_ads_agent',
     'visibility_meta_agent',
+    'nova_agent',
   ],
 }
 

@@ -56,6 +56,7 @@ const NOMS: Record<string, string> = {
   cro: 'Cleo',
   ads: 'Naya',
   meta: 'MIRA',
+  nova: 'Nova',
 }
 
 /** Ce qu'une modification envoyée à une plateforme a touché, dit en mots. */

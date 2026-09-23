@@ -11,6 +11,7 @@ import { lireObjectifs, type VueObjectifs } from './objectifs'
 import { lireAnomalies } from './anomalies'
 import { santeMarketing, type Canal } from './sante'
 import type { VisibilityAgentId } from '@/server/agents/visibility'
+import { lireNova, type VueNova } from '@/server/nova/service'
 
 /**
  * Ce qu'Oria lit, et ce qu'elle en fait.
@@ -486,9 +487,53 @@ export type Consolidation = {
    * réelles : la fin du dernier audit, la dernière synchronisation d'un compte. Aucune
    * n'est fabriquée pour remplir une case — `null` s'affiche « jamais ».
    */
-  reperes: { audit: Date | null; ads: Date | null; meta: Date | null }
+  /** `nova` : la dernière lecture des ventes. Absente quand Nova n'a rien lu. */
+  reperes: { audit: Date | null; ads: Date | null; meta: Date | null; nova?: Date | null }
   /** Ce que l'entreprise cherche. C'est ce qui a incliné le classement. */
   objectifs: VueObjectifs
+}
+
+/**
+ * Ce que Nova transmet à Oria : ses alertes et ses opportunités, en signaux.
+ *
+ * Deux exclusions, pour qu'Oria ne dise pas deux fois la même chose. Le suivi de
+ * conversions qui se tait est déjà relevé par les anomalies d'Oria, jour par jour ; et une
+ * alerte verte n'est pas une priorité — elle reste sur l'écran de Nova. Le reste arrive avec
+ * les mots de Nova et son fondement chiffré, que le « Pourquoi ? » affiche tel quel.
+ */
+export function depuisNova(nova: VueNova | null, locale: string): Signal[] {
+  if (nova === null || nova.vierge) return []
+  const suffixe = nova.siteId === '' ? '' : `?siteId=${nova.siteId}`
+  const href = `/${locale}/nova${suffixe}`
+  const alertes: Signal[] = nova.alertes
+    .filter((alerte) => alerte.niveau !== 'vert' && !alerte.cle.startsWith('suivi.'))
+    .map((alerte) => ({
+      cle: `nova:${alerte.cle}`,
+      sources: ['nova', alerte.agent as VisibilityAgentId],
+      titre: alerte.texte,
+      pourquoi: alerte.fondement,
+      quoiFaire: `Regarder avec ${alerte.agent === 'ads' ? 'Naya' : alerte.agent === 'meta' ? 'MIRA' : 'Cleo'} ce qui a changé.`,
+      mesure: `Calculé par Nova sur ${nova.periode.libelle.toLowerCase()}, comparé à la période précédente (${nova.sources.join(' + ')}).`,
+      impact: alerte.niveau === 'rouge' ? 'eleve' : 'moyen',
+      effort: 'moyen',
+      urgence: alerte.niveau === 'rouge' ? 'critique' : 'important',
+      confiance: 'moyenne',
+      href,
+    }))
+  const opportunites: Signal[] = nova.opportunites.map((opportunite) => ({
+    cle: `nova:${opportunite.cle}`,
+    sources: ['nova', opportunite.agent as VisibilityAgentId],
+    titre: opportunite.titre,
+    pourquoi: opportunite.pourquoi,
+    quoiFaire: opportunite.cta.label,
+    mesure: `Relevé par Nova sur ${nova.periode.libelle.toLowerCase()} (${nova.sources.join(' + ')}).`,
+    impact: opportunite.impact,
+    effort: 'moyen',
+    urgence: 'information',
+    confiance: 'moyenne',
+    href: opportunite.cta.href,
+  }))
+  return [...alertes, ...opportunites]
 }
 
 /**
@@ -526,10 +571,14 @@ export async function lireSignaux(
     sans(lireAnomalies(userId, locale, site?.id ?? null), []),
   ])
 
+  // Les chiffres de Nova, déjà calculés : Oria les lit, elle ne les refait pas.
+  const nova = await sans(lireNova(userId, locale, { periode: '30', siteId: site?.id }), null)
+
   const sourcesLues: VisibilityAgentId[] = []
   if (site !== null) sourcesLues.push('audit', 'seo', 'geo', 'cro')
   if (compteAds !== null) sourcesLues.push('ads')
   if (compteMeta !== null) sourcesLues.push('meta')
+  if (nova !== null && !nova.vierge) sourcesLues.push('nova')
 
   const signaux: Signal[] = [
     ...(site === null ? [] : depuisSurveillance(pannes, locale, site.id)),
@@ -561,6 +610,7 @@ export async function lireSignaux(
       `/${locale}/publicite/meta`,
       'Meta Ads',
     ),
+    ...depuisNova(nova, locale),
     ...croisementPayantConversion(
       [
         ...(compteAds === null
@@ -631,6 +681,7 @@ export async function lireSignaux(
       audit: tableau?.audit.finishedAt ?? null,
       ads: compteAds?.synchroAt ?? null,
       meta: compteMeta?.synchroAt ?? null,
+      nova: nova?.ventes.synchroAt ?? null,
     },
   }
 }

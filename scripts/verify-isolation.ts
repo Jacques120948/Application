@@ -50,6 +50,8 @@ const PROTECTED_TABLES = [
   'SiteArticle',
   'SiteImage',
   'OriaResume',
+  'CommerceJour',
+  'CommerceSynchro',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',
