@@ -26,11 +26,14 @@ import { ensureTestPlan, testPlanId } from '../helpers/plan'
 vi.mock('@/server/integrations/providers/shopify', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/integrations/providers/shopify')>()),
   frapperJeton: vi.fn(async () => ({ ok: true, jeton: 'jeton-test' })),
-  lirePortees: vi.fn(async () => ['read_orders', 'read_customers']),
+  lirePortees: vi.fn(async () => ['read_orders', 'read_all_orders', 'read_customers']),
+  lireReglagesBoutique: vi.fn(async () => ({ fuseau: 'Europe/Zurich', devise: 'CHF' })),
 }))
 vi.mock('@/server/integrations/providers/shopify-clients', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/server/integrations/providers/shopify-clients')>()),
   lancerExportClients: vi.fn(),
+  lancerExportCommandes: vi.fn(async () => ({ ok: true, operation: 'gid://shopify/BulkOperation/2' })),
+  telechargerCommandes: vi.fn(),
   suivreExport: vi.fn(),
   telechargerExport: vi.fn(),
   lirePaniersAbandonnes: vi.fn(),
@@ -108,7 +111,7 @@ describe('Lina — collecte', () => {
     const lignes = await withUserScope(boutique, (tx) => tx.linaClient.findMany({ where: { userId: boutique } }))
     expect(lignes).toHaveLength(125)
     // Rien qui dise qui est un client : ni nom, ni courriel, ni jeton.
-    expect(Object.keys(lignes[0]!).sort()).toEqual(['caCents', 'commandes', 'consentement', 'creeLe', 'derniereCommande', 'devise', 'id', 'ref', 'source', 'userId'])
+    expect(Object.keys(lignes[0]!).sort()).toEqual(['caCents', 'commandes', 'consentement', 'creeLe', 'derniereCommande', 'devise', 'id', 'intervalleJours', 'premiereCommande', 'produitPrincipal', 'ref', 'source', 'userId'])
     const synchro = await withUserScope(boutique, (tx) => tx.linaSynchro.findFirstOrThrow({ where: { userId: boutique } }))
     expect(JSON.stringify(synchro)).not.toMatch(/jeton-test|secret-de-test/u)
   })

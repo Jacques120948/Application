@@ -20,6 +20,10 @@ export type ClientIndex = {
   commandes: number
   caCents: number
   consentement: string
+  /** V2, quand les commandes ont été lues : la vraie première commande et le rythme habituel. */
+  premiereCommande?: Date | null
+  intervalleJours?: number | null
+  produitPrincipal?: string | null
 }
 
 export const CLES_SEGMENTS = [
@@ -106,6 +110,8 @@ export function contexteSegments(clients: readonly ClientIndex[], criteres: Crit
  */
 export function intervalleEstime(client: ClientIndex): number | null {
   if (client.commandes < 2 || client.derniereCommande === null) return null
+  // Le rythme lu dans les commandes vaut mieux que l'estimation par la date de création.
+  if (client.intervalleJours != null) return Math.max(7, client.intervalleJours)
   return Math.max(7, (+client.derniereCommande - +client.creeLe) / JOUR_MS / (client.commandes - 1))
 }
 
@@ -116,7 +122,7 @@ export function appartient(client: ClientIndex, cle: CleSegment, contexte: Conte
   const depuis = jours(client.derniereCommande, maintenant)
   switch (cle) {
     case 'nouveaux':
-      return jours(client.creeLe, maintenant) <= criteres.nouveauJours
+      return jours(client.premiereCommande ?? client.creeLe, maintenant) <= criteres.nouveauJours
     case 'actifs':
       return depuis <= criteres.actifJours
     case 'recurrents':

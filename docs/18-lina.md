@@ -95,11 +95,30 @@ Portées `read_customers` (clients) et `read_orders` (paniers), et l'accès aux 
 customer data » demandé dans le Dev Dashboard. Sans cet accès, Lina le dit et explique quoi
 faire.
 
-## V2 (prévu, non livré)
+## V2 — ce qui est livré
 
-Détail des commandes par client (produit principal, réachat par produit, cross-sell,
-upsell), cohortes, LTV estimée, bilan hebdomadaire et alertes, objectifs, performance et
-comparaison des campagnes, A/B tests, audiences publicitaires pour Naya et MIRA (avec
-autorisation), WooCommerce, Stripe, HubSpot et outils d'emailing (Klaviyo, Mailchimp,
-Brevo), SMS / WhatsApp, niveau d'autonomie « automatique ». Tout connecteur qui pourrait
-coûter à Evoliia sera soumis avant d'être construit.
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Export des commandes | `shopify-clients.ts` (`lancerExportCommandes`, `telechargerCommandes`, lecture en flux) | Seconde phase, lancée dès que les clients sont lus : l'écran reste utilisable pendant. Trois ans avec `read_all_orders`, soixante jours sinon ; 150 000 commandes au plus. De chaque commande : date, identifiant client, total, et par article le produit, sa famille, sa quantité, son prix. Annulées et commandes de test écartées. Une panne de cette phase n'abîme pas l'index des clients. |
+| Agrégation | `lina/commandes.ts` (pur) | **Les commandes ne sont jamais écrites.** Il reste par client : vraie première commande (seulement si toute son histoire est dans l'export), rythme médian, produit principal ; par produit (`LinaProduit`) : acheteurs, réacheteurs, prix moyen, intervalle entre deux achats (médiane, quartiles, dès 5 intervalles) ; pour la boutique (`LinaSynchro.analyse`) : cohortes (le calcul de Nova, 12 dernières), paires « acheté ensuite » et « acheté ensemble » (dès 5 clients), montées en gamme, délai de la deuxième commande. |
+| Réachat | `lina/valeur.ts` (`reachatParProduit`) | « Les clients ayant acheté X le rachètent souvent entre p25 et p75 jours » — dès 5 réacheteurs. Campagne de réachat avec la requête `products_purchased MATCHES (id = X, date BETWEEN -p75d AND -p25d)`. |
+| Cross-sell / upsell | `suggestions`, `campagnesProduits` | « n % des acheteurs de A ont ensuite acheté B » (observé, une corrélation). Montée en gamme : même famille, prix moyen ≥ +30 %, jamais répétée parmi les compléments. Offre groupée suggérée quand les deux s'achètent aussi ensemble. Audience = acheteurs de A qui n'ont pas B ; requête Shopify fournie. |
+| Valeur client | `valeurClient` | **Observée** : dépense moyenne d'un acheteur. **Estimée** : panier moyen × commandes par an × durée de vie, la durée venant de l'attrition annuelle observée (clients arrivés il y a plus d'un an sans commande depuis un an), plafonnée à 5 ans ; dès 50 clients anciens ; méthode affichée. |
+| Risque de départ | `risquesDepart`, `segments.ts` | Silence rapporté au rythme propre du client (lu dans les commandes) : > 3× élevé, 2–3× moyen. « Risque estimé ». |
+| Fidélité | `programmeFidelite` | Paliers Découverte / Habitué / Fidèle / VIP tirés de la base, avantages non monétaires. |
+| Audiences publicitaires | `audiencesPub`, `delegation.ts` | VIP et fidèles (audiences similaires), acheteurs récents (exclusion), dormants (reconquête), dès 100 clients. **Aucune liste ne sort d'Evoliia** : Shopify synchronise ses segments par ses canaux, avec l'accord de la personne ; MIRA ou Naya reçoivent la taille et l'usage (délégation payée en crédits, sur clic). |
+| Scénarios | `scenarios` | SI / ALORS préparés et comptés (panier, deuxième commande, reconquête, fidèle, VIP, réachat), avec l'endroit où les activer dans Shopify. Lina ne déclenche rien. |
+| Résultats et A/B | `lina/resultats.ts`, table `LinaResultat` (RLS), `/api/lina/resultats` | Saisie des résultats d'un envoi ; taux, revenu par destinataire, désinscriptions. Test A/B : même groupe, variantes A et B ; gagnant seulement avec ≥ 100 envois par variante, ≥ 20 actions et un test de deux proportions à 95 % (conversions, à défaut clics). |
+| Écrans | `/lina/produits`, `/lina/valeur`, `/lina/resultats` | Onglets ajoutés ; produit principal affiché dans « Clients à réactiver ». |
+
+Coût pour Evoliia : aucun — un export en masse de plus par analyse, sur l'API Shopify de la
+personne. Aucun envoi d'email, aucune écriture dans Shopify.
+
+## Encore à venir
+
+Import automatique des résultats depuis un outil d'emailing (Klaviyo, Brevo, Mailchimp :
+lecture seule, clé de la personne, sans coût pour Evoliia — à valider avant construction),
+bilan hebdomadaire et alertes de Lina (qui demandent un historique des indicateurs),
+objectifs CRM et score de fidélité, WooCommerce et Stripe comme sources de clients, SMS et
+WhatsApp (le consentement SMS n'est pas exposé par Shopify dans cette version de l'API),
+niveau d'autonomie « automatique ».

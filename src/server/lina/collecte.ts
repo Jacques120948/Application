@@ -2,9 +2,11 @@ import type { Prisma } from '@prisma/client'
 import { getEntitlements } from '@/server/billing/entitlements'
 import { SHOPIFY_FEATURE } from '@/server/commerce/boutique'
 import { withUserScope } from '@/server/db/scope'
-import { frapperJeton, lireAcces, lirePortees, type AccesShopify } from '@/server/integrations/providers/shopify'
+import { frapperJeton, lireAcces, lirePortees, lireReglagesBoutique, type AccesShopify } from '@/server/integrations/providers/shopify'
 import {
   lancerExportClients,
+  lancerExportCommandes,
+  telechargerCommandes,
   lirePaniersAbandonnes,
   suivreExport,
   telechargerExport,
@@ -14,6 +16,7 @@ import {
 import { markConnectionError, useCredential } from '@/server/integrations/service'
 import { aRelire, JOUR_MS, jourIso, PAUSE_MANUELLE_MS } from '@/server/nova/collecte-commerce'
 import { logger } from '@/server/observability/logger'
+import { analyserCommandes, type AnalyseCommandes } from './commandes'
 
 /**
  * La collecte de Lina : la base clients de la boutique, relue au rythme de Nova.
@@ -36,6 +39,11 @@ const LIGNES_PAR_LOT = 2_000
 /** Le suffixe de l'opération dit si elle lit le consentement : `|c` oui, `|s` sans. */
 const AVEC_CONSENTEMENT = '|c'
 const SANS_CONSENTEMENT = '|s'
+/** V2 : la seconde phase, l'export des commandes, qui suit celui des clients. */
+const COMMANDES = '|o'
+/** Trois ans de commandes avec read_all_orders ; sans lui, Shopify n'en rend que soixante jours. */
+const JOURS_COMMANDES = 1_095
+const JOURS_SANS_HISTORIQUE = 60
 
 export type PeriodePaniers = { nombre: number; valeurCents: number; recuperes: number; valeurRecupereeCents: number }
 
@@ -51,6 +59,11 @@ export type PaniersLina = {
 
 export type EtatLina = {
   etat: 'absent' | 'offre' | 'jamais' | 'en-cours' | 'ok' | 'erreur' | 'portee' | 'protegees'
+  /** V2 : la lecture des commandes suit celle des clients ; l'écran reste utilisable pendant. */
+  commandesEnCours: boolean
+  commandesAt: Date | null
+  commandesMessage: string
+  analyse: AnalyseCommandes | null
   message: string
   boutique: string
   synchroAt: Date | null
@@ -63,6 +76,10 @@ export type EtatLina = {
 
 const SANS: EtatLina = {
   etat: 'absent',
+  commandesEnCours: false,
+  commandesAt: null,
+  commandesMessage: '',
+  analyse: null,
   message: '',
   boutique: '',
   synchroAt: null,
@@ -71,6 +88,12 @@ const SANS: EtatLina = {
   tronque: false,
   consentement: false,
   paniers: null,
+}
+
+function lireAnalyse(brut: unknown): AnalyseCommandes | null {
+  if (brut === null || typeof brut !== 'object') return null
+  const valeur = brut as Partial<AnalyseCommandes>
+  return typeof valeur.au === 'string' && Array.isArray(valeur.cohortes) ? (valeur as AnalyseCommandes) : null
 }
 
 function lirePaniers(brut: unknown): PaniersLina | null {
@@ -115,6 +138,10 @@ export async function lireEtatLina(userId: string): Promise<EtatLina> {
   return {
     etat: ligne.etat as EtatLina['etat'],
     message: ligne.message,
+    commandesEnCours: ligne.operation?.endsWith(COMMANDES) === true,
+    commandesAt: ligne.commandesAt,
+    commandesMessage: ligne.commandesMessage,
+    analyse: lireAnalyse(ligne.analyse),
     boutique: lu.acces.boutique,
     synchroAt: ligne.synchroAt,
     lanceAt: ligne.lanceAt,
@@ -150,6 +177,56 @@ async function ecrireClients(userId: string, clients: readonly ClientShopify[]):
         skipDuplicates: true,
       }),
     )
+  }
+}
+
+/** Écrit ce que les commandes ont appris : par client (mise à jour groupée), par produit, et les totaux. */
+async function ecrireCommandes(userId: string, resultat: ReturnType<typeof analyserCommandes>, maintenant: Date): Promise<void> {
+  await withUserScope(userId, (tx) =>
+    tx.linaClient.updateMany({ where: { userId, source: SOURCE }, data: { premiereCommande: null, intervalleJours: null, produitPrincipal: null } }),
+  )
+  for (let debut = 0; debut < resultat.parClient.length; debut += LIGNES_PAR_LOT) {
+    const lot = resultat.parClient.slice(debut, debut + LIGNES_PAR_LOT)
+    await withUserScope(
+      userId,
+      (tx) => tx.$executeRaw`
+        UPDATE "LinaClient" AS c
+        SET "premiereCommande" = u.premiere, "intervalleJours" = u.intervalle, "produitPrincipal" = u.produit
+        FROM unnest(
+          ${lot.map((client) => client.ref)}::text[],
+          ${lot.map((client) => (client.premiereCommande === null ? null : new Date(client.premiereCommande)))}::timestamp[],
+          ${lot.map((client) => client.intervalleJours)}::int[],
+          ${lot.map((client) => client.produitPrincipal)}::text[]
+        ) AS u(ref, premiere, intervalle, produit)
+        WHERE c."userId" = ${userId}::uuid AND c."source" = ${SOURCE} AND c."ref" = u.ref`,
+    )
+  }
+  await withUserScope(userId, (tx) => tx.linaProduit.deleteMany({ where: { userId } }))
+  for (let debut = 0; debut < resultat.produits.length; debut += LIGNES_PAR_LOT) {
+    const lot = resultat.produits.slice(debut, debut + LIGNES_PAR_LOT)
+    await withUserScope(userId, (tx) => tx.linaProduit.createMany({ data: lot.map((produit) => ({ userId, ...produit })), skipDuplicates: true }))
+  }
+  await noter(userId, {
+    analyse: resultat.analyse as unknown as Prisma.InputJsonValue,
+    commandesAt: maintenant,
+    commandesMessage: '',
+    operation: null,
+  })
+}
+
+/** Lance la seconde phase : les commandes, sur trois ans quand Shopify les rend. */
+async function lancerCommandes(userId: string, acces: AccesShopify, jeton: string, maintenant: Date): Promise<void> {
+  const portees = await lirePortees(acces, jeton)
+  if (portees !== null && !portees.includes('read_orders')) {
+    await noter(userId, { operation: null, commandesMessage: 'L’autorisation « read_orders » manque : Lina ne peut pas lire les produits achetés.' })
+    return
+  }
+  const jours = portees?.includes('read_all_orders') === true ? JOURS_COMMANDES : JOURS_SANS_HISTORIQUE
+  const essai = await lancerExportCommandes(acces, jeton, jourIso(new Date(+maintenant - jours * JOUR_MS)))
+  if (essai.ok) {
+    await noter(userId, { operation: `${essai.operation}${COMMANDES}`, lanceAt: maintenant })
+  } else {
+    await noter(userId, { operation: null, commandesMessage: essai.raison })
   }
 }
 
@@ -202,6 +279,36 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
       const [operation, variante] = [ligne.operation.slice(0, -2), ligne.operation.slice(-2)]
       const consentement = variante === AVEC_CONSENTEMENT
       const suivi = await suivreExport(lu.acces, frappe.jeton, operation)
+
+      // La seconde phase : ses échecs ne touchent pas à l'index des clients, déjà utilisable.
+      if (variante === COMMANDES) {
+        if (suivi.statut === 'en-cours') {
+          if (ligne.lanceAt !== null && +maintenant - +ligne.lanceAt > EXPORT_PERIME_MS) {
+            await noter(userId, { operation: null, commandesMessage: 'L’export des commandes n’a pas abouti. Il sera relancé à la prochaine analyse.' })
+          }
+          return lireEtatLina(userId)
+        }
+        if (suivi.statut !== 'termine') {
+          await noter(userId, { operation: null, commandesMessage: suivi.statut === 'refuse' ? MESSAGE_PROTEGEES : suivi.raison })
+          return lireEtatLina(userId)
+        }
+        const { commandes, tronque } = suivi.url === null ? { commandes: [], tronque: false } : await telechargerCommandes(suivi.url)
+        const connus = await withUserScope(userId, (tx) =>
+          tx.linaClient.findMany({ where: { userId, source: SOURCE }, select: { ref: true, commandes: true } }),
+        )
+        const reglages = await lireReglagesBoutique(lu.acces, frappe.jeton).catch(() => null)
+        const resultat = analyserCommandes(commandes, new Map(connus.map((client) => [client.ref, client.commandes])), {
+          depuis: commandes[0]?.creeLe.slice(0, 10) ?? jourIso(maintenant),
+          tronque,
+          historiqueComplet: false,
+          fuseau: reglages?.fuseau || 'Europe/Zurich',
+          maintenant,
+        })
+        await ecrireCommandes(userId, resultat, maintenant)
+        logger.info('commandes analysées pour Lina', { commandes: commandes.length, produits: resultat.produits.length })
+        return lireEtatLina(userId)
+      }
+
       if (suivi.statut === 'en-cours') {
         if (ligne.lanceAt !== null && +maintenant - +ligne.lanceAt > EXPORT_PERIME_MS) {
           await noter(userId, { etat: 'erreur', message: 'L’export Shopify n’a pas abouti. Relancez l’analyse.', operation: null })
@@ -233,6 +340,8 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
         consentement,
       })
       logger.info('clients relus pour Lina', { clients: clients.length, tronque })
+      // Les clients sont là : l'écran s'ouvre, et les commandes se lisent derrière.
+      await lancerCommandes(userId, lu.acces, frappe.jeton, maintenant)
       return lireEtatLina(userId)
     }
 
@@ -278,7 +387,12 @@ export async function synchroniserLina(userId: string, mode: 'auto' | 'manuel' |
     await lancer(userId, lu.acces, frappe.jeton, maintenant, true)
   } catch (error) {
     const raison = error instanceof Error ? error.message : 'Shopify n’a pas répondu.'
-    await noter(userId, { etat: 'erreur', message: raison.slice(0, 300), operation: null }).catch(() => undefined)
+    // Une panne pendant les commandes laisse l'index des clients intact et utilisable.
+    const pendantCommandes = ligne?.operation?.endsWith(COMMANDES) === true
+    await noter(
+      userId,
+      pendantCommandes ? { commandesMessage: raison.slice(0, 300), operation: null } : { etat: 'erreur', message: raison.slice(0, 300), operation: null },
+    ).catch(() => undefined)
     logger.warn('collecte de Lina en échec', { userId })
   }
   return lireEtatLina(userId)

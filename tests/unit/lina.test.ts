@@ -239,7 +239,7 @@ describe('Lina — ce que le modèle reçoit', () => {
     const segments = segmenter(clients, contexte, true, 'CHF')
     const ind = indicateurs(clients, segments, true)
     const faits = faitsLina({
-      etat: { etat: 'ok', message: '', boutique: 'demo.myshopify.com', synchroAt: MAINTENANT, lanceAt: null, clients: clients.length, tronque: false, consentement: true, paniers: null },
+      etat: { etat: 'ok', commandesEnCours: false, commandesAt: null, commandesMessage: '', analyse: null, message: '', boutique: 'demo.myshopify.com', synchroAt: MAINTENANT, lanceAt: null, clients: clients.length, tronque: false, consentement: true, paniers: null },
       criteres: CRITERES_DEFAUT,
       activite: 'ecommerce',
       devise: 'CHF',
@@ -255,6 +255,17 @@ describe('Lina — ce que le modèle reçoit', () => {
       topSegment: null,
       nova: null,
       pourOria: [],
+      analyse: null,
+      produits: [],
+      reachat: [],
+      croisees: [],
+      montees: [],
+      valeur: null,
+      risques: [],
+      fidelite: [],
+      audiences: [],
+      scenarios: [],
+      produitsSegments: {},
     }).join('\n')
     expect(faits).toContain('Clients dormants')
     expect(faits).not.toMatch(/demo\.myshopify|Client n°|gid:\/\//u)

@@ -1604,10 +1604,13 @@ export function CohortesClientsNova({
   cohortes,
   source,
   devise,
+  fenetre = 'sur les six derniers mois',
 }: {
   cohortes: readonly CohorteClients[] | null
   source: string
   devise: string
+  /** La fenêtre de lecture, dite telle quelle : Nova lit six mois, Lina trois ans. */
+  fenetre?: string
 }) {
   return (
     <Card className="min-w-0 max-w-full">
@@ -1624,8 +1627,8 @@ export function CohortesClientsNova({
         ) : (
           <>
             <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
-              Chaque ligne suit les clients dont la première commande tombe ce mois-là. Calculé à la dernière lecture complète, sur les six
-              derniers mois ; aucun client n’est conservé, seulement ces moyennes.
+              Chaque ligne suit les clients dont la première commande tombe ce mois-là. Calculé à la dernière lecture complète, {fenetre} ;
+              aucun client n’est conservé, seulement ces moyennes.
             </p>
             {(
               [

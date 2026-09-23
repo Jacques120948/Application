@@ -3,6 +3,7 @@ import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
 import { lireLina } from '@/server/lina/service'
 import { faitsLina, transmissionOria as transmissionLina } from '@/server/lina/contexte'
+import { lireResultats, testsAB } from '@/server/lina/resultats'
 import { contenusPourMilo, conversionPourCleo, pagesSeoPourNeo, traficAssistantsPourGia } from '@/server/nova/transmission'
 import { lireSignaux } from '@/server/oria/signaux'
 import { lireDecisions } from '@/server/oria/decisions'
@@ -516,8 +517,8 @@ export async function readSiteFacts(
    * conseiller, rien qui permette de reconnaître quelqu'un.
    */
   if (agent === 'lina') {
-    const vue = await lireLina(userId)
-    return [...base, ...faitsLina(vue)].join('\n')
+    const [vue, resultats] = await Promise.all([lireLina(userId), lireResultats(userId).catch(() => [])])
+    return [...base, ...faitsLina(vue, resultats, testsAB(resultats))].join('\n')
   }
   /*
    * Milo écrit. Il voit les deux catalogues — un texte sert au référencement comme aux

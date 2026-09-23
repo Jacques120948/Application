@@ -17,7 +17,7 @@ import { Button } from '@/components/ui'
 const INTERVALLE_MS = 4_000
 const ESSAIS_MAX = 45
 
-type Reponse = { etat?: string; message?: string; clients?: number }
+type Reponse = { etat?: string; message?: string; clients?: number; commandesEnCours?: boolean }
 
 export function SynchroLina({
   derniere,
@@ -33,7 +33,7 @@ export function SynchroLina({
   libelle?: string
 }) {
   const router = useRouter()
-  const [etat, setEtat] = useState<'repos' | 'lecture' | 'attente' | 'erreur'>(
+  const [etat, setEtat] = useState<'repos' | 'lecture' | 'commandes' | 'attente' | 'erreur'>(
     enCours ? 'lecture' : probleme !== null && probleme !== '' ? 'erreur' : 'repos',
   )
   const [message, setMessage] = useState(probleme ?? '')
@@ -52,14 +52,21 @@ export function SynchroLina({
 
   async function suivre(premier: Reponse | null): Promise<void> {
     let courant = premier
-    for (let essai = 0; essai < ESSAIS_MAX && courant?.etat === 'en-cours'; essai += 1) {
+    // Les clients d'abord ; dès qu'ils sont lus, l'écran se rafraîchit, puis on attend les commandes.
+    let clientsVus = false
+    for (let essai = 0; essai < ESSAIS_MAX && (courant?.etat === 'en-cours' || courant?.commandesEnCours === true); essai += 1) {
+      if (!clientsVus && courant?.etat === 'ok') {
+        clientsVus = true
+        setEtat('commandes')
+        router.refresh()
+      }
       await new Promise((resolve) => setTimeout(resolve, INTERVALLE_MS))
       courant = await demander('suivre')
     }
     if (courant === null) {
       setEtat('erreur')
       setMessage('La lecture n’a pas abouti. Les dernières données restent affichées.')
-    } else if (courant.etat === 'en-cours') {
+    } else if (courant.etat === 'en-cours' || courant.commandesEnCours === true) {
       setEtat('attente')
     } else if (courant.etat === 'ok') {
       setEtat('repos')
@@ -90,6 +97,8 @@ export function SynchroLina({
       <span>
         {etat === 'lecture'
           ? 'Lecture de votre base clients chez Shopify…'
+          : etat === 'commandes'
+            ? 'Clients lus. Lecture des commandes pour les produits et le réachat…'
           : etat === 'attente'
             ? 'Shopify prépare encore l’export de vos clients. Revenez dans quelques minutes.'
             : derniere === null

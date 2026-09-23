@@ -172,22 +172,42 @@ export function lireLigneClient(ligne: string, consentementLu: boolean): ClientS
 }
 
 /**
- * Relit le fichier préparé par Shopify. Il est servi par le stockage de Shopify, par une
- * adresse signée et temporaire : on ne suit aucune redirection vers ailleurs.
+ * Les lignes d'un fichier d'export, lues en flux : un export de commandes pèse plusieurs
+ * dizaines de mégaoctets, et le lire d'un bloc doublerait la mémoire pour rien. Le fichier
+ * est servi par le stockage de Shopify, par une adresse signée et temporaire.
  */
+export async function* lignesExport(url: string): AsyncGenerator<string> {
+  if (!/^https:\/\//u.test(url)) throw new Error('Adresse d’export inattendue.')
+  const reponse = await fetch(url, { signal: AbortSignal.timeout(50_000) })
+  if (!reponse.ok || reponse.body === null) throw new Error(`Le fichier d’export n’a pas pu être relu (${reponse.status}).`)
+  const lecteur = reponse.body.getReader()
+  const decodeur = new TextDecoder()
+  let reste = ''
+  for (;;) {
+    const { value, done } = await lecteur.read()
+    if (done) break
+    reste += decodeur.decode(value, { stream: true })
+    let fin = reste.indexOf('\n')
+    while (fin >= 0) {
+      const ligne = reste.slice(0, fin)
+      reste = reste.slice(fin + 1)
+      if (ligne.trim() !== '') yield ligne
+      fin = reste.indexOf('\n')
+    }
+  }
+  reste += decodeur.decode()
+  if (reste.trim() !== '') yield reste
+}
+
+/** Relit l'export des clients. */
 export async function telechargerExport(
   url: string,
   consentementLu: boolean,
   max = CLIENTS_MAX,
 ): Promise<{ clients: ClientShopify[]; tronque: boolean }> {
-  if (!/^https:\/\//u.test(url)) throw new Error('Adresse d’export inattendue.')
-  const reponse = await fetch(url, { signal: AbortSignal.timeout(45_000) })
-  if (!reponse.ok) throw new Error(`Le fichier d’export n’a pas pu être relu (${reponse.status}).`)
-  const texte = await reponse.text()
   const clients: ClientShopify[] = []
   let tronque = false
-  for (const ligne of texte.split('\n')) {
-    if (ligne.trim() === '') continue
+  for await (const ligne of lignesExport(url)) {
     const client = lireLigneClient(ligne, consentementLu)
     if (client === null) continue
     if (clients.length >= max) {
@@ -197,6 +217,120 @@ export async function telechargerExport(
     clients.push(client)
   }
   return { clients, tronque }
+}
+
+// ── V2 : les commandes ──────────────────────────────────────────────────────
+
+/** Au-delà, l'analyse des produits porte sur les commandes les plus anciennes lues, et le dit. */
+export const COMMANDES_EXPORT_MAX = 150_000
+
+/**
+ * Une commande de l'export, réduite à ce qui sert : quand, qui (un identifiant, rien
+ * d'autre), combien, et quels produits. Ni adresse, ni nom, ni note.
+ */
+export type CommandeExport = {
+  id: string
+  creeLe: string
+  clientRef: string | null
+  totalCents: number
+  devise: string
+  lignes: { produitRef: string; titre: string; type: string; quantite: number; prixUnitaireCents: number }[]
+}
+
+function requeteCommandes(depuis: string): string {
+  return `{
+  orders(query: "created_at:>=${depuis} AND status:any") {
+    edges {
+      node {
+        id
+        createdAt
+        cancelledAt
+        test
+        customer { id }
+        currentTotalPriceSet { shopMoney { amount currencyCode } }
+        lineItems {
+          edges {
+            node {
+              quantity
+              originalUnitPriceSet { shopMoney { amount } }
+              product { id title productType }
+            }
+          }
+        }
+      }
+    }
+  }
+}`
+}
+
+/** Lance l'export des commandes depuis une date (AAAA-MM-JJ calculée par le serveur). */
+export async function lancerExportCommandes(
+  acces: AccesShopify,
+  jeton: string,
+  depuis: string,
+): Promise<{ ok: true; operation: string } | { ok: false; raison: string; protegees: boolean }> {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(depuis)) throw new Error('Date de début illisible.')
+  const reponse = await appeler(acces.boutique, jeton, acces.version, LANCER, { q: requeteCommandes(depuis) })
+  const refus = [...reponse.erreurs, ...erreursUtilisateur(reponse)]
+  const operation = (reponse.data?.bulkOperationRunQuery as { bulkOperation?: { id?: string } | null } | undefined)?.bulkOperation?.id
+  if (reponse.status === 200 && typeof operation === 'string') return { ok: true, operation }
+  const protegees = refusDonneesProtegees(refus)
+  return {
+    ok: false,
+    protegees,
+    raison: protegees
+      ? 'Shopify demande l’accès aux données client protégées pour relier les commandes aux clients.'
+      : `Shopify a refusé l’export des commandes (${reponse.status}).`,
+  }
+}
+
+/** Relit l'export des commandes : une ligne par commande, puis une ligne par article. */
+export async function telechargerCommandes(url: string, max = COMMANDES_EXPORT_MAX): Promise<{ commandes: CommandeExport[]; tronque: boolean }> {
+  const parId = new Map<string, CommandeExport>()
+  const annulees = new Set<string>()
+  let tronque = false
+  for await (const ligne of lignesExport(url)) {
+    let brut: Record<string, unknown>
+    try {
+      brut = JSON.parse(ligne) as Record<string, unknown>
+    } catch {
+      continue
+    }
+    const id = typeof brut.id === 'string' ? brut.id : ''
+    if (id.startsWith('gid://shopify/Order/')) {
+      if (brut.cancelledAt != null || brut.test === true) {
+        annulees.add(id)
+        continue
+      }
+      if (parId.size >= max) {
+        tronque = true
+        continue
+      }
+      const client = (brut.customer as { id?: string } | null)?.id ?? null
+      const total = (brut.currentTotalPriceSet as { shopMoney?: { amount?: string; currencyCode?: string } } | undefined)?.shopMoney
+      parId.set(id, {
+        id,
+        creeLe: String(brut.createdAt ?? ''),
+        clientRef: client === null ? null : client.slice(client.lastIndexOf('/') + 1),
+        totalCents: centimes(total?.amount),
+        devise: total?.currencyCode ?? '',
+        lignes: [],
+      })
+      continue
+    }
+    const parent = typeof brut.__parentId === 'string' ? brut.__parentId : ''
+    const commande = parId.get(parent)
+    const produit = brut.product as { id?: string; title?: string; productType?: string } | null | undefined
+    if (commande === undefined || produit?.id == null) continue
+    commande.lignes.push({
+      produitRef: produit.id.slice(produit.id.lastIndexOf('/') + 1),
+      titre: produit.title ?? '',
+      type: produit.productType ?? '',
+      quantite: Number(brut.quantity ?? 0) || 0,
+      prixUnitaireCents: centimes((brut.originalUnitPriceSet as { shopMoney?: { amount?: string } } | undefined)?.shopMoney?.amount),
+    })
+  }
+  return { commandes: [...parId.values()], tronque }
 }
 
 export type PanierShopify = { creeLe: string; recupere: boolean; totalCents: number; devise: string }

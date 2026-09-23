@@ -3,6 +3,25 @@ import { lireNova } from '@/server/nova/service'
 import { reglagesNova, type Activite } from '@/server/nova/reglages'
 import { lireEtatLina, type EtatLina, type PaniersLina } from './collecte'
 import { criteresLina, type Criteres } from './criteres'
+import type { AnalyseCommandes, ProduitAnalyse } from './commandes'
+import {
+  audiencesPub,
+  campagnesProduits,
+  produitPrincipalSegment,
+  programmeFidelite,
+  reachatParProduit,
+  risquesDepart,
+  scenarios,
+  suggestions,
+  valeurClient,
+  type AudiencePub,
+  type NiveauRisque,
+  type PalierFidelite,
+  type ReachatProduit,
+  type Scenario,
+  type SuggestionProduit,
+  type ValeurClient,
+} from './valeur'
 import {
   argent,
   campagnes as recommanderCampagnes,
@@ -62,15 +81,56 @@ export type VueLina = {
   nova: DepuisNova | null
   /** Les phrases transmises à Oria : des opportunités chiffrées, rien d'autre. */
   pourOria: string[]
+  /** V2 : ce que les commandes ont appris. `null` tant qu'elles n'ont pas été lues. */
+  analyse: AnalyseCommandes | null
+  produits: ProduitAnalyse[]
+  reachat: ReachatProduit[]
+  croisees: SuggestionProduit[]
+  montees: SuggestionProduit[]
+  valeur: ValeurClient | null
+  risques: NiveauRisque[]
+  fidelite: PalierFidelite[]
+  audiences: AudiencePub[]
+  scenarios: Scenario[]
+  /** Le produit le plus acheté par les clients à réactiver et par les dormants. */
+  produitsSegments: Partial<Record<CleSegment, string>>
 }
 
 async function lireClients(userId: string): Promise<(ClientIndex & { devise: string })[]> {
   return withUserScope(userId, (tx) =>
     tx.linaClient.findMany({
       where: { userId },
-      select: { ref: true, creeLe: true, derniereCommande: true, commandes: true, caCents: true, consentement: true, devise: true },
+      select: {
+        ref: true,
+        creeLe: true,
+        derniereCommande: true,
+        commandes: true,
+        caCents: true,
+        consentement: true,
+        devise: true,
+        premiereCommande: true,
+        intervalleJours: true,
+        produitPrincipal: true,
+      },
     }),
   )
+}
+
+async function lireProduits(userId: string): Promise<ProduitAnalyse[]> {
+  const lignes = await withUserScope(userId, (tx) => tx.linaProduit.findMany({ where: { userId }, orderBy: { caCents: 'desc' } }))
+  return lignes.map(({ ref, titre, type, acheteurs, reacheteurs, commandes, caCents, prixMoyenCents, intervalleMedian, intervalleP25, intervalleP75 }) => ({
+    ref,
+    titre,
+    type,
+    acheteurs,
+    reacheteurs,
+    commandes,
+    caCents,
+    prixMoyenCents,
+    intervalleMedian,
+    intervalleP25,
+    intervalleP75,
+  }))
 }
 
 async function depuisNova(userId: string): Promise<DepuisNova | null> {
@@ -119,13 +179,48 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     topSegment: null,
     nova,
     pourOria: [],
+    analyse: etat.analyse,
+    produits: [],
+    reachat: [],
+    croisees: [],
+    montees: [],
+    valeur: null,
+    risques: [],
+    fidelite: [],
+    audiences: [],
+    scenarios: [],
+    produitsSegments: {},
   }
   if (!lue) return vide
 
   const contexte = contexteSegments(clients, criteres, maintenant)
   const segments = segmenter(clients, contexte, etat.consentement, devise)
   const indicateurs = calculerIndicateurs(clients, segments, etat.consentement)
-  const campagnes = recommanderCampagnes(segments, indicateurs, etat.paniers, criteres, devise)
+  const produits = etat.analyse === null ? [] : await lireProduits(userId)
+  const reachat = reachatParProduit(produits)
+  const montees = etat.analyse === null ? [] : suggestions(etat.analyse.montees, produits, etat.analyse.ensemble, true)
+  // Une montée en gamme se dit comme telle : elle ne revient pas parmi les produits complémentaires.
+  const enMontee = new Set(montees.map((un) => `${un.de.ref}>${un.vers.ref}`))
+  const croisees =
+    etat.analyse === null
+      ? []
+      : suggestions(etat.analyse.suivants, produits, etat.analyse.ensemble, false).filter((un) => !enMontee.has(`${un.de.ref}>${un.vers.ref}`))
+  /*
+   * Les campagnes de la V1 et celles que les produits rendent possibles, classées ensemble :
+   * potentiel divisé par l'effort. Chaque liste a calculé son impact par rapport à la sienne ;
+   * le classement, lui, est commun.
+   */
+  const poids = { faible: 1, moyen: 2, eleve: 3 } as const
+  const campagnes = [
+    ...recommanderCampagnes(segments, indicateurs, etat.paniers, criteres, devise),
+    ...campagnesProduits(reachat, croisees, montees, produits, devise),
+  ].sort((a, b) => b.potentielCents / poids[b.effort] - a.potentielCents / poids[a.effort])
+  const paniersRestants = etat.paniers === null || etat.paniers.erreur !== undefined ? null : etat.paniers.courant.nombre - etat.paniers.courant.recuperes
+  const produitsSegments: Partial<Record<CleSegment, string>> = {}
+  for (const cle of ['a-reactiver', 'dormants', 'vip', 'a-risque'] as const) {
+    const titre = produitPrincipalSegment(clients, cle, contexte, produits)
+    if (titre !== null) produitsSegments[cle] = titre
+  }
   const plusAncien = clients.reduce<Date | null>((min, client) => (min === null || client.creeLe < min ? client.creeLe : min), null)
   return {
     ...vide,
@@ -134,7 +229,10 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     segments,
     rfm: calculerRfm(clients, maintenant),
     campagnes,
-    insights: detecter(segments, indicateurs, etat.paniers, criteres, devise),
+    insights: [
+      ...detecter(segments, indicateurs, etat.paniers, criteres, devise),
+      ...(reachat[0] === undefined ? [] : [{ cle: 'reachat-produit', texte: `« ${reachat[0].titre} » est le produit le plus racheté : ${reachat[0].p25} à ${reachat[0].p75} jours entre deux achats.` }]),
+    ].slice(0, 5),
     quickWins: gainsRapides(campagnes),
     sante: santeCrm(segments, indicateurs, etat.paniers, {
       clients: clients.length,
@@ -145,6 +243,16 @@ export async function lireLina(userId: string, options: { avecNova?: boolean; ma
     }),
     topSegment: segments.find((segment) => segment.cle === campagnes[0]?.segment) ?? null,
     pourOria: pourOria(campagnes, segments, devise),
+    produits,
+    reachat,
+    croisees,
+    montees,
+    valeur: valeurClient(clients, maintenant),
+    risques: risquesDepart(clients, contexte),
+    fidelite: programmeFidelite(segments, clients, criteres),
+    audiences: audiencesPub(segments),
+    scenarios: scenarios(segments, reachat, paniersRestants, criteres),
+    produitsSegments,
   }
 }
 

@@ -22,12 +22,26 @@ function couper(texte: string, longueur: number): string {
 
 export async function deleguerLina(
   userId: string,
-  entree: { siteId?: string; cle: string; agent: 'content' | 'cro' },
+  entree: { siteId?: string; cle: string; agent: 'content' | 'cro' | 'meta' | 'ads' },
   locale: string,
 ): Promise<VisibilityNoteView> {
   if (entree.siteId === undefined) throw validation('Lina ne transmet que sur un site analysé : lancez d’abord une analyse.')
   const vue = await lireLina(userId)
   const devise = vue.devise
+
+  /*
+   * Une audience publicitaire : MIRA ou Naya reçoivent sa taille et son usage, jamais une
+   * liste. La synchronisation, si la personne la veut, passe par les canaux de Shopify.
+   */
+  if (entree.agent === 'meta' || entree.agent === 'ads') {
+    const audience = vue.audiences.find((un) => `audience-${un.cle}` === entree.cle && un.agent === entree.agent)
+    if (audience === undefined) throw notFound('Cette audience n’est plus d’actualité.')
+    const segment = vue.segments.find((un) => un.cle === audience.segment)
+    const question = `Lina vous propose une audience : « ${audience.nom} », ${nombreLisible(audience.clients)} clients${segment === undefined ? '' : ` (${segment.critere.toLowerCase()}, panier moyen ${segment.panierMoyenCents === null ? 'inconnu' : argent(segment.panierMoyenCents, devise)})`}. Usage envisagé : ${audience.usage} Le segment existe dans Shopify, qui peut le synchroniser avec ${entree.agent === 'meta' ? 'Meta' : 'Google'} par son canal de vente, avec l’accord de la personne. Comment l’utiliser dans les campagnes actuelles, et qu’en attendre ? Ne modifiez rien sans accord.`
+    return askVisibility(userId, { siteId: entree.siteId, agent: entree.agent, question: couper(question, QUESTION_MAX), history: [] }, locale, {
+      demandePar: 'lina',
+    })
+  }
 
   if (entree.agent === 'cro') {
     const paniers = vue.paniers

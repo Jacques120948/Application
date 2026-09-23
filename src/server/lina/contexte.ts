@@ -1,5 +1,6 @@
 import { argent, NOM_NIVEAU, nombreLisible } from './recommandations'
 import type { VueLina } from './service'
+import type { ResultatVu, VerdictAB } from './resultats'
 
 /**
  * Ce que Lina sait quand on lui parle : des totaux et des segments, jamais un client.
@@ -17,7 +18,7 @@ function quand(date: Date | null): string {
   return date === null ? 'jamais' : date.toISOString().slice(0, 10)
 }
 
-export function faitsLina(vue: VueLina): string[] {
+export function faitsLina(vue: VueLina, resultats: readonly ResultatVu[] = [], tests: readonly VerdictAB[] = []): string[] {
   const { etat, devise } = vue
   const lignes: string[] = []
   if (vue.vierge || vue.indicateurs === null) {
@@ -79,6 +80,50 @@ export function faitsLina(vue: VueLina): string[] {
       ),
     )
   }
+  // V2 : ce que les commandes ont appris.
+  if (vue.analyse === null) {
+    lignes.push(
+      vue.etat.commandesEnCours
+        ? 'Commandes : lecture en cours chez Shopify (produits, réachat, cohortes à venir).'
+        : `Commandes : pas encore lues${vue.etat.commandesMessage === '' ? '' : ` (${vue.etat.commandesMessage})`}. Réachat par produit, produits complémentaires et cohortes indisponibles.`,
+    )
+  } else {
+    const a = vue.analyse
+    lignes.push(`Commandes lues depuis le ${a.depuis} : ${nombreLisible(a.commandes)}${a.tronque ? ' (lecture partielle)' : ''}.`)
+    if (a.reachat.medianeJours !== null) {
+      lignes.push(
+        `Délai entre la première et la deuxième commande : médiane ${a.reachat.medianeJours} j (la moitié des cas entre ${a.reachat.p25Jours} et ${a.reachat.p75Jours} j). Part des clients qui recommandent : ${a.reachat.sous.map((un) => `${pourcent(un.part)} sous ${un.jours} j`).join(', ')} (sur ${nombreLisible(a.reachat.base)} clients arrivés il y a plus de 6 mois).`,
+      )
+    }
+    if (vue.reachat.length > 0) lignes.push('Produits qui se rachètent (observé) :', ...vue.reachat.slice(0, 5).map((un) => `- ${un.texte}`))
+    if (vue.croisees.length > 0) lignes.push('Produits achetés ensuite (observé) :', ...vue.croisees.slice(0, 5).map((un) => `- ${un.texte}`))
+    if (vue.montees.length > 0) lignes.push('Montées en gamme observées :', ...vue.montees.slice(0, 3).map((un) => `- ${un.texte}`))
+    const cohortes = a.cohortes.slice(-4)
+    if (cohortes.length > 0) {
+      lignes.push(
+        'Cohortes (mois de première commande) :',
+        ...cohortes.map((cohorte) => `- ${cohorte.mois} : ${nombreLisible(cohorte.clients)} clients, ${pourcent(cohorte.revenus.at(-1) ?? 0)} ont recommandé depuis, CA cumulé par client ${argent(cohorte.chiffreParClientCents.at(-1) ?? 0, devise)}.`),
+      )
+    }
+  }
+  if (vue.valeur !== null) {
+    const v = vue.valeur
+    lignes.push(
+      `Valeur client observée (dépense moyenne d’un acheteur jusqu’ici) : ${v.observeeCents === null ? 'inconnue' : argent(v.observeeCents, devise)}.`,
+      v.estimeeCents === null
+        ? `Valeur client estimée : pas assez d’historique (${nombreLisible(v.base)} clients arrivés il y a plus d’un an, il en faut 50).`
+        : `Valeur client estimée : ${argent(v.estimeeCents, devise)} (${v.commandesParAn} commandes par an, durée de vie ${v.dureeVieAns} ans, attrition annuelle ${pourcent(v.attritionAnnuelle)}). ${v.methode}`,
+    )
+  }
+  const risques = vue.risques.filter((risque) => risque.clients > 0)
+  if (risques.length > 0) lignes.push(`Risque de départ estimé : ${risques.map((risque) => `${risque.niveau === 'eleve' ? 'élevé' : 'moyen'} ${nombreLisible(risque.clients)} clients (${argent(risque.caCents, devise)} de CA historique)`).join(' ; ')}.`)
+  if (resultats.length > 0) {
+    lignes.push(
+      'Résultats de campagnes saisis :',
+      ...resultats.slice(0, 8).map((r) => `- ${r.nom}${r.variante === '' ? '' : ` (variante ${r.variante})`} : ${nombreLisible(r.envoyes)} envois, conversion ${pourcent(r.tauxConversion)}, CA ${argent(r.caCents, devise)}, revenu par destinataire ${argent(r.revenuParDestinataireCents, devise)}${r.tauxDesinscription === null ? '' : `, désinscriptions ${pourcent(r.tauxDesinscription)}`}.`),
+    )
+  }
+  if (tests.length > 0) lignes.push('Tests A/B :', ...tests.map((test) => `- ${test.groupe} : ${test.explication}`))
   if (vue.insights.length > 0) lignes.push('Ce que Lina a détecté :', ...vue.insights.map((insight) => `- ${insight.texte}`))
   const aVerifier = vue.sante.filter((ligne) => ligne.etat !== 'bon')
   if (aVerifier.length > 0) lignes.push('Santé de la base :', ...aVerifier.map((ligne) => `- ${ligne.texte}`))

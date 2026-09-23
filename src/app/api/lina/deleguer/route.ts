@@ -13,8 +13,8 @@ import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
  * avec les seuls totaux du segment. Les crédits sont ceux d'une question à un spécialiste.
  */
 const input = z.object({
-  cle: z.string().min(1).max(60),
-  agent: z.enum(['content', 'cro']),
+  cle: z.string().min(1).max(120),
+  agent: z.enum(['content', 'cro', 'meta', 'ads']),
   siteId: z.string().uuid().optional(),
   locale: z.string().max(8).optional(),
 })

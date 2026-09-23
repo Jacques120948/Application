@@ -69,6 +69,8 @@ model User {
   clientsLina        LinaClient[]
   synchroLina        LinaSynchro?
   reglagesLina       LinaReglages?
+  produitsLina       LinaProduit[]
+  resultatsLina      LinaResultat[]
   supportAlerts      Boolean             @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId   String?             @unique
@@ -2720,6 +2722,11 @@ model LinaClient {
   devise           String    @default("")
   /// oui | non | sans-email | inconnu — l’accord pour recevoir des courriels marketing.
   consentement     String    @default("inconnu")
+  /// V2, tirés des commandes : la vraie première commande (si toute l'histoire est lue), le
+  /// rythme médian entre deux commandes, et le produit le plus acheté.
+  premiereCommande DateTime?
+  intervalleJours  Int?
+  produitPrincipal String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -2728,23 +2735,27 @@ model LinaClient {
 }
 
 model LinaSynchro {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @unique @db.Uuid
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @unique @db.Uuid
   /// jamais | en-cours | ok | erreur | portee | protegees
-  etat         String    @default("jamais")
-  message      String    @default("")
-  source       String    @default("shopify")
+  etat             String    @default("jamais")
+  message          String    @default("")
+  source           String    @default("shopify")
   /// L'export en masse lancé chez Shopify, tant qu'il n'est pas relu.
-  operation    String?
-  lanceAt      DateTime?
-  synchroAt    DateTime?
-  essaiAt      DateTime?
-  clients      Int       @default(0)
-  tronque      Boolean   @default(false)
+  operation        String?
+  lanceAt          DateTime?
+  synchroAt        DateTime?
+  essaiAt          DateTime?
+  clients          Int       @default(0)
+  tronque          Boolean   @default(false)
   /// Le consentement marketing a-t-il pu être lu ? Sinon, il est « inconnu » pour tous.
-  consentement Boolean   @default(false)
+  consentement     Boolean   @default(false)
   /// Paniers abandonnés des trente derniers jours, en totaux.
-  paniers      Json      @default("{}")
+  paniers          Json      @default("{}")
+  /// V2 : ce que les commandes ont appris (cohortes, réachat, paires de produits), en totaux.
+  analyse          Json      @default("{}")
+  commandesAt      DateTime?
+  commandesMessage String    @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2762,4 +2773,52 @@ model LinaReglages {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Lina V2 : ce qu'un produit dit du réachat. Des totaux par produit, aucun client.
+model LinaProduit {
+  id               String @id @default(uuid()) @db.Uuid
+  userId           String @db.Uuid
+  ref              String
+  titre            String
+  type             String @default("")
+  acheteurs        Int    @default(0)
+  /// Clients qui l'ont acheté dans au moins deux commandes différentes.
+  reacheteurs      Int    @default(0)
+  commandes        Int    @default(0)
+  caCents          Int    @default(0)
+  prixMoyenCents   Int    @default(0)
+  /// Jours entre deux achats du même produit par le même client : médiane et quartiles.
+  intervalleMedian Int?
+  intervalleP25    Int?
+  intervalleP75    Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, ref])
+}
+
+/// Lina V2 : les résultats d'une campagne, saisis par la personne (ou importés plus tard).
+model LinaResultat {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @db.Uuid
+  nom             String
+  /// La campagne de Lina dont il s'agit (reactivation, vip…), ou « autre ».
+  type            String    @default("autre")
+  /// Deux variantes d'un même test partagent un groupe ; la variante vaut A ou B.
+  groupe          String    @default("")
+  variante        String    @default("")
+  envoyeLe        DateTime? @db.Date
+  envoyes         Int
+  ouvertures      Int?
+  clics           Int?
+  conversions     Int       @default(0)
+  caCents         Int       @default(0)
+  desinscriptions Int?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }

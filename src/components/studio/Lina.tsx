@@ -94,13 +94,16 @@ export function EnteteLina({ versAnalyse, versSegments, versConversation }: { ve
   )
 }
 
-export type OngletLina = 'tableau' | 'segments'
+export type OngletLina = 'tableau' | 'segments' | 'produits' | 'valeur' | 'resultats'
 
 export function OngletsLina({ courant, locale, siteId }: { courant: OngletLina; locale: string; siteId: string }) {
   const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
   const onglets: { cle: OngletLina; label: string; href: string }[] = [
     { cle: 'tableau', label: 'Tableau de bord', href: `/${locale}/lina${suffixe}` },
     { cle: 'segments', label: 'Segments clients', href: `/${locale}/lina/segments${suffixe}` },
+    { cle: 'produits', label: 'Produits et réachat', href: `/${locale}/lina/produits${suffixe}` },
+    { cle: 'valeur', label: 'Valeur client', href: `/${locale}/lina/valeur${suffixe}` },
+    { cle: 'resultats', label: 'Résultats', href: `/${locale}/lina/resultats${suffixe}` },
   ]
   return (
     <nav className="flex flex-wrap gap-2" aria-label="Lina">
@@ -271,7 +274,17 @@ function Transmettre({ cle, agent, pour, transmission }: { cle: string; agent: '
   )
 }
 
-export function ReactivationLina({ segments, devise, campagnes }: { segments: readonly Segment[]; devise: string; campagnes: readonly Campagne[] }) {
+export function ReactivationLina({
+  segments,
+  devise,
+  campagnes,
+  produits,
+}: {
+  segments: readonly Segment[]
+  devise: string
+  campagnes: readonly Campagne[]
+  produits: Partial<Record<string, string>>
+}) {
   const tranches = segments.filter((segment) => (segment.cle === 'a-reactiver' || segment.cle === 'dormants') && segment.nombre > 0)
   if (tranches.length === 0) return null
   return (
@@ -292,6 +305,7 @@ export function ReactivationLina({ segments, devise, campagnes }: { segments: re
                   <Chiffre label="Dernier achat (médiane)" valeur={segment.joursMedian === null ? '—' : `il y a ${nombre(segment.joursMedian)} j`} />
                   <Chiffre label="Joignables par email" valeur={segment.contactables === null ? 'à vérifier' : nombre(segment.contactables)} />
                   {campagne === undefined ? null : <Chiffre label="Potentiel (hypothèse)" valeur={argent(campagne.potentielCents, devise)} />}
+                  {produits[segment.cle] === undefined ? null : <Chiffre label="Produit principal" valeur={produits[segment.cle]!} />}
                 </dl>
                 {campagne === undefined ? null : (
                   <a href={`#campagne-${campagne.cle}`} className="mt-3 inline-block text-xs font-medium">
@@ -302,9 +316,6 @@ export function ReactivationLina({ segments, devise, campagnes }: { segments: re
             )
           })}
         </div>
-        <p className="mt-3 mb-0 text-[11px] leading-relaxed text-[var(--color-ink-faint)]">
-          Le produit principal de chaque segment viendra avec la lecture du détail des commandes, dans une prochaine version.
-        </p>
       </CardBody>
     </Card>
   )

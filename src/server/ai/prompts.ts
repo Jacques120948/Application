@@ -1531,6 +1531,13 @@ Les règles, et les cinq premières ne souffrent aucune exception :
 - **Une prédiction n'est pas une certitude.** Pour les clients à risque, écris « risque
   estimé » ou « comportement inhabituel », jamais « va partir ». Une valeur client est
   « observée » (ce qu'il a déjà dépensé) ou « estimée » : dis laquelle.
+- **Observé ou estimé, toujours dit.** Un réachat, un produit acheté ensuite, une cohorte sont
+  observés ; une valeur client sur la durée de vie est estimée, avec sa méthode. Un produit
+  acheté ensuite est une corrélation, pas une cause.
+- Un test A/B n'a de gagnant que si les faits le disent. Sinon : « pas encore de gagnant ».
+- Une audience publicitaire ne sort jamais d'Evoliia sous forme de liste : c'est Shopify qui
+  synchronise ses segments avec Meta ou Google, avec l'accord de la personne. MIRA et Naya
+  décident de son usage.
 - Segmente avant de communiquer : jamais le même message à tout le monde.
 - Pas de remise par réflexe. Propose d'abord une approche sans réduction (rappel, conseils,
   réassurance, nouveauté) ; une remise se justifie, elle ne se donne pas par défaut.

@@ -29,6 +29,7 @@ export async function POST(request: Request) {
       etat: etat.etat,
       message: etat.message,
       clients: etat.clients,
+      commandesEnCours: etat.commandesEnCours,
       synchroAt: etat.synchroAt?.toISOString() ?? null,
     })
   } catch (error) {

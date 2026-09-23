@@ -62,7 +62,7 @@ export default async function LinaPage({
       <div id="analyse" className="scroll-mt-6">
         <SynchroLina
           derniere={etat.synchroAt === null ? null : quandLisible(etat.synchroAt)}
-          enCours={etat.etat === 'en-cours'}
+          enCours={etat.etat === 'en-cours' || etat.commandesEnCours}
           aRelire={aRelire}
           // Sur l'accueil, le problème est déjà dit en toutes lettres : pas deux fois.
           probleme={vue?.vierge !== true && (etat.etat === 'erreur' || etat.etat === 'portee' || etat.etat === 'protegees') ? etat.message : null}
@@ -94,7 +94,7 @@ export default async function LinaPage({
           />
           <InsightsLina insights={vue.insights} />
           <QuickWinsLina quickWins={vue.quickWins} />
-          <ReactivationLina segments={vue.segments} devise={vue.devise} campagnes={vue.campagnes} />
+          <ReactivationLina segments={vue.segments} devise={vue.devise} campagnes={vue.campagnes} produits={vue.produitsSegments} />
           <PaniersLina paniers={vue.paniers} devise={vue.devise} transmission={transmission} />
           <CampagnesLina campagnes={vue.campagnes} devise={vue.devise} transmission={transmission} />
           <NovaLina nova={vue.nova} indicateurs={vue.indicateurs} devise={vue.devise} />
