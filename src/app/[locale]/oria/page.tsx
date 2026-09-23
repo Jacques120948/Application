@@ -7,6 +7,7 @@ import { lireCockpit } from '@/server/oria/cockpit'
 import { canauxInconnus } from '@/server/oria/sante'
 import { dernierResume } from '@/server/oria/resume'
 import { destinataires } from '@/server/oria/delegation'
+import { lireAutonomie } from '@/server/oria/autonomie'
 import { VISIBILITY_ASK_ESTIMATED_CREDITS } from '@/server/agents/visibility-service'
 import { actionCosts } from '@/server/billing/action-costs'
 import { ResumeOria } from '@/components/studio/ResumeOria'
@@ -19,6 +20,7 @@ import {
   AutresRecommandations,
   CartePriorite,
   EnteteOria,
+  AutonomieOria,
   EquipeOria,
   OngletsOria,
   SanteMarketing,
@@ -64,9 +66,10 @@ export default async function OriaPage({
   ])
 
   const siteId = cockpit.site?.id ?? ''
-  const [resume, couts] = await Promise.all([
+  const [resume, couts, autonomie] = await Promise.all([
     dernierResume(user.id, 'jour', cockpit.site?.id ?? null).catch(() => null),
     actionCosts(),
+    lireAutonomie(user.id).catch(() => []),
   ])
   const coutResume = couts.find((ligne) => ligne.id === 'oria-resume') ?? null
   const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
@@ -183,6 +186,8 @@ export default async function OriaPage({
             />
 
             <ActiviteEquipe activite={cockpit.activite} maintenant={maintenant} />
+
+            {autonomie.length === 0 ? null : <AutonomieOria autonomie={autonomie} locale={locale} />}
           </>
         )}
       </div>

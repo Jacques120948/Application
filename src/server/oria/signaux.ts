@@ -8,6 +8,7 @@ import { withUserScope } from '@/server/db/scope'
 import { readSetting } from '@/server/settings/store'
 import { biaisDesObjectifs } from '@/lib/objectifs'
 import { lireObjectifs, type VueObjectifs } from './objectifs'
+import { lireAnomalies } from './anomalies'
 import { santeMarketing, type Canal } from './sante'
 import type { VisibilityAgentId } from '@/server/agents/visibility'
 
@@ -514,13 +515,15 @@ export async function lireSignaux(
     sans(compteActif(userId, 'meta-ads'), null),
   ])
 
-  const [recosAds, recosMeta, depenseAds, depenseMeta] = await Promise.all([
+  const [recosAds, recosMeta, depenseAds, depenseMeta, anomalies] = await Promise.all([
     compteAds === null ? Promise.resolve([]) : sans(lireRecommandations(userId, compteAds.id), []),
     compteMeta === null
       ? Promise.resolve([])
       : sans(lireRecommandationsMeta(userId, compteMeta.id), []),
     compteAds === null ? Promise.resolve(0) : sans(depenseRecente(userId, compteAds.id), 0),
     compteMeta === null ? Promise.resolve(0) : sans(depenseRecente(userId, compteMeta.id), 0),
+    // Les ruptures qu'aucune règle de campagne ne voit : arrêt, suivi cassé, envolée, chute.
+    sans(lireAnomalies(userId, locale, site?.id ?? null), []),
   ])
 
   const sourcesLues: VisibilityAgentId[] = []
@@ -530,6 +533,7 @@ export async function lireSignaux(
 
   const signaux: Signal[] = [
     ...(site === null ? [] : depuisSurveillance(pannes, locale, site.id)),
+    ...anomalies,
     ...(site === null || plan === null ? [] : depuisPlan(plan.lignes, locale, site.id)),
     ...depuisPublicite(
       recosAds.map((reco) => ({

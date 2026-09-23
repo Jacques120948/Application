@@ -9,6 +9,7 @@ import type { RapportSemaine, Resultat } from '@/server/oria/rapport'
 import type { Decision, Impact } from '@/server/oria/decisions'
 import type { Destinataire } from '@/server/oria/delegation'
 import type { Plateforme, Recommandation, Simulation } from '@/server/oria/budget'
+import type { AutonomieAgent } from '@/server/oria/autonomie'
 import { DelegationOria } from './DelegationOria'
 
 /**
@@ -1250,6 +1251,70 @@ export function SimulationOria({
         ) : (
           <p className="mt-4 mb-0 text-sm text-[var(--color-ink-soft)]">{resultat.raison}</p>
         )}
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── Autonomie ───────────────────────────────────────────────────────────────
+
+/**
+ * Le niveau d'autonomie de chaque agent, et le mode automatique, fermé.
+ *
+ * Le mode automatique est affiché plutôt que caché : on voit qu'il existe, qu'il est
+ * fermé, et pourquoi. C'est ce qui permet de faire confiance aux deux autres.
+ */
+export function AutonomieOria({
+  autonomie,
+  locale,
+}: {
+  autonomie: readonly AutonomieAgent[]
+  locale: string
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Niveau d’autonomie</h2>
+        <p className="mt-1 mb-4 text-sm leading-relaxed text-[var(--color-ink-soft)]">
+          <strong>Conseil</strong> : l’agent recommande. <strong>Assisté</strong> : il prépare,
+          vous confirmez, il exécute. Aucun agent n’agit sans vous.
+        </p>
+        <ul className="m-0 grid list-none gap-0 p-0">
+          {autonomie.map((ligne) => {
+            const qui = membre(ligne.agent)
+            const ecran = ecranDuMembre(ligne.agent as IdMembre, locale, '').href
+            return (
+              <li
+                key={ligne.agent}
+                className="flex items-start gap-3 border-t border-[var(--color-line)] py-3 first:border-t-0 first:pt-0"
+              >
+                <Portrait id={ligne.agent} taille={28} />
+                <div className="min-w-0 flex-1">
+                  <p className="m-0 flex flex-wrap items-center gap-2 text-sm font-medium">
+                    {qui?.name}
+                    <Badge tone={ligne.niveau === 'assiste' ? 'brand' : 'neutral'}>
+                      {ligne.niveau === 'assiste' ? 'Assisté' : 'Conseil'}
+                    </Badge>
+                  </p>
+                  <p className="m-0 mt-0.5 text-xs leading-relaxed text-[var(--color-ink-soft)]">
+                    {ligne.pourquoi}
+                    {ligne.reglable ? (
+                      <>
+                        {' '}
+                        <a href={ecran}>Changer chez {qui?.name}</a>
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+        <p className="mt-3 mb-0 flex flex-wrap items-center gap-2 border-t border-[var(--color-line)] pt-3 text-xs leading-relaxed text-[var(--color-ink-faint)]">
+          <Badge tone="neutral">Automatique : fermé</Badge>
+          Il s’ouvrira plus tard, action par action, pour des gestes sûrs que vous aurez
+          explicitement autorisés — jamais pour un budget ni une publication.
+        </p>
       </CardBody>
     </Card>
   )
