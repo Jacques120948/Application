@@ -12,6 +12,7 @@ import { synchroniserVentes } from '@/server/nova/collecte'
 import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
+import { periodeDe, periodePrecedente } from '@/server/nova/metriques'
 import { enregistrerReglages, reglagesNova } from '@/server/nova/reglages'
 import { lireBilan } from '@/server/nova/bilan'
 import { ensureTestPlan, testPlanId } from '../helpers/plan'
@@ -216,5 +217,21 @@ describe('Nova — lecture', () => {
     expect(vue.kpis.find((un) => un.cle === 'chiffre')?.valeur).toBeNull()
     expect(await withUserScope(voisin, (tx) => tx.commerceJour.count({ where: { userId: proprietaire } }))).toBe(0)
     expect(await withUserScope(voisin, (tx) => tx.commerceSynchro.count())).toBe(0)
+  })
+})
+
+describe('Nova — fenêtre de lecture', () => {
+  it('couvre la période de 90 jours et celle qu’on lui compare, avec tout l’historique', async () => {
+    vi.mocked(shopify.lirePortees).mockResolvedValueOnce(['read_orders', 'read_all_orders'])
+    vi.mocked(shopify.lireCommandes).mockResolvedValueOnce({ commandes: [commande({})], tronque: false, parcours: true, client: false })
+    await withUserScope(proprietaire, (tx) =>
+      tx.commerceSynchro.updateMany({ where: { userId: proprietaire }, data: { essaiAt: new Date(Date.now() - 10 * 60_000) } }),
+    )
+    const etat = await synchroniserVentes(proprietaire, 'manuel')
+    const aujourdhui = new Date().toISOString().slice(0, 10)
+    const avant = periodePrecedente(periodeDe('90', aujourdhui))
+    expect(etat.couvertureDepuis! <= avant.du).toBe(true)
+    // Lue depuis la même date qu'annoncée : ce qui est couvert a bien été demandé.
+    expect(vi.mocked(shopify.lireCommandes).mock.lastCall?.[2]).toBe(etat.couvertureDepuis)
   })
 })

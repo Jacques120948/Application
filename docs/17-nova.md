@@ -46,7 +46,7 @@ Sources ─► Collecte ─► Normalisation ─► Moteur de métriques ─► 
 
 - Ouverture de l'écran : relecture Shopify seulement si la dernière a plus de 12 h, en
   arrière-plan (`POST /api/nova/synchro`, mode `auto`). Après un échec, 30 min de pause.
-- Bouton « Actualiser » : relit les 90 jours (mode `manuel`), 2 min entre deux clics.
+- Bouton « Actualiser » : relit toute la fenêtre de 180 jours (mode `manuel`), 2 min entre deux clics. 180 = la période de 90 jours finissant hier + les 90 jours qu’on lui compare.
 - Relecture partielle : depuis la dernière réussite moins 3 jours (remboursements).
 - Sans l'autorisation `read_all_orders`, Shopify ne rend que 60 jours : `couvertureDepuis`
   le dit, et une période plus ancienne n'est pas sommée.

@@ -32,9 +32,10 @@ import { agregerCommandes, instantaneClients, type InstantaneClients } from './a
  * **Une panne ne vide pas l'écran.** Si Shopify ne répond pas, les jours déjà relevés
  * restent, et l'écran dit de quand ils datent.
  *
- * La première lecture remonte quatre-vingt-dix jours ; les suivantes relisent depuis la
+ * La première lecture remonte cent quatre-vingts jours — la plus longue période affichée,
+ * quatre-vingt-dix jours finissant hier, plus les quatre-vingt-dix qu'on lui compare. Les suivantes relisent depuis la
  * dernière réussite moins trois jours, pour rattraper les remboursements et les commandes
- * modifiées. Le bouton « Actualiser » relit les quatre-vingt-dix jours en entier.
+ * modifiées. Le bouton « Actualiser » relit toute la fenêtre.
  */
 
 export const SOURCE_SHOPIFY = 'shopify'
@@ -45,8 +46,16 @@ export const FRAICHEUR_MS = 12 * 60 * 60 * 1000
 const PAUSE_APRES_ECHEC_MS = 30 * 60 * 1000
 /** Entre deux actualisations manuelles : de quoi éviter le double clic, pas plus. */
 const PAUSE_MANUELLE_MS = 2 * 60 * 1000
-/** La profondeur d'une lecture complète : la plus longue période que Nova affiche. */
-export const JOURS_LUS = 90
+/**
+ * La profondeur d'une lecture complète, en jours avant aujourd'hui.
+ *
+ * Quatre-vingt-dix jours finissant hier, et les quatre-vingt-dix qui les précèdent pour la
+ * comparaison. Une fenêtre de « 90 jours aujourd'hui compris » manquait d'un jour à la
+ * période de 90 jours, et entièrement à sa comparaison : l'écran affichait des tirets.
+ */
+export const JOURS_LUS = 180
+/** La fenêtre sur laquelle se comptent les clients : la plus longue période affichée. */
+const JOURS_CLIENTS = 90
 /** Ce qu'une lecture partielle relit avant la dernière réussite. */
 const JOURS_RATTRAPES = 3
 /** Sans l'autorisation read_all_orders, Shopify ne rend que les soixante derniers jours. */
@@ -215,7 +224,7 @@ export async function synchroniserVentes(
     const reglages = await lireReglagesBoutique(acces, frappe.jeton)
     const fuseau = reglages?.fuseau ?? precedente?.fuseau ?? ''
     const aujourdhui = jourDansFuseau(maintenant, fuseau)
-    const debutFenetre = jourIso(new Date(Date.parse(aujourdhui) - (JOURS_LUS - 1) * JOUR_MS))
+    const debutFenetre = jourIso(new Date(Date.parse(aujourdhui) - JOURS_LUS * JOUR_MS))
     const derniereReussite = precedente?.synchroAt ?? null
     const instantane = lireInstantane(precedente?.clients ?? null)
     /*
@@ -286,7 +295,13 @@ export async function synchroniserVentes(
 
     // Le compte des clients : seulement sur une lecture complète, et seulement si Shopify a rendu les clients.
     const clients =
-      complete && lecture.client && !lecture.tronque ? instantaneClients(lecture.commandes, depuis, aujourdhui) : null
+      complete && lecture.client && !lecture.tronque
+        ? (() => {
+            const debutClients = jourIso(new Date(Date.parse(aujourdhui) - JOURS_CLIENTS * JOUR_MS))
+            const recentes = lecture.commandes.filter((commande) => commande.creeLe.slice(0, 10) >= debutClients)
+            return instantaneClients(recentes, [debutClients, depuis].sort().at(-1)!, aujourdhui)
+          })()
+        : null
     await noter(userId, acces.boutique, {
       ...(clients === null ? {} : { clients: clients as unknown as Prisma.InputJsonValue }),
       etat: 'ok',
