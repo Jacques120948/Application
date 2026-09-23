@@ -12,6 +12,7 @@ import { lireNova } from '@/server/nova/service'
 import { faitsNova } from '@/server/nova/contexte'
 import { contenusPourMilo, conversionPourCleo, traficAssistantsPourGia } from '@/server/nova/transmission'
 import { deleguerNova } from '@/server/nova/delegation'
+import { enregistrerProspects } from '@/server/nova/reglages'
 import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
@@ -57,6 +58,26 @@ beforeAll(async () => {
     expiresAt: new Date(Date.now() + 3_600_000),
   })
   vi.mocked(ga4.rapport).mockImplementation(async (_jeton, _propriete, demande) => {
+    if (demande.dimensions.includes('countryId')) {
+      return {
+        ok: true,
+        lignes: [
+          { dimensions: [dateGa4(3), 'CH', 'new'], metriques: [300, 2] },
+          { dimensions: [dateGa4(3), 'CH', 'returning'], metriques: [150, 3] },
+          { dimensions: [dateGa4(3), 'FR', 'new'], metriques: [62, 0] },
+        ],
+      }
+    }
+    if (demande.dimensions.includes('eventName')) {
+      return {
+        ok: true,
+        lignes: [
+          { dimensions: [dateGa4(3), 'generate_lead', 'Organic Search', 'google', 'organic'], metriques: [6] },
+          { dimensions: [dateGa4(3), 'devis_envoye', 'Direct', '(direct)', '(none)'], metriques: [2] },
+          { dimensions: [dateGa4(3), 'purchase', 'Organic Search', 'google', 'organic'], metriques: [5] },
+        ],
+      }
+    }
     if (demande.dimensions.includes('sessionDefaultChannelGroup')) {
       return {
         ok: true,
@@ -128,6 +149,23 @@ describe('Nova V3 — Google Analytics 4', () => {
     expect(vue.contenus.lignes).toEqual([expect.objectContaining({ page: '/blogs/journal/rituel-du-soir', sessions: 80 })])
     expect(await contenusPourMilo(proprietaire)).toContain('/blogs/journal/rituel-du-soir — 80 visites, 88 % engagées')
     expect(await conversionPourCleo(proprietaire)).toContain('mobile 0,5 % (400 visites)')
+  })
+
+  it('compte les prospects et lit les audiences, et suit le choix de la personne', async () => {
+    const vue = await lireNova(proprietaire, 'fr', { periode: '30' })
+    // generate_lead et devis_envoye se reconnaissent à leur nom ; purchase jamais.
+    expect(vue.leads).toMatchObject({ total: 8, auto: true, parCanal: { seo: 6, direct: 2 } })
+    expect(vue.leads!.evenements.sort()).toEqual(['devis_envoye', 'generate_lead'])
+    expect(vue.kpis.find((kpi) => kpi.cle === 'leads')).toMatchObject({ valeur: 8 })
+    expect(vue.audiences!.pays.map((un) => un.nom)).toEqual(['Suisse', 'France'])
+    expect(vue.audiences!.connus.conversion).toBe(0.02)
+    expect(faitsNova(vue).join('\n')).toContain('Prospects sur la période')
+
+    await enregistrerProspects(proprietaire, ['generate_lead'])
+    const choisi = await lireNova(proprietaire, 'fr', { periode: '30' })
+    expect(choisi.leads).toMatchObject({ total: 6, auto: false, evenements: ['generate_lead'] })
+    await enregistrerProspects(proprietaire, null)
+    expect((await lireNova(proprietaire, 'fr', { periode: '30' })).leads?.auto).toBe(true)
   })
 
   it('ne transmet rien sans site analysé, ni un point que Nova n’a pas calculé', async () => {

@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { withUserScope } from '@/server/db/scope'
 
@@ -79,4 +79,22 @@ export async function enregistrerReglages(userId: string, reglages: Reglages): P
     tx.novaReglages.upsert({ where: { userId }, create: { userId, ...data }, update: data }),
   )
   return propre
+}
+
+/** Un nom d'événement GA4 : lettres, chiffres, soulignés — ce que GA4 accepte, et rien d'autre. */
+export const prospectsSchema = z.array(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,79}$/u)).max(10).nullable()
+
+/** Les événements comptés comme prospects ; `undefined` : Nova les reconnaît à leur nom. */
+export async function prospectsNova(userId: string): Promise<string[] | undefined> {
+  const ligne = await withUserScope(userId, (tx) => tx.novaReglages.findUnique({ where: { userId }, select: { prospects: true } }))
+  const lu = prospectsSchema.safeParse(ligne?.prospects ?? null)
+  return lu.success && lu.data !== null ? lu.data : undefined
+}
+
+export async function enregistrerProspects(userId: string, evenements: string[] | null): Promise<void> {
+  const propre = prospectsSchema.parse(evenements)
+  const prospects = propre === null ? Prisma.DbNull : (propre as Prisma.InputJsonValue)
+  await withUserScope(userId, (tx) =>
+    tx.novaReglages.upsert({ where: { userId }, create: { userId, prospects }, update: { prospects } }),
+  )
 }

@@ -1,6 +1,6 @@
 import { lireNova } from '@/server/nova/service'
 import { MENTION_PARCOURS, MENTION_VALEUR, MODELES } from '@/server/nova/clients'
-import { ClientsNova, ModelesNova, ParcoursNova, PeriodeNova } from '@/components/studio/Nova'
+import { AudiencesNova, ClientsNova, ModelesNova, ParcoursNova, PeriodeNova } from '@/components/studio/Nova'
 import { CadreNova, ouvrirNova } from '../cadre'
 
 /**
@@ -39,6 +39,7 @@ export default async function ClientsNovaPage({
           <ClientsNova repartition={vue.clients} valeur={vue.valeurClient} devise={vue.devise} mention={MENTION_VALEUR} />
           <ModelesNova lignes={vue.modeles} devise={vue.devise} explications={MODELES} />
           <ParcoursNova phrases={vue.parcours} mention={MENTION_PARCOURS} />
+          <AudiencesNova audiences={vue.audiences} />
         </>
       )}
     </CadreNova>

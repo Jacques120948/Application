@@ -46,8 +46,11 @@ import { ABSENT, lireEtatVentes, type EtatVentes } from './collecte'
 import type { SourceVentes } from './sources'
 import { lireEtatAbonnements, type EtatAbonnements } from './collecte-stripe'
 import { indicateursAbonnements, type IndicateursAbonnements } from './abonnements'
+import { lireAudiences, type Audiences } from './audiences'
+import { prevoirVentes, type Prevision } from './previsions'
 import { lireEtatVisites, type EtatVisites } from './collecte-ga4'
-import { reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
+import { prospectsNova, reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
+import type { Leads } from './leads'
 import { controlesSuivi } from './suivi'
 import { contenusQuiAttirent, type Contenus } from './contenus'
 import {
@@ -103,6 +106,14 @@ export type LigneSante = {
   agent?: IdMembre
 }
 
+/**
+ * Ce que coûte un nouvel abonné : la dépense publicitaire du mois précédent sur les abonnés
+ * qui ont commencé à payer ce mois-là, et le nombre de mois de son abonnement qu'il faut
+ * pour la rembourser. Toute la dépense est rapportée aux abonnés, y compris ce qui visait
+ * autre chose : c'est un plafond, et c'est dit.
+ */
+export type AcquisitionAbonnes = { mois: string; depense: number; nouveaux: number; cac: number; rentabiliseEnMois: number | null }
+
 export type VueNova = {
   periode: Periode
   precedente: { du: string; au: string }
@@ -126,8 +137,14 @@ export type VueNova = {
   visitesPeriode: CumulVisites | null
   /** Les articles de blog par lesquels on entre, et leur engagement. */
   contenus: Contenus
+  /** Les prospects de la période (événements clés GA4), par canal ; `null` sans GA4 lu. */
+  leads: Leads | null
   /** Les abonnements Stripe : l'état de la lecture, et ce qu'on en tire quand elle a eu lieu. */
-  abonnements: { etat: EtatAbonnements; indicateurs: IndicateursAbonnements | null }
+  abonnements: { etat: EtatAbonnements; indicateurs: IndicateursAbonnements | null; acquisition: AcquisitionAbonnes | null }
+  /** Pays, nouveaux et connus, sur la période ; `null` sans GA4 ou avant la V6. */
+  audiences: Audiences | null
+  /** Les ventes des trente prochains jours et de la fin du mois ; `null` sans historique suffisant. */
+  prevision: Prevision | null
   /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
   manqueVentes: string
   /** Pourquoi les ventes ne se comparent pas à la période précédente, quand c'est le cas. */
@@ -294,6 +311,9 @@ async function lireVisites(userId: string, propriete: string, depuis: string, ju
     appareils: (ligne.appareils ?? {}) as Record<string, { sessions: number; achats: number }>,
     pages: pages(ligne.pages),
     pagesSeo: pages(ligne.pagesSeo),
+    pays: (ligne.pays ?? {}) as Record<string, { sessions: number; achats: number }>,
+    visiteurs: (ligne.visiteurs ?? {}) as JourVisites['visiteurs'],
+    evenements: (ligne.evenements ?? {}) as JourVisites['evenements'],
   }))
 }
 
@@ -569,7 +589,9 @@ export async function lireNova(
   // Les objectifs se jugent sur le mois en cours et sur trente jours, quelle que soit la période affichée.
   const mois = moisCourant(fuseau, maintenant)
   const trente = periodeDe('30', aujourdhui)
-  const depuis = [precedente.du, reference.du, mois.premier, trente.du].sort()[0]!
+  // Le mois précédent entier : c'est sur lui que se mesure le coût d'acquisition d'un abonné.
+  const moisPrecedent = { du: decaler(mois.premier, -1).slice(0, 7) + '-01', au: decaler(mois.premier, -1) }
+  const depuis = [precedente.du, reference.du, mois.premier, trente.du, moisPrecedent.du].sort()[0]!
   const fin = [periode.au, trente.au].sort().at(-1)!
 
   const [campagnes, joursVentes, recherche, joursVisites] = await Promise.all([
@@ -578,7 +600,7 @@ export async function lireNova(
     sans(lireRecherche(userId, siteId, periode.au), null),
     visitesLues ? sans(lireVisites(userId, visites.propriete, depuis, fin), []) : Promise.resolve([]),
   ])
-  const reglages = await sans(reglagesNova(userId), REGLAGES_VIDES)
+  const [reglages, prospects] = await Promise.all([sans(reglagesNova(userId), REGLAGES_VIDES), sans(prospectsNova(userId), undefined)])
 
   const donnees: Donnees = {
     devise,
@@ -586,6 +608,7 @@ export async function lireNova(
     campagnes,
     ventes: { disponibles: venteLues, couvertureDepuis: ventes.couvertureDepuis, jours: joursVentes },
     nomVentes: ventes.nom,
+    ...(prospects === undefined ? {} : { evenementsLeads: prospects }),
     recherche,
     visites: { disponibles: visitesLues, couvertureDepuis: visites.couvertureDepuis, jours: joursVisites },
   }
@@ -632,6 +655,27 @@ export async function lireNova(
         : Math.round((trenteJours.pub.depense / trenteJours.ventes.nouveauxClients) * 100) / 100,
   })
   const modeles = modelesAttribution(ventesActuelles)
+
+  // Le coût d'acquisition d'un abonné, sur le dernier mois terminé.
+  const moisAbos = abonnements.instantane?.serie.at(-2) ?? null
+  const depenseMois = regies.length === 0 ? 0 : ensemble(donnees, moisPrecedent).pub.depense
+  const acquisitionAbonnes: AcquisitionAbonnes | null =
+    moisAbos === null || moisAbos.mois !== moisPrecedent.du.slice(0, 7) || moisAbos.nouveaux === 0 || depenseMois <= 0
+      ? null
+      : {
+          mois: moisAbos.mois,
+          depense: Math.round(depenseMois * 100) / 100,
+          nouveaux: moisAbos.nouveaux,
+          cac: Math.round((depenseMois / moisAbos.nouveaux) * 100) / 100,
+          rentabiliseEnMois:
+            indicateursAbos?.arpu == null || indicateursAbos.arpu === 0
+              ? null
+              : Math.round((depenseMois / moisAbos.nouveaux / indicateursAbos.arpu) * 10) / 10,
+        }
+
+  // Les prévisions lisent plus loin que la période : huit semaines, et l'an dernier s'il existe.
+  const historique = venteLues ? await sans(lireVentes(userId, ventes.source, ventes.boutique, decaler(aujourdhui, -430), decaler(aujourdhui, -1)), []) : []
+  const prevision = venteLues ? prevoirVentes(historique, aujourdhui, ventes.couvertureDepuis) : null
 
   const marge = margeEstimee(ventesActuelles, regies.length === 0 ? null : actuel.pub.depense, reglages.couts)
   contexte.merEquilibre = marge.etat === 'calculee' ? marge.merEquilibre : null
@@ -729,7 +773,7 @@ export async function lireNova(
     vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null && visites.etat === 'absent' && abonnements.etat === 'absent',
     sources,
     kpis: indicateursNova(actuel, avant, raisonVentes(ventes), ventes.nom),
-    canaux: performanceCanaux(donnees, periode, ventesActuelles, visitesActuelles),
+    canaux: performanceCanaux(donnees, periode, ventesActuelles, visitesActuelles, actuel.leads ?? null),
     attribution: lignesAttribution,
     campagnes: lignesCampagnes.slice(0, CAMPAGNES_MAX),
     produits: lignesProduits.slice(0, PRODUITS_MAX),
@@ -741,7 +785,10 @@ export async function lireNova(
     visites,
     visitesPeriode: visitesActuelles,
     contenus: contenusQuiAttirent(visitesActuelles),
-    abonnements: { etat: abonnements, indicateurs: indicateursAbos },
+    leads: actuel.leads ?? null,
+    abonnements: { etat: abonnements, indicateurs: indicateursAbos, acquisition: acquisitionAbonnes },
+    audiences: lireAudiences(visitesActuelles),
+    prevision,
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     /*
      * La période affichée est couverte, la précédente non : sans cette phrase, « pas de

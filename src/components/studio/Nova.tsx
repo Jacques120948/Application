@@ -10,6 +10,9 @@ import type { Bilan } from '@/server/nova/bilan'
 import type { CumulVisites } from '@/server/nova/metriques'
 import type { Contenus } from '@/server/nova/contenus'
 import type { IndicateursAbonnements, InstantaneAbonnements } from '@/server/nova/abonnements'
+import type { Audiences } from '@/server/nova/audiences'
+import type { Prevision } from '@/server/nova/previsions'
+import type { AcquisitionAbonnes } from '@/server/nova/service'
 import { DelegationOria } from './DelegationOria'
 
 /**
@@ -381,6 +384,8 @@ export function CanauxNova({ canaux, devise }: { canaux: readonly LigneCanal[]; 
                 {canal.trafic === null ? null : <Chiffre label={canal.depenses === null ? 'Clics Google' : 'Clics'} valeur={nombre(canal.trafic)} />}
                 {canal.sessions === null ? null : <Chiffre label="Visites (GA4)" valeur={nombre(canal.sessions)} />}
                 {canal.conversionGa4 === null ? null : <Chiffre label="Conversion (GA4)" valeur={`${nombre(canal.conversionGa4, 1)} %`} />}
+                {canal.leads === null || canal.leads === 0 ? null : <Chiffre label="Prospects (GA4)" valeur={nombre(canal.leads)} />}
+                {canal.cpl === null ? null : <Chiffre label="Coût par prospect" valeur={argent(canal.cpl, devise)} />}
                 {canal.commandes === null ? null : <Chiffre label="Commandes boutique" valeur={nombre(canal.commandes)} />}
                 {canal.chiffre === null ? null : <Chiffre label="CA boutique" valeur={argent(canal.chiffre, devise)} />}
               </dl>
@@ -1248,10 +1253,12 @@ export function AbonnementsNova({
   instantane,
   indicateurs,
   devise,
+  acquisition = null,
 }: {
   instantane: InstantaneAbonnements
   indicateurs: IndicateursAbonnements
   devise: string
+  acquisition?: AcquisitionAbonnes | null
 }) {
   const monnaie = instantane.devise || devise
   const max = Math.max(1, ...instantane.serie.map((mois) => mois.mrr))
@@ -1279,6 +1286,7 @@ export function AbonnementsNova({
         ) : (
           <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">LTV = revenu moyen par abonné ÷ churn mensuel. Une estimation, pas une promesse.</p>
         )}
+        <AcquisitionAbonnesNova acquisition={acquisition} devise={instantane.devise || devise} />
         {instantane.essais > 0 || instantane.nonChiffres > 0 ? (
           <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">
             {instantane.essais > 0 ? `${instantane.essais} en essai gratuit. ` : ''}
@@ -1372,5 +1380,107 @@ export function AbonnementsNova({
         )}
       </CardBody>
     </Card>
+  )
+}
+
+// ── V6 : prévisions et audiences ─────────────────────────────────────────────
+
+/** Les ventes à venir, avec leur fourchette et la méthode : une estimation, dite comme telle. */
+export function PrevisionNova({ prevision, devise }: { prevision: Prevision | null; devise: string }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Prévisions de ventes</h2>
+        {prevision === null ? (
+          <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">
+            Il faut huit semaines de ventes connues et au moins trente commandes pour prévoir quoi que ce soit : en deçà, une moyenne tient du
+            hasard.
+          </p>
+        ) : (
+          <>
+            <dl className="m-0 mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="flex flex-col-reverse gap-1">
+                <dt className="text-xs text-[var(--color-ink-soft)]">
+                  30 prochains jours · entre {argent(prevision.prochains30.bas, devise)} et {argent(prevision.prochains30.haut, devise)}
+                </dt>
+                <dd className="m-0 text-2xl font-semibold tabular-nums">≈ {argent(prevision.prochains30.chiffre, devise)}</dd>
+              </div>
+              {prevision.finDeMois === null ? null : (
+                <div className="flex flex-col-reverse gap-1">
+                  <dt className="text-xs text-[var(--color-ink-soft)]">
+                    Fin du mois · dont {argent(prevision.finDeMois.aDate, devise)} déjà réalisés · entre {argent(prevision.finDeMois.bas, devise)} et{' '}
+                    {argent(prevision.finDeMois.haut, devise)}
+                  </dt>
+                  <dd className="m-0 text-2xl font-semibold tabular-nums">≈ {argent(prevision.finDeMois.chiffre, devise)}</dd>
+                </div>
+              )}
+            </dl>
+            <p className="mt-3 mb-0 text-xs text-[var(--color-ink-soft)]">{prevision.methode}</p>
+            <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">
+              Une estimation, pas une promesse : une promotion, une rupture de stock ou une campagne arrêtée la font mentir.
+            </p>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * Qui vient, et qui achète. Une barre par pays : une seule série, la part des visites ; la
+ * conversion est écrite à côté, jamais seulement suggérée par une couleur.
+ */
+export function AudiencesNova({ audiences }: { audiences: Audiences | null }) {
+  if (audiences === null) return null
+  const pct = (valeur: number | null) => (valeur === null ? 'trop peu de visites' : `${nombre(valeur * 100, 1)} %`)
+  return (
+    <Card className="min-w-0 max-w-full">
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Audiences</h2>
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">Selon Google Analytics 4, sur la période. Conversion = achats ÷ visites.</p>
+        <h3 className="mt-4 mb-2 text-sm font-semibold">Par pays</h3>
+        <ul className="m-0 grid list-none gap-2 p-0">
+          {audiences.pays.map((ligne) => (
+            <li key={ligne.cle} className="grid gap-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                <span>{ligne.nom}</span>
+                <span className="text-xs text-[var(--color-ink-soft)] tabular-nums">
+                  {nombre(ligne.sessions)} visites · {Math.round(ligne.part * 100)} % · conversion {pct(ligne.conversion)}
+                </span>
+              </div>
+              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-canvas)]">
+                <div className="h-full rounded-full bg-[var(--color-brand)]" style={{ width: `${Math.max(2, Math.round(ligne.part * 100))}%` }} />
+              </div>
+            </li>
+          ))}
+        </ul>
+        <h3 className="mt-5 mb-2 text-sm font-semibold">Première visite ou retour</h3>
+        <dl className="m-0 grid grid-cols-2 gap-4">
+          {[audiences.nouveaux, audiences.connus].map((ligne) => (
+            <div key={ligne.cle} className="flex flex-col-reverse gap-0.5">
+              <dt className="text-xs text-[var(--color-ink-soft)]">
+                {ligne.nom} · {Math.round(ligne.part * 100)} % des visites
+              </dt>
+              <dd className="m-0 text-lg font-semibold tabular-nums">{pct(ligne.conversion)}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardBody>
+    </Card>
+  )
+}
+
+/** Ce que coûte un nouvel abonné, et en combien de mois il le rembourse. */
+export function AcquisitionAbonnesNova({ acquisition, devise }: { acquisition: AcquisitionAbonnes | null; devise: string }) {
+  if (acquisition === null) return null
+  return (
+    <p className="m-0 mt-3 rounded-[var(--radius-control)] bg-[var(--color-canvas)] p-3 text-sm">
+      <strong>Coût d’un nouvel abonné ({moisLisible(acquisition.mois)}) : {argent(acquisition.cac, devise)}</strong>
+      {acquisition.rentabiliseEnMois === null ? '' : `, remboursé en ${nombre(acquisition.rentabiliseEnMois, 1)} mois d’abonnement`}.
+      <span className="mt-1 block text-xs text-[var(--color-ink-soft)]">
+        {argent(acquisition.depense, devise)} de publicité pour {nombre(acquisition.nouveaux)} nouveaux abonnés. Toute la dépense est comptée, y compris ce
+        qui visait autre chose : c’est un plafond.
+      </span>
+    </p>
   )
 }

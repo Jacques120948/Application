@@ -248,7 +248,7 @@ export function suivreObjectifs(
 
 /** L'ordre des cartes : ce que chaque activité regarde en premier. */
 export function ordreIndicateurs(activite: Activite | ''): Kpi['cle'][] {
-  if (activite === 'services') return ['depenses', 'cpa', 'chiffre', 'roas', 'mer', 'commandes', 'cac', 'panier', 'conversion']
+  if (activite === 'services') return ['leads', 'cpl', 'depenses', 'chiffre', 'roas', 'mer', 'cpa', 'commandes', 'conversion']
   if (activite === 'saas') return ['chiffre', 'cac', 'depenses', 'roas', 'mer', 'commandes', 'cpa', 'panier', 'conversion']
   return ['chiffre', 'roas', 'cac', 'commandes', 'depenses', 'mer', 'cpa', 'panier', 'conversion']
 }
@@ -261,7 +261,7 @@ export function indicateursAVenir(activite: Activite | '', stripeRelie = false):
       : 'MRR, churn et LTV d’un abonnement demandent vos paiements récurrents : reliez Stripe (clé restreinte en lecture) dans Connexions.'
   }
   if (activite === 'services') {
-    return 'Leads, coût par lead et taux lead → client demandent vos formulaires ou votre CRM : ils ne sont pas encore reliés à Nova. En attendant, le coût par conversion de chaque régie en tient lieu.'
+    return 'Le taux prospect → client demande votre CRM, qui n’est pas relié à Nova : Nova compte les prospects (événements clés de GA4) et ce qu’ils coûtent, pas ceux qui signent.'
   }
   return null
 }

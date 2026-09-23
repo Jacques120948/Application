@@ -137,7 +137,7 @@ export default async function NovaPage({
           <IndicateursNova kpis={vue.kpis} devise={vue.devise} ordre={vue.ordre} />
           <AVenirNova texte={vue.aVenir} />
           {vue.abonnements.etat.instantane === null || vue.abonnements.indicateurs === null ? null : (
-            <AbonnementsNova instantane={vue.abonnements.etat.instantane} indicateurs={vue.abonnements.indicateurs} devise={vue.devise} />
+            <AbonnementsNova instantane={vue.abonnements.etat.instantane} indicateurs={vue.abonnements.indicateurs} devise={vue.devise} acquisition={vue.abonnements.acquisition} />
           )}
           <AlertesNova alertes={vue.alertes} locale={locale} siteId={siteId} transmission={transmission} />
           <InsightsNova insights={vue.insights} />

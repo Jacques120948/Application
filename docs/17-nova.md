@@ -144,8 +144,20 @@ la santé des données dit combien de variantes l'ont.
 Coût pour Evoliia : aucun. L'API REST de WooCommerce est servie par la boutique elle-même,
 celle de Stripe est gratuite ; mêmes règles de cache (12 h, 30 min après échec).
 
+## V6 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| GA4 enrichi | `agregat-ga4.ts`, `collecte-ga4.ts` (`VERSION_JOURS = 3`) | Deux rapports de plus, sans coût : pays (`countryId`) × nouveaux/connus (`newVsReturning`), et événements clés (`keyEvents`) par nom et par canal. Par jour : 25 pays au plus (le reste sous « ZZ »). Un rapport refusé n'efface pas les visites. Relecture complète au passage de version. |
+| Prospects | `nova/leads.ts`, `NovaReglages.prospects`, `api/nova/prospects` | Les événements clés de GA4 comptés comme prospects : choisis par la personne, sinon reconnus à leur nom (lead, contact, form, devis, appel, téléphone…). L'achat et ses étapes ne sont jamais proposés. KPI « Prospects » et « Coût par prospect » (dépenses ÷ prospects), prospects et coût par canal. Une activité de services les voit en tête. Le taux prospect → client exige un CRM : il n'est pas prétendu. |
+| Audiences | `nova/audiences.ts` | Par pays (noms en français), nouveaux / qui reviennent, conversion = achats ÷ visites, seulement au-delà de 100 visites par segment. Constats : un pays à ≥ 10 % des visites qui convertit moitié moins que le premier ; des visiteurs fidèles qui achètent deux fois plus. Âge et sexe non lus (signaux Google souvent absents). Une période dont un jour a été lu avant la V6 n'affiche pas d'audience. |
+| Prévisions | `nova/previsions.ts` | 30 prochains jours et fin du mois. Chaque jour = moyenne des 8 derniers jours de la même semaine ; facteur de saison de l'an dernier quand l'historique existe (borné entre ×0,5 et ×2) ; fourchette = ±1,28 écart-type des 8 dernières semaines. Exige 56 jours couverts et 30 commandes. Toujours dite « estimation, pas une promesse ». |
+| Coût d'un abonné | `service.ts` (`AcquisitionAbonnes`) | Dépense publicitaire du dernier mois terminé ÷ nouveaux abonnés de ce mois, et mois d'abonnement pour la rembourser (÷ revenu moyen). Toute la dépense est comptée : c'est un plafond, et c'est dit. |
+
+Coût pour Evoliia : aucun — deux rapports GA4 de plus par lecture, sur le quota de la
+propriété de la personne.
+
 ## Encore à venir
 
-CRM (leads, CPL, taux lead → client), cohortes et LTV des boutiques (elles exigent l'accès
-aux données client protégées de Shopify), CAC par abonné (dépense ÷ nouveaux abonnés),
-prévisions au-delà du mois, analyse des audiences.
+CRM (taux prospect → client, valeur d'un prospect), cohortes et LTV des boutiques (accès aux
+données client protégées de Shopify), âge et sexe (signaux Google).

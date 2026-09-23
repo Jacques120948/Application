@@ -13,7 +13,17 @@ import { useCredential, useOAuthAccess } from '@/server/integrations/service'
 import { logger } from '@/server/observability/logger'
 import { AppError } from '@/lib/errors'
 import { FRAICHEUR_MS, JOURS_LUS } from './collecte'
-import { agregerVisites, DIMENSIONS_CANAUX, DIMENSIONS_PAGES, METRIQUES, METRIQUES_PAGES } from './agregat-ga4'
+import {
+  agregerVisites,
+  DIMENSIONS_AUDIENCES,
+  DIMENSIONS_CANAUX,
+  DIMENSIONS_EVENEMENTS,
+  DIMENSIONS_PAGES,
+  METRIQUES,
+  METRIQUES_AUDIENCES,
+  METRIQUES_EVENEMENTS,
+  METRIQUES_PAGES,
+} from './agregat-ga4'
 
 /**
  * La collecte des visites : Google Analytics 4 vers Evoliia.
@@ -29,11 +39,12 @@ const PAUSE_APRES_ECHEC_MS = 30 * 60 * 1000
 const PAUSE_MANUELLE_MS = 2 * 60 * 1000
 const JOURS_RATTRAPES = 3
 /**
- * La forme des jours écrits. 1 : V3. 2 : l'engagement par page d'entrée. Une ligne plus
+ * La forme des jours écrits. 1 : V3. 2 : l'engagement par page d'entrée. 3 : pays, nouveaux
+ * et connus, événements clés. Une ligne plus
  * ancienne que le code déclenche une relecture complète, sans quoi les anciens jours
  * garderaient leur ancienne forme jusqu'à sortir de la fenêtre.
  */
-export const VERSION_JOURS = 2
+export const VERSION_JOURS = 3
 const JOURS_GARDES = 400
 const FOURNISSEUR = 'google-analytics'
 
@@ -161,7 +172,7 @@ export async function synchroniserVisites(
         : [debut, jourIso(new Date(+precedente.synchroAt - JOURS_RATTRAPES * JOUR_MS))].sort().at(-1)!
 
     const bornes = { du: depuis, au: aujourdhui }
-    const [canaux, pages, pagesSeo] = await Promise.all([
+    const [canaux, pages, pagesSeo, audiences, evenements] = await Promise.all([
       rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_CANAUX, metriques: METRIQUES, limite: 100_000 }),
       rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_PAGES, metriques: METRIQUES_PAGES, limite: 100_000 }),
       rapport(acces.accessToken, propriete, {
@@ -171,13 +182,25 @@ export async function synchroniserVisites(
         filtreCanal: 'Organic Search',
         limite: 100_000,
       }),
+      rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_AUDIENCES, metriques: METRIQUES_AUDIENCES, limite: 100_000 }),
+      rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_EVENEMENTS, metriques: METRIQUES_EVENEMENTS, limite: 100_000 }),
     ])
     const echec = [canaux, pages, pagesSeo].find((un) => !un.ok)
     if (echec !== undefined && !echec.ok) {
       await noter(userId, { etat: 'erreur', message: echec.raison })
       return lireEtatVisites(userId)
     }
-    const jours = agregerVisites(canaux.ok ? canaux.lignes : [], pages.ok ? pages.lignes : [], pagesSeo.ok ? pagesSeo.lignes : [])
+    /*
+     * Audiences et événements clés sont un plus : une propriété qui les refuse (pas
+     * d'événement clé déclaré, par exemple) garde ses visites, sans ces deux blocs.
+     */
+    const jours = agregerVisites(
+      canaux.ok ? canaux.lignes : [],
+      pages.ok ? pages.lignes : [],
+      pagesSeo.ok ? pagesSeo.lignes : [],
+      audiences.ok ? audiences.lignes : [],
+      evenements.ok ? evenements.lignes : [],
+    )
 
     await withUserScope(userId, async (tx) => {
       await tx.analyticsJour.deleteMany({ where: { userId, propriete, jour: { gte: new Date(depuis) } } })
@@ -195,6 +218,9 @@ export async function synchroniserVisites(
             appareils: jour.appareils as Prisma.InputJsonValue,
             pages: jour.pages as unknown as Prisma.InputJsonValue,
             pagesSeo: jour.pagesSeo as unknown as Prisma.InputJsonValue,
+            pays: jour.pays as Prisma.InputJsonValue,
+            visiteurs: jour.visiteurs as Prisma.InputJsonValue,
+            evenements: jour.evenements as unknown as Prisma.InputJsonValue,
           })),
         })
       }

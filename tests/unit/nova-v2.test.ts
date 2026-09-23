@@ -64,7 +64,8 @@ describe('Nova V2 — objectifs', () => {
 
   it('met en avant d’autres chiffres selon l’activité', () => {
     expect(ordreIndicateurs('ecommerce')[0]).toBe('chiffre')
-    expect(ordreIndicateurs('services')[0]).toBe('depenses')
+    // V6 : une activité de services regarde d'abord ses prospects et ce qu'ils coûtent.
+    expect(ordreIndicateurs('services').slice(0, 2)).toEqual(['leads', 'cpl'])
   })
 })
 

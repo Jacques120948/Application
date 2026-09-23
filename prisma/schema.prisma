@@ -2542,6 +2542,8 @@ model NovaReglages {
   objectifs Json   @default("{}")
   /// { coutProduitPct, livraisonParCommande, paiementPct, paiementFixe, commissionPct, autresPct }
   couts     Json   @default("{}")
+  /// Les événements clés de GA4 comptés comme prospects. `null` : ceux que Nova reconnaît à leur nom.
+  prospects Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2570,6 +2572,12 @@ model AnalyticsJour {
   pages            Json     @default("[]")
   /// Même forme, pour les seules visites venues de la recherche naturelle.
   pagesSeo         Json     @default("[]")
+  /// { "CH": { sessions, achats }, … } — pays les plus visités, le reste sous « ZZ ».
+  pays             Json     @default("{}")
+  /// { nouveaux: { sessions, achats }, connus: { sessions, achats } }
+  visiteurs        Json     @default("{}")
+  /// { "generate_lead": { total, canaux: { canal: n } } } — événements clés de GA4.
+  evenements       Json     @default("{}")
 
   createdAt DateTime @default(now())
 

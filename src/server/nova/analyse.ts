@@ -3,6 +3,7 @@ import { NOM_CANAL } from '@/lib/nova'
 import { variation } from '@/server/ads/metriques'
 import { contenuQualifie, contenusQuiAttirent } from './contenus'
 import type { IndicateursAbonnements } from './abonnements'
+import { lireAudiences, paysQuiNAchetePas } from './audiences'
 import {
   cumulPub,
   enPourcent,
@@ -271,6 +272,29 @@ export function detecterInsights(ctx: Contexte): Insight[] {
       fondement: `${argent(faible.chiffre, devise)} de ventes, ${argent(faible.marge!, devise)} de marge brute après coût d’achat (Shopify, coût actuel), hors livraison, frais et publicité. Estimation basée sur les coûts renseignés.`,
       ton: 'attention',
     })
+  }
+
+  // Les audiences : un pays qui visite sans acheter, et ce que rapportent ceux qui reviennent.
+  const audiences = lireAudiences(ctx.visites)
+  if (audiences !== null) {
+    const faiblePays = paysQuiNAchetePas(audiences)
+    if (faiblePays !== null) {
+      trouves.push({
+        cle: `audience.pays.${faiblePays.pays.cle}`,
+        texte: `${faiblePays.pays.nom} apporte ${pourcent(faiblePays.pays.part * 100)} de vos visites mais convertit à ${fmt(faiblePays.pays.conversion! * 100)} %, contre ${fmt(faiblePays.reference.conversion! * 100)} % pour ${faiblePays.reference.nom}.`,
+        fondement: 'Achats ÷ visites par pays, selon GA4. Une publicité qui cible trop large, une livraison ou une langue qui ne suivent pas en sont des causes fréquentes — à vérifier, pas à supposer.',
+        ton: 'attention',
+      })
+    }
+    const { nouveaux, connus } = audiences
+    if (nouveaux.conversion !== null && connus.conversion !== null && nouveaux.conversion > 0 && connus.conversion >= nouveaux.conversion * 2) {
+      trouves.push({
+        cle: 'audience.fideles',
+        texte: `Les visiteurs qui reviennent achètent ${fmt(connus.conversion / nouveaux.conversion)} fois plus que les nouveaux (${fmt(connus.conversion * 100)} % contre ${fmt(nouveaux.conversion * 100)} %).`,
+        fondement: `Achats ÷ visites, nouveaux et connus, selon GA4. Ils font ${pourcent(connus.part * 100)} des visites.`,
+        ton: 'neutre',
+      })
+    }
   }
 
   const iaVisites = ctx.visites?.canaux.ia

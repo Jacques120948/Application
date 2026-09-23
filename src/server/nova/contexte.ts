@@ -123,8 +123,37 @@ export function faitsNova(vue: VueNova): string[] {
         `${abos.churnMrr === null ? '' : ` (${nombre(abos.churnMrr * 100, 1)} % du MRR)`}` +
         `. LTV : ${abos.ltv === null ? `indisponible — ${abos.raisonLtv ?? ''}` : `≈ ${monnaie} ${nombre(abos.ltv, 0)} (revenu moyen ÷ churn, estimation)`}.`,
     )
+    const acq = vue.abonnements.acquisition
+    if (acq !== null) {
+      lignes.push(
+        `Coût d’acquisition d’un abonné (${acq.mois}) : ${monnaie} ${nombre(acq.cac, 2)} — ${monnaie} ${nombre(acq.depense, 0)} de publicité pour ${acq.nouveaux} nouveaux abonnés, toute la dépense comptée (un plafond)${acq.rentabiliseEnMois === null ? '' : ` ; remboursé en ${nombre(acq.rentabiliseEnMois, 1)} mois d’abonnement`}.`,
+      )
+    }
   } else if (vue.abonnements.etat.etat !== 'absent') {
     lignes.push('Abonnements Stripe : reliés mais pas encore lus. Ne cite aucun MRR ni churn.')
+  }
+  if (vue.leads !== null) {
+    lignes.push(
+      vue.leads.evenements.length === 0
+        ? 'Prospects : aucun événement clé de GA4 ne compte comme prospect. Ne cite aucun nombre de prospects ni de coût par prospect.'
+        : `Prospects sur la période (événements clés GA4 : ${vue.leads.evenements.join(', ')}${vue.leads.auto ? ', reconnus par leur nom' : ', choisis par la personne'}) : ${vue.leads.total}. Nova ne sait pas combien deviennent clients (aucun CRM relié).`,
+    )
+  }
+  if (vue.audiences !== null) {
+    const pct = (valeur: number | null) => (valeur === null ? 'volume insuffisant' : `${nombre(valeur * 100, 1)} %`)
+    lignes.push(
+      `Audiences (GA4) : ${vue.audiences.pays
+        .slice(0, 5)
+        .map((un) => `${un.nom} ${Math.round(un.part * 100)} % des visites, conversion ${pct(un.conversion)}`)
+        .join(' ; ')}. Nouveaux visiteurs : conversion ${pct(vue.audiences.nouveaux.conversion)} ; visiteurs qui reviennent : ${pct(vue.audiences.connus.conversion)}.`,
+    )
+  }
+  if (vue.prevision !== null) {
+    const p = vue.prevision
+    lignes.push(
+      `Prévision des ventes (estimation, jamais une promesse) : ${vue.devise} ${nombre(p.prochains30.chiffre, 0)} sur les 30 prochains jours (fourchette ${nombre(p.prochains30.bas, 0)} à ${nombre(p.prochains30.haut, 0)})` +
+        `${p.finDeMois === null ? '' : ` ; fin du mois ≈ ${vue.devise} ${nombre(p.finDeMois.chiffre, 0)} (${nombre(p.finDeMois.bas, 0)} à ${nombre(p.finDeMois.haut, 0)}), dont ${nombre(p.finDeMois.aDate, 0)} déjà réalisés`}. Méthode : ${p.methode}`,
+    )
   }
   if (vue.clients !== null) {
     lignes.push(

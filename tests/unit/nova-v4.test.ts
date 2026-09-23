@@ -227,6 +227,10 @@ describe('Nova V4 — contenus qui attirent', () => {
     appareils: {},
     pages,
     pagesSeo: [],
+    audiencesLues: true,
+    pays: {},
+    visiteurs: { nouveaux: { sessions: 0, achats: 0 }, connus: { sessions: 0, achats: 0 } },
+    evenements: {},
   })
 
   it('ne garde que les articles de blog, avec assez de visites', () => {
