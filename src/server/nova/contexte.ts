@@ -96,6 +96,40 @@ export function faitsNova(vue: VueNova): string[] {
       : `Opportunités : ${vue.opportunites.map((un) => `${un.titre} — ${un.pourquoi} (agent : ${membre(un.agent)?.name ?? un.agent})`).join(' | ')}`,
     `Santé des données : ${vue.sante.lignes.map((ligne) => `${ligne.source} ${ligne.etat} — ${ligne.texte}`).join(' | ')}`,
   )
+
+  // V2 : ce que la personne a déclaré, et ce qui en découle.
+  const activites: Record<string, string> = { ecommerce: 'boutique en ligne', services: 'prestations de services', saas: 'abonnement en ligne' }
+  lignes.push(`Type d’activité déclaré : ${activites[vue.reglages.activite] ?? 'non précisé'}.`)
+  if (vue.aVenir !== null) lignes.push(`Indicateurs indisponibles pour cette activité : ${vue.aVenir}`)
+  lignes.push(
+    vue.objectifs.length === 0
+      ? 'Objectifs : aucun fixé. Si la question en dépend, propose d’en fixer dans l’onglet « Objectifs et marge ».'
+      : `Objectifs : ${vue.objectifs
+          .map((suivi) => `${suivi.label} — objectif ${suivi.objectif}, actuel ${suivi.actuel ?? 'inconnu'}${suivi.projection === null ? '' : `, projection fin de mois ${suivi.projection} (au rythme actuel, pas une prévision)`}, état ${suivi.tendance}`)
+          .join(' | ')}`,
+  )
+  lignes.push(
+    vue.marge.etat === 'impossible'
+      ? `Marge : non calculable — ${vue.marge.raison}`
+      : `Marge estimée sur la période (estimation basée sur les coûts renseignés) : ${vue.devise} ${nombre(vue.marge.marge, 2)}, soit ${nombre(vue.marge.taux * 100, 1)} % du CA${vue.marge.manquants.length === 0 ? '' : ` ; non renseignés : ${vue.marge.manquants.join(', ')} (marge réelle probablement plus basse)`}.`,
+  )
+  if (vue.clients !== null) {
+    lignes.push(
+      `Clients sur la période : ${vue.clients.nouveaux.commandes} commandes de nouveaux clients (${vue.devise} ${nombre(vue.clients.nouveaux.chiffre, 2)}), ${vue.clients.existants.commandes} de clients revenus, ${vue.clients.inconnus.commandes} sans client identifié.`,
+    )
+  }
+  lignes.push(
+    vue.valeurClient.etat === 'calculee'
+      ? `Valeur moyenne d’un client sur ${vue.valeurClient.depuis} → ${vue.valeurClient.au} : ${vue.devise} ${nombre(vue.valeurClient.valeur, 2)}, ${nombre(vue.valeurClient.commandesParClient, 2)} commandes par client, ${Math.round(vue.valeurClient.tauxRetour * 100)} % revenus. Ce n’est PAS une LTV : ne l’appelle jamais ainsi.`
+      : `Valeur client / LTV : indisponible — ${vue.valeurClient.raison}`,
+  )
+  if (vue.modeles !== null) {
+    lignes.push(
+      'CA boutique par canal selon le modèle (dernier clic / premier clic / partagé 50-50) :',
+      ...vue.modeles.map((ligne) => `- ${ligne.nom} : ${nombre(ligne.chiffre.dernier, 2)} / ${nombre(ligne.chiffre.premier, 2)} / ${nombre(ligne.chiffre.partage, 2)}`),
+    )
+  }
+  if (vue.parcours.length > 0) lignes.push(`Lecture du parcours (INTERPRÉTATION, à présenter comme telle) : ${vue.parcours.join(' ')}`)
   return lignes
 }
 
@@ -110,9 +144,14 @@ export function transmissionOria(vue: VueNova): string[] {
     .map((cle) => kpi(cle))
     .filter((un): un is Kpi => un !== undefined && un.valeur !== null)
     .map((un) => `${un.label} ${valeurKpi(un, vue.devise).split(' — ')[0]}`)
+  const marge =
+    vue.marge.etat === 'calculee'
+      ? [`- Marge estimée : ${vue.devise} ${nombre(vue.marge.marge, 0)} (${nombre(vue.marge.taux * 100, 1)} % du CA, d’après les coûts renseignés).`]
+      : []
   return [
     `NOVA → ORIA (${vue.pourOria.periode}, sources : ${vue.sources.length === 0 ? 'aucune' : vue.sources.join(' + ')}). Chiffres de référence, ne les recalcule pas :`,
     chiffres.length === 0 ? '- Aucun indicateur calculable : ni boutique ni régie reliée.' : `- ${chiffres.join(' ; ')}`,
+    ...marge,
     ...vue.pourOria.observations.map((observation, rang) => `${rang + 1}. ${observation}`),
     vue.pourOria.recommandation === null ? 'Recommandation de Nova : aucune.' : `Recommandation de Nova : ${vue.pourOria.recommandation}`,
   ]

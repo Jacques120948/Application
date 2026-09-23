@@ -12,6 +12,8 @@ import { synchroniserVentes } from '@/server/nova/collecte'
 import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
 import { lireSignaux } from '@/server/oria/signaux'
+import { enregistrerReglages, reglagesNova } from '@/server/nova/reglages'
+import { lireBilan } from '@/server/nova/bilan'
 import { ensureTestPlan, testPlanId } from '../helpers/plan'
 
 /**
@@ -48,6 +50,8 @@ function commande(partiel: Partial<CommandeShopify>): CommandeShopify {
     test: false,
     premiere: true,
     visite: null,
+    premiereVisite: null,
+    clientId: null,
     lignes: [{ produitId: 'gid://shopify/Product/1', titre: 'Bougie citrine', quantite: 1, totalCents: 10_000 }],
     ...partiel,
   }
@@ -108,8 +112,13 @@ describe('Nova — collecte des ventes', () => {
   it('écrit des totaux par jour, sans rien garder d’un client', async () => {
     vi.mocked(shopify.lireCommandes).mockResolvedValueOnce({
       commandes: [
-        commande({ totalCents: 12_000, visite: { source: '', referrer: 'https://www.google.com/?gclid=x', utm: { source: '', medium: '', campaign: '', content: '', term: '' } } }),
-        commande({ totalCents: 8_000, premiere: false }),
+        commande({
+          totalCents: 12_000,
+          clientId: 'gid://shopify/Customer/1',
+          visite: { source: '', referrer: 'https://www.google.com/?gclid=x', utm: { source: '', medium: '', campaign: '', content: '', term: '' } },
+          premiereVisite: { source: '', referrer: 'https://www.instagram.com/', utm: { source: '', medium: '', campaign: '', content: '', term: '' } },
+        }),
+        commande({ totalCents: 8_000, premiere: false, clientId: 'gid://shopify/Customer/2' }),
         commande({ totalCents: 99_999, test: true }),
       ],
       tronque: false,
@@ -124,6 +133,12 @@ describe('Nova — collecte des ventes', () => {
     const jours = await withUserScope(proprietaire, (tx) => tx.commerceJour.findMany({ where: { userId: proprietaire } }))
     expect(jours).toHaveLength(1)
     expect(jours[0]).toMatchObject({ commandes: 2, chiffreCents: BigInt(20_000), nouveauxClients: 1, clientsIdentifies: 2 })
+    expect(jours[0]!.chiffreNouveauxCents).toBe(BigInt(12_000))
+    expect(jours[0]!.canauxPremier).toMatchObject({ social: { commandes: 1 } })
+    // Le compte des clients est gardé ; leurs identifiants, non.
+    expect(etat.clients).toMatchObject({ clients: 2, recurrents: 0, commandes: 2 })
+    const synchro = await withUserScope(proprietaire, (tx) => tx.commerceSynchro.findFirstOrThrow({ where: { userId: proprietaire } }))
+    expect(JSON.stringify(synchro.clients)).not.toContain('Customer')
     expect(JSON.stringify(jours[0], (_, valeur: unknown) => (typeof valeur === 'bigint' ? String(valeur) : valeur))).not.toContain('gid://shopify/Order')
   })
 
@@ -176,7 +191,26 @@ describe('Nova — lecture', () => {
     expect(oria.sourcesLues).toContain('nova')
   })
 
+  it('estime une marge et suit un objectif d’après les réglages saisis', async () => {
+    await enregistrerReglages(proprietaire, { activite: 'ecommerce', objectifs: { cacMax: 50 }, couts: { coutProduitPct: 40 } })
+    const vue = await lireNova(proprietaire, 'fr', { periode: '30' })
+    // 200 − 80 produits − 100 publicité ; livraison, paiement, commissions et autres non renseignés.
+    expect(vue.marge).toMatchObject({ etat: 'calculee', marge: 20 })
+    expect(vue.objectifs.find((un) => un.cle === 'cacMax')).toMatchObject({ actuel: 100, tendance: 'hors-cible' })
+    expect(vue.modeles?.find((ligne) => ligne.canal === 'social')?.chiffre.premier).toBe(120)
+    expect(faitsNova(vue).join('\n')).toContain('Valeur client / LTV : indisponible — Moins de 20 clients')
+  })
+
+  it('compose le bilan de la dernière semaine terminée', async () => {
+    const bilan = await lireBilan(proprietaire, 'fr')
+    expect(bilan.vue.periode.cle).toBe('perso')
+    expect(bilan.vue.periode.jours).toBe(7)
+    expect(bilan.chiffres.map((kpi) => kpi.cle)).toEqual(['chiffre', 'depenses', 'roas', 'cac', 'commandes'])
+  })
+
   it('ne montre à personne les ventes d’un autre', async () => {
+    expect(await reglagesNova(voisin)).toEqual({ activite: '', objectifs: {}, couts: {} })
+    expect(await withUserScope(voisin, (tx) => tx.novaReglages.count())).toBe(0)
     const vue = await lireNova(voisin, 'fr', { periode: '30' })
     expect(vue.vierge).toBe(true)
     expect(vue.kpis.find((un) => un.cle === 'chiffre')?.valeur).toBeNull()

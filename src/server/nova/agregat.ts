@@ -33,9 +33,68 @@ export type JourVentes = {
   commandes: number
   chiffreCents: number
   nouveauxClients: number
+  /** Ce qu'ont rapporté les premières commandes. */
+  chiffreNouveauxCents: number
   clientsIdentifies: number
   canaux: Partial<Record<CanalNova, CanalJour>>
+  /** Les mêmes commandes, rangées par le canal de leur première visite. */
+  canauxPremier: Partial<Record<CanalNova, CanalJour>>
   produits: ProduitJour[]
+}
+
+function ranger(
+  canaux: Partial<Record<CanalNova, CanalJour>>,
+  visite: CommandeShopify['visite'],
+  totalCents: number,
+): void {
+  const { canal, origine } = canalDeVisite(visite)
+  const ligne = canaux[canal] ?? { commandes: 0, chiffreCents: 0, origines: {} }
+  ligne.commandes += 1
+  ligne.chiffreCents += totalCents
+  ligne.origines[origine] = (ligne.origines[origine] ?? 0) + 1
+  canaux[canal] = ligne
+}
+
+/**
+ * Les clients d'une fenêtre, comptés : combien de personnes distinctes, combien sont
+ * revenues, ce qu'elles ont rapporté.
+ *
+ * C'est le seul calcul qui a besoin de reconnaître un client d'une commande à l'autre, et il
+ * se fait ici, en mémoire, pendant la synchronisation. Ce qui en sort est un compte ; les
+ * identifiants ne quittent pas cette fonction.
+ */
+export type InstantaneClients = {
+  /** Le jour du calcul, et la fenêtre couverte. */
+  au: string
+  depuis: string
+  clients: number
+  /** Clients qui ont commandé au moins deux fois dans la fenêtre. */
+  recurrents: number
+  commandes: number
+  chiffreCents: number
+}
+
+export function instantaneClients(
+  commandes: readonly CommandeShopify[],
+  depuis: string,
+  au: string,
+): InstantaneClients | null {
+  const retenues = commandes.filter((commande) => !commande.test && !commande.annulee && commande.clientId !== null)
+  if (retenues.length === 0) return null
+  const parClient = new Map<string, number>()
+  let chiffreCents = 0
+  for (const commande of retenues) {
+    parClient.set(commande.clientId!, (parClient.get(commande.clientId!) ?? 0) + 1)
+    chiffreCents += commande.totalCents
+  }
+  return {
+    au,
+    depuis,
+    clients: parClient.size,
+    recurrents: [...parClient.values()].filter((n) => n >= 2).length,
+    commandes: retenues.length,
+    chiffreCents,
+  }
 }
 
 /** Les produits gardés par jour : au-delà, la ligne pèse sans rien apprendre de plus. */
@@ -65,21 +124,23 @@ export function agregerCommandes(commandes: readonly CommandeShopify[], fuseau: 
         commandes: 0,
         chiffreCents: 0,
         nouveauxClients: 0,
+        chiffreNouveauxCents: 0,
         clientsIdentifies: 0,
         canaux: {},
+        canauxPremier: {},
         produits: [],
       } satisfies JourVentes)
     courant.commandes += 1
     courant.chiffreCents += commande.totalCents
     if (commande.premiere !== null) courant.clientsIdentifies += 1
-    if (commande.premiere === true) courant.nouveauxClients += 1
+    if (commande.premiere === true) {
+      courant.nouveauxClients += 1
+      courant.chiffreNouveauxCents += commande.totalCents
+    }
 
-    const { canal, origine } = canalDeVisite(commande.visite)
-    const ligne = courant.canaux[canal] ?? { commandes: 0, chiffreCents: 0, origines: {} }
-    ligne.commandes += 1
-    ligne.chiffreCents += commande.totalCents
-    ligne.origines[origine] = (ligne.origines[origine] ?? 0) + 1
-    courant.canaux[canal] = ligne
+    ranger(courant.canaux, commande.visite, commande.totalCents)
+    // Sans première visite connue, on ne la déduit pas de la dernière : ce serait inventer un parcours.
+    ranger(courant.canauxPremier, commande.premiereVisite, commande.totalCents)
     jours.set(jour, courant)
 
     const duJour = produits.get(jour) ?? new Map<string, ProduitJour>()

@@ -71,9 +71,34 @@ Sources ─► Collecte ─► Normalisation ─► Moteur de métriques ─► 
   intermédiaire). Jamais le modèle le plus cher.
 - Shopify Admin API : gratuite. Aucun coût pour Evoliia.
 
-## Prévu pour la V2
+## V2 — ce qui est livré
 
-Google Analytics 4 (visites, taux de conversion, parcours), WooCommerce, Stripe, CRM ;
-objectifs chiffrés et bilan hebdomadaire ; marge avec coûts renseignés ; LTV et cohortes ;
-attribution multi-touch (premier clic, linéaire, position) ; nouveaux contre anciens
-clients par canal ; routage des questions par complexité.
+Quatre onglets : **Tableau de bord**, **Bilan de la semaine**, **Objectifs et marge**,
+**Clients et parcours**. Aucun ne consomme de crédit.
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Réglages | `server/nova/reglages.ts`, table `NovaReglages` (RLS) | Type d'activité, objectifs, coûts variables. Tout est facultatif ; un champ vide veut dire « non renseigné », jamais zéro. |
+| Indicateurs par activité | `pilotage.ts` (`ordreIndicateurs`, `indicateursAVenir`) | Boutique : CA, ROAS, CAC d'abord. Services : dépenses et coût par conversion. SaaS : CA, CAC. Ce qui manque (MRR, churn, leads) est nommé avec la source qu'il faudrait. |
+| Objectifs | `pilotage.ts` (`suivreObjectifs`) | CA et commandes du mois à date, avec projection au rythme actuel à partir du 7e jour (« pas une prévision »). ROAS minimum et CAC maximum sur 30 jours. Un objectif en retard devient un constat en tête et remonte à Oria. |
+| Marge | `pilotage.ts` (`margeEstimee`) | CA − coût des produits − livraison − paiement − commissions − autres − publicité. Exige le coût des produits ; nomme les coûts non renseignés. Toujours « Estimation basée sur les coûts renseignés ». |
+| Bilan | `bilan.ts` | Dernière semaine terminée (lundi → dimanche, fuseau de la boutique) contre la précédente : chiffres, top canal / campagne / produit, anomalie et opportunité principales, ce qui progresse / baisse / mérite l'attention (seuil 5 %). |
+| Clients | `clients.ts`, `agregat.ts` (`instantaneClients`) | Nouveaux / revenus / non identifiés ; CA des premières commandes. Valeur moyenne d'un client sur la fenêtre lue (≥ 20 clients) — explicitement **pas une LTV**. |
+| Attribution | `clients.ts` (`modelesAttribution`) | Dernier clic, premier clic, partagé 50/50 (exact : chaque commande donne une moitié à chacun). Linéaire, position et data-driven attendent GA4. |
+| Parcours | `clients.ts` (`lectureParcours`) | « Semble intervenir en début de parcours / plus près de l'achat » quand le rapport premier/dernier dépasse 1,5 sur ≥ 5 commandes. Toujours marqué **Interprétation**. |
+
+Collecte : la lecture Shopify demande aussi la première visite (`firstVisit`) et
+l'identifiant client. L'identifiant ne sert qu'à compter les clients distincts pendant la
+synchronisation ; seul le compte est écrit (`CommerceSynchro.clients`). Une lecture complète
+des 90 jours a lieu au moins une fois par semaine pour tenir ce compte à jour.
+
+Shopify range les commandes parmi les « données client protégées » : en plus de
+`read_orders`, l'application doit en déclarer l'accès (Dev Dashboard → API access). Le refus
+correspondant est reconnu et expliqué à l'écran.
+
+## Encore à venir
+
+Google Analytics 4 (visites, taux de conversion, parcours complet, modèles linéaire et en
+position), WooCommerce, Stripe (MRR, churn), CRM (leads, CPL), coûts par produit, cohortes
+mensuelles, prévisions au-delà du mois, détection d'anomalies statistique (écarts-types),
+analyse des audiences.

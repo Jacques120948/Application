@@ -137,8 +137,12 @@ export type JourVentes = {
   commandes: number
   chiffre: number
   nouveauxClients: number
+  /** Ce qu'ont rapporté les premières commandes. */
+  chiffreNouveaux: number
   clientsIdentifies: number
   canaux: Partial<Record<CanalNova, CanalVentes>>
+  /** Les mêmes commandes, par canal de première visite. Vide pour les jours lus avant la V2. */
+  canauxPremier: Partial<Record<CanalNova, CanalVentes>>
   produits: ProduitVentes[]
 }
 
@@ -186,9 +190,24 @@ export type CumulVentes = {
   commandes: number
   chiffre: number
   nouveauxClients: number
+  chiffreNouveaux: number
   clientsIdentifies: number
   canaux: Partial<Record<CanalNova, CanalVentes>>
+  canauxPremier: Partial<Record<CanalNova, CanalVentes>>
   produits: ProduitVentes[]
+}
+
+function additionner(
+  cible: Partial<Record<CanalNova, CanalVentes>>,
+  source: Partial<Record<CanalNova, CanalVentes>>,
+): void {
+  for (const [canal, ligne] of Object.entries(source) as [CanalNova, CanalVentes][]) {
+    const deja = cible[canal] ?? { commandes: 0, chiffre: 0, origines: {} }
+    deja.commandes += ligne.commandes
+    deja.chiffre += ligne.chiffre
+    for (const [origine, n] of Object.entries(ligne.origines)) deja.origines[origine] = (deja.origines[origine] ?? 0) + n
+    cible[canal] = deja
+  }
 }
 
 /**
@@ -199,21 +218,26 @@ export type CumulVentes = {
  */
 export function cumulVentes(ventes: Donnees['ventes'], bornes: { du: string; au: string }): CumulVentes | null {
   if (!ventes.disponibles || ventes.couvertureDepuis === null || bornes.du < ventes.couvertureDepuis) return null
-  const total: CumulVentes = { commandes: 0, chiffre: 0, nouveauxClients: 0, clientsIdentifies: 0, canaux: {}, produits: [] }
+  const total: CumulVentes = {
+    commandes: 0,
+    chiffre: 0,
+    nouveauxClients: 0,
+    chiffreNouveaux: 0,
+    clientsIdentifies: 0,
+    canaux: {},
+    canauxPremier: {},
+    produits: [],
+  }
   const produits = new Map<string, ProduitVentes>()
   for (const jour of ventes.jours) {
     if (!dansPeriode(jour.jour, bornes)) continue
     total.commandes += jour.commandes
     total.chiffre += jour.chiffre
     total.nouveauxClients += jour.nouveauxClients
+    total.chiffreNouveaux += jour.chiffreNouveaux
     total.clientsIdentifies += jour.clientsIdentifies
-    for (const [canal, ligne] of Object.entries(jour.canaux) as [CanalNova, CanalVentes][]) {
-      const deja = total.canaux[canal] ?? { commandes: 0, chiffre: 0, origines: {} }
-      deja.commandes += ligne.commandes
-      deja.chiffre += ligne.chiffre
-      for (const [origine, n] of Object.entries(ligne.origines)) deja.origines[origine] = (deja.origines[origine] ?? 0) + n
-      total.canaux[canal] = deja
-    }
+    additionner(total.canaux, jour.canaux)
+    additionner(total.canauxPremier, jour.canauxPremier)
     for (const produit of jour.produits) {
       const deja = produits.get(produit.id) ?? { ...produit, commandes: 0, quantite: 0, chiffre: 0 }
       deja.commandes += produit.commandes

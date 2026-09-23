@@ -59,6 +59,7 @@ model User {
   resumesOria          OriaResume[]
   ventesJour           CommerceJour[]
   synchrosVentes       CommerceSynchro[]
+  reglagesNova         NovaReglages?
   supportAlerts    Boolean   @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId String?   @unique
@@ -2462,12 +2463,16 @@ model CommerceJour {
   chiffreCents      BigInt @default(0)
   /// Clients dont c'est la première commande. Voir nova/collecte.ts pour la méthode.
   nouveauxClients   Int    @default(0)
+  /// Ce qu'ont rapporté ces premières commandes, en centimes.
+  chiffreNouveauxCents BigInt @default(0)
   /// Commandes dont le client est identifié : sans lui, on ne sait pas s'il est nouveau.
   clientsIdentifies Int    @default(0)
   /// { canal: { commandes, chiffreCents, origines: { "source / medium": n } } }
   canaux            Json   @default("{}")
   /// [{ id, titre, commandes, quantite, chiffreCents }]
   produits          Json   @default("[]")
+  /// Même forme que `canaux`, au premier clic (première visite enregistrée).
+  canauxPremier     Json   @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2500,6 +2505,8 @@ model CommerceSynchro {
   tronque          Boolean   @default(false)
   devise           String    @default("")
   fuseau           String    @default("")
+  /// Instantané des clients sur la fenêtre lue (voir nova/collecte.ts). Des comptes, jamais un identifiant.
+  clients          Json      @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2507,4 +2514,21 @@ model CommerceSynchro {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, source, boutique])
+}
+
+/// Ce que la personne dit de son activité à Nova : type, objectifs, coûts variables.
+model NovaReglages {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @unique @db.Uuid
+  /// ecommerce | services | saas — ce qui décide des indicateurs mis en avant.
+  activite  String @default("")
+  /// { caMensuel, roasMin, cacMax, commandesMensuelles } — des montants, jamais des cibles devinées.
+  objectifs Json   @default("{}")
+  /// { coutProduitPct, livraisonParCommande, paiementPct, paiementFixe, commissionPct, autresPct }
+  couts     Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

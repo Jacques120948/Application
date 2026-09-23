@@ -4,6 +4,9 @@ import { Badge, Card, CardBody, LinkButton } from '@/components/ui'
 import type { Kpi, LigneCampagne, LigneCanal, LigneProduit, Attribution } from '@/server/nova/metriques'
 import type { Alerte, Insight, Opportunite, RapportOria } from '@/server/nova/analyse'
 import type { LigneSante } from '@/server/nova/service'
+import type { Marge, SuiviObjectif } from '@/server/nova/pilotage'
+import type { LigneModele, Modele, RepartitionClients, ValeurClient } from '@/server/nova/clients'
+import type { Bilan } from '@/server/nova/bilan'
 
 /**
  * Les blocs de l'écran de Nova.
@@ -202,8 +205,16 @@ export function PeriodeNova({
 /** L'ordre des cartes, celui qu'on veut voir en premier sur un téléphone. */
 const ORDRE: readonly Kpi['cle'][] = ['chiffre', 'roas', 'cac', 'commandes', 'depenses', 'mer', 'cpa', 'panier', 'conversion']
 
-export function IndicateursNova({ kpis, devise }: { kpis: readonly Kpi[]; devise: string }) {
-  const ranges = ORDRE.map((cle) => kpis.find((kpi) => kpi.cle === cle)).filter((kpi): kpi is Kpi => kpi !== undefined)
+export function IndicateursNova({
+  kpis,
+  devise,
+  ordre = ORDRE,
+}: {
+  kpis: readonly Kpi[]
+  devise: string
+  ordre?: readonly Kpi['cle'][]
+}) {
+  const ranges = ordre.map((cle) => kpis.find((kpi) => kpi.cle === cle)).filter((kpi): kpi is Kpi => kpi !== undefined)
   return (
     <section id="chiffres" className="scroll-mt-6">
       <h2 className="sr-only">Vos chiffres</h2>
@@ -670,6 +681,342 @@ export function ParlerANova({ versConversation, cout }: { versConversation: stri
             <LinkButton href={versConversation}>Ouvrir la conversation</LinkButton>
           )}
         </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── V2 : onglets ─────────────────────────────────────────────────────────────
+
+export type OngletNova = 'tableau' | 'bilan' | 'pilotage' | 'clients'
+
+export function OngletsNova({ courant, locale, siteId }: { courant: OngletNova; locale: string; siteId: string }) {
+  const suffixe = siteId === '' ? '' : `?siteId=${siteId}`
+  const onglets: { cle: OngletNova; label: string; href: string }[] = [
+    { cle: 'tableau', label: 'Tableau de bord', href: `/${locale}/nova${suffixe}` },
+    { cle: 'bilan', label: 'Bilan de la semaine', href: `/${locale}/nova/bilan${suffixe}` },
+    { cle: 'pilotage', label: 'Objectifs et marge', href: `/${locale}/nova/pilotage${suffixe}` },
+    { cle: 'clients', label: 'Clients et parcours', href: `/${locale}/nova/clients${suffixe}` },
+  ]
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label="Nova">
+      {onglets.map((onglet) => (
+        <a
+          key={onglet.cle}
+          href={onglet.href}
+          aria-current={onglet.cle === courant ? 'page' : undefined}
+          className={`rounded-[var(--radius-pill)] border px-3 py-1.5 text-xs no-underline ${
+            onglet.cle === courant
+              ? 'border-transparent bg-[var(--color-ink)] text-[var(--color-surface)]'
+              : 'border-[var(--color-line)] text-[var(--color-ink-soft)]'
+          }`}
+        >
+          {onglet.label}
+        </a>
+      ))}
+    </nav>
+  )
+}
+
+export function AVenirNova({ texte }: { texte: string | null }) {
+  if (texte === null) return null
+  return <p className="m-0 text-xs leading-relaxed text-[var(--color-ink-faint)]">{texte}</p>
+}
+
+// ── V2 : objectifs et marge ──────────────────────────────────────────────────
+
+const TENDANCE: Record<SuiviObjectif['tendance'], { label: string; ton: 'positive' | 'caution' | 'critical' | 'neutral' }> = {
+  atteint: { label: 'Atteint', ton: 'positive' },
+  'en-avance': { label: 'En bonne voie', ton: 'positive' },
+  'en-retard': { label: 'En retard', ton: 'caution' },
+  'hors-cible': { label: 'Hors objectif', ton: 'critical' },
+  inconnue: { label: 'À mesurer', ton: 'neutral' },
+}
+
+function valeurSuivi(valeur: number | null, format: SuiviObjectif['format'], devise: string): string {
+  if (valeur === null) return '—'
+  if (format === 'argent') return argent(valeur, devise)
+  if (format === 'pourcent') return `${nombre(valeur)} %`
+  return nombre(valeur)
+}
+
+export function ObjectifsNova({
+  suivis,
+  devise,
+  versReglages,
+}: {
+  suivis: readonly SuiviObjectif[]
+  devise: string
+  versReglages: string | null
+}) {
+  return (
+    <section>
+      <h2 className="m-0 text-lg font-semibold">Mes objectifs</h2>
+      {suivis.length === 0 ? (
+        <p className="mt-1 mb-0 text-sm text-[var(--color-ink-soft)]">
+          Aucun objectif fixé. {versReglages === null ? null : <a href={versReglages}>Fixer mes objectifs</a>}
+        </p>
+      ) : (
+        <ul className="m-0 mt-3 grid list-none gap-3 p-0 sm:grid-cols-2">
+          {suivis.map((suivi) => {
+            const tendance = TENDANCE[suivi.tendance]
+            return (
+              <li key={suivi.cle} className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold">{suivi.label}</span>
+                  <Badge tone={tendance.ton}>{tendance.label}</Badge>
+                </div>
+                <dl className="m-0 mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+                  <Chiffre label="Objectif" valeur={valeurSuivi(suivi.objectif, suivi.format, devise)} />
+                  <Chiffre label="Actuel" valeur={valeurSuivi(suivi.actuel, suivi.format, devise)} />
+                  <Chiffre
+                    label={suivi.projection === null ? 'Écart' : 'Fin de mois'}
+                    valeur={
+                      suivi.projection === null
+                        ? suivi.ecart === null
+                          ? '—'
+                          : `${suivi.ecart > 0 ? '+' : '−'}${nombre(Math.abs(suivi.ecart), 1)} %`
+                        : `≈ ${valeurSuivi(suivi.projection, suivi.format, devise)}`
+                    }
+                  />
+                </dl>
+                <p className="mt-2 mb-0 text-[11px] text-[var(--color-ink-faint)]">{suivi.commentaire}</p>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+export function MargeNova({ marge, devise, mention }: { marge: Marge; devise: string; mention: string }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Marge estimée</h2>
+        {marge.etat === 'impossible' ? (
+          <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">{marge.raison}</p>
+        ) : (
+          <>
+            <ul className="m-0 mt-3 grid list-none gap-1 p-0 text-sm">
+              <li className="flex justify-between gap-3">
+                <span>Chiffre d’affaires</span>
+                <span className="tabular-nums">{argent(marge.chiffre, devise)}</span>
+              </li>
+              {marge.lignes.map((ligne) => (
+                <li key={ligne.quoi} className="flex justify-between gap-3 text-[var(--color-ink-soft)]">
+                  <span>− {ligne.quoi}</span>
+                  <span className="tabular-nums">{argent(ligne.montant, devise)}</span>
+                </li>
+              ))}
+              <li className="mt-1 flex justify-between gap-3 border-t border-[var(--color-line)] pt-2 font-semibold">
+                <span>= Marge estimée</span>
+                <span className="tabular-nums" style={{ color: marge.marge < 0 ? 'var(--color-critical)' : undefined }}>
+                  {argent(marge.marge, devise)} ({nombre(marge.taux * 100, 1)} %)
+                </span>
+              </li>
+            </ul>
+            {marge.manquants.length === 0 ? null : (
+              <p className="mt-2 mb-0 text-xs text-[var(--color-caution)]">
+                Non renseignés : {marge.manquants.join(', ')}. La marge réelle est probablement plus basse.
+              </p>
+            )}
+            <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">{mention}</p>
+          </>
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── V2 : bilan ───────────────────────────────────────────────────────────────
+
+export function BilanNova({ bilan }: { bilan: Bilan }) {
+  const { vue } = bilan
+  const lignes: [string, string | null][] = [
+    ['Top canal', bilan.topCanal],
+    ['Top campagne', bilan.topCampagne],
+    ['Top produit', bilan.topProduit],
+    ['Anomalie principale', bilan.anomalie],
+    ['Opportunité principale', bilan.opportunite],
+  ]
+  return (
+    <div className="grid gap-6">
+      <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+        {vue.periode.libelle} · comparé à la semaine précédente · Sources : {vue.sources.length === 0 ? 'aucune' : vue.sources.join(' + ')}
+      </p>
+      <IndicateursNova kpis={bilan.chiffres} devise={vue.devise} ordre={bilan.chiffres.map((kpi) => kpi.cle)} />
+      <Card>
+        <CardBody>
+          <h2 className="m-0 text-base font-semibold">L’essentiel</h2>
+          <dl className="m-0 mt-3 grid gap-2">
+            {lignes.map(([quoi, valeur]) => (
+              <div key={quoi} className="grid gap-0.5 sm:grid-cols-[12rem_1fr]">
+                <dt className="text-xs text-[var(--color-ink-soft)]">{quoi}</dt>
+                <dd className="m-0 text-sm">{valeur ?? '—'}</dd>
+              </div>
+            ))}
+          </dl>
+        </CardBody>
+      </Card>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {(
+          [
+            ['Ce qui progresse', bilan.progresse.map((ligne) => ligne.texte), 'var(--color-positive)'],
+            ['Ce qui baisse', bilan.baisse.map((ligne) => ligne.texte), 'var(--color-critical)'],
+            ['Ce qui mérite votre attention', bilan.attention, 'var(--color-caution)'],
+          ] as const
+        ).map(([titre, elements, couleur]) => (
+          <section key={titre} className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+            <h3 className="m-0 text-sm font-semibold" style={{ color: couleur }}>
+              {titre}
+            </h3>
+            {elements.length === 0 ? (
+              <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">Rien de notable.</p>
+            ) : (
+              <ul className="mt-2 mb-0 grid gap-1 pl-4 text-sm">
+                {elements.map((element) => (
+                  <li key={element}>{element}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── V2 : clients et parcours ─────────────────────────────────────────────────
+
+export function ClientsNova({
+  repartition,
+  valeur,
+  devise,
+  mention,
+}: {
+  repartition: RepartitionClients | null
+  valeur: ValeurClient
+  devise: string
+  mention: string
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Card>
+        <CardBody>
+          <h2 className="m-0 text-base font-semibold">Nouveaux et fidèles</h2>
+          {repartition === null ? (
+            <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">Aucune vente lue sur la période.</p>
+          ) : (
+            <>
+              <dl className="m-0 mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+                <Chiffre label="Nouveaux clients" valeur={nombre(repartition.nouveaux.commandes)} />
+                <Chiffre label="Clients revenus" valeur={nombre(repartition.existants.commandes)} />
+                <Chiffre label="Non identifiés" valeur={nombre(repartition.inconnus.commandes)} />
+                <Chiffre label="CA nouveaux" valeur={argent(repartition.nouveaux.chiffre, devise)} />
+                <Chiffre label="CA autres" valeur={argent(repartition.autresChiffre, devise)} />
+                <Chiffre
+                  label="Part de nouveaux"
+                  valeur={repartition.partNouveaux === null ? '—' : `${Math.round(repartition.partNouveaux * 100)} %`}
+                />
+              </dl>
+              <p className="mt-2 mb-0 text-[11px] text-[var(--color-ink-faint)]">
+                En commandes. « Non identifiés » : commandes sans client connu, dont on ne sait pas s’ils étaient nouveaux.
+              </p>
+            </>
+          )}
+        </CardBody>
+      </Card>
+      <Card>
+        <CardBody>
+          <h2 className="m-0 text-base font-semibold">Valeur d’un client</h2>
+          {valeur.etat === 'insuffisant' ? (
+            <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">{valeur.raison}</p>
+          ) : (
+            <>
+              <dl className="m-0 mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+                <Chiffre label="Valeur moyenne" valeur={argent(valeur.valeur, devise)} />
+                <Chiffre label="Commandes par client" valeur={nombre(valeur.commandesParClient, 2)} />
+                <Chiffre label="Clients" valeur={nombre(valeur.clients)} />
+                <Chiffre label="Revenus au moins une fois" valeur={`${Math.round(valeur.tauxRetour * 100)} %`} />
+              </dl>
+              <p className="mt-2 mb-0 text-[11px] text-[var(--color-ink-faint)]">{mention}</p>
+            </>
+          )}
+        </CardBody>
+      </Card>
+    </div>
+  )
+}
+
+const NOMS_MODELES: Record<Modele, string> = { dernier: 'Dernier clic', premier: 'Premier clic', partage: 'Partagé' }
+
+export function ModelesNova({
+  lignes,
+  devise,
+  explications,
+}: {
+  lignes: readonly LigneModele[] | null
+  devise: string
+  explications: Record<Modele, { nom: string; explication: string }>
+}) {
+  return (
+    <section>
+      <h2 className="m-0 text-lg font-semibold">Chiffre d’affaires selon le modèle d’attribution</h2>
+      <ul className="mt-1 mb-3 grid gap-0.5 pl-4 text-xs text-[var(--color-ink-soft)]">
+        {(Object.keys(explications) as Modele[]).map((cle) => (
+          <li key={cle}>
+            <strong>{explications[cle].nom}</strong> — {explications[cle].explication}
+          </li>
+        ))}
+        <li>Linéaire, en position et « data-driven » demandent toutes les visites : ils viendront avec Google Analytics 4.</li>
+      </ul>
+      {lignes === null ? (
+        <Card>
+          <CardBody>
+            <p className="m-0 text-sm text-[var(--color-ink-soft)]">
+              Les premières visites ne sont pas encore connues : elles arrivent à la prochaine lecture complète des ventes.
+            </p>
+          </CardBody>
+        </Card>
+      ) : (
+        <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-2">
+          {lignes.map((ligne) => (
+            <li key={ligne.canal} className="rounded-[var(--radius-card)] border border-[var(--color-line)] bg-[var(--color-surface)] p-4">
+              <p className="m-0 text-sm font-semibold">{ligne.nom}</p>
+              <dl className="m-0 mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+                {(['dernier', 'premier', 'partage'] as const).map((modele) => (
+                  <Chiffre key={modele} label={NOMS_MODELES[modele]} valeur={argent(ligne.chiffre[modele], devise)} />
+                ))}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+export function ParcoursNova({ phrases, mention }: { phrases: readonly string[]; mention: string }) {
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Parcours de conversion</h2>
+        {phrases.length === 0 ? (
+          <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">
+            Aucun rôle net ne se dégage encore : il faut assez de commandes dont la première et la dernière visite sont connues.
+          </p>
+        ) : (
+          <ul className="mt-2 mb-0 grid gap-1 pl-4 text-sm">
+            {phrases.map((phrase) => (
+              <li key={phrase}>{phrase}</li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
+          <strong>Interprétation</strong> — {mention}
+        </p>
       </CardBody>
     </Card>
   )

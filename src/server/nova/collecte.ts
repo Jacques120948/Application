@@ -12,7 +12,7 @@ import {
 } from '@/server/integrations/providers/shopify'
 import { markConnectionError, useCredential } from '@/server/integrations/service'
 import { logger } from '@/server/observability/logger'
-import { agregerCommandes } from './agregat'
+import { agregerCommandes, instantaneClients, type InstantaneClients } from './agregat'
 
 /**
  * La collecte des ventes : Shopify vers Evoliia, une fois, puis relu gratuitement.
@@ -51,6 +51,8 @@ export const JOURS_LUS = 90
 const JOURS_RATTRAPES = 3
 /** Sans l'autorisation read_all_orders, Shopify ne rend que les soixante derniers jours. */
 const JOURS_SANS_HISTORIQUE = 60
+/** Au-delà, la lecture automatique relit toute la fenêtre pour refaire le compte des clients. */
+const CLIENTS_VALABLES_MS = 7 * 24 * 60 * 60 * 1000
 /** Ce qu'on garde en base. Au-delà, une comparaison d'une année sur l'autre n'est plus possible. */
 const JOURS_GARDES = 400
 
@@ -69,6 +71,18 @@ export type EtatVentes = {
   tronque: boolean
   devise: string
   fuseau: string
+  /** Le dernier compte des clients sur la fenêtre lue, ou `null` s'il n'a pas pu être fait. */
+  clients: InstantaneClients | null
+}
+
+/** L'instantané relu en base, vérifié champ par champ : un JSON n'est pas une promesse. */
+export function lireInstantane(brut: unknown): InstantaneClients | null {
+  if (brut === null || typeof brut !== 'object') return null
+  const valeur = brut as Partial<Record<keyof InstantaneClients, unknown>>
+  const nombres = ['clients', 'recurrents', 'commandes', 'chiffreCents'] as const
+  if (typeof valeur.au !== 'string' || typeof valeur.depuis !== 'string') return null
+  if (!nombres.every((cle) => typeof valeur[cle] === 'number')) return null
+  return valeur as InstantaneClients
 }
 
 const ABSENT: EtatVentes = {
@@ -80,6 +94,7 @@ const ABSENT: EtatVentes = {
   tronque: false,
   devise: '',
   fuseau: '',
+  clients: null,
 }
 
 function jourIso(date: Date): string {
@@ -110,6 +125,7 @@ export async function lireEtatVentes(userId: string): Promise<EtatVentes> {
     tronque: ligne.tronque,
     devise: ligne.devise,
     fuseau: ligne.fuseau,
+    clients: lireInstantane(ligne.clients),
   }
 }
 
@@ -201,7 +217,13 @@ export async function synchroniserVentes(
     const aujourdhui = jourDansFuseau(maintenant, fuseau)
     const debutFenetre = jourIso(new Date(Date.parse(aujourdhui) - (JOURS_LUS - 1) * JOUR_MS))
     const derniereReussite = precedente?.synchroAt ?? null
-    const complete = mode === 'manuel' || derniereReussite === null
+    const instantane = lireInstantane(precedente?.clients ?? null)
+    /*
+     * Une lecture complète chaque semaine au moins : le compte des clients distincts ne se
+     * refait que sur toute la fenêtre, jamais sur trois jours relus.
+     */
+    const clientsPerimes = instantane === null || +maintenant - Date.parse(instantane.au) > CLIENTS_VALABLES_MS
+    const complete = mode === 'manuel' || derniereReussite === null || clientsPerimes
     const depuis =
       derniereReussite === null || complete
         ? debutFenetre
@@ -249,8 +271,10 @@ export async function synchroniserVentes(
             commandes: jour.commandes,
             chiffreCents: BigInt(jour.chiffreCents),
             nouveauxClients: jour.nouveauxClients,
+            chiffreNouveauxCents: BigInt(jour.chiffreNouveauxCents),
             clientsIdentifies: jour.clientsIdentifies,
             canaux: jour.canaux as Prisma.InputJsonValue,
+            canauxPremier: jour.canauxPremier as Prisma.InputJsonValue,
             produits: jour.produits as unknown as Prisma.InputJsonValue,
           })),
         })
@@ -260,7 +284,11 @@ export async function synchroniserVentes(
       })
     })
 
+    // Le compte des clients : seulement sur une lecture complète, et seulement si Shopify a rendu les clients.
+    const clients =
+      complete && lecture.client && !lecture.tronque ? instantaneClients(lecture.commandes, depuis, aujourdhui) : null
     await noter(userId, acces.boutique, {
+      ...(clients === null ? {} : { clients: clients as unknown as Prisma.InputJsonValue }),
       etat: 'ok',
       message: '',
       synchroAt: maintenant,

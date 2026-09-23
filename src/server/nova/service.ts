@@ -1,6 +1,6 @@
 import { NOM_CANAL } from '@/lib/nova'
 import { compteActif, type CompteRelie } from '@/server/ads/comptes'
-import { jourDansFuseau, enUnites } from '@/server/ads/metriques'
+import { jourDansFuseau, enUnites, moisCourant } from '@/server/ads/metriques'
 import { listSites } from '@/server/audit/service'
 import { withUserScope } from '@/server/db/scope'
 import {
@@ -24,6 +24,7 @@ import {
   type Periode,
   type PlateformePayante,
   MANQUE_VENTES,
+  enPourcent,
 } from './metriques'
 import {
   detecterAlertes,
@@ -36,6 +37,24 @@ import {
   type RapportOria,
 } from './analyse'
 import { lireEtatVentes, SOURCE_SHOPIFY, type EtatVentes } from './collecte'
+import { reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
+import {
+  indicateursAVenir,
+  margeEstimee,
+  ordreIndicateurs,
+  suivreObjectifs,
+  type Marge,
+  type SuiviObjectif,
+} from './pilotage'
+import {
+  lectureParcours,
+  modelesAttribution,
+  repartitionClients,
+  valeurClient,
+  type LigneModele,
+  type RepartitionClients,
+  type ValeurClient,
+} from './clients'
 
 /**
  * Nova, assemblée : les sources, la collecte, les calculs et l'analyse, en une lecture.
@@ -89,6 +108,17 @@ export type VueNova = {
   manqueVentes: string
   pourOria: RapportOria
   siteId: string
+  reglages: Reglages
+  /** L'ordre des cartes d'indicateurs, selon le type d'activité. */
+  ordre: Kpi['cle'][]
+  /** Ce que l'activité voudrait voir et qu'aucune source reliée ne donne encore. */
+  aVenir: string | null
+  marge: Marge
+  objectifs: SuiviObjectif[]
+  clients: RepartitionClients | null
+  valeurClient: ValeurClient
+  modeles: LigneModele[] | null
+  parcours: string[]
 }
 
 function jourIso(date: Date): string {
@@ -164,21 +194,26 @@ async function lireVentes(userId: string, boutique: string, depuis: string, jusq
       orderBy: { jour: 'asc' },
     }),
   )
+  type CanalBrut = Record<string, { commandes: number; chiffreCents: number; origines: Record<string, number> }>
+  const enUnitesCanaux = (brut: CanalBrut) =>
+    Object.fromEntries(
+      Object.entries(brut).map(([canal, valeur]) => [
+        canal,
+        { commandes: valeur.commandes, chiffre: valeur.chiffreCents / 100, origines: valeur.origines ?? {} },
+      ]),
+    )
   return lignes.map((ligne) => {
-    const canaux = (ligne.canaux ?? {}) as Record<string, { commandes: number; chiffreCents: number; origines: Record<string, number> }>
+    const canaux = (ligne.canaux ?? {}) as CanalBrut
     const produits = (ligne.produits ?? []) as { id: string; titre: string; commandes: number; quantite: number; chiffreCents: number }[]
     return {
       jour: jourIso(ligne.jour),
       commandes: ligne.commandes,
       chiffre: Number(ligne.chiffreCents) / 100,
       nouveauxClients: ligne.nouveauxClients,
+      chiffreNouveaux: Number(ligne.chiffreNouveauxCents) / 100,
       clientsIdentifies: ligne.clientsIdentifies,
-      canaux: Object.fromEntries(
-        Object.entries(canaux).map(([canal, valeur]) => [
-          canal,
-          { commandes: valeur.commandes, chiffre: valeur.chiffreCents / 100, origines: valeur.origines ?? {} },
-        ]),
-      ),
+      canaux: enUnitesCanaux(canaux),
+      canauxPremier: enUnitesCanaux((ligne.canauxPremier ?? {}) as CanalBrut),
       produits: produits.map((produit) => ({ ...produit, chiffre: produit.chiffreCents / 100 })),
     }
   })
@@ -318,7 +353,7 @@ export async function lireNova(
   maintenant = new Date(),
 ): Promise<VueNova> {
   const [ventes, google, meta, sites] = await Promise.all([
-    sans(lireEtatVentes(userId), { etat: 'absent', message: '', boutique: '', synchroAt: null, couvertureDepuis: null, tronque: false, devise: '', fuseau: '' } as EtatVentes),
+    sans(lireEtatVentes(userId), { etat: 'absent', message: '', boutique: '', synchroAt: null, couvertureDepuis: null, tronque: false, devise: '', fuseau: '', clients: null } as EtatVentes),
     sans(compteActif(userId, 'google-ads'), null),
     sans(compteActif(userId, 'meta-ads'), null),
     sans(listSites(userId), []),
@@ -337,13 +372,18 @@ export async function lireNova(
   const periode = periodeDe(options.periode, aujourdhui, options.du, options.au)
   const precedente = periodePrecedente(periode)
   const reference = { du: decaler(periode.du, -30), au: decaler(periode.du, -1) }
-  const depuis = [precedente.du, reference.du].sort()[0]!
+  // Les objectifs se jugent sur le mois en cours et sur trente jours, quelle que soit la période affichée.
+  const mois = moisCourant(fuseau, maintenant)
+  const trente = periodeDe('30', aujourdhui)
+  const depuis = [precedente.du, reference.du, mois.premier, trente.du].sort()[0]!
+  const fin = [periode.au, trente.au].sort().at(-1)!
 
   const [campagnes, joursVentes, recherche] = await Promise.all([
-    sans(lireCampagnes(userId, regies, depuis, periode.au), []),
-    venteLues ? sans(lireVentes(userId, ventes.boutique, depuis, periode.au), []) : Promise.resolve([]),
+    sans(lireCampagnes(userId, regies, depuis, fin), []),
+    venteLues ? sans(lireVentes(userId, ventes.boutique, depuis, fin), []) : Promise.resolve([]),
     sans(lireRecherche(userId, siteId, periode.au), null),
   ])
+  const reglages = await sans(reglagesNova(userId), REGLAGES_VIDES)
 
   const donnees: Donnees = {
     devise,
@@ -373,7 +413,48 @@ export async function lireNova(
     campagnes: lignesCampagnes,
     produits: lignesProduits,
   }
+  // Le mois à date : le premier du mois, rien n'est encore écoulé, et zéro est alors la vérité.
+  const ventesMois =
+    mois.hier === null
+      ? (venteLues ? cumulVentes(donnees.ventes, { du: mois.premier, au: mois.premier }) : null)
+      : cumulVentes(donnees.ventes, { du: mois.premier, au: mois.hier })
+  const trenteJours = ensemble(donnees, trente)
+  const suivis = suivreObjectifs(reglages.objectifs, {
+    mois: { joursEcoules: mois.joursEcoules, joursDuMois: mois.joursDuMois },
+    ventesMois: mois.hier === null && ventesMois !== null ? { ...ventesMois, chiffre: 0, commandes: 0 } : ventesMois,
+    roas30: regies.length === 0 ? null : enPourcent(trenteJours.pub.valeur, trenteJours.pub.depense),
+    cac30:
+      trenteJours.ventes === null || regies.length === 0 || trenteJours.ventes.nouveauxClients === 0 || trenteJours.pub.depense === 0
+        ? null
+        : Math.round((trenteJours.pub.depense / trenteJours.ventes.nouveauxClients) * 100) / 100,
+  })
+  const modeles = modelesAttribution(ventesActuelles)
+
   const insights = detecterInsights(contexte)
+  /*
+   * Un objectif mensuel en retard est un constat comme un autre, et il passe devant : c'est
+   * la personne qui l'a fixé, c'est donc ce qu'elle cherche en ouvrant l'écran.
+   */
+  for (const suivi of suivis) {
+    if (suivi.tendance === 'en-retard' && suivi.projection !== null) {
+      const unite = suivi.format === 'argent' ? `${devise} ` : ''
+      const nombre = (valeur: number) => new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 0 }).format(valeur)
+      insights.unshift({
+        cle: `objectif.${suivi.cle}`,
+        texte: `À ce rythme, ${suivi.label.toLowerCase()} finirait vers ${unite}${nombre(suivi.projection)}, pour un objectif de ${unite}${nombre(suivi.objectif)}.`,
+        fondement: `${unite}${nombre(suivi.actuel ?? 0)} à date. ${suivi.commentaire}`,
+        ton: 'attention',
+      })
+    } else if (suivi.tendance === 'hors-cible') {
+      insights.unshift({
+        cle: `objectif.${suivi.cle}`,
+        texte: `${suivi.label} : objectif non tenu sur les 30 derniers jours.`,
+        fondement: `${suivi.actuel ?? '—'}${suivi.format === 'pourcent' ? ' %' : ` ${devise}`} pour un objectif de ${suivi.objectif}${suivi.format === 'pourcent' ? ' %' : ` ${devise}`}.`,
+        ton: 'attention',
+      })
+    }
+  }
+  insights.splice(5)
   const alertes = detecterAlertes(contexte)
   const opportunites = detecterOpportunites(contexte, locale, siteId)
 
@@ -445,5 +526,14 @@ export async function lireNova(
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     pourOria: rapportPourOria(periode.libelle, sources, alertes, insights, opportunites),
     siteId,
+    reglages,
+    ordre: ordreIndicateurs(reglages.activite),
+    aVenir: indicateursAVenir(reglages.activite),
+    marge: margeEstimee(ventesActuelles, regies.length === 0 ? null : actuel.pub.depense, reglages.couts),
+    objectifs: suivis,
+    clients: repartitionClients(ventesActuelles),
+    valeurClient: valeurClient(ventes.clients),
+    modeles,
+    parcours: lectureParcours(modeles),
   }
 }

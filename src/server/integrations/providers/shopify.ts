@@ -1040,6 +1040,13 @@ export type CommandeShopify = {
   premiere: boolean | null
   /** La dernière visite avant l'achat : ce qui sert au « dernier clic ». `null` : inconnue. */
   visite: VisiteShopify | null
+  /** La première visite enregistrée : le « premier clic ». `null` : inconnue. */
+  premiereVisite: VisiteShopify | null
+  /**
+   * L'identifiant du client, pour compter les clients distincts d'une fenêtre. Il sert au
+   * calcul et n'est jamais écrit en base : seuls des comptes le sont.
+   */
+  clientId: string | null
   lignes: { produitId: string | null; titre: string; quantite: number; totalCents: number }[]
 }
 
@@ -1060,6 +1067,7 @@ const LIGNES_PAR_COMMANDE = 10
 
 const CHAMPS_PARCOURS = `customerJourneySummary {
         customerOrderIndex
+        firstVisit { source referrerUrl utmParameters { source medium campaign content term } }
         lastVisit { source referrerUrl utmParameters { source medium campaign content term } }
       }`
 
@@ -1107,6 +1115,28 @@ function centimes(montant: unknown): number {
 
 type ArgentBrut = { shopMoney?: { amount?: string; currencyCode?: string } } | null
 
+type VisiteBrute = {
+  source?: string | null
+  referrerUrl?: string | null
+  utmParameters?: Partial<Record<'source' | 'medium' | 'campaign' | 'content' | 'term', string | null>> | null
+}
+
+function lireVisite(visite: VisiteBrute | null | undefined): VisiteShopify | null {
+  if (visite == null) return null
+  const utm = visite.utmParameters ?? null
+  return {
+    source: visite.source ?? '',
+    referrer: visite.referrerUrl ?? '',
+    utm: {
+      source: utm?.source ?? '',
+      medium: utm?.medium ?? '',
+      campaign: utm?.campaign ?? '',
+      content: utm?.content ?? '',
+      term: utm?.term ?? '',
+    },
+  }
+}
+
 type CommandeBrute = {
   id: string
   createdAt: string
@@ -1116,11 +1146,8 @@ type CommandeBrute = {
   customer?: { id: string; numberOfOrders: string | number } | null
   customerJourneySummary?: {
     customerOrderIndex?: number | null
-    lastVisit?: {
-      source?: string | null
-      referrerUrl?: string | null
-      utmParameters?: Partial<Record<'source' | 'medium' | 'campaign' | 'content' | 'term', string | null>> | null
-    } | null
+    firstVisit?: VisiteBrute | null
+    lastVisit?: VisiteBrute | null
   } | null
   lineItems: {
     nodes: {
@@ -1134,8 +1161,6 @@ type CommandeBrute = {
 
 function convertirCommande(brute: CommandeBrute): CommandeShopify {
   const parcours = brute.customerJourneySummary ?? null
-  const visite = parcours?.lastVisit ?? null
-  const utm = visite?.utmParameters ?? null
   const index = parcours?.customerOrderIndex
   const nombre = brute.customer == null ? NaN : Number(brute.customer.numberOfOrders)
   /*
@@ -1155,20 +1180,9 @@ function convertirCommande(brute: CommandeBrute): CommandeShopify {
     annulee: brute.cancelledAt !== null,
     test: brute.test === true,
     premiere,
-    visite:
-      visite === null
-        ? null
-        : {
-            source: visite.source ?? '',
-            referrer: visite.referrerUrl ?? '',
-            utm: {
-              source: utm?.source ?? '',
-              medium: utm?.medium ?? '',
-              campaign: utm?.campaign ?? '',
-              content: utm?.content ?? '',
-              term: utm?.term ?? '',
-            },
-          },
+    visite: lireVisite(parcours?.lastVisit),
+    premiereVisite: lireVisite(parcours?.firstVisit),
+    clientId: brute.customer?.id ?? null,
     lignes: brute.lineItems.nodes.map((ligne) => ({
       produitId: ligne.product?.id ?? null,
       titre: ligne.title,

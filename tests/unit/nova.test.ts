@@ -68,6 +68,8 @@ function commande(partiel: Partial<CommandeShopify>): CommandeShopify {
     test: partiel.test ?? false,
     premiere: partiel.premiere ?? null,
     visite: partiel.visite ?? null,
+    premiereVisite: partiel.premiereVisite ?? null,
+    clientId: partiel.clientId ?? null,
     lignes: partiel.lignes ?? [],
   }
 }
@@ -127,7 +129,7 @@ function jourCampagne(partiel: Partial<JourCampagne> & Pick<JourCampagne, 'plate
 }
 
 function jourVentes(partiel: Partial<JourVentes> & Pick<JourVentes, 'jour'>): JourVentes {
-  return { commandes: 0, chiffre: 0, nouveauxClients: 0, clientsIdentifies: 0, canaux: {}, produits: [], ...partiel }
+  return { commandes: 0, chiffre: 0, nouveauxClients: 0, chiffreNouveaux: 0, clientsIdentifies: 0, canaux: {}, canauxPremier: {}, produits: [], ...partiel }
 }
 
 /** L'exemple du cahier des charges : Google 1 500 → 6 000, Meta 2 500 → 6 500, Shopify 11 000. */

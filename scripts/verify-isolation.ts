@@ -52,6 +52,7 @@ const PROTECTED_TABLES = [
   'OriaResume',
   'CommerceJour',
   'CommerceSynchro',
+  'NovaReglages',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',
