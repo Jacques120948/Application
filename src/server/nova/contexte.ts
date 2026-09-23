@@ -139,13 +139,27 @@ export function faitsNova(vue: VueNova): string[] {
         : `Prospects sur la période (événements clés GA4 : ${vue.leads.evenements.join(', ')}${vue.leads.auto ? ', reconnus par leur nom' : ', choisis par la personne'}) : ${vue.leads.total}. Nova ne sait pas combien deviennent clients (aucun CRM relié).`,
     )
   }
+  if (vue.lectureCrm !== null) {
+    const crm = vue.lectureCrm
+    const pct = (valeur: number | null) => (valeur === null ? 'volume insuffisant' : `${nombre(valeur * 100, 1)} %`)
+    lignes.push(
+      `CRM (HubSpot, six derniers mois) : taux prospect → client ${crm.global === null ? 'pas encore mesurable' : `${pct(crm.global.taux)} (${crm.global.clients} clients sur ${crm.global.prospects} prospects, cohortes d’au moins un mois)`} ; par canal d’origine : ${crm.parCanal
+        .slice(0, 6)
+        .map((ligne) => `${ligne.nom} ${ligne.prospects} prospects, ${ligne.clients} clients (${pct(ligne.taux)})`)
+        .join(' ; ')}${crm.delaiMoyenJours === null ? '' : ` ; délai moyen de signature d’une transaction : ${nombre(crm.delaiMoyenJours, 1)} jours`}. Des prospects récents peuvent encore signer.`,
+    )
+  } else if (vue.crm.etat !== 'absent') {
+    lignes.push('CRM (HubSpot) : relié mais pas encore lu. Ne cite aucun taux de transformation.')
+  }
   if (vue.audiences !== null) {
     const pct = (valeur: number | null) => (valeur === null ? 'volume insuffisant' : `${nombre(valeur * 100, 1)} %`)
     lignes.push(
       `Audiences (GA4) : ${vue.audiences.pays
         .slice(0, 5)
         .map((un) => `${un.nom} ${Math.round(un.part * 100)} % des visites, conversion ${pct(un.conversion)}`)
-        .join(' ; ')}. Nouveaux visiteurs : conversion ${pct(vue.audiences.nouveaux.conversion)} ; visiteurs qui reviennent : ${pct(vue.audiences.connus.conversion)}.`,
+        .join(' ; ')}. Nouveaux visiteurs : conversion ${pct(vue.audiences.nouveaux.conversion)} ; visiteurs qui reviennent : ${pct(vue.audiences.connus.conversion)}.${
+        vue.audiences.ages === null ? ' Âge : inconnu (signaux Google).' : ` Âge (estimé par Google) : ${vue.audiences.ages.map((un) => `${un.nom} ${Math.round(un.part * 100)} %`).join(', ')}.`
+      }${vue.audiences.sexes === null ? '' : ` Sexe (estimé par Google) : ${vue.audiences.sexes.map((un) => `${un.nom} ${Math.round(un.part * 100)} %`).join(', ')}.`}`,
     )
   }
   if (vue.ventes.cohortes !== null && vue.ventes.cohortes.length > 0) {

@@ -27,6 +27,22 @@ export type Audiences = {
   pays: LigneAudience[]
   nouveaux: LigneAudience
   connus: LigneAudience
+  /**
+   * Tranches d'âge et sexe, seulement quand Google les connaît pour la moitié des visites au
+   * moins (ses signaux sont souvent désactivés ou masqués) ; `null` sinon.
+   */
+  ages: LigneAudience[] | null
+  sexes: LigneAudience[] | null
+}
+
+const SEXES: Record<string, string> = { female: 'Femmes', male: 'Hommes' }
+
+function repartition(segments: Record<string, SegmentVisites>, nom: (cle: string) => string): LigneAudience[] | null {
+  const total = Object.values(segments).reduce((somme, segment) => somme + segment.sessions, 0)
+  const connus = Object.entries(segments).filter(([cle]) => cle !== 'unknown')
+  const vus = connus.reduce((somme, [, segment]) => somme + segment.sessions, 0)
+  if (total < 500 || vus / total < 0.5) return null
+  return connus.map(([cle, segment]) => ligne(cle, nom(cle), segment, vus)).sort((un, autre) => un.cle.localeCompare(autre.cle))
 }
 
 /** En deçà, un taux de conversion par segment tient du hasard. */
@@ -75,6 +91,8 @@ export function lireAudiences(visites: CumulVisites | null | undefined): Audienc
     pays: affiches,
     nouveaux: ligne('nouveaux', 'Nouveaux visiteurs', visites.visiteurs.nouveaux, visiteurs),
     connus: ligne('connus', 'Visiteurs qui reviennent', visites.visiteurs.connus, visiteurs),
+    ages: repartition(visites.ages, (cle) => `${cle} ans`),
+    sexes: repartition(visites.sexes, (cle) => SEXES[cle] ?? cle),
   }
 }
 

@@ -10,6 +10,7 @@ import type { Bilan } from '@/server/nova/bilan'
 import type { CumulVisites } from '@/server/nova/metriques'
 import type { Contenus } from '@/server/nova/contenus'
 import type { IndicateursAbonnements, InstantaneAbonnements } from '@/server/nova/abonnements'
+import type { LectureCrm } from '@/server/nova/crm'
 import type { CohorteClients } from '@/server/nova/agregat'
 import type { LigneSurveillance } from '@/server/nova/surveillance'
 import type { Audiences } from '@/server/nova/audiences'
@@ -388,6 +389,8 @@ export function CanauxNova({ canaux, devise }: { canaux: readonly LigneCanal[]; 
                 {canal.conversionGa4 === null ? null : <Chiffre label="Conversion (GA4)" valeur={`${nombre(canal.conversionGa4, 1)} %`} />}
                 {canal.leads === null || canal.leads === 0 ? null : <Chiffre label="Prospects (GA4)" valeur={nombre(canal.leads)} />}
                 {canal.cpl === null ? null : <Chiffre label="Coût par prospect" valeur={argent(canal.cpl, devise)} />}
+                {canal.signes === null || canal.signes === 0 ? null : <Chiffre label="Clients signés (CRM)" valeur={nombre(canal.signes)} />}
+                {canal.cps === null ? null : <Chiffre label="Coût par client signé" valeur={argent(canal.cps, devise)} />}
                 {canal.commandes === null ? null : <Chiffre label="Commandes boutique" valeur={nombre(canal.commandes)} />}
                 {canal.chiffre === null ? null : <Chiffre label="CA boutique" valeur={argent(canal.chiffre, devise)} />}
               </dl>
@@ -1456,6 +1459,38 @@ export function AudiencesNova({ audiences }: { audiences: Audiences | null }) {
             </li>
           ))}
         </ul>
+        {([
+          ['Par âge', audiences.ages],
+          ['Par sexe', audiences.sexes],
+        ] as const).map(([titre, lignes]) =>
+          lignes === null ? null : (
+            <div key={titre}>
+              <h3 className="mt-5 mb-2 text-sm font-semibold">{titre}</h3>
+              <ul className="m-0 grid list-none gap-2 p-0">
+                {lignes.map((ligne) => (
+                  <li key={ligne.cle} className="grid gap-1">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
+                      <span>{ligne.nom}</span>
+                      <span className="text-xs text-[var(--color-ink-soft)] tabular-nums">
+                        {Math.round(ligne.part * 100)} % des visites connues · conversion {pct(ligne.conversion)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-canvas)]">
+                      <div className="h-full rounded-full bg-[var(--color-brand)]" style={{ width: `${Math.max(2, Math.round(ligne.part * 100))}%` }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ),
+        )}
+        {audiences.ages === null && audiences.sexes === null ? (
+          <p className="mt-4 mb-0 text-xs text-[var(--color-ink-faint)]">
+            Âge et sexe : Google ne les connaît pas pour assez de visites. Ils demandent les « signaux Google » activés dans GA4, et restent souvent masqués sur les petits volumes.
+          </p>
+        ) : (
+          <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">Âge et sexe estimés par Google, seulement pour les visites qu’il reconnaît.</p>
+        )}
         <h3 className="mt-5 mb-2 text-sm font-semibold">Première visite ou retour</h3>
         <dl className="m-0 grid grid-cols-2 gap-4">
           {[audiences.nouveaux, audiences.connus].map((ligne) => (
@@ -1644,6 +1679,58 @@ export function CohortesClientsNova({
             ))}
           </>
         )}
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── V8 : CRM ─────────────────────────────────────────────────────────────────
+
+/** Ce que deviennent les prospects : par mois de création, et par canal d'origine. */
+export function CrmNova({ lecture }: { lecture: LectureCrm | null }) {
+  if (lecture === null) return null
+  const pct = (valeur: number | null) => (valeur === null ? '—' : `${nombre(valeur * 100, 1)} %`)
+  const tableau = (titre: string, lignes: LectureCrm['parCanal'], nomColonne: string, lisible: (nom: string) => string = (nom) => nom) => (
+    <div>
+      <h3 className="mt-4 mb-2 text-sm font-semibold">{titre}</h3>
+      <div className="max-w-full overflow-x-auto">
+        <table className="w-full text-xs tabular-nums">
+          <thead>
+            <tr className="text-left text-[var(--color-ink-soft)]">
+              <th className="py-1 pr-3 font-medium">{nomColonne}</th>
+              <th className="py-1 pr-3 text-right font-medium">Prospects</th>
+              <th className="py-1 pr-3 text-right font-medium">Devenus clients</th>
+              <th className="py-1 text-right font-medium">Taux</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lignes.map((ligne) => (
+              <tr key={ligne.cle} className="border-t border-[var(--color-line)]">
+                <td className="py-1.5 pr-3">{lisible(ligne.nom)}</td>
+                <td className="py-1.5 pr-3 text-right">{nombre(ligne.prospects)}</td>
+                <td className="py-1.5 pr-3 text-right">{nombre(ligne.clients)}</td>
+                <td className="py-1.5 text-right">{pct(ligne.taux)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+  return (
+    <Card className="min-w-0 max-w-full">
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Prospects → clients</h2>
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
+          Selon HubSpot, sur les six derniers mois. Un taux ne s’affiche qu’à partir de 20 prospects ; les prospects récents peuvent encore signer.
+        </p>
+        <dl className="m-0 mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+          <Chiffre label="Taux prospect → client" valeur={lecture.global === null ? 'pas encore mesurable' : pct(lecture.global.taux)} />
+          <Chiffre label="Transactions gagnées" valeur={nombre(lecture.affaires)} />
+          <Chiffre label="Délai moyen de signature" valeur={lecture.delaiMoyenJours === null ? '—' : `${nombre(lecture.delaiMoyenJours, 1)} jours`} />
+        </dl>
+        {tableau('Par canal d’origine', lecture.parCanal, 'Canal')}
+        {tableau('Par mois de création', lecture.cohortes, 'Mois', (mois) => moisLisible(mois))}
       </CardBody>
     </Card>
   )

@@ -32,6 +32,7 @@ import {
 } from './collecte-commerce'
 import { lireEtatWoo, synchroniserWoo } from './collecte-woo'
 import { lireEtatEncaissements, synchroniserEncaissements } from './collecte-stripe'
+import { lireEtatVentesCrm, synchroniserVentesCrm } from './collecte-crm'
 import { FOURNISSEUR_SOURCE, type SourceVentes } from './sources'
 
 export {
@@ -63,6 +64,7 @@ async function sourceReliee(userId: string): Promise<SourceVentes | null> {
   }
   if (await hasConnection(userId, FOURNISSEUR_SOURCE.woocommerce).catch(() => false)) return 'woocommerce'
   if (await hasConnection(userId, FOURNISSEUR_SOURCE.stripe).catch(() => false)) return 'stripe'
+  if (await hasConnection(userId, FOURNISSEUR_SOURCE.hubspot).catch(() => false)) return 'hubspot'
   return null
 }
 
@@ -71,6 +73,7 @@ export async function lireEtatVentes(userId: string): Promise<EtatVentes> {
   const source = await sourceReliee(userId)
   if (source === 'woocommerce') return lireEtatWoo(userId)
   if (source === 'stripe') return lireEtatEncaissements(userId)
+  if (source === 'hubspot') return lireEtatVentesCrm(userId)
   return lireEtatShopify(userId)
 }
 
@@ -85,6 +88,7 @@ export async function synchroniserVentes(userId: string, mode: 'auto' | 'manuel'
   const source = await sourceReliee(userId)
   if (source === 'woocommerce') return synchroniserWoo(userId, mode, maintenant)
   if (source === 'stripe') return synchroniserEncaissements(userId, mode, maintenant)
+  if (source === 'hubspot') return synchroniserVentesCrm(userId, mode, maintenant)
   return synchroniserShopify(userId, mode, maintenant)
 }
 

@@ -4,6 +4,7 @@ import { variation } from '@/server/ads/metriques'
 import { contenuQualifie, contenusQuiAttirent } from './contenus'
 import type { IndicateursAbonnements } from './abonnements'
 import { lireAudiences, paysQuiNAchetePas } from './audiences'
+import { canalQuiNeSignePas, type LectureCrm } from './crm'
 import {
   cumulPub,
   enPourcent,
@@ -50,6 +51,8 @@ export type Contexte = {
   merEquilibre?: number | null
   /** Les abonnements Stripe, quand ils ont été lus. */
   abonnements?: IndicateursAbonnements | null
+  /** Le CRM, quand il a été lu : taux de transformation par cohorte et par canal. */
+  crm?: LectureCrm | null
 }
 
 const AGENT_DE: Record<PlateformePayante, IdMembre> = { 'google-ads': 'ads', 'meta-ads': 'meta' }
@@ -225,6 +228,31 @@ export function detecterInsights(ctx: Contexte): Insight[] {
         cle: 'abonnements.churn',
         texte: `Vous perdez ${fmt(abos.churn * 100)} % de vos abonnés chaque mois.`,
         fondement: `Départs ÷ abonnés en début de mois, moyenne des trois derniers mois terminés (Stripe).${abos.ltv === null ? '' : ` À ce rythme, un abonné rapporte en moyenne ${argentAbos(abos.ltv)} sur sa durée (estimation).`}`,
+        ton: 'attention',
+      })
+    }
+  }
+
+  // Le CRM : ce que deviennent les prospects.
+  const crm = ctx.crm
+  if (crm != null) {
+    if (crm.global !== null && crm.global.taux !== null) {
+      trouves.push({
+        cle: 'crm.taux',
+        texte: `${pourcent(crm.global.taux * 100)} de vos prospects deviennent clients.`,
+        fondement: `${crm.global.clients} clients sur ${crm.global.prospects} prospects créés dans HubSpot, cohortes d’au moins un mois${crm.delaiMoyenJours === null ? '' : ` ; une transaction gagnée se signe en ${fmt(crm.delaiMoyenJours)} jours en moyenne`}.`,
+        ton: 'neutre',
+      })
+    }
+    const faible = canalQuiNeSignePas(crm)
+    if (faible !== null) {
+      trouves.push({
+        cle: `crm.canal.${faible.cle}`,
+        texte:
+          faible.clients === 0
+            ? `${faible.nom} a amené ${faible.prospects} prospects, et aucun n’est devenu client.`
+            : `Les prospects venus de ${faible.nom} deviennent clients deux fois moins souvent que les autres (${pourcent(faible.taux! * 100)}).`,
+        fondement: 'Source d’origine des contacts selon HubSpot, sur les six derniers mois. Des prospects récents peuvent encore signer.',
         ton: 'attention',
       })
     }

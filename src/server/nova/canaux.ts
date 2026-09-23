@@ -188,3 +188,29 @@ export function canalGa4(groupe: string, source: string, medium: string): Attrib
       return { canal: 'autres', origine, assistant: null }
   }
 }
+
+/**
+ * La source d'origine d'un contact HubSpot, rangée dans les canaux de Nova.
+ *
+ * HubSpot range lui-même chaque contact dans une source (« Recherche payante », « Réseaux
+ * sociaux payants »…). Deux approximations, assumées et dites : la recherche payante est
+ * comptée en Google Ads (Bing en fait partie aussi), les réseaux sociaux payants en Meta Ads
+ * (LinkedIn aussi). Ce que HubSpot ne sait pas ranger reste « non attribué ».
+ */
+const SOURCES_HUBSPOT: Record<string, CanalNova> = {
+  ORGANIC_SEARCH: 'seo',
+  PAID_SEARCH: 'google-ads',
+  PAID_SOCIAL: 'meta-ads',
+  SOCIAL_MEDIA: 'social',
+  EMAIL_MARKETING: 'email',
+  DIRECT_TRAFFIC: 'direct',
+  REFERRALS: 'referral',
+  AI_REFERRALS: 'ia',
+  OTHER_CAMPAIGNS: 'autres',
+  OFFLINE: 'autres',
+}
+
+export function canalHubspot(source: string): Attribution {
+  const cle = source.toUpperCase()
+  return { canal: SOURCES_HUBSPOT[cle] ?? 'inconnu', origine: cle === '' ? 'inconnue' : cle.toLowerCase(), assistant: null }
+}

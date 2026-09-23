@@ -710,6 +710,42 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     reviewedOn: '2026-09-23',
   },
   {
+    id: 'hubspot',
+    name: 'HubSpot (CRM)',
+    category: 'commerce',
+    summary: 'Votre CRM HubSpot, pour Nova : combien de prospects deviennent clients, et par quel canal.',
+    usage:
+      'Lire vos contacts et vos transactions gagnées pour que Nova calcule vos prospects, vos clients signés, le taux de transformation et le coût d’un client signé, par canal d’origine. En lecture seule.',
+    status: 'available',
+    credential: 'API_KEY',
+    connectionTarget: 'EVOLIIA',
+    scopes: ['crm.objects.contacts.read', 'crm.objects.deals.read'],
+    costToEvoliia: 'aucun',
+    costToCreator: 'compte-gratuit-suffisant',
+    costNotice: 'Les applications privées et leur API sont incluses dans HubSpot, y compris dans le CRM gratuit. Evoliia ne paie rien.',
+    freeQuota: 'Largement suffisant : Nova lit au plus toutes les douze heures, bien sous les limites de HubSpot.',
+    webhooks: false,
+    providerReview: 'Aucune validation : l’application privée est créée par vous, dans votre compte HubSpot, et se supprime d’un clic.',
+    risk:
+      'Evoliia lit la date de création, la source d’origine et la date de passage au stade « client » de vos contacts, et le montant et les dates de vos transactions gagnées. Elle ne demande ni nom, ni courriel, ni téléphone, et ne garde que des comptes par jour. Ne donnez à l’application privée que les deux droits de lecture indiqués.',
+    keyHelp: {
+      label: 'Le jeton de l’application privée',
+      hint: 'Il commence par « pat-eu1- » ou « pat-na1- ». Evoliia le chiffre et ne le réaffiche jamais.',
+    },
+    guide: {
+      url: 'https://app.hubspot.com/private-apps/',
+      urlLabel: 'Ouvrir les applications privées',
+      steps: [
+        'Dans HubSpot, ouvrez Paramètres → Intégrations → Applications privées, puis « Créer une application privée ».',
+        'Nom : « Evoliia ». Onglet « Scopes » : cochez seulement crm.objects.contacts.read et crm.objects.deals.read.',
+        'Créez l’application et copiez le jeton d’accès : il commence par « pat- ».',
+        'Revenez ici et collez-le.',
+      ],
+      caution: 'Lecture seule : aucun droit d’écriture n’est nécessaire, n’en cochez aucun.',
+    },
+    reviewedOn: '2026-09-23',
+  },
+  {
     id: 'notion',
     name: 'Notion',
     category: 'productivite',

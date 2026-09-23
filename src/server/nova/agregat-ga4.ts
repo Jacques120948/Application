@@ -36,6 +36,8 @@ export type JourVisites = {
   visiteurs: { nouveaux?: Segment; connus?: Segment }
   /** Les événements clés du jour, par nom. */
   evenements: Record<string, EvenementCle>
+  /** Tranches d'âge et sexe, quand les signaux Google les donnent ; « unknown » sinon. */
+  demographie: { ages: Record<string, Segment>; sexes: Record<string, Segment> }
 }
 
 /** Les dimensions et métriques demandées, dans l'ordre où les rapports les rendent. */
@@ -47,6 +49,8 @@ export const DIMENSIONS_AUDIENCES = ['date', 'countryId', 'newVsReturning']
 export const METRIQUES_AUDIENCES = ['sessions', 'ecommercePurchases']
 export const DIMENSIONS_EVENEMENTS = ['date', 'eventName', 'sessionDefaultChannelGroup', 'sessionSource', 'sessionMedium']
 export const METRIQUES_EVENEMENTS = ['keyEvents']
+export const DIMENSIONS_DEMOGRAPHIE = ['date', 'userAgeBracket', 'userGender']
+export const METRIQUES_DEMOGRAPHIE = ['sessions', 'ecommercePurchases']
 
 /** Les pays gardés par jour. Au-delà, ils sont regroupés : une ligne par pays du monde ne dit rien. */
 const PAYS_PAR_JOUR = 25
@@ -79,6 +83,7 @@ function nouveauJour(jour: string): JourVisites {
     pays: {},
     visiteurs: {},
     evenements: {},
+    demographie: { ages: {}, sexes: {} },
   }
 }
 
@@ -115,6 +120,7 @@ export function agregerVisites(
   pagesSeo: LigneRapport[],
   audiences: LigneRapport[] = [],
   evenements: LigneRapport[] = [],
+  demographie: LigneRapport[] = [],
 ): JourVisites[] {
   const jours = new Map<string, JourVisites>()
   for (const ligne of canaux) {
@@ -188,6 +194,16 @@ export function agregerVisites(
     evenement.total += cles
     evenement.canaux[canal] = (evenement.canaux[canal] ?? 0) + cles
     courant.evenements[nom.slice(0, 80)] = evenement
+    jours.set(jour, courant)
+  }
+  for (const ligne of demographie) {
+    const jour = dateGa4(ligne.dimensions[0] ?? '')
+    if (jour === null) continue
+    const [age = '', sexe = ''] = ligne.dimensions.slice(1)
+    const [sessions = 0, achats = 0] = ligne.metriques
+    const courant = jours.get(jour) ?? nouveauJour(jour)
+    ajouter(courant.demographie.ages, /^\d{2}(-\d{2}|\+)$/u.test(age) ? age : 'unknown', sessions, achats)
+    ajouter(courant.demographie.sexes, sexe === 'male' || sexe === 'female' ? sexe : 'unknown', sessions, achats)
     jours.set(jour, courant)
   }
   return [...jours.values()].sort((un, autre) => un.jour.localeCompare(autre.jour))

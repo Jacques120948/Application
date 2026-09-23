@@ -16,11 +16,13 @@ import { FRAICHEUR_MS, JOURS_LUS } from './collecte'
 import {
   agregerVisites,
   DIMENSIONS_AUDIENCES,
+  DIMENSIONS_DEMOGRAPHIE,
   DIMENSIONS_CANAUX,
   DIMENSIONS_EVENEMENTS,
   DIMENSIONS_PAGES,
   METRIQUES,
   METRIQUES_AUDIENCES,
+  METRIQUES_DEMOGRAPHIE,
   METRIQUES_EVENEMENTS,
   METRIQUES_PAGES,
 } from './agregat-ga4'
@@ -40,11 +42,11 @@ const PAUSE_MANUELLE_MS = 2 * 60 * 1000
 const JOURS_RATTRAPES = 3
 /**
  * La forme des jours écrits. 1 : V3. 2 : l'engagement par page d'entrée. 3 : pays, nouveaux
- * et connus, événements clés. Une ligne plus
+ * et connus, événements clés. 4 : âge et sexe. Une ligne plus
  * ancienne que le code déclenche une relecture complète, sans quoi les anciens jours
  * garderaient leur ancienne forme jusqu'à sortir de la fenêtre.
  */
-export const VERSION_JOURS = 3
+export const VERSION_JOURS = 4
 const JOURS_GARDES = 400
 const FOURNISSEUR = 'google-analytics'
 
@@ -172,7 +174,7 @@ export async function synchroniserVisites(
         : [debut, jourIso(new Date(+precedente.synchroAt - JOURS_RATTRAPES * JOUR_MS))].sort().at(-1)!
 
     const bornes = { du: depuis, au: aujourdhui }
-    const [canaux, pages, pagesSeo, audiences, evenements] = await Promise.all([
+    const [canaux, pages, pagesSeo, audiences, evenements, demographie] = await Promise.all([
       rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_CANAUX, metriques: METRIQUES, limite: 100_000 }),
       rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_PAGES, metriques: METRIQUES_PAGES, limite: 100_000 }),
       rapport(acces.accessToken, propriete, {
@@ -184,6 +186,7 @@ export async function synchroniserVisites(
       }),
       rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_AUDIENCES, metriques: METRIQUES_AUDIENCES, limite: 100_000 }),
       rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_EVENEMENTS, metriques: METRIQUES_EVENEMENTS, limite: 100_000 }),
+      rapport(acces.accessToken, propriete, { ...bornes, dimensions: DIMENSIONS_DEMOGRAPHIE, metriques: METRIQUES_DEMOGRAPHIE, limite: 100_000 }),
     ])
     const echec = [canaux, pages, pagesSeo].find((un) => !un.ok)
     if (echec !== undefined && !echec.ok) {
@@ -200,6 +203,7 @@ export async function synchroniserVisites(
       pagesSeo.ok ? pagesSeo.lignes : [],
       audiences.ok ? audiences.lignes : [],
       evenements.ok ? evenements.lignes : [],
+      demographie.ok ? demographie.lignes : [],
     )
 
     await withUserScope(userId, async (tx) => {
@@ -221,6 +225,7 @@ export async function synchroniserVisites(
             pays: jour.pays as Prisma.InputJsonValue,
             visiteurs: jour.visiteurs as Prisma.InputJsonValue,
             evenements: jour.evenements as unknown as Prisma.InputJsonValue,
+            demographie: jour.demographie as unknown as Prisma.InputJsonValue,
           })),
         })
       }

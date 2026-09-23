@@ -166,6 +166,21 @@ propriété de la personne.
 | Surveillance | `nova/surveillance.ts` | Par régie (dépense, conversions, coût par conversion, ROAS), ventes (CA, commandes) et visites : hier, 7, 30 et 90 jours finissant hier, en moyenne par jour ; les ratios sur les sommes. Écart signalé (7 jours, ou hier pour une dépense qui double, contre 30 jours) seulement avec volume : ≥ 5 conversions sur 7 jours et ≥ 15 sur 30, ≥ 30 commandes sur 30 jours, ≥ 1 000 visites. Attention à 30 %, alerte à 50–60 % (100 % pour une dépense). |
 | Cohortes de clients | `nova/agregat.ts` (`cohortesClients`), `CommerceSynchro.cohortes` | Shopify seulement (la première commande y est connue). Calculées en mémoire à la lecture complète quand Shopify rend l'identifiant client ; seules des parts et des moyennes sont gardées. Part des clients qui ont recommandé et CA cumulé par client, mois après mois ; cohortes de 5 clients au moins. |
 
+## V8 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Connecteur HubSpot | `integrations/providers/hubspot.ts`, catalogue `hubspot` | Jeton d'application privée (`pat-…`), lecture seule : `crm.objects.contacts.read` et `crm.objects.deals.read`. Vérifié à l'enregistrement (un refus nomme le droit manquant). D'un contact on ne demande que la date de création, la source d'origine et la date de passage au stade « client » : ni nom, ni courriel, ni téléphone ne traversent le réseau. D'une transaction gagnée : montant, devise, dates, source. 10 000 résultats au plus par recherche, et c'est dit. |
+| Collecte CRM | `nova/collecte-crm.ts`, `nova/agregat-crm.ts`, tables `CrmJour` et `CrmSynchro` (RLS) | Mêmes rythmes que les autres sources (12 h, pause après échec, 2 min entre deux lectures manuelles). Chaque lecture relit les 180 jours : un prospect ancien peut signer aujourd'hui. Gardé : des comptes par jour et par canal, et un instantané (cohortes mensuelles, par canal, délai moyen de signature). Un jeton refusé laisse les derniers chiffres et le dit. |
+| Source de ventes | `nova/sources.ts`, `collecte.ts` | Les transactions gagnées font le chiffre d'affaires seulement sans Shopify, WooCommerce ni Stripe. Jamais additionnées à une autre source. |
+| Prospects → clients | `nova/crm.ts`, `metriques.ts`, `analyse.ts` | Le KPI « Prospects » préfère les contacts HubSpot aux événements GA4. Nouveaux KPI « Clients signés » et « Coût par client signé » (dépenses ÷ clients), aussi par canal. Taux lu par cohorte : le taux global ne compte que les mois d'au moins un mois terminé ; un taux ne s'affiche qu'à partir de 20 prospects. Constat : un canal qui amène des prospects qui signent moitié moins que l'ensemble. |
+| Âge et sexe | `agregat-ga4.ts` (`VERSION_JOURS = 4`), `AnalyticsJour.demographie`, `audiences.ts` | Un rapport GA4 de plus (`userAgeBracket`, `userGender`). Affichés seulement au-delà de 500 visites et quand Google en reconnaît au moins la moitié (signaux Google activés) ; sinon Nova explique pourquoi. Toujours « estimés par Google ». Relecture complète de GA4 au passage de version. |
+
+Coût pour Evoliia : aucun — l'API HubSpot est gratuite sur le compte de la personne,
+et le rapport GA4 de plus tombe sur le quota de sa propriété.
+
 ## Encore à venir
 
-CRM (taux prospect → client), âge et sexe (signaux Google).
+Le cahier des charges de Nova est couvert. Extensions possibles, sur demande : autres CRM
+(Pipedrive, Salesforce), cohortes Shopify dès que l'accès aux données clients protégées
+est accordé.

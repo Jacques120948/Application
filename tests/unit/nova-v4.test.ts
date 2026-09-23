@@ -231,6 +231,8 @@ describe('Nova V4 — contenus qui attirent', () => {
     pays: {},
     visiteurs: { nouveaux: { sessions: 0, achats: 0 }, connus: { sessions: 0, achats: 0 } },
     evenements: {},
+    ages: {},
+    sexes: {},
   })
 
   it('ne garde que les articles de blog, avec assez de visites', () => {

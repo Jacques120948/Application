@@ -31,6 +31,7 @@ import {
   type CumulVentes,
   type JourVisites,
   cumulPub,
+  type JourCrmVue,
 } from './metriques'
 import {
   detecterAlertes,
@@ -45,6 +46,8 @@ import {
 import { ABSENT, lireEtatVentes, type EtatVentes } from './collecte'
 import type { SourceVentes } from './sources'
 import { lireEtatAbonnements, type EtatAbonnements } from './collecte-stripe'
+import { lireEtatCrm, type EtatCrm } from './collecte-crm'
+import { lireCrm, type LectureCrm } from './crm'
 import { indicateursAbonnements, type IndicateursAbonnements } from './abonnements'
 import { lireAudiences, type Audiences } from './audiences'
 import { prevoirVentes, type Prevision } from './previsions'
@@ -140,6 +143,9 @@ export type VueNova = {
   contenus: Contenus
   /** Les prospects de la période (événements clés GA4), par canal ; `null` sans GA4 lu. */
   leads: Leads | null
+  /** Le CRM : l'état de la lecture, et ce qu'on lit de ses cohortes de prospects. */
+  crm: EtatCrm
+  lectureCrm: LectureCrm | null
   /** Les abonnements Stripe : l'état de la lecture, et ce qu'on en tire quand elle a eu lieu. */
   abonnements: { etat: EtatAbonnements; indicateurs: IndicateursAbonnements | null; acquisition: AcquisitionAbonnes | null }
   /** Pays, nouveaux et connus, sur la période ; `null` sans GA4 ou avant la V6. */
@@ -317,6 +323,19 @@ async function lireVisites(userId: string, propriete: string, depuis: string, ju
     pays: (ligne.pays ?? {}) as Record<string, { sessions: number; achats: number }>,
     visiteurs: (ligne.visiteurs ?? {}) as JourVisites['visiteurs'],
     evenements: (ligne.evenements ?? {}) as JourVisites['evenements'],
+    demographie: (ligne.demographie ?? {}) as JourVisites['demographie'],
+  }))
+}
+
+async function lireJoursCrm(userId: string, depuis: string, jusqua: string): Promise<JourCrmVue[]> {
+  const lignes = await withUserScope(userId, (tx) =>
+    tx.crmJour.findMany({ where: { userId, jour: { gte: new Date(depuis), lte: new Date(jusqua) } }, orderBy: { jour: 'asc' } }),
+  )
+  return lignes.map((ligne) => ({
+    jour: jourIso(ligne.jour),
+    prospects: ligne.prospects,
+    clients: ligne.clients,
+    canaux: (ligne.canaux ?? {}) as JourCrmVue['canaux'],
   }))
 }
 
@@ -565,15 +584,17 @@ export async function lireNova(
   options: { periode?: string; du?: string; au?: string; siteId?: string } = {},
   maintenant = new Date(),
 ): Promise<VueNova> {
-  const [ventes, google, meta, sites, visites, abonnements] = await Promise.all([
+  const [ventes, google, meta, sites, visites, abonnements, crm] = await Promise.all([
     sans(lireEtatVentes(userId), ABSENT),
     sans(compteActif(userId, 'google-ads'), null),
     sans(compteActif(userId, 'meta-ads'), null),
     sans(listSites(userId), []),
     sans(lireEtatVisites(userId), { etat: 'absent', message: '', propriete: '', nom: '', synchroAt: null, couvertureDepuis: null, devise: '', fuseau: '' } as EtatVisites),
     sans(lireEtatAbonnements(userId), { etat: 'absent', message: '', synchroAt: null, tronque: false, instantane: null } as EtatAbonnements),
+    sans(lireEtatCrm(userId), { etat: 'absent', message: '', synchroAt: null, couvertureDepuis: null, tronque: false, instantane: null } as EtatCrm),
   ])
   const indicateursAbos = abonnements.instantane === null ? null : indicateursAbonnements(abonnements.instantane)
+  const lectureCrm = lireCrm(crm.instantane)
   const visitesLues = (visites.etat === 'ok' || (visites.etat === 'erreur' && visites.synchroAt !== null)) && visites.propriete !== ''
   const site = sites.find((un) => un.id === options.siteId) ?? sites[0] ?? null
   const siteId = site?.id ?? ''
@@ -598,11 +619,13 @@ export async function lireNova(
   const depuis = [precedente.du, reference.du, mois.premier, trente.du, moisPrecedent.du, decaler(aujourdhui, -90)].sort()[0]!
   const fin = [periode.au, trente.au].sort().at(-1)!
 
-  const [campagnes, joursVentes, recherche, joursVisites] = await Promise.all([
+  const crmLu = crm.etat === 'ok' || (crm.etat === 'erreur' && crm.synchroAt !== null)
+  const [campagnes, joursVentes, recherche, joursVisites, joursCrm] = await Promise.all([
     sans(lireCampagnes(userId, regies, depuis, fin), []),
     venteLues ? sans(lireVentes(userId, ventes.source, ventes.boutique, depuis, fin), []) : Promise.resolve([]),
     sans(lireRecherche(userId, siteId, periode.au), null),
     visitesLues ? sans(lireVisites(userId, visites.propriete, depuis, fin), []) : Promise.resolve([]),
+    crmLu ? sans(lireJoursCrm(userId, depuis, fin), []) : Promise.resolve([]),
   ])
   const [reglages, prospects] = await Promise.all([sans(reglagesNova(userId), REGLAGES_VIDES), sans(prospectsNova(userId), undefined)])
 
@@ -613,6 +636,7 @@ export async function lireNova(
     ventes: { disponibles: venteLues, couvertureDepuis: ventes.couvertureDepuis, jours: joursVentes },
     nomVentes: ventes.nom,
     ...(prospects === undefined ? {} : { evenementsLeads: prospects }),
+    crm: { disponibles: crmLu, couvertureDepuis: crm.couvertureDepuis, jours: joursCrm },
     recherche,
     visites: { disponibles: visitesLues, couvertureDepuis: visites.couvertureDepuis, jours: joursVisites },
   }
@@ -642,6 +666,7 @@ export async function lireNova(
     produits: lignesProduits,
     merEquilibre: null as number | null,
     abonnements: indicateursAbos,
+    crm: lectureCrm,
   }
   // Le mois à date : le premier du mois, rien n'est encore écoulé, et zéro est alors la vérité.
   const ventesMois =
@@ -725,6 +750,23 @@ export async function lireNova(
   if (couts !== null) lignesSante.push(couts)
   const santeAbos = santeAbonnements(abonnements, maintenant)
   if (santeAbos !== null) lignesSante.push(santeAbos)
+  if (crm.etat !== 'absent') {
+    lignesSante.push(
+      crm.etat === 'jamais'
+        ? { cle: 'crm', source: 'HubSpot', etat: 'verifier', texte: 'Relié, pas encore lu. Actualisez pour récupérer vos prospects.', action: null }
+        : crm.etat === 'erreur'
+          ? { cle: 'crm', source: 'HubSpot', etat: 'probleme', texte: crm.synchroAt === null ? crm.message : `${crm.message} Les derniers chiffres datent du ${quandLisible(crm.synchroAt)}.`, action: null }
+          : {
+              cle: 'crm',
+              source: 'HubSpot',
+              etat: crm.tronque ? 'verifier' : 'bon',
+              texte: crm.tronque
+                ? 'Plus de dix mille contacts sur la période : HubSpot n’en rend pas davantage, les plus récents peuvent manquer.'
+                : `À jour${crm.synchroAt === null ? '' : ` — lu le ${quandLisible(crm.synchroAt)}`}.`,
+              action: null,
+            },
+    )
+  }
   if (ventesActuelles !== null && ventesActuelles.commandes >= 20) {
     const inconnues = (ventesActuelles.canaux.inconnu?.commandes ?? 0) / ventesActuelles.commandes
     if (inconnues >= 0.3) {
@@ -768,16 +810,18 @@ export async function lireNova(
     ...(recherche === null ? [] : ['Search Console']),
     ...(visitesLues ? ['Google Analytics 4'] : []),
     ...(abonnements.instantane !== null && ventes.source !== 'stripe' ? ['Stripe (abonnements)'] : []),
+    ...(crmLu && ventes.source !== 'hubspot' ? ['HubSpot'] : []),
   ]
 
   return {
     periode,
     precedente,
     devise,
-    vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null && visites.etat === 'absent' && abonnements.etat === 'absent',
+    vierge:
+      ventes.etat === 'absent' && comptes.length === 0 && recherche === null && visites.etat === 'absent' && abonnements.etat === 'absent' && crm.etat === 'absent',
     sources,
     kpis: indicateursNova(actuel, avant, raisonVentes(ventes), ventes.nom),
-    canaux: performanceCanaux(donnees, periode, ventesActuelles, visitesActuelles, actuel.leads ?? null),
+    canaux: performanceCanaux(donnees, periode, ventesActuelles, visitesActuelles, actuel.leads ?? null, actuel.crm ?? null),
     attribution: lignesAttribution,
     campagnes: lignesCampagnes.slice(0, CAMPAGNES_MAX),
     produits: lignesProduits.slice(0, PRODUITS_MAX),
@@ -790,6 +834,8 @@ export async function lireNova(
     visitesPeriode: visitesActuelles,
     contenus: contenusQuiAttirent(visitesActuelles),
     leads: actuel.leads ?? null,
+    crm,
+    lectureCrm,
     abonnements: { etat: abonnements, indicateurs: indicateursAbos, acquisition: acquisitionAbonnes },
     audiences: lireAudiences(visitesActuelles),
     prevision,
@@ -807,7 +853,7 @@ export async function lireNova(
     siteId,
     reglages,
     ordre: ordreIndicateurs(reglages.activite),
-    aVenir: indicateursAVenir(reglages.activite, abonnements.etat !== 'absent'),
+    aVenir: indicateursAVenir(reglages.activite, abonnements.etat !== 'absent', crm.etat !== 'absent'),
     marge,
     objectifs: suivis,
     clients: repartitionClients(ventesActuelles),

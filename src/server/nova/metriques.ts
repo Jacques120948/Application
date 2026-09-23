@@ -177,6 +177,8 @@ export type Donnees = {
   nomVentes?: string
   /** Les événements GA4 que la personne compte comme prospects. Absent : reconnus par leur nom. */
   evenementsLeads?: readonly string[]
+  /** Le CRM (HubSpot) : prospects créés et clients signés par jour, quand il est relié. */
+  crm?: { disponibles: boolean; couvertureDepuis: string | null; jours: JourCrmVue[] }
   /** Search Console : des cumuls sur 28 jours, seule forme qu'Evoliia conserve. */
   recherche: { clics28: number; clics28Avant: number | null; au: string } | null
   /** Google Analytics 4, quand il est relié. Même règle de couverture que les ventes. */
@@ -202,9 +204,33 @@ export type JourVisites = {
   pays?: Record<string, SegmentVisites>
   visiteurs?: { nouveaux?: SegmentVisites; connus?: SegmentVisites }
   evenements?: Record<string, { total: number; canaux: Partial<Record<CanalNova, number>> }>
+  demographie?: { ages?: Record<string, SegmentVisites>; sexes?: Record<string, SegmentVisites> }
 }
 
 export type SegmentVisites = { sessions: number; achats: number }
+
+/** Une journée du CRM : des comptes, par canal d'origine. */
+export type JourCrmVue = { jour: string; prospects: number; clients: number; canaux: Partial<Record<CanalNova, { prospects: number; clients: number }>> }
+
+export type CumulCrm = { prospects: number; clients: number; parCanal: Partial<Record<CanalNova, { prospects: number; clients: number }>> }
+
+/** Prospects créés et clients signés sur une période, ou `null` si le CRM ne la couvre pas. */
+export function cumulCrm(crm: Donnees['crm'], bornes: { du: string; au: string }): CumulCrm | null {
+  if (crm === undefined || !crm.disponibles || crm.couvertureDepuis === null || bornes.du < crm.couvertureDepuis) return null
+  const total: CumulCrm = { prospects: 0, clients: 0, parCanal: {} }
+  for (const jour of crm.jours) {
+    if (!dansPeriode(jour.jour, bornes)) continue
+    total.prospects += jour.prospects
+    total.clients += jour.clients
+    for (const [canal, ligne] of Object.entries(jour.canaux) as [CanalNova, { prospects: number; clients: number }][]) {
+      const deja = total.parCanal[canal] ?? { prospects: 0, clients: 0 }
+      deja.prospects += ligne.prospects
+      deja.clients += ligne.clients
+      total.parCanal[canal] = deja
+    }
+  }
+  return total
+}
 
 export type CumulVisites = {
   sessions: number
@@ -223,6 +249,8 @@ export type CumulVisites = {
   pays: Record<string, SegmentVisites>
   visiteurs: { nouveaux: SegmentVisites; connus: SegmentVisites }
   evenements: Record<string, { total: number; canaux: Partial<Record<CanalNova, number>> }>
+  ages: Record<string, SegmentVisites>
+  sexes: Record<string, SegmentVisites>
 }
 
 function ajouterSegment(cible: Record<string, SegmentVisites>, cle: string, segment: SegmentVisites | undefined): void {
@@ -264,6 +292,8 @@ export function cumulVisites(visites: Donnees['visites'], bornes: { du: string; 
     pays: {},
     visiteurs: { nouveaux: { sessions: 0, achats: 0 }, connus: { sessions: 0, achats: 0 } },
     evenements: {},
+    ages: {},
+    sexes: {},
   }
   const pages = new Map<string, PageSessions>()
   const pagesSeo = new Map<string, PageSessions>()
@@ -299,6 +329,8 @@ export function cumulVisites(visites: Donnees['visites'], bornes: { du: string; 
       for (const [canal, n] of Object.entries(evenement.canaux) as [CanalNova, number][]) deja.canaux[canal] = (deja.canaux[canal] ?? 0) + n
       total.evenements[nom] = deja
     }
+    for (const [age, segment] of Object.entries(jour.demographie?.ages ?? {})) ajouterSegment(total.ages, age, segment)
+    for (const [sexe, segment] of Object.entries(jour.demographie?.sexes ?? {})) ajouterSegment(total.sexes, sexe, segment)
     cumulerPages(pages, jour.pages, sansEngagement)
     cumulerPages(pagesSeo, jour.pagesSeo, sansEngagementSeo)
   }
@@ -434,7 +466,7 @@ export function enPourcent(haut: number, bas: number): number | null {
 export type FormatKpi = 'argent' | 'nombre' | 'pourcent'
 
 export type Kpi = {
-  cle: 'chiffre' | 'depenses' | 'roas' | 'mer' | 'commandes' | 'cpa' | 'cac' | 'panier' | 'conversion' | 'leads' | 'cpl'
+  cle: 'chiffre' | 'depenses' | 'roas' | 'mer' | 'commandes' | 'cpa' | 'cac' | 'panier' | 'conversion' | 'leads' | 'cpl' | 'signes' | 'cps'
   label: string
   valeur: number | null
   format: FormatKpi
@@ -452,6 +484,7 @@ export const MANQUE_VENTES = 'Reliez votre boutique (Shopify, WooCommerce) ou St
 export const MANQUE_PUB = 'Aucun compte publicitaire relié.'
 export const MANQUE_LEADS =
   'Reliez Google Analytics 4 et déclarez-y vos demandes (formulaire, appel, devis) comme événements clés : Nova les comptera comme prospects.'
+export const MANQUE_CRM = 'Reliez votre CRM (HubSpot) : Nova saura combien de prospects deviennent clients.'
 export const MANQUE_CAC = 'Données insuffisantes pour calculer précisément votre coût d’acquisition client.'
 export const MANQUE_CONVERSION =
   'Il faut le nombre de visites de votre site : connectez Google Analytics 4 depuis Connexions.'
@@ -463,6 +496,8 @@ type Ensemble = {
   visites?: CumulVisites | null
   /** Les prospects (événements clés de GA4 choisis), quand GA4 les donne. */
   leads?: Leads | null
+  /** Le CRM, qui fait foi pour les prospects quand il est relié. */
+  crm?: CumulCrm | null
 }
 
 /**
@@ -482,6 +517,7 @@ function valeursKpi(ensemble: Ensemble): Record<Kpi['cle'], number | null> {
   const { pub, ventes, aDesRegies } = ensemble
   const depenses = aDesRegies ? arrondi(pub.depense) : null
   const commandes = ventes?.commandes ?? null
+  const prospects = ensemble.crm != null ? ensemble.crm.prospects : (ensemble.leads?.total ?? null)
   const cac =
     ventes === null || !aDesRegies || ventes.clientsIdentifies === 0 || ventes.nouveauxClients === 0 || pub.depense === 0
       ? null
@@ -501,9 +537,12 @@ function valeursKpi(ensemble: Ensemble): Record<Kpi['cle'], number | null> {
     cac,
     panier: ventes === null || ventes.commandes === 0 ? null : arrondi(ventes.chiffre / ventes.commandes),
     conversion: tauxConversion(ventes, ensemble.visites),
-    leads: ensemble.leads?.total ?? null,
+    // Le CRM fait foi quand il est relié : un contact créé est un prospect, qu'il ait rempli un formulaire suivi ou non.
+    leads: prospects,
     // Le coût par prospect : la dépense de toutes les régies sur les prospects de tous les canaux.
-    cpl: !aDesRegies || ensemble.leads == null || ensemble.leads.total === 0 ? null : arrondi(pub.depense / ensemble.leads.total),
+    cpl: !aDesRegies || prospects === null || prospects === 0 ? null : arrondi(pub.depense / prospects),
+    signes: ensemble.crm?.clients ?? null,
+    cps: !aDesRegies || ensemble.crm == null || ensemble.crm.clients === 0 ? null : arrondi(pub.depense / ensemble.crm.clients),
   }
 }
 
@@ -573,8 +612,10 @@ export function indicateursNova(
       avecVentes ? `Commandes ${nomVentes} ÷ visites GA4` : 'Achats ÷ visites, selon GA4',
       MANQUE_CONVERSION,
     ),
-    kpi('leads', 'Prospects', 'nombre', 'hausse', 'Événements clés GA4 comptés comme prospects', MANQUE_LEADS),
+    kpi('leads', 'Prospects', 'nombre', 'hausse', actuel.crm != null ? 'HubSpot, contacts créés' : 'Événements clés GA4 comptés comme prospects', MANQUE_LEADS),
     kpi('cpl', 'Coût par prospect', 'argent', 'baisse', 'Dépenses ÷ prospects', !pub ? MANQUE_PUB : MANQUE_LEADS),
+    kpi('signes', 'Clients signés', 'nombre', 'hausse', 'HubSpot, contacts passés au stade « client »', MANQUE_CRM),
+    kpi('cps', 'Coût par client signé', 'argent', 'baisse', 'Dépenses ÷ clients signés', !pub ? MANQUE_PUB : MANQUE_CRM),
   ]
 }
 
@@ -585,6 +626,7 @@ export function ensemble(donnees: Donnees, bornes: { du: string; au: string }): 
     aDesRegies: donnees.regies.length > 0,
     visites: cumulVisites(donnees.visites, bornes),
     leads: cumulLeads(cumulVisites(donnees.visites, bornes), donnees.evenementsLeads),
+    crm: cumulCrm(donnees.crm, bornes),
   }
 }
 
@@ -615,6 +657,9 @@ export type LigneCanal = {
   leads: number | null
   /** Dépense de la régie ÷ ses prospects, pour un canal payant. */
   cpl: number | null
+  /** Clients signés venus de ce canal (CRM), et ce qu'ils ont coûté pour un canal payant. */
+  signes: number | null
+  cps: number | null
   /** Les étiquettes d'origine regroupées dans ce canal, les plus fréquentes d'abord. */
   origines: string[]
 }
@@ -632,6 +677,7 @@ export function performanceCanaux(
   ventes: CumulVentes | null,
   visites: CumulVisites | null = null,
   leads: Leads | null = null,
+  crm: CumulCrm | null = null,
 ): LigneCanal[] {
   const lignes: LigneCanal[] = []
   for (const canal of CANAUX) {
@@ -640,7 +686,8 @@ export function performanceCanaux(
     const payant = canal === 'google-ads' || canal === 'meta-ads'
     const pub = payant && donnees.regies.includes(canal) ? cumulPub(donnees.campagnes, bornes, (l) => l.plateforme === canal) : null
     const seo = canal === 'seo' ? donnees.recherche : null
-    if (vues === null && pub === null && seo === null && ga4 === null) continue
+    const prospectsCanal = crm !== null ? (crm.parCanal[canal]?.prospects ?? 0) : leads === null ? null : Math.round(leads.parCanal[canal] ?? 0)
+    if (vues === null && pub === null && seo === null && ga4 === null && (crm?.parCanal[canal] ?? null) === null) continue
     lignes.push({
       canal,
       nom: NOM_CANAL[canal],
@@ -656,8 +703,10 @@ export function performanceCanaux(
       tauxConversion: pub === null || pub.clics === 0 ? null : arrondi((pub.conversions / pub.clics) * 100, 1),
       sessions: ga4?.sessions ?? (visites === null ? null : 0),
       conversionGa4: ga4 === null || ga4.sessions === 0 ? null : arrondi((ga4.achats / ga4.sessions) * 100, 1),
-      leads: leads === null ? null : Math.round(leads.parCanal[canal] ?? 0),
-      cpl: pub === null || leads === null || (leads.parCanal[canal] ?? 0) === 0 ? null : arrondi(pub.depense / leads.parCanal[canal]!),
+      leads: prospectsCanal,
+      cpl: pub === null || prospectsCanal === null || prospectsCanal === 0 ? null : arrondi(pub.depense / prospectsCanal),
+      signes: crm === null ? null : (crm.parCanal[canal]?.clients ?? 0),
+      cps: pub === null || crm === null || (crm.parCanal[canal]?.clients ?? 0) === 0 ? null : arrondi(pub.depense / crm.parCanal[canal]!.clients),
       origines: Object.entries(vues?.origines ?? {})
         .sort((un, autre) => autre[1] - un[1])
         .slice(0, 5)

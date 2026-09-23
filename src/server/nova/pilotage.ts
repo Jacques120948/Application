@@ -248,20 +248,22 @@ export function suivreObjectifs(
 
 /** L'ordre des cartes : ce que chaque activité regarde en premier. */
 export function ordreIndicateurs(activite: Activite | ''): Kpi['cle'][] {
-  if (activite === 'services') return ['leads', 'cpl', 'depenses', 'chiffre', 'roas', 'mer', 'cpa', 'commandes', 'conversion']
+  if (activite === 'services') return ['leads', 'cpl', 'signes', 'cps', 'depenses', 'chiffre', 'roas', 'mer', 'conversion']
   if (activite === 'saas') return ['chiffre', 'cac', 'depenses', 'roas', 'mer', 'commandes', 'cpa', 'panier', 'conversion']
   return ['chiffre', 'roas', 'cac', 'commandes', 'depenses', 'mer', 'cpa', 'panier', 'conversion']
 }
 
 /** Ce que l'activité voudrait voir et qu'aucune source reliée ne donne encore. */
-export function indicateursAVenir(activite: Activite | '', stripeRelie = false): string | null {
+export function indicateursAVenir(activite: Activite | '', stripeRelie = false, crmRelie = false): string | null {
   if (activite === 'saas') {
     return stripeRelie
       ? null
       : 'MRR, churn et LTV d’un abonnement demandent vos paiements récurrents : reliez Stripe (clé restreinte en lecture) dans Connexions.'
   }
   if (activite === 'services') {
-    return 'Le taux prospect → client demande votre CRM, qui n’est pas relié à Nova : Nova compte les prospects (événements clés de GA4) et ce qu’ils coûtent, pas ceux qui signent.'
+    return crmRelie
+      ? null
+      : 'Le taux prospect → client demande votre CRM : reliez HubSpot dans Connexions. En attendant, Nova compte les prospects (événements clés de GA4) et ce qu’ils coûtent, pas ceux qui signent.'
   }
   return null
 }

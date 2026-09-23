@@ -5,6 +5,7 @@ import { verifyGeminiKey } from './providers/gemini'
 import { verifyShopifyToken } from './providers/shopify'
 import { verifyWooKey } from './providers/woocommerce'
 import { verifyStripeLecture } from './providers/stripe-lecture'
+import { verifyHubspotToken } from './providers/hubspot'
 
 /**
  * Vérification d'un secret avant enregistrement.
@@ -60,6 +61,7 @@ const VERIFIERS: Record<string, KeyVerifier> = {
   shopify: verifyShopifyToken,
   woocommerce: verifyWooKey,
   'stripe-revenus': verifyStripeLecture,
+  hubspot: verifyHubspotToken,
 }
 
 export function findVerifier(providerId: string): KeyVerifier | undefined {

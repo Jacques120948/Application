@@ -23,6 +23,7 @@ import {
   ContenusNova,
   AbonnementsNova,
   SurveillanceNova,
+  CrmNova,
   VisitesNova,
 } from '@/components/studio/Nova'
 import { ProprieteGa4 } from '@/components/studio/ProprieteGa4'
@@ -156,6 +157,7 @@ export default async function NovaPage({
             }}
           />
           <SurveillanceNova lignes={vue.surveillance} devise={vue.devise} />
+          <CrmNova lecture={vue.lectureCrm} />
           {vue.objectifs.length === 0 ? null : (
             <ObjectifsNova suivis={vue.objectifs} devise={vue.devise} versReglages={`${base}/pilotage${suffixe === '' ? '' : `?${suffixe}`}`} />
           )}
