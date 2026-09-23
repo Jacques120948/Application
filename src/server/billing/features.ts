@@ -253,16 +253,16 @@ export const FEATURES: readonly Feature[] = [
     status: 'live',
   },
   /*
-   * Nova ne promet que ce qu'elle mesure : les ventes d'une boutique reliée, les dépenses
-   * des régies reliées, les clics Google. Pas de visites ni de taux de conversion : Google
-   * Analytics n'est pas relié à Evoliia, et la fiche ne le laisse pas croire.
+   * Nova ne promet que ce qu'elle mesure : les ventes d'une boutique reliée, les visites
+   * d'une propriété Google Analytics reliée, les dépenses des régies reliées, les clics
+   * Google. Chaque chiffre dépend de la source correspondante, et l'écran dit laquelle manque.
    */
   {
     id: 'nova_agent',
     group: 'equipe',
     label: 'Nova — Analytics',
     summary:
-      'Vos ventes, vos dépenses et ce que chaque canal rapporte réellement, calculés et comparés d’une période à l’autre. Nova confronte ce que déclarent Google et Meta à ce que votre boutique encaisse.',
+      'Vos ventes, vos visites, vos dépenses et ce que chaque canal rapporte réellement, calculés et comparés d’une période à l’autre. Nova confronte ce que déclarent Google et Meta à ce que votre boutique encaisse.',
     status: 'live',
   },
 ]

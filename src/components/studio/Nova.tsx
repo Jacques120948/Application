@@ -7,6 +7,8 @@ import type { LigneSante } from '@/server/nova/service'
 import type { Marge, SuiviObjectif } from '@/server/nova/pilotage'
 import type { LigneModele, Modele, RepartitionClients, ValeurClient } from '@/server/nova/clients'
 import type { Bilan } from '@/server/nova/bilan'
+import type { CumulVisites } from '@/server/nova/metriques'
+import { DelegationOria } from './DelegationOria'
 
 /**
  * Les blocs de l'écran de Nova.
@@ -39,7 +41,8 @@ export function argent(valeur: number | null, devise: string): string {
 function formater(kpi: Pick<Kpi, 'valeur' | 'format'>, devise: string): string {
   if (kpi.valeur === null) return '—'
   if (kpi.format === 'argent') return argent(kpi.valeur, devise)
-  if (kpi.format === 'pourcent') return `${nombre(kpi.valeur)} %`
+  // Un taux de conversion se lit à la décimale : 1,8 % et 2,4 % ne racontent pas la même boutique.
+  if (kpi.format === 'pourcent') return `${nombre(kpi.valeur, Math.abs(kpi.valeur) < 10 ? 1 : 0)} %`
   return nombre(kpi.valeur, 1)
 }
 
@@ -249,7 +252,17 @@ const NIVEAU: Record<Alerte['niveau'], { label: string; ton: 'critical' | 'cauti
   vert: { label: 'Bonne nouvelle', ton: 'positive', pastille: '🟢' },
 }
 
-export function AlertesNova({ alertes, locale, siteId }: { alertes: readonly Alerte[]; locale: string; siteId: string }) {
+export function AlertesNova({
+  alertes,
+  locale,
+  siteId,
+  transmission,
+}: {
+  alertes: readonly Alerte[]
+  locale: string
+  siteId: string
+  transmission?: TransmissionNova
+}) {
   if (alertes.length === 0) return null
   const suffixe = siteId === '' ? '' : `&siteId=${siteId}`
   return (
@@ -267,13 +280,15 @@ export function AlertesNova({ alertes, locale, siteId }: { alertes: readonly Ale
                   {alerte.texte}
                 </p>
                 <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">{alerte.fondement}</p>
-                {qui === undefined ? null : (
+                {qui === undefined || alerte.niveau === 'vert' ? null : transmission === undefined ? (
                   <a
                     href={`/${locale}/visibilite/equipe?agent=${alerte.agent}${suffixe}`}
                     className="mt-1 inline-block text-xs font-medium"
                   >
                     En parler avec {qui.name}
                   </a>
+                ) : (
+                  <Transmettre cle={alerte.cle} agent={alerte.agent} pour="regarder ce qui a changé" transmission={transmission} />
                 )}
               </li>
             )
@@ -361,7 +376,9 @@ export function CanauxNova({ canaux, devise }: { canaux: readonly LigneCanal[]; 
                 {canal.roas === null && canal.depenses === null ? null : <Chiffre label="ROAS" valeur={canal.roas === null ? '—' : `${canal.roas} %`} />}
                 {canal.depenses === null ? null : <Chiffre label="CPA" valeur={argent(canal.cpa, devise)} />}
                 {canal.tauxConversion === null ? null : <Chiffre label="Taux de conv." valeur={`${nombre(canal.tauxConversion, 1)} %`} />}
-                {canal.trafic === null ? null : <Chiffre label="Trafic" valeur={nombre(canal.trafic)} />}
+                {canal.trafic === null ? null : <Chiffre label={canal.depenses === null ? 'Clics Google' : 'Clics'} valeur={nombre(canal.trafic)} />}
+                {canal.sessions === null ? null : <Chiffre label="Visites (GA4)" valeur={nombre(canal.sessions)} />}
+                {canal.conversionGa4 === null ? null : <Chiffre label="Conversion (GA4)" valeur={`${nombre(canal.conversionGa4, 1)} %`} />}
                 {canal.commandes === null ? null : <Chiffre label="Commandes boutique" valeur={nombre(canal.commandes)} />}
                 {canal.chiffre === null ? null : <Chiffre label="CA boutique" valeur={argent(canal.chiffre, devise)} />}
               </dl>
@@ -435,7 +452,13 @@ export function AttributionNova({
 
 const IMPACT: Record<Opportunite['impact'], string> = { faible: 'Faible', moyen: 'Moyen', eleve: 'Élevé' }
 
-export function OpportunitesNova({ opportunites }: { opportunites: readonly Opportunite[] }) {
+export function OpportunitesNova({
+  opportunites,
+  transmission,
+}: {
+  opportunites: readonly Opportunite[]
+  transmission?: TransmissionNova
+}) {
   if (opportunites.length === 0) return null
   return (
     <section>
@@ -456,6 +479,7 @@ export function OpportunitesNova({ opportunites }: { opportunites: readonly Oppo
                   {opportunite.cta.label} →
                 </a>
               </div>
+              <Transmettre cle={opportunite.cle} agent={opportunite.agent} pour="en tirer parti" transmission={transmission} />
             </li>
           )
         })}
@@ -687,6 +711,33 @@ export function ParlerANova({ versConversation, cout }: { versConversation: stri
 }
 
 // ── V2 : onglets ─────────────────────────────────────────────────────────────
+
+/** Ce qu'il faut pour transmettre un point à un spécialiste. Absent : pas de bouton (site non analysé). */
+export type TransmissionNova = {
+  siteId: string
+  locale: string
+  cout: number
+  versConversation: string
+  /** La période affichée : le serveur relit le point sur la même. */
+  periode: { periode: string; du: string; au: string }
+}
+
+function Transmettre({ cle, agent, pour, transmission }: { cle: string; agent: string; pour: string; transmission?: TransmissionNova }) {
+  if (transmission === undefined) return null
+  return (
+    <DelegationOria
+      cle={cle}
+      siteId={transmission.siteId}
+      locale={transmission.locale}
+      destinataires={[{ agent, pour }]}
+      cout={{ min: transmission.cout, max: transmission.cout }}
+      versConversation={transmission.versConversation}
+      route="/api/nova/deleguer"
+      expediteur="Nova"
+      contexte={transmission.periode}
+    />
+  )
+}
 
 export type OngletNova = 'tableau' | 'bilan' | 'pilotage' | 'clients'
 
@@ -970,7 +1021,10 @@ export function ModelesNova({
             <strong>{explications[cle].nom}</strong> — {explications[cle].explication}
           </li>
         ))}
-        <li>Linéaire, en position et « data-driven » demandent toutes les visites : ils viendront avec Google Analytics 4.</li>
+        <li>
+          Linéaire, en position et « data-driven » demandent chaque visite intermédiaire d’un acheteur : ni Shopify ni les
+          rapports agrégés de GA4 ne la donnent.
+        </li>
       </ul>
       {lignes === null ? (
         <Card>
@@ -1017,6 +1071,64 @@ export function ParcoursNova({ phrases, mention }: { phrases: readonly string[];
         <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">
           <strong>Interprétation</strong> — {mention}
         </p>
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── V3 : visites ─────────────────────────────────────────────────────────────
+
+const NOM_APPAREIL: Record<string, string> = { mobile: 'Mobile', desktop: 'Ordinateur', tablet: 'Tablette' }
+
+/**
+ * Appareils et pages d'entrée, selon GA4.
+ *
+ * Deux questions que seules les visites peuvent trancher : où la conversion décroche (le
+ * mobile, souvent), et quelles pages font entrer les acheteurs.
+ */
+export function VisitesNova({ visites, devise }: { visites: CumulVisites; devise: string }) {
+  const appareils = Object.entries(visites.appareils)
+    .filter(([, ligne]) => ligne.sessions > 0)
+    .sort((un, autre) => autre[1].sessions - un[1].sessions)
+  const pages = visites.pages.slice(0, 5)
+  const pagesSeo = visites.pagesSeo.filter((page) => page.revenu > 0).slice(0, 5)
+  const listePages = (titre: string, lignes: typeof pages, vide: string) => (
+    <div>
+      <h3 className="m-0 text-sm font-semibold">{titre}</h3>
+      {lignes.length === 0 ? (
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">{vide}</p>
+      ) : (
+        <ul className="m-0 mt-2 grid list-none gap-2 p-0">
+          {lignes.map((page) => (
+            <li key={page.page} className="grid gap-0.5">
+              <span className="text-sm break-all">{page.page}</span>
+              <span className="text-xs text-[var(--color-ink-soft)]">
+                {nombre(page.sessions)} visites · {nombre(page.achats)} achat{page.achats > 1 ? 's' : ''} · {argent(page.revenu, devise)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+  return (
+    <Card>
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Appareils et pages</h2>
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">Selon Google Analytics 4, sur la période.</p>
+        <dl className="m-0 mt-3 grid grid-cols-3 gap-x-3 gap-y-2">
+          {appareils.map(([appareil, ligne]) => (
+            <Chiffre
+              key={appareil}
+              label={`${NOM_APPAREIL[appareil] ?? appareil} — ${nombre(ligne.sessions)} visites`}
+              valeur={`${nombre((ligne.achats / ligne.sessions) * 100, 1)} % achètent`}
+            />
+          ))}
+        </dl>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {listePages('Pages d’entrée les plus visitées', pages, 'Aucune page relevée.')}
+          {listePages('Pages qui vendent depuis Google', pagesSeo, 'Aucun achat venu de la recherche naturelle sur la période.')}
+        </div>
       </CardBody>
     </Card>
   )

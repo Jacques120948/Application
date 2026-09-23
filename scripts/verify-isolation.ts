@@ -53,6 +53,8 @@ const PROTECTED_TABLES = [
   'CommerceJour',
   'CommerceSynchro',
   'NovaReglages',
+  'AnalyticsJour',
+  'AnalyticsSynchro',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',

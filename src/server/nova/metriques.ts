@@ -159,6 +159,81 @@ export type Donnees = {
   }
   /** Search Console : des cumuls sur 28 jours, seule forme qu'Evoliia conserve. */
   recherche: { clics28: number; clics28Avant: number | null; au: string } | null
+  /** Google Analytics 4, quand il est relié. Même règle de couverture que les ventes. */
+  visites?: { disponibles: boolean; couvertureDepuis: string | null; jours: JourVisites[] }
+}
+
+export type CanalSessions = { sessions: number; achats: number; revenu: number; origines: Record<string, number> }
+export type PageSessions = { page: string; sessions: number; achats: number; revenu: number }
+
+/** Une journée de visites GA4, en unités de la devise de la propriété. */
+export type JourVisites = {
+  jour: string
+  sessions: number
+  sessionsEngagees: number
+  achats: number
+  revenu: number
+  canaux: Partial<Record<CanalNova, CanalSessions>>
+  appareils: Record<string, { sessions: number; achats: number }>
+  pages: PageSessions[]
+  pagesSeo: PageSessions[]
+}
+
+export type CumulVisites = {
+  sessions: number
+  sessionsEngagees: number
+  achats: number
+  revenu: number
+  canaux: Partial<Record<CanalNova, CanalSessions>>
+  appareils: Record<string, { sessions: number; achats: number }>
+  pages: PageSessions[]
+  pagesSeo: PageSessions[]
+}
+
+function cumulerPages(cible: Map<string, PageSessions>, pages: readonly PageSessions[]): void {
+  for (const page of pages) {
+    const deja = cible.get(page.page) ?? { page: page.page, sessions: 0, achats: 0, revenu: 0 }
+    deja.sessions += page.sessions
+    deja.achats += page.achats
+    deja.revenu += page.revenu
+    cible.set(page.page, deja)
+  }
+}
+
+/** Les visites d'une période, ou `null` si GA4 n'est pas relié ou ne couvre pas la période. */
+export function cumulVisites(visites: Donnees['visites'], bornes: { du: string; au: string }): CumulVisites | null {
+  if (visites === undefined || !visites.disponibles || visites.couvertureDepuis === null || bornes.du < visites.couvertureDepuis) {
+    return null
+  }
+  const total: CumulVisites = { sessions: 0, sessionsEngagees: 0, achats: 0, revenu: 0, canaux: {}, appareils: {}, pages: [], pagesSeo: [] }
+  const pages = new Map<string, PageSessions>()
+  const pagesSeo = new Map<string, PageSessions>()
+  for (const jour of visites.jours) {
+    if (!dansPeriode(jour.jour, bornes)) continue
+    total.sessions += jour.sessions
+    total.sessionsEngagees += jour.sessionsEngagees
+    total.achats += jour.achats
+    total.revenu += jour.revenu
+    for (const [canal, ligne] of Object.entries(jour.canaux) as [CanalNova, CanalSessions][]) {
+      const deja = total.canaux[canal] ?? { sessions: 0, achats: 0, revenu: 0, origines: {} }
+      deja.sessions += ligne.sessions
+      deja.achats += ligne.achats
+      deja.revenu += ligne.revenu
+      for (const [origine, n] of Object.entries(ligne.origines)) deja.origines[origine] = (deja.origines[origine] ?? 0) + n
+      total.canaux[canal] = deja
+    }
+    for (const [appareil, ligne] of Object.entries(jour.appareils)) {
+      const deja = total.appareils[appareil] ?? { sessions: 0, achats: 0 }
+      deja.sessions += ligne.sessions
+      deja.achats += ligne.achats
+      total.appareils[appareil] = deja
+    }
+    cumulerPages(pages, jour.pages)
+    cumulerPages(pagesSeo, jour.pagesSeo)
+  }
+  total.pages = [...pages.values()].sort((une, autre) => autre.revenu - une.revenu || autre.sessions - une.sessions)
+  total.pagesSeo = [...pagesSeo.values()].sort((une, autre) => autre.revenu - une.revenu || autre.sessions - une.sessions)
+  return total
 }
 
 // ── Cumuls ───────────────────────────────────────────────────────────────────
@@ -288,9 +363,22 @@ export const MANQUE_VENTES = 'Connectez Shopify pour voir vos ventes réelles.'
 export const MANQUE_PUB = 'Aucun compte publicitaire relié.'
 export const MANQUE_CAC = 'Données insuffisantes pour calculer précisément votre coût d’acquisition client.'
 export const MANQUE_CONVERSION =
-  'Il faut le nombre de visites de votre site : Google Analytics 4 n’est pas encore relié à Evoliia.'
+  'Il faut le nombre de visites de votre site : connectez Google Analytics 4 depuis Connexions.'
 
-type Ensemble = { pub: CumulPub; ventes: CumulVentes | null; aDesRegies: boolean }
+type Ensemble = { pub: CumulPub; ventes: CumulVentes | null; aDesRegies: boolean; visites?: CumulVisites | null }
+
+/**
+ * Le taux de conversion : des commandes pour cent visites.
+ *
+ * Les commandes de la boutique quand elle est lue — ce sont les vraies ventes ; sinon, les
+ * achats que GA4 a vus. Les visites viennent toujours de GA4. Une décimale : 1,8 % et 2,4 %
+ * ne racontent pas la même boutique.
+ */
+export function tauxConversion(ventes: CumulVentes | null, visites: CumulVisites | null | undefined): number | null {
+  if (visites == null || visites.sessions === 0) return null
+  const commandes = ventes?.commandes ?? visites.achats
+  return Math.round((commandes / visites.sessions) * 1000) / 10
+}
 
 function valeursKpi(ensemble: Ensemble): Record<Kpi['cle'], number | null> {
   const { pub, ventes, aDesRegies } = ensemble
@@ -314,7 +402,7 @@ function valeursKpi(ensemble: Ensemble): Record<Kpi['cle'], number | null> {
     cpa: !aDesRegies || ventes === null || ventes.commandes === 0 ? null : arrondi(pub.depense / ventes.commandes),
     cac,
     panier: ventes === null || ventes.commandes === 0 ? null : arrondi(ventes.chiffre / ventes.commandes),
-    conversion: null,
+    conversion: tauxConversion(ventes, ensemble.visites),
   }
 }
 
@@ -371,7 +459,14 @@ export function indicateursNova(actuel: Ensemble, precedent: Ensemble, manqueVen
     ),
     kpi('cac', 'CAC', 'argent', 'baisse', 'Dépenses ÷ nouveaux clients Shopify', MANQUE_CAC),
     kpi('panier', 'Panier moyen', 'argent', 'hausse', 'Chiffre d’affaires ÷ commandes', manqueVentes),
-    kpi('conversion', 'Taux de conversion', 'pourcent', 'hausse', 'Commandes ÷ visites', MANQUE_CONVERSION),
+    kpi(
+      'conversion',
+      'Taux de conversion',
+      'pourcent',
+      'hausse',
+      avecVentes ? 'Commandes Shopify ÷ visites GA4' : 'Achats ÷ visites, selon GA4',
+      MANQUE_CONVERSION,
+    ),
   ]
 }
 
@@ -380,6 +475,7 @@ export function ensemble(donnees: Donnees, bornes: { du: string; au: string }): 
     pub: cumulPub(donnees.campagnes, bornes, (ligne) => donnees.regies.includes(ligne.plateforme)),
     ventes: cumulVentes(donnees.ventes, bornes),
     aDesRegies: donnees.regies.length > 0,
+    visites: cumulVisites(donnees.visites, bornes),
   }
 }
 
@@ -402,6 +498,10 @@ export type LigneCanal = {
   roas: number | null
   /** Conversions ÷ clics, pour une régie. Ailleurs, il faudrait le nombre de visites. */
   tauxConversion: number | null
+  /** Sessions GA4 de ce canal, `null` sans GA4. */
+  sessions: number | null
+  /** Achats ÷ sessions de ce canal, selon GA4, en pour cent à une décimale. */
+  conversionGa4: number | null
   /** Les étiquettes d'origine regroupées dans ce canal, les plus fréquentes d'abord. */
   origines: string[]
 }
@@ -417,14 +517,16 @@ export function performanceCanaux(
   donnees: Donnees,
   bornes: { du: string; au: string },
   ventes: CumulVentes | null,
+  visites: CumulVisites | null = null,
 ): LigneCanal[] {
   const lignes: LigneCanal[] = []
   for (const canal of CANAUX) {
     const vues = ventes?.canaux[canal] ?? null
+    const ga4 = visites?.canaux[canal] ?? null
     const payant = canal === 'google-ads' || canal === 'meta-ads'
     const pub = payant && donnees.regies.includes(canal) ? cumulPub(donnees.campagnes, bornes, (l) => l.plateforme === canal) : null
     const seo = canal === 'seo' ? donnees.recherche : null
-    if (vues === null && pub === null && seo === null) continue
+    if (vues === null && pub === null && seo === null && ga4 === null) continue
     lignes.push({
       canal,
       nom: NOM_CANAL[canal],
@@ -438,6 +540,8 @@ export function performanceCanaux(
       cpa: pub === null || pub.conversions === 0 ? null : arrondi(pub.depense / pub.conversions),
       roas: pub === null ? null : enPourcent(pub.valeur, pub.depense),
       tauxConversion: pub === null || pub.clics === 0 ? null : arrondi((pub.conversions / pub.clics) * 100, 1),
+      sessions: ga4?.sessions ?? (visites === null ? null : 0),
+      conversionGa4: ga4 === null || ga4.sessions === 0 ? null : arrondi((ga4.achats / ga4.sessions) * 100, 1),
       origines: Object.entries(vues?.origines ?? {})
         .sort((un, autre) => autre[1] - un[1])
         .slice(0, 5)

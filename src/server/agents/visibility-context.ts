@@ -1,6 +1,7 @@
 import { contextePublicitaire } from '@/server/ads/contexte'
 import { lireNova } from '@/server/nova/service'
 import { faitsNova, transmissionOria } from '@/server/nova/contexte'
+import { pagesSeoPourNeo, traficAssistantsPourGia } from '@/server/nova/transmission'
 import { lireSignaux } from '@/server/oria/signaux'
 import { lireDecisions } from '@/server/oria/decisions'
 import { comparer, lireBudgets, lirePlateformes, repartition, NOM_POSTE } from '@/server/oria/budget'
@@ -397,18 +398,22 @@ export async function readSiteFacts(
     return [...base, ...(await constats(userId, siteId, null))].join('\n')
   }
   if (agent === 'seo') {
+    const nova = await pagesSeoPourNeo(userId)
     return [
       ...base,
       ...(await constats(userId, siteId, 'seo')),
       ...(await pages(userId, siteId, 'balises')),
       ...(await recherches(userId, siteId)),
+      ...(nova === null ? [] : [nova]),
     ].join('\n')
   }
   if (agent === 'geo') {
+    const nova = await traficAssistantsPourGia(userId)
     return [
       ...base,
       ...(await constats(userId, siteId, 'geo')),
       ...(await pages(userId, siteId, 'machine')),
+      ...(nova === null ? [] : [nova]),
     ].join('\n')
   }
   /*

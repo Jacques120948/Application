@@ -60,6 +60,8 @@ model User {
   ventesJour           CommerceJour[]
   synchrosVentes       CommerceSynchro[]
   reglagesNova         NovaReglages?
+  visitesJour          AnalyticsJour[]
+  synchroVisites       AnalyticsSynchro?
   supportAlerts    Boolean   @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId String?   @unique
@@ -2526,6 +2528,57 @@ model NovaReglages {
   objectifs Json   @default("{}")
   /// { coutProduitPct, livraisonParCommande, paiementPct, paiementFixe, commissionPct, autresPct }
   couts     Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Les visites d'une propriété Google Analytics 4, un jour, agrégées pour Nova.
+model AnalyticsJour {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @db.Uuid
+  /// « properties/123 ».
+  propriete        String
+  /// Le jour, dans le fuseau de la propriété.
+  jour             DateTime @db.Date
+  sessions         Int      @default(0)
+  sessionsEngagees Int      @default(0)
+  /// Achats vus par GA4 (événement purchase). Peut différer des commandes de la boutique.
+  achats           Int      @default(0)
+  revenuCents      BigInt   @default(0)
+  /// { canal: { sessions, achats, revenuCents, origines: { "source / medium": sessions } } }
+  canaux           Json     @default("{}")
+  /// { mobile|desktop|tablet: { sessions, achats } }
+  appareils        Json     @default("{}")
+  /// [{ page, sessions, achats, revenuCents }] — pages d'entrée, tous canaux.
+  pages            Json     @default("[]")
+  /// Même forme, pour les seules visites venues de la recherche naturelle.
+  pagesSeo         Json     @default("[]")
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, propriete, jour])
+  @@index([userId, jour(sort: Desc)])
+}
+
+/// La propriété GA4 suivie par Nova, et l'état de sa dernière lecture.
+model AnalyticsSynchro {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @unique @db.Uuid
+  propriete        String    @default("")
+  nom              String    @default("")
+  /// jamais | ok | erreur
+  etat             String    @default("jamais")
+  message          String    @default("")
+  synchroAt        DateTime?
+  essaiAt          DateTime?
+  couvertureDepuis DateTime? @db.Date
+  devise           String    @default("")
+  fuseau           String    @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

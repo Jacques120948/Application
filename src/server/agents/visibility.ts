@@ -317,7 +317,7 @@ export const VISIBILITY_AGENTS: readonly VisibilityAgent[] = [
      * attendre un chiffre d'affaires qui n'arrivera pas.
      */
     atWork:
-      'Elle rassemble vos ventes Shopify, vos dépenses Google Ads et Meta Ads et vos clics Google, calcule ce qui rapporte réellement et signale ce qui change. Sans boutique reliée, elle ne voit que ce que déclarent les régies.',
+      'Elle rassemble vos ventes Shopify, vos visites Google Analytics 4, vos dépenses Google Ads et Meta Ads et vos clics Google, calcule ce qui rapporte réellement et signale ce qui change. Sans boutique reliée, elle ne voit que ce que déclarent les régies.',
     starters: [
       'Quel canal me rapporte le plus ?',
       'Quel est mon vrai ROAS ?',

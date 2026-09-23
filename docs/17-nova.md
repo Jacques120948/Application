@@ -33,7 +33,7 @@ Sources ─► Collecte ─► Normalisation ─► Moteur de métriques ─► 
   En pour cent entiers, comme chez Naya et MIRA.
 - **CAC** = dépenses ÷ nouveaux clients, seulement si Shopify dit quelles commandes sont
   des premières commandes (`customerOrderIndex`, à défaut un client à une seule commande).
-- **Taux de conversion** : absent tant que Google Analytics 4 n'est pas relié.
+- **Taux de conversion** = commandes Shopify ÷ visites GA4, seulement quand les deux sources couvrent la période. Absent sans Google Analytics 4.
 - **Devises** : celle de la boutique fait référence ; un compte tenu dans une autre est
   écarté des totaux et signalé.
 - **Périodes** : 7, 30 et 90 jours s'arrêtent hier ; « aujourd'hui » se dit partiel ;
@@ -96,9 +96,25 @@ Shopify range les commandes parmi les « données client protégées » : en plu
 `read_orders`, l'application doit en déclarer l'accès (Dev Dashboard → API access). Le refus
 correspondant est reconnu et expliqué à l'écran.
 
+## V3 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Connecteur GA4 | `integrations/providers/google-analytics.ts`, `api/connexions/google-analytics`, `api/nova/ga4` | OAuth Google existant, portée `analytics.readonly` (lecture seule). Choix de la propriété dans Nova ; proposée d'office quand son site correspond. Aucun mot de passe demandé, le jeton reste chiffré côté serveur. |
+| Collecte GA4 | `nova/collecte-ga4.ts`, `agregat-ga4.ts`, tables `AnalyticsJour` / `AnalyticsSynchro` (RLS) | Mêmes règles de cache que Shopify (12 h, 30 min après échec, 2 min entre deux clics, 180 jours). Totaux par jour, canal, appareil et page d'entrée — aucune donnée personnelle. |
+| Canaux GA4 | `nova/canaux.ts` (`canalGa4`) | Le regroupement de canaux GA4 est ramené aux canaux de Nova ; les assistants IA reconnus par leur source. Sessions et conversion GA4 affichées à côté des ventes boutique, jamais additionnées. |
+| Conversion et appareils | `metriques.ts`, `analyse.ts` | Taux de conversion global, par canal et par appareil. Écart mobile / ordinateur signalé à partir de volumes minimaux ; trafic sans ventes relevé. |
+| Cohérence | `service.ts` (`coherenceVisites`) | Achats GA4 comparés aux commandes Shopify : écart important et part non attribuée signalés dans la santé des données. |
+| Écarts inhabituels | `analyse.ts` (`detecterEcarts`) | Dernier jour de la période comparé aux 28 jours précédents (moyenne et écart-type) : alerte à partir de 2,5 écarts-types, avec un volume minimal, et seulement si les 28 jours sont couverts. Les baisses déjà signalées ailleurs ne sont pas répétées. |
+| Transmission | `nova/transmission.ts`, `delegation.ts`, `api/nova/deleguer` | Trafic des assistants IA → Gia ; pages d'entrée SEO qui vendent → Néo ; alertes et opportunités transmissibles à Cleo, Naya, MIRA, Néo, Gia. Le serveur relit le point sur la période affichée ; une transmission est une question au spécialiste (prix sur le bouton), rien ne part sans clic. Le fil d'activité d'Oria l'affiche. |
+
+GA4 est gratuit pour Evoliia : les quotas sont comptés par propriété du client, pas sur un
+compte Evoliia. Prérequis Google Cloud : activer « Google Analytics Admin API » et
+« Google Analytics Data API », ajouter la portée `analytics.readonly` à l'écran de
+consentement OAuth.
+
 ## Encore à venir
 
-Google Analytics 4 (visites, taux de conversion, parcours complet, modèles linéaire et en
-position), WooCommerce, Stripe (MRR, churn), CRM (leads, CPL), coûts par produit, cohortes
-mensuelles, prévisions au-delà du mois, détection d'anomalies statistique (écarts-types),
-analyse des audiences.
+WooCommerce, Stripe (MRR, churn), CRM (leads, CPL), modèles linéaire et en position à partir
+des chemins GA4, coûts par produit, cohortes mensuelles, prévisions au-delà du mois, analyse
+des audiences.

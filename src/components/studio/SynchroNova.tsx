@@ -65,9 +65,9 @@ export function SynchroNova({
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-ink-soft)]">
       <span>
         {etat === 'lecture'
-          ? 'Lecture des ventes Shopify…'
+          ? 'Lecture de vos ventes et de vos visites…'
           : derniere === null
-            ? 'Ventes Shopify pas encore lues.'
+            ? 'Données pas encore lues.'
             : `Dernière synchronisation : ${derniere}`}
       </span>
       <Button variant="ghost" disabled={etat === 'lecture'} onClick={() => void relire('manuel')} className="px-2 py-1 text-xs">

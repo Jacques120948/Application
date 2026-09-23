@@ -138,6 +138,42 @@ export const INTEGRATION_PROVIDERS: readonly IntegrationProvider[] = [
     reviewedOn: '2026-09-19',
   },
   {
+    id: 'google-analytics',
+    name: 'Google Analytics 4',
+    category: 'google',
+    summary: 'Vos visites : combien, d’où elles viennent, sur quel appareil, et combien achètent.',
+    usage:
+      'Lire vos visites par canal, par appareil et par page d’entrée, pour que Nova calcule votre vrai taux de conversion et repère les pages qui vendent. Des totaux par jour, jamais un visiteur.',
+    status: 'available',
+    credential: 'OAUTH',
+    connectionTarget: 'EVOLIIA',
+    // Lecture seule : ni événement créé, ni propriété modifiée, ni utilisateur ajouté.
+    scopes: ['https://www.googleapis.com/auth/analytics.readonly'],
+    costToEvoliia: 'aucun',
+    costToCreator: 'gratuit',
+    costNotice:
+      'Google Analytics et son interface de données sont gratuits, et c’est votre propriété qui est interrogée. Evoliia ne paie rien, vous non plus.',
+    freeQuota:
+      'Sans frais. Google borne les demandes par propriété et par jour ; Evoliia lit une fois toutes les douze heures au plus, très loin de la limite.',
+    webhooks: false,
+    providerReview:
+      'Même écran de consentement Google que Search Console. La portée en lecture seule doit y être ajoutée, et l’écran vérifié avant d’ouvrir la connexion à d’autres comptes que ceux déclarés en test.',
+    risk:
+      'Evoliia lit des totaux, elle ne peut rien changer dans Analytics. Vous pouvez révoquer l’accès à tout moment depuis votre compte Google.',
+    guide: {
+      url: 'https://analytics.google.com/',
+      urlLabel: 'Ouvrir Google Analytics',
+      steps: [
+        'Votre site doit envoyer ses visites à une propriété Google Analytics 4. Pour une boutique Shopify, c’est l’application Google & YouTube qui s’en charge.',
+        'Revenez ici et cliquez « Connecter Google Analytics 4 ».',
+        'Google vous demande d’autoriser la lecture. C’est chez Google que vous vous identifiez : Evoliia ne voit jamais votre mot de passe.',
+        'Nova choisit la propriété qui correspond à votre site ; vous pouvez en changer depuis son écran.',
+      ],
+      caution: 'Les chiffres de la veille se complètent dans la journée chez Google : Nova les relit au plus tard douze heures après.',
+    },
+    reviewedOn: '2026-09-23',
+  },
+  {
     id: 'google-ads',
     name: 'Google Ads',
     category: 'google',

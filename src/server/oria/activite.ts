@@ -157,10 +157,10 @@ export async function lireActivite(
       : sans(
           withUserScope(userId, (tx) =>
             tx.visibilityNote.findMany({
-              where: { userId, siteId, demandePar: 'oria' },
+              where: { userId, siteId, demandePar: { in: ['oria', 'nova'] } },
               orderBy: { createdAt: 'desc' },
               take: limite,
-              select: { createdAt: true, agent: true },
+              select: { createdAt: true, agent: true, demandePar: true },
             }),
           ),
           [],
@@ -223,11 +223,14 @@ export async function lireActivite(
   for (const delegation of delegations) {
     const destinataire = NOMS[delegation.agent]
     if (destinataire === undefined) continue
+    const nova = delegation.demandePar === 'nova'
     fil.push({
       quand: delegation.createdAt,
-      qui: 'oria',
+      qui: nova ? 'nova' : 'oria',
       genre: 'action',
-      quoi: `Oria a transmis une priorité à ${destinataire}, qui a répondu.`,
+      quoi: nova
+        ? `Nova a transmis une mesure à ${destinataire}, qui a répondu.`
+        : `Oria a transmis une priorité à ${destinataire}, qui a répondu.`,
     })
   }
 

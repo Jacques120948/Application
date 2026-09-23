@@ -147,3 +147,44 @@ export function canalDeVisite(visite: VisiteShopify | null): Attribution {
   if (hote !== '') return { canal: 'referral', origine, assistant: null }
   return { canal: 'direct', origine: 'direct', assistant: null }
 }
+
+/**
+ * Le canal d'une session GA4, rangé dans les mêmes catégories que les commandes Shopify.
+ *
+ * Google range déjà chaque session dans un « groupe de canaux par défaut ». On le suit, avec
+ * trois corrections qui gardent les deux sources comparables : les assistants IA ont leur
+ * catégorie (Google les range en « Referral ») ; le payant n'est attribué à Google Ads ou à
+ * Meta Ads que si la source le dit ; ce que Google ne sait pas ranger reste « non attribué ».
+ */
+export function canalGa4(groupe: string, source: string, medium: string): Attribution {
+  const origine = `${source === '' ? '(inconnue)' : source} / ${medium === '' ? '(none)' : medium}`
+  const hote = source.includes('.') ? source.toLowerCase().replace(/^www\./u, '') : ''
+  const assistant = assistantDe(hote, source)
+  if (assistant !== null) return { canal: 'ia', origine, assistant }
+  const nom = normaliserSource(source)
+  switch (groupe) {
+    case 'Paid Search':
+    case 'Paid Shopping':
+      return { canal: nom === 'google' ? 'google-ads' : 'autres', origine, assistant: null }
+    case 'Paid Social':
+      return { canal: nom === 'meta' ? 'meta-ads' : 'autres', origine, assistant: null }
+    case 'Organic Search':
+    case 'Organic Shopping':
+      return { canal: 'seo', origine, assistant: null }
+    case 'Organic Social':
+    case 'Organic Video':
+      return { canal: 'social', origine, assistant: null }
+    case 'Email':
+      return { canal: 'email', origine, assistant: null }
+    case 'Direct':
+      return { canal: 'direct', origine: 'direct', assistant: null }
+    case 'Referral':
+      return { canal: 'referral', origine, assistant: null }
+    case 'Unassigned':
+    case '(not set)':
+    case '':
+      return { canal: 'inconnu', origine, assistant: null }
+    default:
+      return { canal: 'autres', origine, assistant: null }
+  }
+}

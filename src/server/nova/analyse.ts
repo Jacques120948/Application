@@ -7,6 +7,8 @@ import {
   type Attribution,
   type CumulPub,
   type CumulVentes,
+  type CumulVisites,
+  tauxConversion,
   type Donnees,
   type LigneCampagne,
   type LigneProduit,
@@ -35,6 +37,9 @@ export type Contexte = {
   jours: number
   ventes: CumulVentes | null
   ventesAvant: CumulVentes | null
+  /** Les visites GA4, quand GA4 est relié et couvre la période. */
+  visites?: CumulVisites | null
+  visitesAvant?: CumulVisites | null
   attribution: Attribution
   campagnes: LigneCampagne[]
   produits: LigneProduit[]
@@ -49,7 +54,46 @@ export const SEUILS = {
   depenseMin: 50,
   partProduit: 0.2,
   nonAttribue: 0.3,
+  sessionsAppareil: 200,
+  sessionsTendance: 500,
 } as const
+
+/** Le taux de conversion d'un appareil, en pour cent, s'il y a assez de visites pour qu'il dise quelque chose. */
+function tauxAppareil(visites: CumulVisites, appareil: string): number | null {
+  const ligne = visites.appareils[appareil]
+  if (ligne === undefined || ligne.sessions < SEUILS.sessionsAppareil) return null
+  return (ligne.achats / ligne.sessions) * 100
+}
+
+function fmt(valeur: number): string {
+  return new Intl.NumberFormat('fr-CH', { maximumFractionDigits: 1 }).format(valeur)
+}
+
+/** Mobile nettement en dessous de l'ordinateur : l'écart que Cleo peut réduire. */
+function ecartMobile(visites: CumulVisites | null | undefined): { mobile: number; ordinateur: number; part: number } | null {
+  if (visites == null || visites.achats < 10) return null
+  const mobile = tauxAppareil(visites, 'mobile')
+  const ordinateur = tauxAppareil(visites, 'desktop')
+  if (mobile === null || ordinateur === null || ordinateur === 0 || mobile > ordinateur * 0.7) return null
+  return { mobile, ordinateur, part: (visites.appareils.mobile?.sessions ?? 0) / visites.sessions }
+}
+
+/** Le trafic de recherche monte, les commandes non : sessions GA4 d'abord, clics Search Console à défaut. */
+function traficSansVentes(ctx: Contexte): { hausse: number; source: string } | null {
+  if (ctx.ventes === null || ctx.ventesAvant === null || ctx.ventesAvant.commandes < SEUILS.commandesMin) return null
+  const commandes = variation(ctx.ventes.commandes, ctx.ventesAvant.commandes)
+  if (commandes === null || Math.abs(commandes) > 5) return null
+  if (ctx.visites != null && ctx.visitesAvant != null && ctx.visitesAvant.sessions >= SEUILS.sessionsTendance) {
+    const hausse = variation(ctx.visites.sessions, ctx.visitesAvant.sessions)
+    return hausse !== null && hausse >= 20 ? { hausse, source: 'Visites GA4 comparées à la période précédente ; commandes Shopify.' } : null
+  }
+  const recherche = ctx.donnees.recherche
+  if (recherche === null || recherche.clics28Avant === null) return null
+  const hausse = variation(recherche.clics28, recherche.clics28Avant)
+  return hausse !== null && hausse >= 20
+    ? { hausse, source: 'Clics Search Console sur 28 jours, comparés aux 28 jours d’avant ; commandes Shopify sur la période.' }
+    : null
+}
 
 function pourcent(valeur: number): string {
   return `${Math.round(Math.abs(valeur))} %`
@@ -149,19 +193,25 @@ export function detecterInsights(ctx: Contexte): Insight[] {
     }
   }
 
-  // Le trafic de recherche monte, les ventes non : la question est pour Cleo.
-  const recherche = ctx.donnees.recherche
-  if (recherche !== null && recherche.clics28Avant !== null && ctx.ventes !== null && ctx.ventesAvant !== null) {
-    const trafic = variation(recherche.clics28, recherche.clics28Avant)
-    const commandes = variation(ctx.ventes.commandes, ctx.ventesAvant.commandes)
-    if (trafic !== null && trafic >= 20 && commandes !== null && Math.abs(commandes) <= 5 && ctx.ventesAvant.commandes >= SEUILS.commandesMin) {
-      trouves.push({
-        cle: 'seo.trafic-sans-ventes',
-        texte: `Le trafic Google augmente de ${pourcent(trafic)} mais les commandes restent stables.`,
-        fondement: 'Clics Search Console sur 28 jours, comparés aux 28 jours d’avant ; commandes Shopify sur la période.',
-        ton: 'attention',
-      })
-    }
+  // Le trafic monte, les ventes non : la question est pour Cleo.
+  const sansVentes = traficSansVentes(ctx)
+  if (sansVentes !== null) {
+    trouves.push({
+      cle: 'trafic-sans-ventes',
+      texte: `Le trafic a augmenté de ${pourcent(sansVentes.hausse)}, mais les ventes restent stables.`,
+      fondement: sansVentes.source,
+      ton: 'attention',
+    })
+  }
+
+  const mobile = ecartMobile(ctx.visites)
+  if (mobile !== null) {
+    trouves.push({
+      cle: 'conversion.mobile',
+      texte: `Votre taux de conversion mobile (${fmt(mobile.mobile)} %) est inférieur à celui sur ordinateur (${fmt(mobile.ordinateur)} %).`,
+      fondement: `Achats ÷ visites par appareil, selon GA4. Le mobile fait ${Math.round(mobile.part * 100)} % des visites.`,
+      ton: 'attention',
+    })
   }
 
   const premier = ctx.produits[0]
@@ -174,6 +224,15 @@ export function detecterInsights(ctx: Contexte): Insight[] {
     })
   }
 
+  const iaVisites = ctx.visites?.canaux.ia
+  if (iaVisites !== undefined && iaVisites.sessions > 0 && (ctx.ventes?.canaux.ia?.commandes ?? 0) === 0) {
+    trouves.push({
+      cle: 'ia.visites',
+      texte: `${iaVisites.sessions} visite${iaVisites.sessions > 1 ? 's sont venues' : ' est venue'} d’assistants IA (${Object.keys(iaVisites.origines).map((o) => o.split(' / ')[0]).slice(0, 3).join(', ')}).`,
+      fondement: 'Sessions GA4 dont la source est un assistant reconnu.',
+      ton: 'neutre',
+    })
+  }
   const ia = ctx.ventes?.canaux.ia
   if (ia !== undefined && ia.commandes > 0) {
     const assistants = Object.keys(ia.origines).slice(0, 3).join(', ')
@@ -302,8 +361,121 @@ export function detecterAlertes(ctx: Contexte): Alerte[] {
     }
   }
 
+  // Le taux de conversion qui décroche, à trafic comparable : GA4 seul peut le voir.
+  if (ctx.visites != null && ctx.visitesAvant != null && ctx.visitesAvant.sessions >= SEUILS.sessionsTendance && ctx.visites.sessions >= SEUILS.sessionsTendance) {
+    const avant = tauxConversion(ctx.ventesAvant, ctx.visitesAvant)
+    const maintenant = tauxConversion(ctx.ventes, ctx.visites)
+    const ecart = variation(maintenant, avant)
+    if (ecart !== null && ecart <= -25 && (ctx.ventesAvant?.commandes ?? ctx.visitesAvant.achats) >= 10) {
+      alertes.push({
+        cle: 'conversion.baisse',
+        niveau: 'orange',
+        texte: 'Votre taux de conversion a baissé de manière inhabituelle.',
+        fondement: `${fmt(avant!)} % la période précédente, ${fmt(maintenant!)} % sur celle-ci (commandes ÷ visites GA4).`,
+        agent: 'cro',
+      })
+    }
+  }
+
+  // Le dernier jour de la période, comparé à ses quatre semaines.
+  alertes.push(...detecterEcarts(ctx))
+
   const rang = { rouge: 0, orange: 1, vert: 2 } as const
   return alertes.sort((une, autre) => rang[une.niveau] - rang[autre.niveau]).slice(0, ALERTES_MAX)
+}
+
+// ── Écarts inhabituels ───────────────────────────────────────────────────────
+
+/** Le nombre d'écarts-types au-delà duquel une journée est dite inhabituelle. */
+export const Z_SEUIL = 2.5
+/** Les jours de référence : quatre semaines, pour que chaque jour de la semaine y figure. */
+export const JOURS_REFERENCE = 28
+
+export type Ecart = { valeur: number; moyenne: number; ecartType: number; z: number }
+
+/**
+ * Une journée comparée aux vingt-huit précédentes : moyenne et écart-type.
+ *
+ * Rien de plus savant, et c'est voulu : une règle qu'on peut refaire à la main se discute,
+ * un modèle ne se discute pas. Les jours sans valeur comptent pour zéro — une série de ventes
+ * n'a pas de trou, elle a des jours sans vente. `null` quand il manque des jours de référence
+ * ou que la série ne varie jamais.
+ */
+export function ecartDuJour(serie: ReadonlyMap<string, number>, jour: string, veille: (jour: string, n: number) => string): Ecart | null {
+  const valeurs: number[] = []
+  for (let n = 1; n <= JOURS_REFERENCE; n += 1) valeurs.push(serie.get(veille(jour, n)) ?? 0)
+  const moyenne = valeurs.reduce((a, b) => a + b, 0) / valeurs.length
+  const variance = valeurs.reduce((total, valeur) => total + (valeur - moyenne) ** 2, 0) / valeurs.length
+  const ecartType = Math.sqrt(variance)
+  if (ecartType === 0) return null
+  const valeur = serie.get(jour) ?? 0
+  return { valeur, moyenne, ecartType, z: (valeur - moyenne) / ecartType }
+}
+
+function jourAvant(jour: string, n: number): string {
+  return new Date(Date.parse(jour) - n * 86_400_000).toISOString().slice(0, 10)
+}
+
+/**
+ * Les journées inhabituelles, pour le dernier jour de la période.
+ *
+ * Trois séries seulement : commandes et chiffre d'affaires de la boutique, visites de GA4.
+ * Les dépenses publicitaires ont déjà leurs anomalies chez Oria (arrêt, envolée du coût par
+ * clic) ; les répéter ici ferait deux alertes pour une panne. Un volume minimal écarte les
+ * boutiques où un seul jour sans vente passerait pour un effondrement.
+ */
+export function detecterEcarts(ctx: Contexte): Alerte[] {
+  // « Aujourd'hui » est une journée en cours : la comparer à des journées pleines la dirait toujours basse.
+  if (ctx.jours === 1) return []
+  const jour = ctx.bornes.au
+  const alertes: Alerte[] = []
+  const couvert = (depuis: string | null) => depuis !== null && jourAvant(jour, JOURS_REFERENCE) >= depuis
+
+  const series: { cle: string; quoi: string; serie: Map<string, number>; minimum: number; format: (v: number) => string; agent: IdMembre }[] = []
+  if (ctx.donnees.ventes.disponibles && couvert(ctx.donnees.ventes.couvertureDepuis)) {
+    series.push({
+      cle: 'commandes',
+      quoi: 'le nombre de commandes',
+      serie: new Map(ctx.donnees.ventes.jours.map((un) => [un.jour, un.commandes])),
+      minimum: 3,
+      format: (v) => fmt(v),
+      agent: 'cro',
+    })
+    series.push({
+      cle: 'chiffre',
+      quoi: 'le chiffre d’affaires',
+      serie: new Map(ctx.donnees.ventes.jours.map((un) => [un.jour, un.chiffre])),
+      minimum: 100,
+      format: (v) => argent(v, ctx.donnees.devise),
+      agent: 'cro',
+    })
+  }
+  const visites = ctx.donnees.visites
+  if (visites !== undefined && visites.disponibles && couvert(visites.couvertureDepuis)) {
+    series.push({
+      cle: 'visites',
+      quoi: 'le nombre de visites',
+      serie: new Map(visites.jours.map((un) => [un.jour, un.sessions])),
+      minimum: 30,
+      format: (v) => fmt(v),
+      agent: 'audit',
+    })
+  }
+
+  for (const { cle, quoi, serie, minimum, format, agent } of series) {
+    const ecart = ecartDuJour(serie, jour, jourAvant)
+    if (ecart === null || ecart.moyenne < minimum || Math.abs(ecart.z) < Z_SEUIL) continue
+    const bas = ecart.z < 0
+    alertes.push({
+      cle: `ecart.${cle}`,
+      niveau: bas ? 'orange' : 'vert',
+      texte: `Le ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(jour))}, ${quoi} a été inhabituellement ${bas ? 'bas' : 'élevé'}.`,
+      fondement: `${format(ecart.valeur)} ce jour-là, pour ${format(ecart.moyenne)} en moyenne sur les ${JOURS_REFERENCE} jours précédents (écart de ${fmt(Math.abs(ecart.z))} fois la variation habituelle).`,
+      // Des visites qui s'effondrent d'un coup : souvent une panne ou un suivi cassé, ce que Léa vérifie.
+      agent,
+    })
+  }
+  return alertes
 }
 
 // ── Opportunités ─────────────────────────────────────────────────────────────
@@ -352,20 +524,43 @@ export function detecterOpportunites(ctx: Contexte, locale: string, siteId: stri
     })
   }
 
-  const recherche = ctx.donnees.recherche
-  if (recherche !== null && recherche.clics28Avant !== null && ctx.ventes !== null && ctx.ventesAvant !== null) {
-    const trafic = variation(recherche.clics28, recherche.clics28Avant)
-    const commandes = variation(ctx.ventes.commandes, ctx.ventesAvant.commandes)
-    if (trafic !== null && trafic >= 20 && commandes !== null && Math.abs(commandes) <= 5 && ctx.ventesAvant.commandes >= SEUILS.commandesMin) {
-      trouvees.push({
-        cle: 'cleo.conversion',
-        titre: 'Plus de visiteurs, pas plus de ventes',
-        pourquoi: `Le trafic Google a augmenté de ${pourcent(trafic)} sans que les commandes suivent. Cleo peut chercher ce qui retient les visiteurs d’acheter.`,
-        impact: 'eleve',
-        agent: 'cro',
-        cta: voirAvec('cro', locale, siteId),
-      })
-    }
+  const sansVentes = traficSansVentes(ctx)
+  if (sansVentes !== null) {
+    trouvees.push({
+      cle: 'cleo.conversion',
+      titre: 'Plus de visiteurs, pas plus de ventes',
+      pourquoi: `Le trafic a augmenté de ${pourcent(sansVentes.hausse)} sans que les commandes suivent. Cleo peut chercher ce qui retient les visiteurs d’acheter.`,
+      impact: 'eleve',
+      agent: 'cro',
+      cta: voirAvec('cro', locale, siteId),
+    })
+  }
+
+  const mobile = ecartMobile(ctx.visites)
+  if (mobile !== null) {
+    trouvees.push({
+      cle: 'cleo.mobile',
+      titre: 'L’expérience mobile coûte des ventes',
+      pourquoi: `Sur mobile, ${fmt(mobile.mobile)} % des visites achètent, contre ${fmt(mobile.ordinateur)} % sur ordinateur — et le mobile fait ${Math.round(mobile.part * 100)} % du trafic. Cleo peut regarder les pages sur téléphone.`,
+      impact: mobile.part >= 0.5 ? 'eleve' : 'moyen',
+      agent: 'cro',
+      cta: voirAvec('cro', locale, siteId),
+    })
+  }
+
+  // La page de recherche naturelle qui vend le plus : ce que Néo doit protéger en premier.
+  const pagesSeo = ctx.visites?.pagesSeo ?? []
+  const revenuSeo = pagesSeo.reduce((total, page) => total + page.revenu, 0)
+  const pageSeo = pagesSeo[0]
+  if (pageSeo !== undefined && revenuSeo > 0 && pageSeo.achats >= 3 && pageSeo.revenu / revenuSeo >= 0.15) {
+    trouvees.push({
+      cle: `seo.page.${pageSeo.page}`,
+      titre: `La page ${pageSeo.page} vend depuis Google`,
+      pourquoi: `Elle apporte ${pourcent((pageSeo.revenu / revenuSeo) * 100)} du CA venu de la recherche naturelle (${pageSeo.achats} achats, selon GA4). Néo peut la renforcer en priorité.`,
+      impact: 'moyen',
+      agent: 'seo',
+      cta: voirAvec('seo', locale, siteId),
+    })
   }
 
   if (ctx.ventes !== null && ctx.ventes.commandes >= SEUILS.commandesMin) {

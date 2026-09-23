@@ -129,6 +129,28 @@ export function faitsNova(vue: VueNova): string[] {
       ...vue.modeles.map((ligne) => `- ${ligne.nom} : ${nombre(ligne.chiffre.dernier, 2)} / ${nombre(ligne.chiffre.premier, 2)} / ${nombre(ligne.chiffre.partage, 2)}`),
     )
   }
+  if (vue.visitesPeriode === null) {
+    lignes.push(
+      vue.visites.etat === 'absent'
+        ? 'Visites : Google Analytics 4 n’est pas relié. Tu ne connais ni les visites, ni le taux de conversion, ni les appareils. Propose de le connecter si la question en dépend.'
+        : `Visites : pas encore lues ou période non couverte (${vue.visites.message || 'actualiser'}).`,
+    )
+  } else {
+    const v = vue.visitesPeriode
+    const appareils = Object.entries(v.appareils)
+      .filter(([, ligne]) => ligne.sessions > 0)
+      .map(([appareil, ligne]) => `${appareil} ${ligne.sessions} visites, ${nombre((ligne.achats / ligne.sessions) * 100, 1)} % achètent`)
+    lignes.push(
+      `Visites GA4 sur la période : ${nombre(v.sessions)} (dont ${nombre(v.sessionsEngagees)} engagées), ${nombre(v.achats)} achats vus par GA4.`,
+      `Par appareil : ${appareils.join(' ; ') || 'aucune donnée'}.`,
+      `Pages d’entrée qui vendent le plus : ${v.pages.filter((page) => page.revenu > 0).slice(0, 5).map((page) => `${page.page} (${page.achats} achats, ${vue.devise} ${nombre(page.revenu, 0)})`).join(' ; ') || 'aucune'}.`,
+      `Pages de recherche naturelle qui vendent : ${v.pagesSeo.filter((page) => page.revenu > 0).slice(0, 5).map((page) => `${page.page} (${vue.devise} ${nombre(page.revenu, 0)})`).join(' ; ') || 'aucune'}.`,
+    )
+    const ia = v.canaux.ia
+    if (ia !== undefined && ia.sessions > 0) {
+      lignes.push(`Visites venues d’assistants IA : ${ia.sessions} (${Object.keys(ia.origines).map((o) => o.split(' / ')[0]).join(', ')}).`)
+    }
+  }
   if (vue.parcours.length > 0) lignes.push(`Lecture du parcours (INTERPRÉTATION, à présenter comme telle) : ${vue.parcours.join(' ')}`)
   return lignes
 }

@@ -25,6 +25,10 @@ import {
   type PlateformePayante,
   MANQUE_VENTES,
   enPourcent,
+  cumulVisites,
+  type CumulVisites,
+  type CumulVentes,
+  type JourVisites,
 } from './metriques'
 import {
   detecterAlertes,
@@ -37,6 +41,7 @@ import {
   type RapportOria,
 } from './analyse'
 import { lireEtatVentes, SOURCE_SHOPIFY, type EtatVentes } from './collecte'
+import { lireEtatVisites, type EtatVisites } from './collecte-ga4'
 import { reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
 import {
   indicateursAVenir,
@@ -104,6 +109,9 @@ export type VueNova = {
   opportunites: Opportunite[]
   sante: { global: 'bon' | 'verifier' | 'probleme'; lignes: LigneSante[] }
   ventes: EtatVentes
+  visites: EtatVisites
+  /** Les visites de la période, pour les écrans qui détaillent appareils et pages. */
+  visitesPeriode: CumulVisites | null
   /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
   manqueVentes: string
   /** Pourquoi les ventes ne se comparent pas à la période précédente, quand c'est le cas. */
@@ -221,6 +229,35 @@ async function lireVentes(userId: string, boutique: string, depuis: string, jusq
   })
 }
 
+async function lireVisites(userId: string, propriete: string, depuis: string, jusqua: string): Promise<JourVisites[]> {
+  const lignes = await withUserScope(userId, (tx) =>
+    tx.analyticsJour.findMany({
+      where: { userId, propriete, jour: { gte: new Date(depuis), lte: new Date(jusqua) } },
+      orderBy: { jour: 'asc' },
+    }),
+  )
+  type Brut = { sessions: number; achats: number; revenuCents: number; origines: Record<string, number> }
+  type PageBrute = { page: string; sessions: number; achats: number; revenuCents: number }
+  const pages = (brut: unknown) =>
+    ((brut ?? []) as PageBrute[]).map((page) => ({ page: page.page, sessions: page.sessions, achats: page.achats, revenu: page.revenuCents / 100 }))
+  return lignes.map((ligne) => ({
+    jour: jourIso(ligne.jour),
+    sessions: ligne.sessions,
+    sessionsEngagees: ligne.sessionsEngagees,
+    achats: ligne.achats,
+    revenu: Number(ligne.revenuCents) / 100,
+    canaux: Object.fromEntries(
+      Object.entries((ligne.canaux ?? {}) as Record<string, Brut>).map(([canal, valeur]) => [
+        canal,
+        { sessions: valeur.sessions, achats: valeur.achats, revenu: valeur.revenuCents / 100, origines: valeur.origines ?? {} },
+      ]),
+    ),
+    appareils: (ligne.appareils ?? {}) as Record<string, { sessions: number; achats: number }>,
+    pages: pages(ligne.pages),
+    pagesSeo: pages(ligne.pagesSeo),
+  }))
+}
+
 /** Les clics Google sur 28 jours au dernier relevé de la période, et 28 jours plus tôt. */
 async function lireRecherche(userId: string, siteId: string, jusqua: string): Promise<Donnees['recherche']> {
   if (siteId === '') return null
@@ -321,6 +358,65 @@ function santeVentes(ventes: EtatVentes, maintenant: Date): LigneSante {
   }
 }
 
+function santeVisites(visites: EtatVisites, maintenant: Date): LigneSante {
+  const base = { cle: 'ga4', source: 'Google Analytics 4' }
+  switch (visites.etat) {
+    case 'absent':
+      return { ...base, etat: 'absent', texte: 'Non relié : sans lui, ni visites ni taux de conversion.', action: { label: 'Connecter Google Analytics 4', href: '' } }
+    case 'jamais':
+      return { ...base, etat: 'verifier', texte: 'Relié, visites pas encore lues. Actualisez pour les récupérer.', action: null }
+    case 'erreur':
+      return {
+        ...base,
+        etat: 'probleme',
+        texte: visites.synchroAt === null ? visites.message : `${visites.message} Les dernières données GA4 disponibles datent du ${quandLisible(visites.synchroAt)}.`,
+        action: null,
+      }
+    case 'ok':
+      if (visites.synchroAt !== null && +maintenant - +visites.synchroAt > VIEILLE_MS) {
+        return { ...base, etat: 'verifier', texte: `Les dernières données GA4 disponibles datent du ${quandLisible(visites.synchroAt)}.`, action: null }
+      }
+      return { ...base, etat: 'bon', texte: `À jour — propriété « ${visites.nom} »${visites.synchroAt === null ? '' : `, lue le ${quandLisible(visites.synchroAt)}`}.`, action: null }
+  }
+}
+
+/** Les incohérences entre GA4 et la boutique : c'est là que se voit un suivi cassé. */
+function coherenceVisites(visites: CumulVisites | null, ventes: CumulVentes | null): LigneSante[] {
+  if (visites === null) return []
+  const lignes: LigneSante[] = []
+  if (ventes !== null && ventes.commandes >= 10 && visites.achats === 0) {
+    lignes.push({
+      cle: 'ga4-achats',
+      source: 'Événement d’achat GA4',
+      etat: 'probleme',
+      texte: `La boutique compte ${ventes.commandes} commandes, GA4 aucun achat : l’événement « purchase » n’arrive pas dans Analytics. Le suivi e-commerce est à vérifier.`,
+      action: null,
+    })
+  } else if (ventes !== null && ventes.commandes >= 20 && visites.achats > 0) {
+    const ecart = Math.abs(visites.achats - ventes.commandes) / ventes.commandes
+    if (ecart >= 0.4) {
+      lignes.push({
+        cle: 'ga4-ecart',
+        source: 'GA4 et boutique',
+        etat: 'verifier',
+        texte: `GA4 compte ${visites.achats} achats, la boutique ${ventes.commandes} commandes. Un écart de ${Math.round(ecart * 100)} % signale un suivi incomplet (bloqueurs, consentement, événement mal branché).`,
+        action: null,
+      })
+    }
+  }
+  const sansCanal = visites.canaux.inconnu?.sessions ?? 0
+  if (visites.sessions >= 200 && sansCanal / visites.sessions >= 0.2) {
+    lignes.push({
+      cle: 'ga4-non-attribue',
+      source: 'Visites non attribuées',
+      etat: 'verifier',
+      texte: `${Math.round((sansCanal / visites.sessions) * 100)} % des visites n’ont pas de canal dans GA4 (« Unassigned »). Des liens sans paramètres UTM en sont souvent la cause.`,
+      action: null,
+    })
+  }
+  return lignes
+}
+
 /**
  * Pourquoi il n'y a pas de ventes, selon ce qui se passe réellement.
  *
@@ -354,12 +450,14 @@ export async function lireNova(
   options: { periode?: string; du?: string; au?: string; siteId?: string } = {},
   maintenant = new Date(),
 ): Promise<VueNova> {
-  const [ventes, google, meta, sites] = await Promise.all([
+  const [ventes, google, meta, sites, visites] = await Promise.all([
     sans(lireEtatVentes(userId), { etat: 'absent', message: '', boutique: '', synchroAt: null, couvertureDepuis: null, tronque: false, devise: '', fuseau: '', clients: null } as EtatVentes),
     sans(compteActif(userId, 'google-ads'), null),
     sans(compteActif(userId, 'meta-ads'), null),
     sans(listSites(userId), []),
+    sans(lireEtatVisites(userId), { etat: 'absent', message: '', propriete: '', nom: '', synchroAt: null, couvertureDepuis: null, devise: '', fuseau: '' } as EtatVisites),
   ])
+  const visitesLues = (visites.etat === 'ok' || (visites.etat === 'erreur' && visites.synchroAt !== null)) && visites.propriete !== ''
   const site = sites.find((un) => un.id === options.siteId) ?? sites[0] ?? null
   const siteId = site?.id ?? ''
 
@@ -380,10 +478,11 @@ export async function lireNova(
   const depuis = [precedente.du, reference.du, mois.premier, trente.du].sort()[0]!
   const fin = [periode.au, trente.au].sort().at(-1)!
 
-  const [campagnes, joursVentes, recherche] = await Promise.all([
+  const [campagnes, joursVentes, recherche, joursVisites] = await Promise.all([
     sans(lireCampagnes(userId, regies, depuis, fin), []),
     venteLues ? sans(lireVentes(userId, ventes.boutique, depuis, fin), []) : Promise.resolve([]),
     sans(lireRecherche(userId, siteId, periode.au), null),
+    visitesLues ? sans(lireVisites(userId, visites.propriete, depuis, fin), []) : Promise.resolve([]),
   ])
   const reglages = await sans(reglagesNova(userId), REGLAGES_VIDES)
 
@@ -393,12 +492,15 @@ export async function lireNova(
     campagnes,
     ventes: { disponibles: venteLues, couvertureDepuis: ventes.couvertureDepuis, jours: joursVentes },
     recherche,
+    visites: { disponibles: visitesLues, couvertureDepuis: visites.couvertureDepuis, jours: joursVisites },
   }
 
   const actuel = ensemble(donnees, periode)
   const avant = ensemble(donnees, precedente)
   const ventesActuelles = cumulVentes(donnees.ventes, periode)
   const ventesAvant = cumulVentes(donnees.ventes, precedente)
+  const visitesActuelles = cumulVisites(donnees.visites, periode)
+  const visitesAvant = cumulVisites(donnees.visites, precedente)
   const lignesAttribution = attribution(donnees, periode, ventesActuelles)
   const lignesCampagnes = performanceCampagnes(donnees, periode, precedente)
   const lignesProduits = performanceProduits(ventesActuelles, ventesAvant)
@@ -411,6 +513,8 @@ export async function lireNova(
     jours: periode.jours,
     ventes: ventesActuelles,
     ventesAvant,
+    visites: visitesActuelles,
+    visitesAvant,
     attribution: lignesAttribution,
     campagnes: lignesCampagnes,
     produits: lignesProduits,
@@ -468,13 +572,7 @@ export async function lireNova(
     recherche === null
       ? { cle: 'search-console', source: 'Search Console', etat: 'absent', texte: siteId === '' ? 'Aucun site analysé.' : 'Aucun relevé de recherche pour ce site.', action: { label: 'Relier Search Console', href: connexions } }
       : { cle: 'search-console', source: 'Search Console', etat: 'bon', texte: `Relevé du ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(recherche.au))}.`, action: null },
-    {
-      cle: 'ga4',
-      source: 'Google Analytics 4',
-      etat: 'bientot',
-      texte: 'Pas encore disponible dans Evoliia. Sans lui, Nova ne connaît ni vos visites ni votre taux de conversion.',
-      action: null,
-    },
+    santeVisites(visites, maintenant),
   ]
   if (ventesActuelles !== null && ventesActuelles.commandes >= 20) {
     const inconnues = (ventesActuelles.canaux.inconnu?.commandes ?? 0) / ventesActuelles.commandes
@@ -488,6 +586,7 @@ export async function lireNova(
       })
     }
   }
+  lignesSante.push(...coherenceVisites(visitesActuelles, ventesActuelles))
   if (lignesAttribution.reel !== null && lignesAttribution.reel.chiffre > 0 && lignesAttribution.revendique > lignesAttribution.reel.chiffre * 1.3) {
     lignesSante.push({
       cle: 'doublons',
@@ -507,16 +606,17 @@ export async function lireNova(
     ...(venteLues ? ['Shopify'] : []),
     ...regies.map((compte) => NOM_CANAL[compte.plateforme as PlateformePayante]),
     ...(recherche === null ? [] : ['Search Console']),
+    ...(visitesLues ? ['Google Analytics 4'] : []),
   ]
 
   return {
     periode,
     precedente,
     devise,
-    vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null,
+    vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null && visites.etat === 'absent',
     sources,
     kpis: indicateursNova(actuel, avant, raisonVentes(ventes)),
-    canaux: performanceCanaux(donnees, periode, ventesActuelles),
+    canaux: performanceCanaux(donnees, periode, ventesActuelles, visitesActuelles),
     attribution: lignesAttribution,
     campagnes: lignesCampagnes.slice(0, CAMPAGNES_MAX),
     produits: lignesProduits.slice(0, PRODUITS_MAX),
@@ -525,6 +625,8 @@ export async function lireNova(
     opportunites,
     sante: { global, lignes: lignesSante },
     ventes,
+    visites,
+    visitesPeriode: visitesActuelles,
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     /*
      * La période affichée est couverte, la précédente non : sans cette phrase, « pas de

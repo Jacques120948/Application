@@ -44,6 +44,10 @@ const GOOGLE_NOTICES: Record<string, { tone: 'positive' | 'caution' | 'critical'
     tone: 'caution',
     text: "Ce compte Google ne suit aucun site dans Search Console. Déclarez-y votre site, puis recommencez.",
   },
+  'ga4-sans-propriete': {
+    tone: 'caution',
+    text: "Ce compte Google n'a accès à aucune propriété Google Analytics 4. Vérifiez que votre site envoie ses visites à GA4, puis recommencez.",
+  },
   etat: {
     tone: 'critical',
     text: "Le retour de Google n'a pas pu être vérifié. Recommencez la connexion depuis cette page.",

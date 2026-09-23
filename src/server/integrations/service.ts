@@ -29,7 +29,7 @@ export async function isProviderOpen(provider: IntegrationProvider): Promise<boo
    * envoyer la personne. Le fournisseur se présente alors comme à venir plutôt que d'offrir
    * un bouton qui répondrait « introuvable ».
    */
-  if (provider.id === 'google-search-console' && !estConfigureGoogle()) return false
+  if ((provider.id === 'google-search-console' || provider.id === 'google-analytics') && !estConfigureGoogle()) return false
   /*
    * Même raison pour Meta : sans application déclarée chez lui, il n'y a nulle part où
    * envoyer la personne. Le fournisseur se présente alors comme à venir plutôt que d'offrir

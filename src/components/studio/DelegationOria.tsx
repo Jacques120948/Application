@@ -24,6 +24,9 @@ export function DelegationOria({
   destinataires,
   cout,
   versConversation,
+  route = '/api/oria/deleguer',
+  expediteur = 'Oria',
+  contexte = {},
 }: {
   cle: string
   siteId: string
@@ -32,6 +35,12 @@ export function DelegationOria({
   cout: { min: number; max: number } | null
   /** L'adresse de la conversation d'un agent, sans l'identifiant d'agent. */
   versConversation: string
+  /** Oria par défaut ; Nova passe la sienne. Le serveur relit le point dans les deux cas. */
+  route?: string
+  /** Qui transmet, pour l'infobulle : Oria ou Nova. */
+  expediteur?: string
+  /** Ce qui situe le point côté serveur, en plus de sa clé (la période affichée chez Nova). */
+  contexte?: Record<string, string>
 }) {
   const [occupe, setOccupe] = useState<string | null>(null)
   const [note, setNote] = useState<Note | null>(null)
@@ -43,10 +52,10 @@ export function DelegationOria({
   async function transmettre(agent: string) {
     setOccupe(agent)
     setErreur(null)
-    const reponse = await fetch('/api/oria/deleguer', {
+    const reponse = await fetch(route, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ cle, agent, siteId, locale }),
+      body: JSON.stringify({ ...contexte, cle, agent, siteId, locale }),
     }).catch(() => null)
     const corps = (await reponse?.json().catch(() => null)) as { note?: Note; message?: string } | null
     setOccupe(null)
@@ -72,7 +81,7 @@ export function DelegationOria({
                 disabled={occupe !== null}
                 onClick={() => transmettre(destinataire.agent)}
                 className="inline-flex items-center gap-2 rounded-[var(--radius-pill)] border border-[var(--color-line)] bg-[var(--color-surface)] py-1 pr-3 pl-1 text-xs hover:border-[var(--color-brand)] disabled:opacity-50"
-                title={`Oria transmet ce point à ${qui?.name ?? destinataire.agent} pour ${destinataire.pour}${prix}`}
+                title={`${expediteur} transmet ce point à ${qui?.name ?? destinataire.agent} pour ${destinataire.pour}${prix}`}
               >
                 {qui?.avatar === undefined ? null : (
                   // eslint-disable-next-line @next/next/no-img-element

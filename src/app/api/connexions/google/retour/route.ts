@@ -11,6 +11,7 @@ import {
   listerProprietes,
 } from '@/server/integrations/providers/google-search-console'
 import { googleAds } from '@/server/ads/google-ads'
+import { listerProprietes as listerProprietesGa4 } from '@/server/integrations/providers/google-analytics'
 import { enregistrerComptes } from '@/server/ads/comptes'
 
 /**
@@ -98,6 +99,28 @@ export async function GET(request: Request) {
 
     logger.info('Google Ads relié', { comptes: comptes.comptes.length })
     redirect(`/${locale}/publicite`)
+  }
+
+  /*
+   * Google Analytics : même contrôle que Search Console — au moins une propriété lisible, ou
+   * rien n'est enregistré. Une connexion verte qui ne donne accès à aucune propriété se
+   * découvrirait sur l'écran de Nova, vide et sans explication.
+   */
+  if (etat.providerId === 'google-analytics') {
+    const ga4 = await listerProprietesGa4(echange.jetons.accessToken)
+    if (!ga4.ok || ga4.proprietes.length === 0) {
+      logger.warn('retour Google Analytics refusé : aucune propriété lisible')
+      redirect(versConnexions('ga4-sans-propriete'))
+    }
+    await storeConnection(user.id, provider, {
+      kind: 'OAUTH',
+      secret: echange.jetons.accessToken,
+      ...(echange.jetons.refreshToken === undefined ? {} : { refreshSecret: echange.jetons.refreshToken }),
+      accountLabel: ga4.proprietes.map((propriete) => propriete.nom).join(', ').slice(0, 200),
+      expiresAt: echange.jetons.expiresAt,
+    })
+    logger.info('Google Analytics relié', { proprietes: ga4.proprietes.length })
+    redirect(`/${locale}/nova`)
   }
 
   const proprietes = await listerProprietes(echange.jetons.accessToken)

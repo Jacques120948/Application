@@ -38,8 +38,7 @@ export default async function PilotageNovaPage({
                 Votre activité, vos objectifs, vos coûts
               </h2>
               <p className="mt-0 mb-5 text-sm text-[var(--color-ink-soft)]">
-                Nova ne devine rien : ce que vous laissez vide reste « non renseigné ». Le taux de conversion viendra avec
-                Google Analytics 4.
+                Nova ne devine rien : ce que vous laissez vide reste « non renseigné ».
               </p>
               <ReglagesNova
                 devise={vue.devise}
