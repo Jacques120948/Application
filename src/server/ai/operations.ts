@@ -50,6 +50,8 @@ import {
   ORIA_SYSTEM,
   NOVA_SYSTEM,
   ORIA_RESUME_SYSTEM,
+  NOVA_SYNTHESE_SYSTEM,
+  NOVA_ANALYSE_SYSTEM,
   LEA_SYSTEM,
   NEO_SYSTEM,
   GIA_SYSTEM,
@@ -65,10 +67,14 @@ import {
   ideasSchema,
   pointHebdoSchema,
   oriaResumeSchema,
+  novaSyntheseSchema,
+  novaAnalyseSchema,
   elementsProposesSchema,
   questionsSuggereesSchema,
   type PointHebdoIA,
   type OriaResumeIA,
+  type NovaSyntheseIA,
+  type NovaAnalyseIA,
   type ElementsProposes,
   type QuestionsSuggerees,
   pageContentSchemaFor,
@@ -1763,6 +1769,29 @@ export async function resumerOria(params: {
         : 'Résume la semaine écoulée : ce qui a progressé, ce qui a baissé, ce qu’il faut surveiller, et par quoi continuer.',
       asUserData('faits', JSON.stringify(params.faits, null, 2)),
     ].join('\n\n'),
+  })
+}
+
+/**
+ * Les écrits de Nova à la demande : la synthèse (modèle économique) et l'analyse approfondie
+ * (modèle de raisonnement). Les faits sont transmis comme des données, jamais comme des
+ * consignes.
+ */
+export async function syntheseNova(params: { userId: string; locale: string; periode: string; faits: string }): Promise<RunResult<NovaSyntheseIA>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'novaSynthese' },
+    system: NOVA_SYNTHESE_SYSTEM,
+    schema: novaSyntheseSchema,
+    userContent: [`Langue : ${params.locale}.`, `Période : ${params.periode}.`, asUserData('faits', params.faits), 'Écris la synthèse.'].join('\n\n'),
+  })
+}
+
+export async function analyseNova(params: { userId: string; locale: string; periode: string; faits: string }): Promise<RunResult<NovaAnalyseIA>> {
+  return runSingleCall({
+    accounting: { userId: params.userId, operation: 'novaAnalyse' },
+    system: NOVA_ANALYSE_SYSTEM,
+    schema: novaAnalyseSchema,
+    userContent: [`Langue : ${params.locale}.`, `Période : ${params.periode}.`, asUserData('faits', params.faits), 'Fais l’analyse.'].join('\n\n'),
   })
 }
 

@@ -206,6 +206,42 @@ export const oriaResumeSchema = z
 
 export type OriaResumeIA = z.infer<typeof oriaResumeSchema>
 
+/** La synthèse de Nova : une à cinq phrases, rien d'autre. */
+export const novaSyntheseSchema = z
+  .object({
+    phrases: z.array(z.string().min(3).max(320)).min(1).max(5),
+  })
+  .strict()
+
+export type NovaSyntheseIA = z.infer<typeof novaSyntheseSchema>
+
+/**
+ * L'analyse approfondie de Nova. Chaque priorité nomme le spécialiste qui peut agir, et cite
+ * le chiffre sur lequel elle repose — un chiffre qui doit figurer dans les faits donnés.
+ */
+export const novaAnalyseSchema = z
+  .object({
+    diagnostic: z.string().min(10).max(900),
+    priorites: z
+      .array(
+        z
+          .object({
+            titre: z.string().min(3).max(160),
+            pourquoi: z.string().min(10).max(500),
+            chiffre: z.string().min(1).max(160),
+            agent: z.enum(['oria', 'audit', 'seo', 'geo', 'content', 'cro', 'ads', 'meta', 'nova']),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(3),
+    risques: z.array(z.string().min(3).max(300)).max(3),
+    aVerifier: z.array(z.string().min(3).max(300)).max(3),
+  })
+  .strict()
+
+export type NovaAnalyseIA = z.infer<typeof novaAnalyseSchema>
+
 /**
  * Une opportunité du Radar.
  *

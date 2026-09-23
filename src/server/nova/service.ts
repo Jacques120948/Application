@@ -48,6 +48,7 @@ import { lireEtatAbonnements, type EtatAbonnements } from './collecte-stripe'
 import { indicateursAbonnements, type IndicateursAbonnements } from './abonnements'
 import { lireAudiences, type Audiences } from './audiences'
 import { prevoirVentes, type Prevision } from './previsions'
+import { surveillance, type LigneSurveillance } from './surveillance'
 import { lireEtatVisites, type EtatVisites } from './collecte-ga4'
 import { prospectsNova, reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
 import type { Leads } from './leads'
@@ -145,6 +146,8 @@ export type VueNova = {
   audiences: Audiences | null
   /** Les ventes des trente prochains jours et de la fin du mois ; `null` sans historique suffisant. */
   prevision: Prevision | null
+  /** Chaque chiffre comparé à hier, 7, 30 et 90 jours, avec les écarts qui comptent. */
+  surveillance: LigneSurveillance[]
   /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
   manqueVentes: string
   /** Pourquoi les ventes ne se comparent pas à la période précédente, quand c'est le cas. */
@@ -591,7 +594,8 @@ export async function lireNova(
   const trente = periodeDe('30', aujourdhui)
   // Le mois précédent entier : c'est sur lui que se mesure le coût d'acquisition d'un abonné.
   const moisPrecedent = { du: decaler(mois.premier, -1).slice(0, 7) + '-01', au: decaler(mois.premier, -1) }
-  const depuis = [precedente.du, reference.du, mois.premier, trente.du, moisPrecedent.du].sort()[0]!
+  // La surveillance compare hier aux 90 derniers jours : ils doivent être lus.
+  const depuis = [precedente.du, reference.du, mois.premier, trente.du, moisPrecedent.du, decaler(aujourdhui, -90)].sort()[0]!
   const fin = [periode.au, trente.au].sort().at(-1)!
 
   const [campagnes, joursVentes, recherche, joursVisites] = await Promise.all([
@@ -789,6 +793,7 @@ export async function lireNova(
     abonnements: { etat: abonnements, indicateurs: indicateursAbos, acquisition: acquisitionAbonnes },
     audiences: lireAudiences(visitesActuelles),
     prevision,
+    surveillance: surveillance(donnees, decaler(aujourdhui, -1), ventes.nom),
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     /*
      * La période affichée est couverte, la précédente non : sans cette phrase, « pas de

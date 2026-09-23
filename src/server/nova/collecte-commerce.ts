@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { withUserScope } from '@/server/db/scope'
-import type { InstantaneClients, JourVentes as JourVentesAgregees } from './agregat'
+import type { CohorteClients, InstantaneClients, JourVentes as JourVentesAgregees } from './agregat'
 import { NOM_SOURCE, type SourceVentes } from './sources'
 
 /**
@@ -75,6 +75,8 @@ export type EtatVentes = {
   fuseau: string
   /** Le dernier compte des clients sur la fenêtre lue, ou `null` s'il n'a pas pu être fait. */
   clients: InstantaneClients | null
+  /** Les cohortes de clients à la dernière lecture complète ; `null` sans identifiant client. */
+  cohortes: CohorteClients[] | null
   /** La dernière lecture des coûts produits : combien de variantes ont un coût, ou ce qui l'a empêchée. */
   couts: EtatCouts
 }
@@ -105,6 +107,7 @@ export const ABSENT: EtatVentes = {
   devise: '',
   fuseau: '',
   clients: null,
+  cohortes: null,
   couts: COUTS_VIDES,
 }
 
@@ -155,6 +158,7 @@ export async function etatEnBase(userId: string, source: SourceVentes, boutique:
     devise: ligne.devise,
     fuseau: ligne.fuseau,
     clients: lireInstantane(ligne.clients),
+    cohortes: Array.isArray(ligne.cohortes) ? (ligne.cohortes as unknown as CohorteClients[]) : null,
     couts: { at: ligne.coutsAt, message: ligne.coutsMessage, variantes: ligne.coutsVariantes, renseignes: ligne.coutsRenseignes },
   }
 }

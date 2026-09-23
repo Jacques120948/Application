@@ -10,6 +10,8 @@ import type { Bilan } from '@/server/nova/bilan'
 import type { CumulVisites } from '@/server/nova/metriques'
 import type { Contenus } from '@/server/nova/contenus'
 import type { IndicateursAbonnements, InstantaneAbonnements } from '@/server/nova/abonnements'
+import type { CohorteClients } from '@/server/nova/agregat'
+import type { LigneSurveillance } from '@/server/nova/surveillance'
 import type { Audiences } from '@/server/nova/audiences'
 import type { Prevision } from '@/server/nova/previsions'
 import type { AcquisitionAbonnes } from '@/server/nova/service'
@@ -1482,5 +1484,167 @@ export function AcquisitionAbonnesNova({ acquisition, devise }: { acquisition: A
         qui visait autre chose : c’est un plafond.
       </span>
     </p>
+  )
+}
+
+// ── V7 : surveillance ────────────────────────────────────────────────────────
+
+const FENETRES_LISIBLES = [
+  ['hier', 'Hier'],
+  ['7', '7 jours'],
+  ['30', '30 jours'],
+  ['90', '90 jours'],
+] as const
+
+/**
+ * Chaque chiffre à côté de lui-même : hier, 7, 30 et 90 jours, en moyenne par jour. Une
+ * ligne signalée porte son niveau en toutes lettres, jamais seulement une couleur.
+ */
+export function SurveillanceNova({ lignes, devise }: { lignes: readonly LigneSurveillance[]; devise: string }) {
+  if (lignes.length === 0) return null
+  const signalees = lignes.filter((ligne) => ligne.niveau !== 'normal').length
+  const valeur = (ligne: LigneSurveillance, v: number | null) =>
+    v === null ? '—' : ligne.format === 'argent' ? argent(v, devise) : ligne.format === 'pourcent' ? `${nombre(v)} %` : nombre(v, 1)
+  return (
+    <Card className="min-w-0 max-w-full">
+      <CardBody>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="m-0 text-base font-semibold">Surveillance</h2>
+          <Badge tone={signalees === 0 ? 'positive' : 'caution'}>{signalees === 0 ? 'Rien d’inhabituel' : `${signalees} écart${signalees > 1 ? 's' : ''} à regarder`}</Badge>
+        </div>
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
+          Moyennes par jour, fenêtres finissant hier. Un écart n’est signalé qu’avec assez de volume pour compter.
+        </p>
+        <div className="mt-3 max-w-full overflow-x-auto">
+          <table className="w-full text-xs tabular-nums">
+            <thead>
+              <tr className="text-left text-[var(--color-ink-soft)]">
+                <th className="py-1 pr-3 font-medium">Mesure</th>
+                {FENETRES_LISIBLES.map(([cle, nom]) => (
+                  <th key={cle} className="py-1 pr-3 text-right font-medium whitespace-nowrap">
+                    {nom}
+                  </th>
+                ))}
+                <th className="py-1 font-medium">Écart</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignes.map((ligne) => (
+                <tr key={ligne.cle} className="border-t border-[var(--color-line)]">
+                  <td className="py-1.5 pr-3">
+                    <span className="block whitespace-nowrap">{ligne.mesure}</span>
+                    <span className="block text-[10px] text-[var(--color-ink-faint)]">{ligne.source}</span>
+                  </td>
+                  {FENETRES_LISIBLES.map(([cle]) => (
+                    <td key={cle} className="py-1.5 pr-3 text-right whitespace-nowrap">
+                      {valeur(ligne, ligne.valeurs[cle])}
+                    </td>
+                  ))}
+                  <td className="py-1.5 whitespace-nowrap">
+                    {ligne.ecart === null ? (
+                      <span className="text-[var(--color-ink-faint)]">—</span>
+                    ) : (
+                      <span style={{ color: ligne.niveau === 'alerte' ? 'var(--color-critical)' : 'var(--color-caution)' }}>
+                        {ligne.niveau === 'alerte' ? '🔴 ' : '🟠 '}
+                        {ligne.ecart.variation > 0 ? '+' : '−'}
+                        {nombre(Math.abs(ligne.ecart.variation))} % ({ligne.ecart.de === 'hier' ? 'hier' : '7 j'} vs 30 j)
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </CardBody>
+    </Card>
+  )
+}
+
+/**
+ * Les cohortes de clients : qui revient commander, et ce qu'un client rapporte avec le temps.
+ * Deux tableaux, une valeur écrite dans chaque case ; la teinte n'est qu'un repère.
+ */
+export function CohortesClientsNova({
+  cohortes,
+  source,
+  devise,
+}: {
+  cohortes: readonly CohorteClients[] | null
+  source: string
+  devise: string
+}) {
+  return (
+    <Card className="min-w-0 max-w-full">
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Cohortes de clients</h2>
+        {cohortes === null || cohortes.length === 0 ? (
+          <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">
+            {cohortes === null
+              ? source === 'shopify'
+                ? 'Shopify ne transmet pas encore l’identifiant client à Evoliia. Dans le Dev Dashboard, section « API access », demandez l’accès aux « Protected customer data » (Nova n’a besoin d’aucun nom, courriel ni adresse), puis cliquez « Actualiser ».'
+                : 'Les cohortes demandent de savoir quelle commande est la première d’un client : seule une boutique Shopify le dit.'
+              : 'Pas encore assez de nouveaux clients par mois (5 au moins) pour former une cohorte.'}
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
+              Chaque ligne suit les clients dont la première commande tombe ce mois-là. Calculé à la dernière lecture complète, sur les six
+              derniers mois ; aucun client n’est conservé, seulement ces moyennes.
+            </p>
+            {(
+              [
+                ['Part des clients qui ont recommandé', (c: CohorteClients) => c.revenus.map((part) => `${Math.round(part * 100)} %`), (c: CohorteClients) => c.revenus],
+                [
+                  'Chiffre d’affaires cumulé par client',
+                  (c: CohorteClients) => c.chiffreParClientCents.map((cents) => argent(cents / 100, devise)),
+                  (c: CohorteClients) => {
+                    const max = Math.max(...c.chiffreParClientCents, 1)
+                    return c.chiffreParClientCents.map((cents) => cents / max)
+                  },
+                ],
+              ] as const
+            ).map(([titre, textes, teintes]) => (
+              <div key={titre}>
+                <h3 className="mt-4 mb-2 text-sm font-semibold">{titre}</h3>
+                <div className="max-w-full overflow-x-auto">
+                  <table className="text-xs tabular-nums">
+                    <thead>
+                      <tr className="text-left text-[var(--color-ink-soft)]">
+                        <th className="py-1 pr-3 font-medium">Première commande</th>
+                        <th className="py-1 pr-3 font-medium">Clients</th>
+                        {Array.from({ length: Math.max(...cohortes.map((c) => c.revenus.length)) }, (_, k) => (
+                          <th key={k} className="px-1 py-1 text-center font-medium">
+                            M{k}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cohortes.map((cohorte) => (
+                        <tr key={cohorte.mois}>
+                          <td className="py-0.5 pr-3 whitespace-nowrap">{moisLisible(cohorte.mois)}</td>
+                          <td className="py-0.5 pr-3">{nombre(cohorte.clients)}</td>
+                          {textes(cohorte).map((texte, k) => (
+                            <td key={k} className="p-[1px]">
+                              <span
+                                className="block min-w-14 rounded-[3px] px-1 py-0.5 text-center whitespace-nowrap"
+                                style={{ background: `color-mix(in srgb, var(--color-brand) ${Math.round(8 + (teintes(cohorte)[k] ?? 0) * 42)}%, transparent)` }}
+                              >
+                                {texte}
+                              </span>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+      </CardBody>
+    </Card>
   )
 }

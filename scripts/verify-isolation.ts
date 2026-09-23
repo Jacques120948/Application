@@ -56,6 +56,7 @@ const PROTECTED_TABLES = [
   'AnalyticsJour',
   'AnalyticsSynchro',
   'AbonnementsSynchro',
+  'NovaAnalyse',
   'SiteWatch',
   'SiteAutomatisation',
   'ReleveRecherche',

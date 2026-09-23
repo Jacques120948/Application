@@ -63,6 +63,7 @@ model User {
   visitesJour          AnalyticsJour[]
   synchroVisites       AnalyticsSynchro?
   synchroAbonnements   AbonnementsSynchro?
+  analysesNova         NovaAnalyse[]
   supportAlerts    Boolean   @default(true)
   /// Client Stripe correspondant, créé au premier paiement.
   stripeCustomerId String?   @unique
@@ -2517,6 +2518,8 @@ model CommerceSynchro {
   fuseau           String    @default("")
   /// Instantané des clients sur la fenêtre lue (voir nova/collecte.ts). Des comptes, jamais un identifiant.
   clients          Json      @default("{}")
+  /// Cohortes de clients par mois de première commande (voir nova/agregat.ts) : des parts et des moyennes.
+  cohortes         Json?
   /// Dernière lecture des coûts produits (réussie ou non), et ce qui l'a empêchée le cas échéant.
   coutsAt          DateTime?
   coutsMessage     String    @default("")
@@ -2630,4 +2633,24 @@ model AbonnementsSynchro {
   updatedAt DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/// Nova : les écrits demandés (synthèse, analyse approfondie), gardés pour être relus sans payer deux fois.
+model NovaAnalyse {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  /// synthese | approfondie
+  genre        String
+  /// La période analysée, telle qu'affichée (« 30 derniers jours »), et ses bornes.
+  periode      String
+  du           DateTime @db.Date
+  au           DateTime @db.Date
+  /// Ce que le modèle a rendu, validé par son schéma.
+  contenu      Json
+  creditsSpent Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, genre, createdAt(sort: Desc)])
 }

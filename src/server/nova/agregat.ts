@@ -198,3 +198,67 @@ export function agregerCommandes(
     }))
     .sort((un, autre) => un.jour.localeCompare(autre.jour))
 }
+
+/**
+ * Les cohortes de clients : ceux dont la première commande tombe dans un même mois, suivis
+ * ensuite mois par mois.
+ *
+ * Comme le compte des clients, c'est un calcul qui a besoin de reconnaître un client d'une
+ * commande à l'autre ; il se fait ici, en mémoire, pendant la synchronisation, et seules des
+ * proportions et des moyennes en sortent. Une première commande est celle que Shopify dit
+ * première (rang 1 dans l'historique du client) — pas la première que la fenêtre a vue.
+ */
+export type CohorteClients = {
+  /** AAAA-MM de la première commande. */
+  mois: string
+  clients: number
+  /** Part des clients qui ont recommandé, cumulée, à la fin de chaque mois (0 = le mois de départ). */
+  revenus: number[]
+  /** Chiffre d'affaires cumulé par client à la fin de chaque mois, en centimes. */
+  chiffreParClientCents: number[]
+}
+
+/** En deçà, une cohorte est une anecdote. */
+export const COHORTE_CLIENTS_MIN = 5
+
+function decalerMois(mois: string, n: number): string {
+  const [annee, m] = mois.split('-').map(Number) as [number, number]
+  return new Date(Date.UTC(annee, m - 1 + n, 1)).toISOString().slice(0, 7)
+}
+
+export function cohortesClients(commandes: readonly CommandeShopify[], fuseau: string, aujourdhui: string): CohorteClients[] {
+  const retenues = commandes.filter((commande) => !commande.test && !commande.annulee && commande.clientId !== null && commande.creeLe !== '')
+  const parClient = new Map<string, { mois: string; montant: number }[]>()
+  const departs = new Map<string, string>()
+  for (const commande of retenues) {
+    const mois = jourDansFuseau(new Date(commande.creeLe), fuseau).slice(0, 7)
+    const liste = parClient.get(commande.clientId!) ?? []
+    liste.push({ mois, montant: commande.totalCents })
+    parClient.set(commande.clientId!, liste)
+    if (commande.premiere === true) departs.set(commande.clientId!, mois)
+  }
+  const moisCourant = aujourdhui.slice(0, 7)
+  const parCohorte = new Map<string, string[]>()
+  for (const [client, mois] of departs) parCohorte.set(mois, [...(parCohorte.get(mois) ?? []), client])
+
+  const cohortes: CohorteClients[] = []
+  for (const [mois, clients] of [...parCohorte.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    if (clients.length < COHORTE_CLIENTS_MIN) continue
+    const revenus: number[] = []
+    const chiffre: number[] = []
+    for (let k = 0; decalerMois(mois, k) <= moisCourant; k++) {
+      const limite = decalerMois(mois, k)
+      let revenusK = 0
+      let chiffreK = 0
+      for (const client of clients) {
+        const jusque = (parClient.get(client) ?? []).filter((commande) => commande.mois <= limite)
+        if (jusque.length >= 2) revenusK += 1
+        chiffreK += jusque.reduce((total, commande) => total + commande.montant, 0)
+      }
+      revenus.push(revenusK / clients.length)
+      chiffre.push(Math.round(chiffreK / clients.length))
+    }
+    cohortes.push({ mois, clients: clients.length, revenus, chiffreParClientCents: chiffre })
+  }
+  return cohortes
+}

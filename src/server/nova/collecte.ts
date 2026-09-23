@@ -12,7 +12,7 @@ import {
 import { hasConnection, markConnectionError, useCredential } from '@/server/integrations/service'
 import { logger } from '@/server/observability/logger'
 import type { Prisma } from '@prisma/client'
-import { agregerCommandes, instantaneClients } from './agregat'
+import { agregerCommandes, cohortesClients, instantaneClients } from './agregat'
 import {
   ABSENT,
   aLireMaintenant,
@@ -188,8 +188,11 @@ async function synchroniserShopify(userId: string, mode: 'auto' | 'manuel', main
             return instantaneClients(recentes, [debutClients, depuis].sort().at(-1)!, aujourdhui)
           })()
         : null
+    // Les cohortes, sur toute la fenêtre lue : même condition que le compte des clients.
+    const cohortes = complete && lecture.client && !lecture.tronque ? cohortesClients(lecture.commandes, fuseau, aujourdhui) : null
     await noter(acces.boutique, {
       ...(clients === null ? {} : { clients: clients as unknown as Prisma.InputJsonValue }),
+      ...(cohortes === null ? {} : { cohortes: cohortes as unknown as Prisma.InputJsonValue }),
       ...(lecture.commandes.length === 0
         ? {}
         : {

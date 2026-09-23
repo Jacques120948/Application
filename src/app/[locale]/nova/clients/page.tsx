@@ -1,6 +1,6 @@
 import { lireNova } from '@/server/nova/service'
 import { MENTION_PARCOURS, MENTION_VALEUR, MODELES } from '@/server/nova/clients'
-import { AudiencesNova, ClientsNova, ModelesNova, ParcoursNova, PeriodeNova } from '@/components/studio/Nova'
+import { AudiencesNova, ClientsNova, CohortesClientsNova, ModelesNova, ParcoursNova, PeriodeNova } from '@/components/studio/Nova'
 import { CadreNova, ouvrirNova } from '../cadre'
 
 /**
@@ -37,6 +37,7 @@ export default async function ClientsNovaPage({
           />
           {vue.manqueVentes === '' ? null : <p className="m-0 text-sm text-[var(--color-ink-soft)]">{vue.manqueVentes}</p>}
           <ClientsNova repartition={vue.clients} valeur={vue.valeurClient} devise={vue.devise} mention={MENTION_VALEUR} />
+          <CohortesClientsNova cohortes={vue.ventes.cohortes} source={vue.ventes.source} devise={vue.devise} />
           <ModelesNova lignes={vue.modeles} devise={vue.devise} explications={MODELES} />
           <ParcoursNova phrases={vue.parcours} mention={MENTION_PARCOURS} />
           <AudiencesNova audiences={vue.audiences} />

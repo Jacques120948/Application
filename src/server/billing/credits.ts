@@ -96,6 +96,21 @@ export type CreditedOperation =
    * montre en blocs. C'est la seule opération d'Oria qui coûte : le reste est de la lecture.
    */
   | 'oriaResume'
+  /**
+   * La synthèse de Nova : la période en cinq phrases, sur des chiffres déjà calculés.
+   *
+   * Tâche simple, modèle économique : elle met en mots ce que l'écran montre en blocs.
+   */
+  | 'novaSynthese'
+  /**
+   * L'analyse approfondie de Nova : diagnostic, trois priorités, risques, ce qu'il faut
+   * vérifier — sur toutes les sources à la fois.
+   *
+   * La seule opération de Nova qui mérite le modèle de raisonnement : croiser ventes,
+   * régies, visites, marge et abonnements sans additionner ce qui se chevauche. Elle reste
+   * à la demande, jamais automatique.
+   */
+  | 'novaAnalyse'
 
 /** Coût plancher d'une opération, débité même si l'appel a consommé peu de jetons. */
 export const MINIMUM_COST: Record<CreditedOperation, number> = {
@@ -178,6 +193,12 @@ export const MINIMUM_COST: Record<CreditedOperation, number> = {
   adsElements: 2,
   visibilityPoint: 3,
   oriaResume: 2,
+  novaSynthese: 1,
+  /*
+   * Le modèle de raisonnement sur un long contexte : le plancher protège contre une réponse
+   * courte facturée comme une synthèse. Le coût réel des jetons décide au-delà.
+   */
+  novaAnalyse: 6,
 }
 
 /**

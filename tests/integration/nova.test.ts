@@ -143,6 +143,8 @@ describe('Nova — collecte des ventes', () => {
     expect(etat.couts).toMatchObject({ message: '', variantes: 3, renseignes: 1 })
     // Le compte des clients est gardé ; leurs identifiants, non.
     expect(etat.clients).toMatchObject({ clients: 2, recurrents: 0, commandes: 2 })
+    // Une seule première commande dans le mois : pas assez pour une cohorte, mais le calcul a eu lieu.
+    expect(etat.cohortes).toEqual([])
     const synchro = await withUserScope(proprietaire, (tx) => tx.commerceSynchro.findFirstOrThrow({ where: { userId: proprietaire } }))
     expect(JSON.stringify(synchro.clients)).not.toContain('Customer')
     expect(JSON.stringify(jours[0], (_, valeur: unknown) => (typeof valeur === 'bigint' ? String(valeur) : valeur))).not.toContain('gid://shopify/Order')

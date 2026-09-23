@@ -157,7 +157,15 @@ celle de Stripe est gratuite ; mêmes règles de cache (12 h, 30 min après éch
 Coût pour Evoliia : aucun — deux rapports GA4 de plus par lecture, sur le quota de la
 propriété de la personne.
 
+## V7 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Écrits à la demande | `nova/ecrits.ts`, `ai/operations.ts` (`syntheseNova`, `analyseNova`), table `NovaAnalyse` (RLS), `api/nova/ecrit` | Les deux seuls endroits de Nova qui coûtent. **Synthèse** : cinq phrases, modèle économique, plancher 1 crédit. **Analyse approfondie** : diagnostic, une à trois priorités (chacune avec son chiffre et le spécialiste qui peut agir), risques, points à vérifier ; modèle de raisonnement, plancher 6 crédits. Le modèle reçoit les faits calculés de `contexte.ts` comme des données ; il ne calcule rien. Prix affiché sur le bouton ; même demande dans les 10 minutes sur la même période : relue, pas repayée. Droit (`nova_agent`) vérifié avant tout appel. |
+| Routage des modèles | `ai/routing.ts` | Tâche simple → modèle économique ; analyse multi-source → raisonnement ; la conversation reste sur le modèle intermédiaire. Jamais le plus cher par défaut. |
+| Surveillance | `nova/surveillance.ts` | Par régie (dépense, conversions, coût par conversion, ROAS), ventes (CA, commandes) et visites : hier, 7, 30 et 90 jours finissant hier, en moyenne par jour ; les ratios sur les sommes. Écart signalé (7 jours, ou hier pour une dépense qui double, contre 30 jours) seulement avec volume : ≥ 5 conversions sur 7 jours et ≥ 15 sur 30, ≥ 30 commandes sur 30 jours, ≥ 1 000 visites. Attention à 30 %, alerte à 50–60 % (100 % pour une dépense). |
+| Cohortes de clients | `nova/agregat.ts` (`cohortesClients`), `CommerceSynchro.cohortes` | Shopify seulement (la première commande y est connue). Calculées en mémoire à la lecture complète quand Shopify rend l'identifiant client ; seules des parts et des moyennes sont gardées. Part des clients qui ont recommandé et CA cumulé par client, mois après mois ; cohortes de 5 clients au moins. |
+
 ## Encore à venir
 
-CRM (taux prospect → client, valeur d'un prospect), cohortes et LTV des boutiques (accès aux
-données client protégées de Shopify), âge et sexe (signaux Google).
+CRM (taux prospect → client), âge et sexe (signaux Google).

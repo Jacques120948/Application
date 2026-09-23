@@ -130,6 +130,10 @@ export const OPERATION_PROFILES: Record<CreditedOperation, OperationProfile> = {
    * cinq phrases.
    */
   oriaResume: { model: MODELS.fast, maxTokens: 1_200, effort: 'low' },
+  // Mettre en cinq phrases des chiffres déjà calculés : le modèle économique suffit.
+  novaSynthese: { model: MODELS.economical, maxTokens: 900, effort: 'low' },
+  // Croiser toutes les sources sans additionner ce qui se chevauche : le raisonnement.
+  novaAnalyse: { model: MODELS.reasoning, maxTokens: 3_000, effort: 'medium' },
 }
 
 export type TokenUsage = {

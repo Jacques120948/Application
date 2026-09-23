@@ -148,6 +148,21 @@ export function faitsNova(vue: VueNova): string[] {
         .join(' ; ')}. Nouveaux visiteurs : conversion ${pct(vue.audiences.nouveaux.conversion)} ; visiteurs qui reviennent : ${pct(vue.audiences.connus.conversion)}.`,
     )
   }
+  if (vue.ventes.cohortes !== null && vue.ventes.cohortes.length > 0) {
+    lignes.push(
+      `Cohortes de clients (part qui a recommandé, par mois de première commande) : ${vue.ventes.cohortes
+        .map((c) => `${c.mois} (${c.clients} clients) : ${c.revenus.map((part, k) => `M${k} ${Math.round(part * 100)} %`).join(', ')}`)
+        .join(' ; ')}.`,
+    )
+  }
+  const ecarts = vue.surveillance.filter((ligne) => ligne.ecart !== null)
+  if (ecarts.length > 0) {
+    lignes.push(
+      `Surveillance (moyennes par jour, fenêtres finissant hier) : ${ecarts
+        .map((ligne) => `${ligne.source} — ${ligne.mesure} ${ligne.ecart!.variation > 0 ? '+' : ''}${ligne.ecart!.variation} % (${ligne.ecart!.de === 'hier' ? 'hier' : '7 jours'} contre 30 jours, ${ligne.niveau})`)
+        .join(' ; ')}.`,
+    )
+  }
   if (vue.prevision !== null) {
     const p = vue.prevision
     lignes.push(

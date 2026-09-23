@@ -1,5 +1,7 @@
 import { VISIBILITY_ASK_ESTIMATED_CREDITS } from '@/server/agents/visibility-service'
 import { FRAICHEUR_MS } from '@/server/nova/collecte'
+import { COUT_ECRIT, derniersEcrits } from '@/server/nova/ecrits'
+import { EcritsNova, type EcritVu } from '@/components/studio/EcritsNova'
 import { lireNova, quandLisible } from '@/server/nova/service'
 import { SynchroNova } from '@/components/studio/SynchroNova'
 import {
@@ -20,6 +22,7 @@ import {
   SanteNova,
   ContenusNova,
   AbonnementsNova,
+  SurveillanceNova,
   VisitesNova,
 } from '@/components/studio/Nova'
 import { ProprieteGa4 } from '@/components/studio/ProprieteGa4'
@@ -52,6 +55,7 @@ export default async function NovaPage({
   const vue = ouvert
     ? await lireNova(user.id, locale, { periode: demande.periode, du: demande.du, au: demande.au, siteId: contexte.siteId })
     : null
+  const ecrits = ouvert ? await derniersEcrits(user.id, 1).catch(() => []) : []
   const siteId = vue?.siteId ?? contexte.siteId
   const suffixe = siteId === '' ? '' : `siteId=${siteId}`
   const siteAnalyse = sites.find((site) => site.id === siteId)
@@ -141,6 +145,17 @@ export default async function NovaPage({
           )}
           <AlertesNova alertes={vue.alertes} locale={locale} siteId={siteId} transmission={transmission} />
           <InsightsNova insights={vue.insights} />
+          <EcritsNova
+            derniers={ecrits.map((ecrit) => ({ ...ecrit, createdAt: ecrit.createdAt.toISOString() }) as EcritVu)}
+            couts={COUT_ECRIT}
+            contexte={{
+              locale,
+              periode: vue.periode.cle,
+              ...(vue.periode.cle === 'perso' ? { du: vue.periode.du, au: vue.periode.au } : {}),
+              ...(siteId === '' ? {} : { siteId }),
+            }}
+          />
+          <SurveillanceNova lignes={vue.surveillance} devise={vue.devise} />
           {vue.objectifs.length === 0 ? null : (
             <ObjectifsNova suivis={vue.objectifs} devise={vue.devise} versReglages={`${base}/pilotage${suffixe === '' ? '' : `?${suffixe}`}`} />
           )}
