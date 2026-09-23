@@ -103,6 +103,17 @@ export async function listerProprietes(
   return { ok: true, proprietes }
 }
 
+/**
+ * Ce que la carte de connexion affiche. Deux propriétés portent souvent le même nom (une
+ * ancienne et une nouvelle, ou une par flux) : répéter « cap-nature.ch, cap-nature.ch » ne
+ * dit rien, le nombre dit qu'il faut choisir.
+ */
+export function libelleProprietes(proprietes: readonly ProprieteGa4[]): string {
+  const noms = [...new Set(proprietes.map((propriete) => propriete.nom))].join(', ')
+  const libelle = proprietes.length > 1 && !noms.includes(',') ? `${noms} (${proprietes.length} propriétés)` : noms
+  return libelle.slice(0, 200)
+}
+
 /** Le fuseau et la devise de la propriété : c'est son fuseau qui découpe les jours de GA4. */
 export async function lireReglagesPropriete(
   accessToken: string,

@@ -69,6 +69,7 @@ export function ProprieteGa4({ actuelle }: { actuelle: string }) {
           <option key={propriete.id} value={propriete.id}>
             {propriete.nom}
             {propriete.compte === '' ? '' : ` — ${propriete.compte}`}
+            {` · n° ${propriete.id.replace(/^properties\//u, '')}`}
           </option>
         ))}
       </select>

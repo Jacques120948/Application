@@ -4,6 +4,7 @@ import { agregerVisites, dateGa4 } from '@/server/nova/agregat-ga4'
 import { cumulVisites, periodeDe, tauxConversion, type CumulVentes, type Donnees } from '@/server/nova/metriques'
 import { detecterAlertes, detecterInsights, detecterOpportunites, type Contexte } from '@/server/nova/analyse'
 import { proprieteDuSite } from '@/server/nova/collecte-ga4'
+import { libelleProprietes } from '@/server/integrations/providers/google-analytics'
 
 describe('Nova V3 — canaux GA4', () => {
   it('suit le groupe de canaux de Google, avec les mêmes catégories que la boutique', () => {
@@ -213,5 +214,14 @@ describe('Nova V3 — transmission aux spécialistes', () => {
     expect(question).toContain('retenir les visiteurs d’acheter')
     expect(question).toContain('pas une cause prouvée')
     expect(question.length).toBeLessThanOrEqual(600)
+  })
+})
+
+describe('Nova V3 — libellé de la connexion GA4', () => {
+  it('ne répète pas un nom porté par deux propriétés, et dit combien il y en a', () => {
+    const p = (id: string, nom: string) => ({ id: `properties/${id}`, nom, compte: 'Cap Nature' })
+    expect(libelleProprietes([p('1', 'cap-nature.ch'), p('2', 'cap-nature.ch')])).toBe('cap-nature.ch (2 propriétés)')
+    expect(libelleProprietes([p('1', 'cap-nature.ch')])).toBe('cap-nature.ch')
+    expect(libelleProprietes([p('1', 'cap-nature.ch'), p('2', 'boutique.ch')])).toBe('cap-nature.ch, boutique.ch')
   })
 })

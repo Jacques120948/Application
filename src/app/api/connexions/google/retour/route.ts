@@ -11,7 +11,7 @@ import {
   listerProprietes,
 } from '@/server/integrations/providers/google-search-console'
 import { googleAds } from '@/server/ads/google-ads'
-import { listerProprietes as listerProprietesGa4 } from '@/server/integrations/providers/google-analytics'
+import { libelleProprietes, listerProprietes as listerProprietesGa4 } from '@/server/integrations/providers/google-analytics'
 import { enregistrerComptes } from '@/server/ads/comptes'
 
 /**
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
       kind: 'OAUTH',
       secret: echange.jetons.accessToken,
       ...(echange.jetons.refreshToken === undefined ? {} : { refreshSecret: echange.jetons.refreshToken }),
-      accountLabel: ga4.proprietes.map((propriete) => propriete.nom).join(', ').slice(0, 200),
+      accountLabel: libelleProprietes(ga4.proprietes),
       expiresAt: echange.jetons.expiresAt,
     })
     logger.info('Google Analytics relié', { proprietes: ga4.proprietes.length })
