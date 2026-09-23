@@ -131,7 +131,21 @@ l'écran.
 Prérequis : aucun. Le coût se saisit dans Shopify (fiche produit → « Coût par article ») ;
 la santé des données dit combien de variantes l'ont.
 
+## V5 — ce qui est livré
+
+| Sujet | Fichier | Règle |
+|---|---|---|
+| Sources de ventes | `nova/sources.ts`, `nova/collecte.ts`, `nova/collecte-commerce.ts` | Une seule source fait le chiffre d'affaires, dans cet ordre : Shopify, WooCommerce, encaissements Stripe. Jamais additionnées (une boutique qui encaisse par Stripe serait comptée deux fois). Rythmes de lecture, état et écriture des journées partagés ; chaque chiffre dit sa source (« WooCommerce, remboursements déduits »). |
+| WooCommerce | `integrations/providers/woocommerce.ts`, `nova/collecte-woo.ts` | Clé API REST en **lecture** (ck_/cs_), jamais de mot de passe WordPress. Appels par `requeteJson` (audit/net.ts) : adresse publique vérifiée après résolution, https seulement, aucune redirection suivie (l'en-tête d'autorisation ne part jamais ailleurs). Champs demandés limités (`_fields`) : ni nom, ni courriel, ni adresse. Remboursements déduits ; commandes en attente, échouées, annulées écartées. Origine : « Order Attribution » de WooCommerce 8.5+. Ni première commande, ni coût produit : CAC et marge réelle restent absents, et c'est dit. |
+| Stripe (lecture) | `integrations/providers/stripe-lecture.ts`, `nova/collecte-stripe.ts` | Fournisseur `stripe-revenus`, distinct de la connexion Stripe des applications. **Clé restreinte uniquement** (rk_) ; une clé secrète (sk_) ou publiable (pk_) est refusée avant tout appel. Droits requis : Subscriptions et Charges en lecture. Encaissements : paiements réussis, remboursements déduits, fuseau de Zurich. |
+| Abonnements | `nova/abonnements.ts`, table `AbonnementsSynchro` (RLS) | Calcul par du code : MRR (prix actuel des formules, remises non déduites, essais exclus, prix à paliers comptés en abonnés mais pas en MRR), ARR, série de 13 mois, nouveaux / départs, churn mensuel (moyenne des 3 derniers mois terminés, ≥ 20 abonnés), churn en revenu, ARPU, LTV = ARPU ÷ churn (refusée si churn nul ou non mesurable), cohortes par mois de départ (≥ 3 abonnés). Une autre devise est écartée et signalée. Seul l'instantané est gardé : aucun client, aucun identifiant. |
+| Constats | `analyse.ts` | MRR et sa tendance sur trois mois ; churn ≥ 5 % par mois. |
+
+Coût pour Evoliia : aucun. L'API REST de WooCommerce est servie par la boutique elle-même,
+celle de Stripe est gratuite ; mêmes règles de cache (12 h, 30 min après échec).
+
 ## Encore à venir
 
-WooCommerce, Stripe (MRR, churn), CRM (leads, CPL), cohortes et LTV (elles exigent l'accès
-aux données client protégées de Shopify), prévisions au-delà du mois, analyse des audiences.
+CRM (leads, CPL, taux lead → client), cohortes et LTV des boutiques (elles exigent l'accès
+aux données client protégées de Shopify), CAC par abonné (dépense ÷ nouveaux abonnés),
+prévisions au-delà du mois, analyse des audiences.

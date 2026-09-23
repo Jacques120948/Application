@@ -42,7 +42,10 @@ import {
   type Opportunite,
   type RapportOria,
 } from './analyse'
-import { lireEtatVentes, SOURCE_SHOPIFY, type EtatVentes } from './collecte'
+import { ABSENT, lireEtatVentes, type EtatVentes } from './collecte'
+import type { SourceVentes } from './sources'
+import { lireEtatAbonnements, type EtatAbonnements } from './collecte-stripe'
+import { indicateursAbonnements, type IndicateursAbonnements } from './abonnements'
 import { lireEtatVisites, type EtatVisites } from './collecte-ga4'
 import { reglagesNova, REGLAGES_VIDES, type Reglages } from './reglages'
 import { controlesSuivi } from './suivi'
@@ -123,6 +126,8 @@ export type VueNova = {
   visitesPeriode: CumulVisites | null
   /** Les articles de blog par lesquels on entre, et leur engagement. */
   contenus: Contenus
+  /** Les abonnements Stripe : l'état de la lecture, et ce qu'on en tire quand elle a eu lieu. */
+  abonnements: { etat: EtatAbonnements; indicateurs: IndicateursAbonnements | null }
   /** Pourquoi les ventes manquent, dit selon l'état réel de la boutique. Vide quand elles sont là. */
   manqueVentes: string
   /** Pourquoi les ventes ne se comparent pas à la période précédente, quand c'est le cas. */
@@ -208,10 +213,10 @@ async function lireCampagnes(
   }))
 }
 
-async function lireVentes(userId: string, boutique: string, depuis: string, jusqua: string): Promise<JourVentes[]> {
+async function lireVentes(userId: string, source: SourceVentes, boutique: string, depuis: string, jusqua: string): Promise<JourVentes[]> {
   const lignes = await withUserScope(userId, (tx) =>
     tx.commerceJour.findMany({
-      where: { userId, source: SOURCE_SHOPIFY, boutique, jour: { gte: new Date(depuis), lte: new Date(jusqua) } },
+      where: { userId, source, boutique, jour: { gte: new Date(depuis), lte: new Date(jusqua) } },
       orderBy: { jour: 'asc' },
     }),
   )
@@ -354,11 +359,11 @@ function santeCompte(
 }
 
 function santeVentes(ventes: EtatVentes, maintenant: Date): LigneSante {
-  const base = { cle: 'shopify', source: 'Shopify' }
-  const relier = { label: 'Connecter Shopify', href: '' }
+  const base = { cle: ventes.source, source: ventes.etat === 'absent' ? 'Ventes' : ventes.nom }
+  const relier = { label: 'Relier une boutique ou Stripe', href: '' }
   switch (ventes.etat) {
     case 'absent':
-      return { ...base, etat: 'absent', texte: 'Non reliée : sans elle, pas de chiffre d’affaires réel.', action: relier }
+      return { ...base, etat: 'absent', texte: 'Aucune source de ventes (Shopify, WooCommerce ou Stripe) : pas de chiffre d’affaires réel.', action: relier }
     case 'offre':
       return { ...base, etat: 'absent', texte: 'Votre offre n’ouvre pas la lecture de la boutique.', action: null }
     case 'portee':
@@ -372,21 +377,53 @@ function santeVentes(ventes: EtatVentes, maintenant: Date): LigneSante {
         texte:
           ventes.synchroAt === null
             ? ventes.message
-            : `${ventes.message} Les dernières données Shopify disponibles datent du ${quandLisible(ventes.synchroAt)}.`,
+            : `${ventes.message} Les dernières données ${ventes.nom} disponibles datent du ${quandLisible(ventes.synchroAt)}.`,
         action: null,
       }
     case 'ok': {
       if (ventes.synchroAt !== null && +maintenant - +ventes.synchroAt > VIEILLE_MS) {
-        return { ...base, etat: 'verifier', texte: `Les dernières données Shopify disponibles datent du ${quandLisible(ventes.synchroAt)}.`, action: null }
+        return { ...base, etat: 'verifier', texte: `Les dernières données ${ventes.nom} disponibles datent du ${quandLisible(ventes.synchroAt)}.`, action: null }
       }
       if (ventes.tronque) {
-        return { ...base, etat: 'verifier', texte: 'Trop de commandes pour une seule lecture : les jours les plus récents peuvent manquer.', action: null }
+        return { ...base, etat: 'verifier', texte: 'Trop de ventes pour une seule lecture : une partie de la période peut manquer.', action: null }
       }
       return {
         ...base,
         etat: 'bon',
         texte: `À jour${ventes.synchroAt === null ? '' : ` — lue le ${quandLisible(ventes.synchroAt)}`}${ventes.couvertureDepuis === null ? '' : `, ventes connues depuis le ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(ventes.couvertureDepuis))}`}.`,
         action: null,
+      }
+    }
+  }
+}
+
+/** Les abonnements Stripe : lus, en panne, ou pas encore. `null` sans Stripe relié. */
+function santeAbonnements(abonnements: EtatAbonnements, maintenant: Date): LigneSante | null {
+  const base = { cle: 'stripe-abonnements', source: 'Abonnements Stripe', action: null }
+  switch (abonnements.etat) {
+    case 'absent':
+      return null
+    case 'jamais':
+      return { ...base, etat: 'verifier', texte: 'Stripe relié, abonnements pas encore lus. Actualisez pour les récupérer.' }
+    case 'erreur':
+      return {
+        ...base,
+        etat: 'probleme',
+        texte: abonnements.synchroAt === null ? abonnements.message : `${abonnements.message} Les derniers chiffres datent du ${quandLisible(abonnements.synchroAt)}.`,
+      }
+    case 'ok': {
+      if (abonnements.synchroAt !== null && +maintenant - +abonnements.synchroAt > VIEILLE_MS) {
+        return { ...base, etat: 'verifier', texte: `Les derniers chiffres datent du ${quandLisible(abonnements.synchroAt)}.` }
+      }
+      const autres = abonnements.instantane?.autresDevises ?? 0
+      return {
+        ...base,
+        etat: abonnements.tronque || autres > 0 ? 'verifier' : 'bon',
+        texte: abonnements.tronque
+          ? 'Trop d’abonnements pour une seule lecture : les plus anciens peuvent manquer à l’historique.'
+          : autres > 0
+            ? `${autres} abonnement${autres > 1 ? 's' : ''} dans une autre devise, écarté${autres > 1 ? 's' : ''} des totaux.`
+            : `À jour${abonnements.synchroAt === null ? '' : ` — lus le ${quandLisible(abonnements.synchroAt)}`}.`,
       }
     }
   }
@@ -505,13 +542,15 @@ export async function lireNova(
   options: { periode?: string; du?: string; au?: string; siteId?: string } = {},
   maintenant = new Date(),
 ): Promise<VueNova> {
-  const [ventes, google, meta, sites, visites] = await Promise.all([
-    sans(lireEtatVentes(userId), { etat: 'absent', message: '', boutique: '', synchroAt: null, couvertureDepuis: null, tronque: false, devise: '', fuseau: '', clients: null, couts: { at: null, message: '', variantes: 0, renseignes: 0 } } as EtatVentes),
+  const [ventes, google, meta, sites, visites, abonnements] = await Promise.all([
+    sans(lireEtatVentes(userId), ABSENT),
     sans(compteActif(userId, 'google-ads'), null),
     sans(compteActif(userId, 'meta-ads'), null),
     sans(listSites(userId), []),
     sans(lireEtatVisites(userId), { etat: 'absent', message: '', propriete: '', nom: '', synchroAt: null, couvertureDepuis: null, devise: '', fuseau: '' } as EtatVisites),
+    sans(lireEtatAbonnements(userId), { etat: 'absent', message: '', synchroAt: null, tronque: false, instantane: null } as EtatAbonnements),
   ])
+  const indicateursAbos = abonnements.instantane === null ? null : indicateursAbonnements(abonnements.instantane)
   const visitesLues = (visites.etat === 'ok' || (visites.etat === 'erreur' && visites.synchroAt !== null)) && visites.propriete !== ''
   const site = sites.find((un) => un.id === options.siteId) ?? sites[0] ?? null
   const siteId = site?.id ?? ''
@@ -535,7 +574,7 @@ export async function lireNova(
 
   const [campagnes, joursVentes, recherche, joursVisites] = await Promise.all([
     sans(lireCampagnes(userId, regies, depuis, fin), []),
-    venteLues ? sans(lireVentes(userId, ventes.boutique, depuis, fin), []) : Promise.resolve([]),
+    venteLues ? sans(lireVentes(userId, ventes.source, ventes.boutique, depuis, fin), []) : Promise.resolve([]),
     sans(lireRecherche(userId, siteId, periode.au), null),
     visitesLues ? sans(lireVisites(userId, visites.propriete, depuis, fin), []) : Promise.resolve([]),
   ])
@@ -546,6 +585,7 @@ export async function lireNova(
     regies: regies.map((compte) => compte.plateforme as PlateformePayante),
     campagnes,
     ventes: { disponibles: venteLues, couvertureDepuis: ventes.couvertureDepuis, jours: joursVentes },
+    nomVentes: ventes.nom,
     recherche,
     visites: { disponibles: visitesLues, couvertureDepuis: visites.couvertureDepuis, jours: joursVisites },
   }
@@ -574,6 +614,7 @@ export async function lireNova(
     campagnes: lignesCampagnes,
     produits: lignesProduits,
     merEquilibre: null as number | null,
+    abonnements: indicateursAbos,
   }
   // Le mois à date : le premier du mois, rien n'est encore écoulé, et zéro est alors la vérité.
   const ventesMois =
@@ -634,6 +675,8 @@ export async function lireNova(
   ]
   const couts = santeCouts(ventes)
   if (couts !== null) lignesSante.push(couts)
+  const santeAbos = santeAbonnements(abonnements, maintenant)
+  if (santeAbos !== null) lignesSante.push(santeAbos)
   if (ventesActuelles !== null && ventesActuelles.commandes >= 20) {
     const inconnues = (ventesActuelles.canaux.inconnu?.commandes ?? 0) / ventesActuelles.commandes
     if (inconnues >= 0.3) {
@@ -672,19 +715,20 @@ export async function lireNova(
   const global = etats.includes('probleme') ? 'probleme' : etats.includes('verifier') || !etats.includes('bon') ? 'verifier' : 'bon'
 
   const sources = [
-    ...(venteLues ? ['Shopify'] : []),
+    ...(venteLues ? [ventes.nom] : []),
     ...regies.map((compte) => NOM_CANAL[compte.plateforme as PlateformePayante]),
     ...(recherche === null ? [] : ['Search Console']),
     ...(visitesLues ? ['Google Analytics 4'] : []),
+    ...(abonnements.instantane !== null && ventes.source !== 'stripe' ? ['Stripe (abonnements)'] : []),
   ]
 
   return {
     periode,
     precedente,
     devise,
-    vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null && visites.etat === 'absent',
+    vierge: ventes.etat === 'absent' && comptes.length === 0 && recherche === null && visites.etat === 'absent' && abonnements.etat === 'absent',
     sources,
-    kpis: indicateursNova(actuel, avant, raisonVentes(ventes)),
+    kpis: indicateursNova(actuel, avant, raisonVentes(ventes), ventes.nom),
     canaux: performanceCanaux(donnees, periode, ventesActuelles, visitesActuelles),
     attribution: lignesAttribution,
     campagnes: lignesCampagnes.slice(0, CAMPAGNES_MAX),
@@ -697,6 +741,7 @@ export async function lireNova(
     visites,
     visitesPeriode: visitesActuelles,
     contenus: contenusQuiAttirent(visitesActuelles),
+    abonnements: { etat: abonnements, indicateurs: indicateursAbos },
     manqueVentes: ventesActuelles === null ? raisonVentes(ventes) : '',
     /*
      * La période affichée est couverte, la précédente non : sans cette phrase, « pas de
@@ -704,13 +749,13 @@ export async function lireNova(
      */
     sansComparaison:
       ventesActuelles !== null && ventesAvant === null && ventes.couvertureDepuis !== null
-        ? `Ventes connues depuis le ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(ventes.couvertureDepuis))} : la période précédente commence avant, elle n’est donc pas comparée. Sans l’autorisation « read_all_orders », Shopify ne donne que les 60 derniers jours ; avec elle, tout l’historique.`
+        ? `Ventes connues depuis le ${new Intl.DateTimeFormat('fr-CH', { day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(ventes.couvertureDepuis))} : la période précédente commence avant, elle n’est donc pas comparée.${ventes.source === 'shopify' ? ' Sans l’autorisation « read_all_orders », Shopify ne donne que les 60 derniers jours ; avec elle, tout l’historique.' : ''}`
         : null,
     pourOria: rapportPourOria(periode.libelle, sources, alertes, insights, opportunites),
     siteId,
     reglages,
     ordre: ordreIndicateurs(reglages.activite),
-    aVenir: indicateursAVenir(reglages.activite),
+    aVenir: indicateursAVenir(reglages.activite, abonnements.etat !== 'absent'),
     marge,
     objectifs: suivis,
     clients: repartitionClients(ventesActuelles),

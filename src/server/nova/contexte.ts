@@ -64,7 +64,7 @@ export function faitsNova(vue: VueNova): string[] {
     ...a.plateformes.map((ligne) => `- ${ligne.nom} déclare ${nombre(ligne.conversions, 1)} conversions et ${vue.devise} ${nombre(ligne.revenu, 2)}.`),
     a.reel === null
       ? '- Ventes réelles : inconnues, aucune boutique lue.'
-      : `- Ventes réelles (Shopify) : ${a.reel.commandes} commandes, ${vue.devise} ${nombre(a.reel.chiffre, 2)}.`,
+      : `- Ventes réelles (${vue.ventes.nom}) : ${a.reel.commandes} commandes, ${vue.devise} ${nombre(a.reel.chiffre, 2)}.`,
   )
 
   if (vue.campagnes.length > 0) {
@@ -113,6 +113,19 @@ export function faitsNova(vue: VueNova): string[] {
       ? `Marge : non calculable — ${vue.marge.raison}`
       : `Marge estimée sur la période (estimation basée sur les coûts renseignés) : ${vue.devise} ${nombre(vue.marge.marge, 2)}, soit ${nombre(vue.marge.taux * 100, 1)} % du CA${vue.marge.manquants.length === 0 ? '' : ` ; non renseignés : ${vue.marge.manquants.join(', ')} (marge réelle probablement plus basse)`}. Coût des produits : ${vue.marge.source === 'shopify' ? 'lu dans Shopify' : 'pourcentage saisi'}${vue.marge.note === null ? '' : ` (${vue.marge.note})`}.${vue.marge.merEquilibre === null ? '' : ` Seuil de rentabilité publicitaire : MER ${vue.marge.merEquilibre} % (en dessous, la publicité coûte plus qu’elle ne laisse).`}`,
   )
+  const abos = vue.abonnements.indicateurs
+  if (abos !== null) {
+    const monnaie = vue.abonnements.etat.instantane?.devise || vue.devise
+    lignes.push(
+      `Abonnements (Stripe, prix actuel des formules, remises non déduites, essais exclus) : MRR ${monnaie} ${nombre(abos.mrr, 2)}, ARR ${monnaie} ${nombre(abos.arr, 0)}, ${abos.actifs} abonnés payants, revenu moyen ${abos.arpu === null ? 'inconnu' : `${monnaie} ${nombre(abos.arpu, 2)}`} par abonné et par mois` +
+        `${abos.croissance === null ? '' : `, MRR ${abos.croissance >= 0 ? '+' : ''}${abos.croissance} % sur trois mois`}` +
+        `, churn mensuel ${abos.churn === null ? 'non mesurable (historique ou volume insuffisant)' : `${nombre(abos.churn * 100, 1)} % des abonnés`}` +
+        `${abos.churnMrr === null ? '' : ` (${nombre(abos.churnMrr * 100, 1)} % du MRR)`}` +
+        `. LTV : ${abos.ltv === null ? `indisponible — ${abos.raisonLtv ?? ''}` : `≈ ${monnaie} ${nombre(abos.ltv, 0)} (revenu moyen ÷ churn, estimation)`}.`,
+    )
+  } else if (vue.abonnements.etat.etat !== 'absent') {
+    lignes.push('Abonnements Stripe : reliés mais pas encore lus. Ne cite aucun MRR ni churn.')
+  }
   if (vue.clients !== null) {
     lignes.push(
       `Clients sur la période : ${vue.clients.nouveaux.commandes} commandes de nouveaux clients (${vue.devise} ${nombre(vue.clients.nouveaux.chiffre, 2)}), ${vue.clients.existants.commandes} de clients revenus, ${vue.clients.inconnus.commandes} sans client identifié.`,

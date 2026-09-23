@@ -2,6 +2,7 @@ import { ecranDuMembre, membre, type IdMembre } from '@/lib/equipe'
 import { NOM_CANAL } from '@/lib/nova'
 import { variation } from '@/server/ads/metriques'
 import { contenuQualifie, contenusQuiAttirent } from './contenus'
+import type { IndicateursAbonnements } from './abonnements'
 import {
   cumulPub,
   enPourcent,
@@ -46,6 +47,8 @@ export type Contexte = {
   produits: LigneProduit[]
   /** Le MER sous lequel la publicité coûte plus qu'elle ne laisse (voir pilotage.ts), s'il se calcule. */
   merEquilibre?: number | null
+  /** Les abonnements Stripe, quand ils ont été lus. */
+  abonnements?: IndicateursAbonnements | null
 }
 
 const AGENT_DE: Record<PlateformePayante, IdMembre> = { 'google-ads': 'ads', 'meta-ads': 'meta' }
@@ -58,6 +61,8 @@ export const SEUILS = {
   partProduit: 0.2,
   nonAttribue: 0.3,
   sessionsAppareil: 200,
+  /** Un churn mensuel au-delà : un abonné sur vingt part chaque mois. */
+  churnEleve: 0.05,
   /** Un produit qui pèse au moins cette part du CA, et laisse moins que cette marge brute. */
   partMarge: 0.1,
   margeFaible: 0.35,
@@ -69,6 +74,11 @@ function tauxAppareil(visites: CumulVisites, appareil: string): number | null {
   const ligne = visites.appareils[appareil]
   if (ligne === undefined || ligne.sessions < SEUILS.sessionsAppareil) return null
   return (ligne.achats / ligne.sessions) * 100
+}
+
+/** Le nom de la source de ventes, pour dire d'où vient un chiffre. */
+function vend(ctx: Contexte): string {
+  return ctx.donnees.nomVentes ?? 'Shopify'
 }
 
 function fmt(valeur: number): string {
@@ -91,13 +101,13 @@ function traficSansVentes(ctx: Contexte): { hausse: number; source: string } | n
   if (commandes === null || Math.abs(commandes) > 5) return null
   if (ctx.visites != null && ctx.visitesAvant != null && ctx.visitesAvant.sessions >= SEUILS.sessionsTendance) {
     const hausse = variation(ctx.visites.sessions, ctx.visitesAvant.sessions)
-    return hausse !== null && hausse >= 20 ? { hausse, source: 'Visites GA4 comparées à la période précédente ; commandes Shopify.' } : null
+    return hausse !== null && hausse >= 20 ? { hausse, source: `Visites GA4 comparées à la période précédente ; commandes ${vend(ctx)}.` } : null
   }
   const recherche = ctx.donnees.recherche
   if (recherche === null || recherche.clics28Avant === null) return null
   const hausse = variation(recherche.clics28, recherche.clics28Avant)
   return hausse !== null && hausse >= 20
-    ? { hausse, source: 'Clics Search Console sur 28 jours, comparés aux 28 jours d’avant ; commandes Shopify sur la période.' }
+    ? { hausse, source: `Clics Search Console sur 28 jours, comparés aux 28 jours d’avant ; commandes ${vend(ctx)} sur la période.` }
     : null
 }
 
@@ -148,7 +158,7 @@ export function detecterInsights(ctx: Contexte): Insight[] {
     trouves.push({
       cle: 'attribution.chevauchement',
       texte: ctx.attribution.explication,
-      fondement: 'Revenu déclaré par chaque régie, comparé au chiffre d’affaires Shopify de la même période.',
+      fondement: `Revenu déclaré par chaque régie, comparé au chiffre d’affaires ${vend(ctx)} de la même période.`,
       ton: 'attention',
     })
   }
@@ -193,8 +203,28 @@ export function detecterInsights(ctx: Contexte): Insight[] {
       trouves.push({
         cle: 'ventes.tendance',
         texte: `Votre chiffre d’affaires ${ecart > 0 ? 'progresse' : 'recule'} de ${pourcent(ecart)} par rapport à la période précédente.`,
-        fondement: `${argent(ctx.ventesAvant.chiffre, devise)} avant, ${argent(ctx.ventes.chiffre, devise)} maintenant (Shopify).`,
+        fondement: `${argent(ctx.ventesAvant.chiffre, devise)} avant, ${argent(ctx.ventes.chiffre, devise)} maintenant (${vend(ctx)}).`,
         ton: ecart > 0 ? 'positif' : 'attention',
+      })
+    }
+  }
+
+  // Les abonnements : le MRR et sa tendance, puis ce qui part.
+  const abos = ctx.abonnements
+  if (abos != null && abos.actifs > 0) {
+    const argentAbos = (valeur: number) => argent(valeur, devise)
+    trouves.push({
+      cle: 'abonnements.mrr',
+      texte: `Votre revenu mensuel récurrent est de ${argentAbos(abos.mrr)}${abos.croissance === null ? '' : `, ${abos.croissance >= 0 ? 'en hausse' : 'en baisse'} de ${pourcent(Math.abs(abos.croissance))} sur trois mois`}.`,
+      fondement: `${abos.actifs} abonné${abos.actifs > 1 ? 's' : ''} payant${abos.actifs > 1 ? 's' : ''}, au prix actuel de leur formule, remises non déduites (Stripe).`,
+      ton: abos.croissance === null || abos.croissance >= 0 ? 'positif' : 'attention',
+    })
+    if (abos.churn !== null && abos.churn >= SEUILS.churnEleve) {
+      trouves.push({
+        cle: 'abonnements.churn',
+        texte: `Vous perdez ${fmt(abos.churn * 100)} % de vos abonnés chaque mois.`,
+        fondement: `Départs ÷ abonnés en début de mois, moyenne des trois derniers mois terminés (Stripe).${abos.ltv === null ? '' : ` À ce rythme, un abonné rapporte en moyenne ${argentAbos(abos.ltv)} sur sa durée (estimation).`}`,
+        ton: 'attention',
       })
     }
   }
@@ -225,7 +255,7 @@ export function detecterInsights(ctx: Contexte): Insight[] {
     trouves.push({
       cle: `produit.${premier.id}`,
       texte: `« ${premier.titre} » représente ${pourcent(premier.part * 100)} de votre chiffre d’affaires.`,
-      fondement: `${argent(premier.chiffre, devise)} sur ${premier.commandes} commande${premier.commandes > 1 ? 's' : ''} (Shopify).`,
+      fondement: `${argent(premier.chiffre, devise)} sur ${premier.commandes} commande${premier.commandes > 1 ? 's' : ''} (${vend(ctx)}).`,
       ton: 'neutre',
     })
   }
@@ -258,7 +288,7 @@ export function detecterInsights(ctx: Contexte): Insight[] {
     trouves.push({
       cle: 'ia.ventes',
       texte: `${ia.commandes} commande${ia.commandes > 1 ? 's sont arrivées' : ' est arrivée'} depuis un assistant IA (${assistants}).`,
-      fondement: 'Dernière visite enregistrée par Shopify avant l’achat, venant d’un assistant reconnu.',
+      fondement: `Dernière visite enregistrée par ${vend(ctx)} avant l’achat, venant d’un assistant reconnu.`,
       ton: 'positif',
     })
   }
@@ -270,7 +300,7 @@ export function detecterInsights(ctx: Contexte): Insight[] {
       trouves.push({
         cle: 'attribution.inconnue',
         texte: `${pourcent(part * 100)} de vos commandes n’ont pas d’origine connue : la répartition par canal est à lire avec prudence.`,
-        fondement: 'Commandes Shopify sans dernière visite enregistrée.',
+        fondement: `Commandes ${vend(ctx)} sans dernière visite enregistrée.`,
         ton: 'attention',
       })
     }
@@ -317,7 +347,7 @@ export function detecterAlertes(ctx: Contexte): Alerte[] {
           cle: 'marge.seuil',
           niveau: mer < ctx.merEquilibre * 0.8 ? 'rouge' : 'orange',
           texte: `Votre MER (${mer} %) est sous votre seuil de rentabilité publicitaire (${ctx.merEquilibre} %) : la publicité coûte plus qu’elle ne laisse.`,
-          fondement: `${argent(ctx.ventes.chiffre, devise)} de ventes Shopify pour ${argent(depense, devise)} de publicité. Seuil calculé avec vos coûts (produits, livraison, frais) — estimation basée sur les coûts renseignés. Des clients qui reviennent acheter peuvent le justifier.`,
+          fondement: `${argent(ctx.ventes.chiffre, devise)} de ventes ${vend(ctx)} pour ${argent(depense, devise)} de publicité. Seuil calculé avec vos coûts (produits, livraison, frais) — estimation basée sur les coûts renseignés. Des clients qui reviennent acheter peuvent le justifier.`,
           agent: AGENT_DE[principale],
         })
       }
@@ -396,7 +426,7 @@ export function detecterAlertes(ctx: Contexte): Alerte[] {
         cle: 'ventes.baisse',
         niveau: 'orange',
         texte: `Vos commandes ont baissé de ${pourcent(ecart)} par rapport à la période précédente.`,
-        fondement: `${ctx.ventesAvant.commandes} commandes avant, ${ctx.ventes.commandes} maintenant (Shopify).`,
+        fondement: `${ctx.ventesAvant.commandes} commandes avant, ${ctx.ventes.commandes} maintenant (${vend(ctx)}).`,
         agent: 'cro',
       })
     }

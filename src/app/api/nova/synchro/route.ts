@@ -5,10 +5,11 @@ import { getEntitlements } from '@/server/billing/entitlements'
 import { requireFeature } from '@/server/billing/features'
 import { synchroniserVentes } from '@/server/nova/collecte'
 import { synchroniserVisites } from '@/server/nova/collecte-ga4'
+import { synchroniserAbonnements } from '@/server/nova/collecte-stripe'
 import { assertSameOrigin, fail, ok, readJson } from '@/server/http/respond'
 
 /**
- * Relire les ventes de la boutique et les visites de Google Analytics.
+ * Relire les ventes, les visites de Google Analytics et les abonnements Stripe.
  *
  * `auto` : appelé par l'écran de Nova à l'ouverture ; ne relit que si les données ont plus
  * de douze heures. `manuel` : le bouton « Actualiser », qui relit toute la fenêtre. Aucun
@@ -25,9 +26,13 @@ export async function POST(request: Request) {
     requireFeature(await getEntitlements(user.id), 'nova_agent')
     consume(`nova-synchro:${user.id}`, RULES.aiOperation)
     const { mode } = input.parse(await readJson(request))
-    // Les deux sources se relisent ensemble ; une panne de l'une n'empêche pas l'autre.
-    const [etat, visites] = await Promise.all([synchroniserVentes(user.id, mode), synchroniserVisites(user.id, mode)])
-    const probleme = [etat, visites].find((un) => un.etat === 'erreur' || un.etat === 'portee')
+    // Les sources se relisent ensemble ; une panne de l'une n'empêche pas les autres.
+    const [etat, visites, abonnements] = await Promise.all([
+      synchroniserVentes(user.id, mode),
+      synchroniserVisites(user.id, mode),
+      synchroniserAbonnements(user.id, mode),
+    ])
+    const probleme = [etat, visites, abonnements].find((un) => un.etat === 'erreur' || un.etat === 'portee')
     return ok({
       etat: probleme === undefined ? 'ok' : probleme.etat,
       message: probleme?.message ?? '',

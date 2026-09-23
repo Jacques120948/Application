@@ -172,6 +172,8 @@ export type Donnees = {
     couvertureDepuis: string | null
     jours: JourVentes[]
   }
+  /** Le nom de la source de ventes (Shopify, WooCommerce, Stripe). Absent : Shopify. */
+  nomVentes?: string
   /** Search Console : des cumuls sur 28 jours, seule forme qu'Evoliia conserve. */
   recherche: { clics28: number; clics28Avant: number | null; au: string } | null
   /** Google Analytics 4, quand il est relié. Même règle de couverture que les ventes. */
@@ -398,7 +400,7 @@ export type Kpi = {
   absent: string
 }
 
-export const MANQUE_VENTES = 'Connectez Shopify pour voir vos ventes réelles.'
+export const MANQUE_VENTES = 'Reliez votre boutique (Shopify, WooCommerce) ou Stripe pour voir vos ventes réelles.'
 export const MANQUE_PUB = 'Aucun compte publicitaire relié.'
 export const MANQUE_CAC = 'Données insuffisantes pour calculer précisément votre coût d’acquisition client.'
 export const MANQUE_CONVERSION =
@@ -453,7 +455,12 @@ function valeursKpi(ensemble: Ensemble): Record<Kpi['cle'], number | null> {
  * additionner celles de Google et de Meta est précisément l'erreur que Nova existe pour
  * éviter.
  */
-export function indicateursNova(actuel: Ensemble, precedent: Ensemble, manqueVentes: string = MANQUE_VENTES): Kpi[] {
+export function indicateursNova(
+  actuel: Ensemble,
+  precedent: Ensemble,
+  manqueVentes: string = MANQUE_VENTES,
+  nomVentes = 'Shopify',
+): Kpi[] {
   const a = valeursKpi(actuel)
   const p = valeursKpi(precedent)
   const avecVentes = actuel.ventes !== null
@@ -476,7 +483,7 @@ export function indicateursNova(actuel: Ensemble, precedent: Ensemble, manqueVen
     absent: a[cle] === null ? absent : '',
   })
   return [
-    kpi('chiffre', 'Chiffre d’affaires', 'argent', 'hausse', 'Shopify, remboursements déduits', manqueVentes),
+    kpi('chiffre', 'Chiffre d’affaires', 'argent', 'hausse', `${nomVentes}, remboursements déduits`, manqueVentes),
     kpi('depenses', 'Dépenses marketing', 'argent', 'neutre', 'Google Ads et Meta Ads', MANQUE_PUB),
     kpi('roas', 'ROAS', 'pourcent', 'hausse', 'Revenu déclaré par les régies ÷ dépenses', pub ? 'Aucune dépense sur la période.' : MANQUE_PUB),
     kpi(
@@ -487,23 +494,23 @@ export function indicateursNova(actuel: Ensemble, precedent: Ensemble, manqueVen
       'Chiffre d’affaires total ÷ dépenses marketing',
       !avecVentes ? manqueVentes : pub ? 'Aucune dépense sur la période.' : MANQUE_PUB,
     ),
-    kpi('commandes', 'Commandes', 'nombre', 'hausse', 'Shopify', `${manqueVentes} Les conversions déclarées par chaque régie sont plus bas, par canal.`),
+    kpi('commandes', 'Commandes', 'nombre', 'hausse', nomVentes, `${manqueVentes} Les conversions déclarées par chaque régie sont plus bas, par canal.`),
     kpi(
       'cpa',
       'Coût par commande',
       'argent',
       'baisse',
-      'Dépenses ÷ commandes Shopify',
+      `Dépenses ÷ commandes ${nomVentes}`,
       !pub ? MANQUE_PUB : !avecVentes ? `${manqueVentes} Le coût par conversion de chaque régie est plus bas, par canal.` : 'Aucune commande sur la période.',
     ),
-    kpi('cac', 'CAC', 'argent', 'baisse', 'Dépenses ÷ nouveaux clients Shopify', MANQUE_CAC),
+    kpi('cac', 'CAC', 'argent', 'baisse', `Dépenses ÷ nouveaux clients ${nomVentes}`, MANQUE_CAC),
     kpi('panier', 'Panier moyen', 'argent', 'hausse', 'Chiffre d’affaires ÷ commandes', manqueVentes),
     kpi(
       'conversion',
       'Taux de conversion',
       'pourcent',
       'hausse',
-      avecVentes ? 'Commandes Shopify ÷ visites GA4' : 'Achats ÷ visites, selon GA4',
+      avecVentes ? `Commandes ${nomVentes} ÷ visites GA4` : 'Achats ÷ visites, selon GA4',
       MANQUE_CONVERSION,
     ),
   ]
@@ -638,7 +645,7 @@ export function attribution(
     const verbe = plateformes.length > 1 ? 'revendiquent ensemble' : 'revendique'
     explication =
       revendique > reel.chiffre
-        ? `${qui} ${verbe} ${montant(revendique, donnees.devise)} de revenu attribué alors que Shopify enregistre ${montant(reel.chiffre, donnees.devise)} de chiffre d’affaires total sur la période. ${plateformes.length > 1 ? 'Cela indique probablement un chevauchement d’attribution entre les plateformes.' : 'La régie s’attribue probablement des ventes qui venaient d’ailleurs.'}`
+        ? `${qui} ${verbe} ${montant(revendique, donnees.devise)} de revenu attribué alors que ${donnees.nomVentes ?? 'Shopify'} enregistre ${montant(reel.chiffre, donnees.devise)} de chiffre d’affaires total sur la période. ${plateformes.length > 1 ? 'Cela indique probablement un chevauchement d’attribution entre les plateformes.' : 'La régie s’attribue probablement des ventes qui venaient d’ailleurs.'}`
         : `${qui} ${verbe} ${montant(revendique, donnees.devise)} sur ${montant(reel.chiffre, donnees.devise)} encaissés par la boutique. Le reste vient d’autres canaux, ou de ventes que les régies n’ont pas vues. ${PRUDENCE}`
   }
   return { plateformes, reel, revendique, chevauchement, explication, modele: MODELE }

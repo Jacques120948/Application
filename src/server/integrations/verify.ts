@@ -3,6 +3,8 @@ import { verifyPostelyaCode } from './providers/postelya'
 import { verifyOpenAiKey } from './providers/openai'
 import { verifyGeminiKey } from './providers/gemini'
 import { verifyShopifyToken } from './providers/shopify'
+import { verifyWooKey } from './providers/woocommerce'
+import { verifyStripeLecture } from './providers/stripe-lecture'
 
 /**
  * Vérification d'un secret avant enregistrement.
@@ -56,6 +58,8 @@ const VERIFIERS: Record<string, KeyVerifier> = {
   openai: verifyOpenAiKey,
   'google-gemini': verifyGeminiKey,
   shopify: verifyShopifyToken,
+  woocommerce: verifyWooKey,
+  'stripe-revenus': verifyStripeLecture,
 }
 
 export function findVerifier(providerId: string): KeyVerifier | undefined {

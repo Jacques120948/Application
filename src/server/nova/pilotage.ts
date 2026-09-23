@@ -254,9 +254,11 @@ export function ordreIndicateurs(activite: Activite | ''): Kpi['cle'][] {
 }
 
 /** Ce que l'activité voudrait voir et qu'aucune source reliée ne donne encore. */
-export function indicateursAVenir(activite: Activite | ''): string | null {
+export function indicateursAVenir(activite: Activite | '', stripeRelie = false): string | null {
   if (activite === 'saas') {
-    return 'MRR, churn et LTV d’un abonnement demandent vos paiements récurrents : Stripe n’est pas encore relié à Nova.'
+    return stripeRelie
+      ? null
+      : 'MRR, churn et LTV d’un abonnement demandent vos paiements récurrents : reliez Stripe (clé restreinte en lecture) dans Connexions.'
   }
   if (activite === 'services') {
     return 'Leads, coût par lead et taux lead → client demandent vos formulaires ou votre CRM : ils ne sont pas encore reliés à Nova. En attendant, le coût par conversion de chaque régie en tient lieu.'

@@ -364,3 +364,65 @@ export async function secureFetch(brut: string): Promise<Reponse> {
 
   throw validation('Cette adresse enchaîne trop de redirections.')
 }
+
+/** Une réponse d'API JSON, bornée comme une page. */
+export type ReponseJson = { status: number; corps: unknown; entetes: Record<string, string> }
+
+/** Au-delà, une page d'API est anormale : une page de cent commandes pèse quelques centaines de ko. */
+export const MAX_JSON_BYTES = 8 * 1024 * 1024
+
+/**
+ * Appelle une API JSON sur un serveur choisi par la personne — sa boutique WooCommerce —,
+ * sous les mêmes protections qu'une page.
+ *
+ * Deux différences avec la lecture d'une page, et chacune protège un secret. **HTTPS
+ * seulement** : les identifiants partent dans l'en-tête, et en clair ils se liraient sur le
+ * chemin. **Aucune redirection suivie** : une redirection emporterait l'en-tête
+ * d'autorisation vers une adresse que personne n'a vérifiée ; elle est rendue telle quelle,
+ * et l'appelant dit à la personne quelle adresse corriger.
+ */
+export function requeteJson(url: URL, entetes: Readonly<Record<string, string>>): Promise<ReponseJson> {
+  if (url.protocol !== 'https:') return Promise.reject(validation('La boutique doit être servie en https.'))
+  return new Promise((resolve, reject) => {
+    const demande = httpsRequest(
+      url,
+      {
+        method: 'GET',
+        lookup: lookupSurveille,
+        headers: { 'user-agent': USER_AGENT, accept: 'application/json', ...entetes },
+        timeout: TIMEOUT_MS * 2,
+      },
+      (message) => {
+        const morceaux: Buffer[] = []
+        let lus = 0
+        message.on('data', (morceau: Buffer) => {
+          lus += morceau.length
+          if (lus > MAX_JSON_BYTES) {
+            message.destroy()
+            reject(new Error('La réponse de la boutique est trop volumineuse.'))
+            return
+          }
+          morceaux.push(morceau)
+        })
+        message.on('end', () => {
+          const texte = Buffer.concat(morceaux).toString('utf8')
+          let corps: unknown = null
+          try {
+            corps = texte === '' ? null : JSON.parse(texte)
+          } catch {
+            corps = null
+          }
+          const plats: Record<string, string> = {}
+          for (const [cle, valeur] of Object.entries(message.headers)) {
+            if (typeof valeur === 'string') plats[cle.toLowerCase()] = valeur
+          }
+          resolve({ status: message.statusCode ?? 0, corps, entetes: plats })
+        })
+        message.on('error', reject)
+      },
+    )
+    demande.on('timeout', () => demande.destroy(new Error("La boutique n'a pas répondu à temps.")))
+    demande.on('error', reject)
+    demande.end()
+  })
+}

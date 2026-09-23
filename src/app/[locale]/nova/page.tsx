@@ -19,6 +19,7 @@ import {
   ProduitsNova,
   SanteNova,
   ContenusNova,
+  AbonnementsNova,
   VisitesNova,
 } from '@/components/studio/Nova'
 import { ProprieteGa4 } from '@/components/studio/ProprieteGa4'
@@ -135,6 +136,9 @@ export default async function NovaPage({
 
           <IndicateursNova kpis={vue.kpis} devise={vue.devise} ordre={vue.ordre} />
           <AVenirNova texte={vue.aVenir} />
+          {vue.abonnements.etat.instantane === null || vue.abonnements.indicateurs === null ? null : (
+            <AbonnementsNova instantane={vue.abonnements.etat.instantane} indicateurs={vue.abonnements.indicateurs} devise={vue.devise} />
+          )}
           <AlertesNova alertes={vue.alertes} locale={locale} siteId={siteId} transmission={transmission} />
           <InsightsNova insights={vue.insights} />
           {vue.objectifs.length === 0 ? null : (
@@ -143,10 +147,10 @@ export default async function NovaPage({
           <CanauxNova canaux={vue.canaux} devise={vue.devise} />
           {vue.visitesPeriode === null ? null : <VisitesNova visites={vue.visitesPeriode} devise={vue.devise} />}
           <ContenusNova contenus={vue.contenus} devise={vue.devise} transmission={transmission} />
-          <AttributionNova attribution={vue.attribution} devise={vue.devise} manqueVentes={vue.manqueVentes} />
+          <AttributionNova attribution={vue.attribution} devise={vue.devise} manqueVentes={vue.manqueVentes} nomVentes={vue.ventes.nom} />
           <OpportunitesNova opportunites={vue.opportunites} transmission={transmission} />
           <CampagnesNova campagnes={vue.campagnes} devise={vue.devise} filtre={filtre} lien={lienRegie} />
-          <ProduitsNova produits={vue.produits} devise={vue.devise} />
+          <ProduitsNova produits={vue.produits} devise={vue.devise} nomVentes={vue.ventes.nom} />
           <SanteNova global={vue.sante.global} lignes={vue.sante.lignes} transmission={transmission} />
           {vue.visites.etat === 'absent' ? null : <ProprieteGa4 actuelle={vue.visites.propriete} />}
           <PourOriaNova rapport={vue.pourOria} versOria={`/${locale}/oria${suffixe === '' ? '' : `?${suffixe}`}`} />

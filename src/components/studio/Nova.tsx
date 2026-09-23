@@ -9,6 +9,7 @@ import type { LigneModele, Modele, RepartitionClients, ValeurClient } from '@/se
 import type { Bilan } from '@/server/nova/bilan'
 import type { CumulVisites } from '@/server/nova/metriques'
 import type { Contenus } from '@/server/nova/contenus'
+import type { IndicateursAbonnements, InstantaneAbonnements } from '@/server/nova/abonnements'
 import { DelegationOria } from './DelegationOria'
 
 /**
@@ -122,8 +123,8 @@ export function AccueilNova({ versConnexions }: { versConnexions: string }) {
           vous montrer ce qui fonctionne réellement.
         </p>
         <p className="mt-3 mb-0 text-sm leading-relaxed text-[var(--color-ink-soft)]">
-          Commençons par connecter vos principales sources de données : votre boutique Shopify pour les ventes réelles,
-          Google Ads et Meta Ads pour les dépenses, Search Console pour vos clics Google.
+          Commençons par connecter vos principales sources de données : votre boutique (Shopify ou WooCommerce) ou
+          Stripe pour les ventes réelles, Google Ads et Meta Ads pour les dépenses, Google Analytics pour les visites.
         </p>
         <div className="mt-5">
           <LinkButton href={versConnexions}>Analyser mes performances</LinkButton>
@@ -403,10 +404,12 @@ export function AttributionNova({
   attribution,
   devise,
   manqueVentes,
+  nomVentes = 'Shopify',
 }: {
   attribution: Attribution
   devise: string
   manqueVentes: string
+  nomVentes?: string
 }) {
   if (attribution.plateformes.length === 0 && attribution.reel === null) return null
   return (
@@ -435,7 +438,7 @@ export function AttributionNova({
               <p className="mt-2 mb-0 text-sm text-[var(--color-ink-soft)]">{manqueVentes}</p>
             ) : (
               <p className="mt-2 mb-0 text-sm">
-                <strong>Shopify</strong> : {nombre(attribution.reel.commandes)} commandes · {argent(attribution.reel.chiffre, devise)}
+                <strong>{nomVentes}</strong> : {nombre(attribution.reel.commandes)} commandes · {argent(attribution.reel.chiffre, devise)}
               </p>
             )}
           </div>
@@ -558,7 +561,7 @@ export function CampagnesNova({
   )
 }
 
-export function ProduitsNova({ produits, devise }: { produits: readonly LigneProduit[]; devise: string }) {
+export function ProduitsNova({ produits, devise, nomVentes = 'Shopify' }: { produits: readonly LigneProduit[]; devise: string; nomVentes?: string }) {
   if (produits.length === 0) return null
   const avecMarge = produits.some((produit) => produit.marge !== null)
   return (
@@ -566,8 +569,10 @@ export function ProduitsNova({ produits, devise }: { produits: readonly LignePro
       <h2 className="m-0 text-lg font-semibold">Produits</h2>
       <p className="mt-1 mb-3 text-xs text-[var(--color-ink-soft)]">
         {avecMarge
-          ? 'Selon vos commandes Shopify. Marge brute = ventes − coût d’achat saisi dans Shopify (coût actuel), hors livraison, frais et publicité. Estimation basée sur les coûts renseignés.'
-          : 'Selon vos commandes Shopify. Renseignez « Coût par article » dans vos fiches produits Shopify, puis actualisez : Nova affichera la marge de chaque produit.'}
+          ? `Selon vos commandes ${nomVentes}. Marge brute = ventes − coût d’achat saisi dans Shopify (coût actuel), hors livraison, frais et publicité. Estimation basée sur les coûts renseignés.`
+          : nomVentes === 'Shopify'
+            ? 'Selon vos commandes Shopify. Renseignez « Coût par article » dans vos fiches produits Shopify, puis actualisez : Nova affichera la marge de chaque produit.'
+            : `Selon vos commandes ${nomVentes}. ${nomVentes} ne donne pas le coût d’achat des produits : la marge se calcule avec le pourcentage saisi dans « Objectifs et marge ».`}
       </p>
       <ul className="m-0 grid list-none gap-3 p-0">
         {produits.map((produit) => (
@@ -1218,6 +1223,152 @@ export function ContenusNova({ contenus, devise, transmission }: { contenus: Con
             pour="écrire dans la même veine"
             transmission={transmission}
           />
+        )}
+      </CardBody>
+    </Card>
+  )
+}
+
+// ── V5 : abonnements ─────────────────────────────────────────────────────────
+
+const MOIS_COURTS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+function moisLisible(mois: string): string {
+  return `${MOIS_COURTS[Number(mois.slice(5, 7)) - 1] ?? mois} ${mois.slice(2, 4)}`
+}
+
+/**
+ * Les abonnements Stripe : ce qu'une activité récurrente regarde avant tout le reste.
+ *
+ * Le graphique est une seule série (le MRR de fin de mois) : pas de légende, le titre la
+ * nomme ; chaque barre dit sa valeur au survol, et le détail existe en tableau. Les cohortes
+ * se lisent en teinte unique, du clair au foncé ; la valeur est toujours écrite.
+ */
+export function AbonnementsNova({
+  instantane,
+  indicateurs,
+  devise,
+}: {
+  instantane: InstantaneAbonnements
+  indicateurs: IndicateursAbonnements
+  devise: string
+}) {
+  const monnaie = instantane.devise || devise
+  const max = Math.max(1, ...instantane.serie.map((mois) => mois.mrr))
+  const pct = (valeur: number | null) => (valeur === null ? '—' : `${nombre(valeur * 100, 1)} %`)
+  return (
+    // min-w-0 : sans lui, le tableau des cohortes élargit toute la page sur un téléphone.
+    <Card className="min-w-0 max-w-full">
+      <CardBody>
+        <h2 className="m-0 text-base font-semibold">Abonnements</h2>
+        <p className="mt-1 mb-0 text-xs text-[var(--color-ink-soft)]">
+          Selon Stripe, au prix actuel de chaque formule, remises non déduites. Les abonnés en essai gratuit ne comptent pas.
+        </p>
+        <dl className="m-0 mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+          <Chiffre label="MRR (revenu mensuel récurrent)" valeur={argent(indicateurs.mrr, monnaie)} />
+          <Chiffre label="ARR (sur un an)" valeur={argent(indicateurs.arr, monnaie)} />
+          <Chiffre label="Abonnés payants" valeur={nombre(indicateurs.actifs)} />
+          <Chiffre label="Revenu moyen par abonné" valeur={argent(indicateurs.arpu, monnaie)} />
+          <Chiffre label="Churn mensuel (abonnés)" valeur={pct(indicateurs.churn)} />
+          <Chiffre label="Churn mensuel (revenu)" valeur={pct(indicateurs.churnMrr)} />
+          <Chiffre label="Valeur d’un abonné (LTV)" valeur={indicateurs.ltv === null ? '—' : `≈ ${argent(indicateurs.ltv, monnaie)}`} />
+          <Chiffre label="Ce mois-ci" valeur={`+${argent(indicateurs.mrrNouveauMois, monnaie)} / −${argent(indicateurs.mrrPerduMois, monnaie)}`} />
+        </dl>
+        {indicateurs.ltv === null && indicateurs.raisonLtv !== null ? (
+          <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">LTV : {indicateurs.raisonLtv}</p>
+        ) : (
+          <p className="mt-2 mb-0 text-xs text-[var(--color-ink-faint)]">LTV = revenu moyen par abonné ÷ churn mensuel. Une estimation, pas une promesse.</p>
+        )}
+        {instantane.essais > 0 || instantane.nonChiffres > 0 ? (
+          <p className="mt-1 mb-0 text-xs text-[var(--color-ink-faint)]">
+            {instantane.essais > 0 ? `${instantane.essais} en essai gratuit. ` : ''}
+            {instantane.nonChiffres > 0 ? `${instantane.nonChiffres} à prix variable (paliers, usage), comptés comme abonnés mais absents du MRR.` : ''}
+          </p>
+        ) : null}
+
+        <h3 className="mt-5 mb-2 text-sm font-semibold">MRR en fin de mois, sur treize mois</h3>
+        <div className="flex h-32 items-end gap-[2px]" role="img" aria-label="Évolution du MRR, détail dans le tableau ci-dessous">
+          {instantane.serie.map((mois) => (
+            <div key={mois.mois} className="group flex h-full min-w-0 flex-1 items-end" title={`${moisLisible(mois.mois)} : ${argent(mois.mrr, monnaie)} · ${mois.actifs} abonnés`}>
+              <div
+                className="w-full rounded-t-[4px] bg-[var(--color-brand)] opacity-80 group-hover:opacity-100"
+                style={{ height: `${Math.max(mois.mrr > 0 ? 2 : 0, (mois.mrr / max) * 100)}%` }}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="mt-1 flex justify-between text-[10px] text-[var(--color-ink-faint)]">
+          <span>{moisLisible(instantane.serie[0]?.mois ?? '')}</span>
+          <span>{moisLisible(instantane.serie.at(-1)?.mois ?? '')} (en cours)</span>
+        </div>
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-medium">Voir le détail par mois</summary>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-xs tabular-nums">
+              <thead>
+                <tr className="text-left text-[var(--color-ink-soft)]">
+                  <th className="py-1 pr-3 font-medium">Mois</th>
+                  <th className="py-1 pr-3 font-medium">MRR</th>
+                  <th className="py-1 pr-3 font-medium">Abonnés</th>
+                  <th className="py-1 pr-3 font-medium">Nouveaux</th>
+                  <th className="py-1 font-medium">Départs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {instantane.serie.map((mois) => (
+                  <tr key={mois.mois} className="border-t border-[var(--color-line)]">
+                    <td className="py-1 pr-3">{moisLisible(mois.mois)}</td>
+                    <td className="py-1 pr-3">{argent(mois.mrr, monnaie)}</td>
+                    <td className="py-1 pr-3">{nombre(mois.actifs)}</td>
+                    <td className="py-1 pr-3">{nombre(mois.nouveaux)}</td>
+                    <td className="py-1">{nombre(mois.perdus)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+
+        {instantane.cohortes.length === 0 ? null : (
+          <>
+            <h3 className="mt-5 mb-1 text-sm font-semibold">Cohortes : qui reste abonné, mois après mois</h3>
+            <p className="mt-0 mb-2 text-xs text-[var(--color-ink-soft)]">
+              Chaque ligne suit les abonnés d’un mois de départ (au moins 3). M0 : fin du mois de départ ; M1 : un mois plus tard, etc.
+            </p>
+            <div className="max-w-full overflow-x-auto">
+              <table className="text-xs tabular-nums">
+                <thead>
+                  <tr className="text-left text-[var(--color-ink-soft)]">
+                    <th className="py-1 pr-3 font-medium">Départ</th>
+                    <th className="py-1 pr-3 font-medium">Abonnés</th>
+                    {Array.from({ length: Math.max(...instantane.cohortes.map((c) => c.restants.length)) }, (_, k) => (
+                      <th key={k} className="px-1 py-1 text-center font-medium">
+                        M{k}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {instantane.cohortes.map((cohorte) => (
+                    <tr key={cohorte.mois}>
+                      <td className="py-0.5 pr-3 whitespace-nowrap">{moisLisible(cohorte.mois)}</td>
+                      <td className="py-0.5 pr-3">{nombre(cohorte.depart)}</td>
+                      {cohorte.restants.map((part, k) => (
+                        <td key={k} className="p-[1px]">
+                          <span
+                            className="block min-w-11 rounded-[3px] px-1 py-0.5 text-center whitespace-nowrap"
+                            style={{ background: `color-mix(in srgb, var(--color-brand) ${Math.round(8 + part * 42)}%, transparent)` }}
+                          >
+                            {Math.round(part * 100)} %
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </CardBody>
     </Card>
