@@ -1074,6 +1074,19 @@ export const en: Record<keyof typeof fr, string> = {
   'vis.packsNote':
     'Purchased credits are added to your monthly allowance and stay available until you use them.',
 
+  'recharges.buy': 'Buy',
+  'recharges.recommended': 'Recommended',
+  'recharges.perCredit': '{price} per credit',
+  'recharges.balance':
+    'You have {monthly} credits left from your monthly allowance and {purchased} purchased credits. The monthly allowance is used first.',
+  'recharges.received':
+    'Payment received. Your credits are added as soon as Stripe confirms it, usually within seconds; reload the page if your balance has not changed.',
+  'recharges.note':
+    'One-time payment, no subscription. Purchased credits never expire and add to your monthly allowance. A refunded purchase takes back the credits that were not used.',
+  'recharges.unavailable': 'Online payment is not enabled on this installation: top-ups cannot be bought here yet.',
+  'recharges.error': 'The payment could not start. Please try again in a moment.',
+  'vis.packsCta': 'Buy a top-up',
+
   'vis.costsTitle': 'What costs credits, and what costs nothing.',
   'vis.costsFree': 'Included, no credits',
   'vis.costsPaid': 'Uses credits',

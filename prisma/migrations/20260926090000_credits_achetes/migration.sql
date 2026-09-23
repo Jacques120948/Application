@@ -1,0 +1,14 @@
+-- La part achetée du solde de crédits, qui n'expire pas.
+--
+-- Le renouvellement mensuel remettait le solde à la dotation de l'offre. Tant que rien ne
+-- s'achetait à part, c'était juste : les crédits d'un abonnement sont une réserve du mois.
+-- Avec les recharges, cela effaçait chaque mois des crédits payés — alors que la page des
+-- tarifs promet qu'ils n'expirent pas, et que les garder est la moindre des choses pour un
+-- service payé et non rendu.
+--
+-- Une colonne suffit : le solde reste le total disponible, et `purchased` dit quelle part
+-- en vient d'un achat. La dotation mensuelle se consomme en premier — c'est celle qui
+-- expire — et le renouvellement ne touche qu'à elle.
+--
+-- Zéro pour tout le monde au départ : aucune recharge n'a jamais pu être achetée.
+ALTER TABLE "CreditWallet" ADD COLUMN "purchased" INTEGER NOT NULL DEFAULT 0;

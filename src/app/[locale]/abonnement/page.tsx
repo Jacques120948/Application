@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
 import { getTranslator, resolveLocale } from '@/i18n'
 import { getCurrentUser } from '@/server/auth/session'
-import { getWallet } from '@/server/billing/credits'
+import { getWallet, partMensuelle } from '@/server/billing/credits'
+import { creditPacks } from '@/server/billing/packs'
 import { comparePlans, planDetails } from '@/server/billing/plan-details'
 import { actionCosts } from '@/server/billing/action-costs'
 import { listPublicPlans } from '@/server/billing/plans'
@@ -9,6 +10,7 @@ import { isStripeAvailable } from '@/server/billing/stripe/client'
 import { getSubscriptionView } from '@/server/billing/stripe/subscriptions'
 import { Shell } from '@/components/studio/Shell'
 import { SubscriptionBoard, type PlanCard } from '@/components/studio/SubscriptionBoard'
+import { Recharges } from '@/components/studio/Recharges'
 
 /**
  * L'abonnement du créateur.
@@ -22,19 +24,20 @@ export default async function SubscriptionPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>
-  searchParams: Promise<{ etat?: string; session_id?: string }>
+  searchParams: Promise<{ etat?: string; session_id?: string; recharge?: string }>
 }) {
   const locale = resolveLocale((await params).locale)
-  const { etat, session_id: sessionId } = await searchParams
+  const { etat, session_id: sessionId, recharge } = await searchParams
   const user = await getCurrentUser()
   if (user === null) redirect(`/${locale}/connexion`)
 
-  const [plans, subscription, wallet, couts] = await Promise.all([
+  const [plans, subscription, wallet, couts, packs] = await Promise.all([
     listPublicPlans(),
     getSubscriptionView(user.id),
     getWallet(user.id),
     // Pour traduire la réserve en articles, pages et foires aux questions. Voir volumes-offre.
     actionCosts(),
+    creditPacks(),
   ])
   const t = getTranslator(locale)
 
@@ -74,6 +77,14 @@ export default async function SubscriptionPage({
           paymentAvailable={isStripeAvailable()}
           returnState={etat === 'succes' ? 'succes' : etat === 'annule' ? 'annule' : null}
           sessionId={sessionId ?? null}
+        />
+        <Recharges
+          locale={locale}
+          packs={packs.map((pack) => ({ ...pack }))}
+          paymentAvailable={isStripeAvailable()}
+          purchased={wallet.purchased}
+          monthly={partMensuelle(wallet)}
+          returnState={recharge === 'succes' ? 'succes' : recharge === 'annulee' ? 'annulee' : null}
         />
       </div>
     </Shell>

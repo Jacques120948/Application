@@ -789,6 +789,14 @@ export default async function LandingPage({
         <p className="mt-4 mb-0 max-w-3xl text-sm leading-relaxed text-[var(--color-ink-faint)]">
           {t('vis.packsNote')}
         </p>
+        {/* Le bouton n'existe que si l'achat existe : pas de porte peinte sur le mur. */}
+        {isStripeAvailable() ? (
+          <div className="mt-5">
+            <LinkButton href={`/${locale}/abonnement#recharges`} variant="secondary">
+              {t('vis.packsCta')}
+            </LinkButton>
+          </div>
+        ) : null}
 
         {/* ── Ce qui coûte, ce qui ne coûte rien ── */}
         <h3 className="mt-14 mb-6 text-lg font-semibold">{t('vis.costsTitle')}</h3>

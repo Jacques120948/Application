@@ -45,22 +45,30 @@ Les crédits ne suivent pas la facturation : leur renouvellement dépend de `res
 portefeuille et de `monthlyCredits` sur l'offre. Un abonné à l'année reçoit sa dotation
 chaque mois, pas douze fois d'un coup.
 
-### Les recharges de crédits — annoncées, pas encore achetables
+### Les recharges de crédits
 
-`DEFAULT_CREDIT_PACKS` est lu par la seule page de tarifs : **aucune route de paiement
-n'existe pour un pack**. Quelqu'un qui lit le prix n'a aujourd'hui aucun bouton pour
-acheter. C'est une décision assumée tant qu'Evoliia n'a pas de vrais clients — mais c'est
-une promesse sans porte derrière, exactement le motif qu'on a retiré des offres.
+Un paiement unique, sans abonnement, depuis la section « Recharges » de la page
+Abonnement (`/abonnement#recharges`). Le catalogue est `creditPacks()` (réglage
+`billing.credit.packs`, valeurs de départ dans `DEFAULT_CREDIT_PACKS`).
 
-Ce qu'il faudra, le jour venu :
+| Étape | Ce qui se passe |
+|---|---|
+| Choisir un pack | `POST /api/recharges` ne reçoit qu'un identifiant de pack. Le serveur lit le prix et le nombre de crédits dans le catalogue et crée une session Checkout en mode `payment` ; il les écrit aussi dans les métadonnées de la session et du paiement. Rien n'est crédité. |
+| Retour de paiement | `?recharge=succes` : la page dit « paiement reçu, vos crédits arrivent ». Elle ne crédite rien et n'appelle rien : quelqu'un qui fabrique cette adresse ne reçoit rien. |
+| Webhook | `checkout.session.completed` (ou `checkout.session.async_payment_succeeded` pour un moyen de paiement différé) verse les crédits, si et seulement si la session est payée **et** que le montant encaissé est celui que le serveur a demandé. Un écart ne verse rien et se journalise. |
+| Une seule fois | Le grand livre porte l'identifiant du paiement (`stripePaymentId`, unique en base). Un événement rejoué, ou le même paiement annoncé par deux événements, se heurte à la contrainte. |
+| Remboursement | `charge.refunded` total : les crédits achetés **qui restent** sont repris, jamais la réserve mensuelle, jamais plus que l'achat. Un remboursement partiel ne reprend rien : il se tranche à la main. |
 
-- une session Stripe en mode `payment` (et non `subscription`) ;
-- les crédits ajoutés **après validation serveur du webhook**, jamais au retour du
-  navigateur — c'est la règle qui vaut pour tout ce qui touche aux crédits ;
-- le nombre de crédits décidé par le serveur d'après le pack, jamais d'après ce que le
-  navigateur annonce.
+Le portefeuille distingue deux parts : `CreditWallet.purchased` (achetée, n'expire pas) et
+le reste du solde (réserve mensuelle). Le renouvellement mensuel remet la réserve à neuf
+et garde la part achetée ; une dépense prend d'abord sur la réserve mensuelle. Les calculs
+sont des fonctions pures de `credits.ts`, testées une à une, et chaque écriture de solde
+verrouille la ligne du portefeuille (`portefeuilleVerrouille`) : une dépense qui tombe
+pendant qu'une recharge est versée ne peut plus l'effacer.
 
-À défaut, masquer la section plutôt qu'annoncer ce qui n'existe pas.
+**Un événement dont le traitement échoue n'est plus perdu.** Il était noté comme reçu avant
+d'être traité, et la note restait en cas d'erreur : la nouvelle livraison de Stripe passait
+pour un doublon. La note est désormais retirée quand le traitement échoue.
 
 Le prix d'une recharge reste toujours au-dessus du crédit le plus cher vendu en abonnement
 (0,23 contre 0,19 franc aujourd'hui), et un test le tient : une recharge moins chère que
@@ -122,7 +130,8 @@ STRIPE_APPLICATION_FEE_PERCENT    facultatif, 0 par défaut
 Dans le tableau de bord Stripe :
 
 1. Webhook « compte » sur `https://evoliia.com/api/stripe/webhook`, événements
-   `checkout.session.completed`, `customer.subscription.created`,
+   `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `customer.subscription.created`,
    `customer.subscription.updated`, `customer.subscription.deleted`,
    `invoice.payment_failed`, `charge.refunded`.
 2. Webhook « comptes connectés » (option *Listen to events on connected accounts*) sur

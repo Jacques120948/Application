@@ -6,7 +6,9 @@ import { withRuntimeScope, withUserScope } from '@/server/db/scope'
 import { clearAll } from '@/server/auth/rate-limit'
 import { register } from '@/server/auth/service'
 import { DEFAULT_PLANS, FREE_PLAN_ID, getEffectivePlan } from '@/server/billing/plans'
-import { getWallet } from '@/server/billing/credits'
+import { getWallet, spendCredits } from '@/server/billing/credits'
+import { DEFAULT_CREDIT_PACKS } from '@/server/billing/packs'
+import { commencerRecharge } from '@/server/billing/stripe/recharges'
 import {
   applyStripeSubscription,
   ensureStripePrice,
@@ -493,6 +495,149 @@ describe('Abonnements Evoliia', () => {
     const absent = await POST(new Request('http://localhost/api/stripe/webhook', { method: 'POST', body: payload }))
     expect(absent.status).toBe(404)
     process.env.STRIPE_WEBHOOK_SECRET = saved
+  })
+})
+
+describe('Recharges de crédits', () => {
+  const PACK = DEFAULT_CREDIT_PACKS.find((pack) => pack.id === 'pack-500')!
+  let acheteur: string
+
+  beforeAll(async () => {
+    acheteur = await creerCreateur(null)
+    await getWallet(acheteur)
+  })
+
+  afterAll(async () => {
+    await prisma.user.deleteMany({ where: { id: acheteur } }).catch(() => undefined)
+  })
+
+  /** Une session de paiement terminée, telle que le webhook la livrerait. */
+  function sessionPayee(params: {
+    paiement: string
+    montant?: number
+    statut?: Stripe.Checkout.Session.PaymentStatus
+    credits?: number
+  }): Stripe.Checkout.Session {
+    return {
+      id: next('cs'),
+      object: 'checkout.session',
+      mode: 'payment',
+      payment_status: params.statut ?? 'paid',
+      payment_intent: params.paiement,
+      amount_total: params.montant ?? PACK.priceCents,
+      client_reference_id: acheteur,
+      metadata: {
+        genre: 'recharge',
+        userId: acheteur,
+        packId: PACK.id,
+        credits: String(params.credits ?? PACK.credits),
+        priceCents: String(PACK.priceCents),
+      },
+    } as unknown as Stripe.Checkout.Session
+  }
+
+  const solde = async () => {
+    const wallet = await prisma.creditWallet.findUniqueOrThrow({ where: { userId: acheteur } })
+    return { balance: wallet.balance, purchased: wallet.purchased }
+  }
+
+  it('ouvre un paiement unique au prix du catalogue, sans rien créditer', async () => {
+    const avant = await solde()
+    const { url } = await commencerRecharge(fake, acheteur, { packId: PACK.id, locale: 'fr' })
+    expect(url).toMatch(/^https:\/\/checkout\.stripe\.test\//)
+    const params = created.sessions.at(-1)!.params
+    expect(params.mode).toBe('payment')
+    expect(params.line_items?.[0]?.price_data?.unit_amount).toBe(PACK.priceCents)
+    expect(params.metadata).toMatchObject({ genre: 'recharge', userId: acheteur, credits: String(PACK.credits) })
+    expect(params.success_url).toContain('recharge=succes')
+    expect(await solde()).toEqual(avant)
+  })
+
+  it('refuse un pack qui n’existe pas', async () => {
+    await expect(commencerRecharge(fake, acheteur, { packId: 'pack-gratuit', locale: 'fr' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+
+  it('verse les crédits sur l’événement signé, une seule fois', async () => {
+    const avant = await solde()
+    const paiement = `pi_${randomUUID()}`
+    const livraison = event('checkout.session.completed', sessionPayee({ paiement }))
+    expect(await handleStripeEvent(fake, livraison)).toBe('handled')
+    expect(await solde()).toEqual({ balance: avant.balance + PACK.credits, purchased: avant.purchased + PACK.credits })
+
+    // Même livraison rejouée, puis même paiement sous un autre événement : rien de plus.
+    expect(await handleStripeEvent(fake, livraison)).toBe('duplicate')
+    expect(await handleStripeEvent(fake, event('checkout.session.async_payment_succeeded', sessionPayee({ paiement })))).toBe(
+      'duplicate',
+    )
+    expect((await solde()).balance).toBe(avant.balance + PACK.credits)
+    const lignes = await prisma.creditLedger.findMany({ where: { stripePaymentId: paiement } })
+    expect(lignes).toHaveLength(1)
+    expect(lignes[0]).toMatchObject({ type: 'CREDIT_PURCHASE', delta: PACK.credits })
+  })
+
+  it('ne verse rien pour un paiement en attente ou un montant qui n’est pas celui demandé', async () => {
+    const avant = await solde()
+    const attente = sessionPayee({ paiement: `pi_${randomUUID()}`, statut: 'unpaid' })
+    expect(await handleStripeEvent(fake, event('checkout.session.completed', attente))).toBe('ignored')
+    const rabais = sessionPayee({ paiement: `pi_${randomUUID()}`, montant: 100 })
+    expect(await handleStripeEvent(fake, event('checkout.session.completed', rabais))).toBe('ignored')
+    expect(await solde()).toEqual(avant)
+
+    // Le virement arrive : c'est cet événement-là qui verse.
+    const paye = { ...attente, payment_status: 'paid' } as Stripe.Checkout.Session
+    expect(await handleStripeEvent(fake, event('checkout.session.async_payment_succeeded', paye))).toBe('handled')
+    expect((await solde()).balance).toBe(avant.balance + PACK.credits)
+  })
+
+  it('garde les crédits achetés au renouvellement mensuel', async () => {
+    const avant = await solde()
+    expect(avant.purchased).toBeGreaterThan(0)
+    await prisma.creditWallet.update({ where: { userId: acheteur }, data: { resetsAt: new Date(Date.now() - 1000) } })
+    const apres = await getWallet(acheteur)
+    expect(apres.purchased).toBe(avant.purchased)
+    expect(apres.balance).toBe(apres.monthlyGrant + avant.purchased)
+  })
+
+  it('reprend au remboursement les crédits achetés qui restent, et rien de la réserve mensuelle', async () => {
+    const paiement = `pi_${randomUUID()}`
+    await handleStripeEvent(fake, event('checkout.session.completed', sessionPayee({ paiement })))
+    const avant = await solde()
+
+    const charge = { id: next('ch'), object: 'charge', payment_intent: paiement, refunded: true, amount_refunded: PACK.priceCents }
+    // Un remboursement partiel ne reprend rien : c'est un geste à trancher à la main.
+    expect(
+      await handleStripeEvent(fake, event('charge.refunded', { ...charge, refunded: false, amount_refunded: 100 })),
+    ).toBe('ignored')
+    expect(await solde()).toEqual(avant)
+
+    expect(await handleStripeEvent(fake, event('charge.refunded', charge))).toBe('handled')
+    expect(await solde()).toEqual({ balance: avant.balance - PACK.credits, purchased: avant.purchased - PACK.credits })
+    expect(await handleStripeEvent(fake, event('charge.refunded', charge))).toBe('duplicate')
+    expect((await solde()).balance).toBe(avant.balance - PACK.credits)
+  })
+
+  it('dépense d’abord la réserve mensuelle, puis les crédits achetés', async () => {
+    const avant = await solde()
+    const mensuel = avant.balance - avant.purchased
+    await spendCredits(acheteur, mensuel + 10, 'test:depense')
+    expect(await solde()).toEqual({ balance: avant.purchased - 10, purchased: avant.purchased - 10 })
+  })
+
+  it('reprend un événement dont le traitement a échoué à la livraison suivante', async () => {
+    const session = { id: next('cs'), object: 'checkout.session', mode: 'subscription', subscription: next('sub') }
+    const livraison = event('checkout.session.completed', session)
+    vi.mocked(fake.subscriptions.retrieve).mockRejectedValueOnce(new Error('Stripe injoignable'))
+    await expect(handleStripeEvent(fake, livraison)).rejects.toThrow('Stripe injoignable')
+    // L'échec n'a pas marqué l'événement comme vu : la livraison suivante le traite.
+    expect(await prisma.stripeEvent.findUnique({ where: { id: livraison.id } })).toBeNull()
+
+    vi.mocked(fake.subscriptions.retrieve).mockResolvedValueOnce(
+      fakeSubscription({ customer: `cus_${randomUUID()}`, priceId: 'price_inconnu', userId: acheteur, planId: FREE_PLAN_ID, status: 'incomplete' }) as never,
+    )
+    expect(await handleStripeEvent(fake, livraison)).toBe('handled')
+    expect(await handleStripeEvent(fake, livraison)).toBe('duplicate')
   })
 })
 

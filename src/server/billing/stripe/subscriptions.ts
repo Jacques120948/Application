@@ -7,6 +7,7 @@ import { prisma } from '@/server/db/client'
 import { logger } from '@/server/observability/logger'
 import { getWallet } from '@/server/billing/credits'
 import { FREE_PLAN_ID, getEffectivePlan } from '@/server/billing/plans'
+import { reprendreRecharge, verserRecharge } from './recharges'
 
 /**
  * Abonnements Evoliia payés par Stripe.
@@ -411,6 +412,14 @@ export async function applyStripeSubscription(sub: Stripe.Subscription): Promise
 /**
  * Un événement du compte Evoliia. Traité une seule fois, quel que soit le nombre de
  * livraisons. Ce qu'on ne connaît pas est ignoré, pas refusé : Stripe n'a pas à réessayer.
+ *
+ * **Un événement dont le traitement échoue n'est pas « vu ».** Il était noté avant d'être
+ * traité, et la note restait si le traitement levait une erreur : la nouvelle livraison de
+ * Stripe passait alors pour un doublon, et l'événement était perdu pour de bon — pour une
+ * recharge, un paiement encaissé sans crédits versés. La note est désormais retirée quand
+ * le traitement échoue, pour que la livraison suivante le reprenne. Traiter deux fois reste
+ * sans danger : chaque traitement est idempotent de lui-même (un abonnement se réécrit à
+ * l'identique, un paiement ne crédite qu'une fois, la base y veille).
  */
 export async function handleStripeEvent(stripe: Stripe, event: Stripe.Event): Promise<'handled' | 'duplicate' | 'ignored'> {
   // Une livraison déjà vue est ignorée sans bruit : Stripe rejoue volontiers.
@@ -423,9 +432,20 @@ export async function handleStripeEvent(stripe: Stripe, event: Stripe.Event): Pr
     return 'duplicate'
   }
 
+  try {
+    return await traiterEvenement(stripe, event)
+  } catch (error) {
+    await prisma.stripeEvent.delete({ where: { id: event.id } }).catch(() => undefined)
+    throw error
+  }
+}
+
+async function traiterEvenement(stripe: Stripe, event: Stripe.Event): Promise<'handled' | 'duplicate' | 'ignored'> {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object
+      // Une recharge se paie une fois : ses crédits sont versés ici, jamais au retour du navigateur.
+      if (session.mode === 'payment') return verserRecharge(session)
       if (session.mode !== 'subscription' || session.subscription === null) return 'ignored'
       const sub =
         typeof session.subscription === 'string'
@@ -434,6 +454,9 @@ export async function handleStripeEvent(stripe: Stripe, event: Stripe.Event): Pr
       await applyStripeSubscription(sub)
       return 'handled'
     }
+    // Un moyen de paiement différé (virement, prélèvement) : payé plus tard, versé à ce moment-là.
+    case 'checkout.session.async_payment_succeeded':
+      return verserRecharge(event.data.object)
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
@@ -450,9 +473,12 @@ export async function handleStripeEvent(stripe: Stripe, event: Stripe.Event): Pr
       return 'handled'
     }
     case 'charge.refunded': {
-      // Un remboursement fait depuis le tableau de bord Stripe d'Evoliia : on le note, sans
-      // toucher à l'offre. La fermer est une décision à prendre dans le back-office.
       const charge = event.data.object
+      // Une recharge remboursée : les crédits qui en restent sont repris.
+      const recharge = await reprendreRecharge(charge)
+      if (recharge !== 'ignored') return recharge
+      // Un remboursement d'abonnement fait depuis le tableau de bord Stripe d'Evoliia : on le
+      // note, sans toucher à l'offre. La fermer est une décision à prendre dans le back-office.
       const customerId = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id
       const user =
         customerId === undefined

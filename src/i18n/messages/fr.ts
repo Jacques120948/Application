@@ -1120,6 +1120,20 @@ export const fr = {
   'vis.packsNote':
     'Les crédits achetés s’ajoutent à votre réserve mensuelle et restent disponibles tant que vous ne les utilisez pas.',
 
+  'recharges.buy': 'Acheter',
+  'recharges.recommended': 'Recommandé',
+  'recharges.perCredit': 'soit {price} le crédit',
+  'recharges.balance':
+    'Il vous reste {monthly} crédits de votre réserve mensuelle et {purchased} crédits achetés. La réserve mensuelle est utilisée en premier.',
+  'recharges.received':
+    'Paiement reçu. Vos crédits sont ajoutés dès que Stripe nous le confirme, en général en quelques secondes ; rechargez la page si le solde n’a pas bougé.',
+  'recharges.note':
+    'Paiement unique, sans abonnement. Les crédits achetés n’expirent pas et s’ajoutent à votre réserve mensuelle. Un achat remboursé reprend les crédits qui n’ont pas été utilisés.',
+  'recharges.unavailable':
+    'Le paiement en ligne n’est pas activé sur cette installation : les recharges ne sont pas encore achetables ici.',
+  'recharges.error': 'Le paiement n’a pas pu commencer. Réessayez dans un instant.',
+  'vis.packsCta': 'Acheter une recharge',
+
   'vis.costsTitle': 'Ce qui coûte, et ce qui ne coûte rien.',
   'vis.costsFree': 'Inclus, sans crédit',
   'vis.costsPaid': 'Consomme des crédits',

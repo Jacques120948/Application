@@ -1,4 +1,4 @@
-import type { CreditMovement } from '@prisma/client'
+import type { CreditMovement, Prisma } from '@prisma/client'
 import { AppError } from '@/lib/errors'
 import { prisma } from '@/server/db/client'
 import { logger } from '@/server/observability/logger'
@@ -202,6 +202,59 @@ function nextResetDate(from: Date): Date {
   return next
 }
 
+/**
+ * L'arithmétique du portefeuille, à part pour être éprouvée sans base de données.
+ *
+ * Le solde est le total disponible ; `purchased` en est la part achetée, qui n'expire pas.
+ * La dotation mensuelle se consomme en premier — c'est elle qui disparaît au
+ * renouvellement — et le renouvellement ne touche qu'à elle. Ainsi un crédit payé n'est
+ * jamais effacé par le calendrier, et un crédit offert n'est jamais gardé au-delà de son
+ * mois.
+ */
+export type Portefeuille = { balance: number; purchased: number }
+
+/** La part mensuelle du solde : ce qui reste de la dotation, hors achats. */
+export function partMensuelle(portefeuille: Portefeuille): number {
+  return Math.max(0, portefeuille.balance - portefeuille.purchased)
+}
+
+/** Le mois recommence : la dotation repart à neuf, les achats restent. */
+export function renouveler(portefeuille: Portefeuille, dotation: number): Portefeuille {
+  const purchased = Math.min(portefeuille.purchased, portefeuille.balance)
+  return { balance: dotation + purchased, purchased }
+}
+
+/**
+ * Changement d'offre vers le haut : la part mensuelle monte à la nouvelle dotation sans
+ * jamais redescendre, et les achats restent.
+ */
+export function surclasser(portefeuille: Portefeuille, dotation: number): Portefeuille {
+  const purchased = Math.min(portefeuille.purchased, portefeuille.balance)
+  return { balance: Math.max(partMensuelle(portefeuille), dotation) + purchased, purchased }
+}
+
+/** Un débit : la dotation d'abord, les achats ensuite. Jamais sous zéro. */
+export function debiter(portefeuille: Portefeuille, montant: number): Portefeuille & { debite: number } {
+  const debite = Math.min(Math.max(0, montant), portefeuille.balance)
+  const balance = portefeuille.balance - debite
+  return { balance, purchased: Math.min(portefeuille.purchased, balance), debite }
+}
+
+/** Une recharge achetée : elle s'ajoute au solde et à la part qui n'expire pas. */
+export function crediterAchat(portefeuille: Portefeuille, credits: number): Portefeuille {
+  return { balance: portefeuille.balance + credits, purchased: portefeuille.purchased + credits }
+}
+
+/**
+ * Un remboursement : on reprend les crédits achetés qui restent, jamais plus. Ceux qui ont
+ * déjà servi ont été consommés ; reprendre sur la dotation mensuelle ferait payer un
+ * remboursement avec des crédits offerts.
+ */
+export function reprendreAchat(portefeuille: Portefeuille, credits: number): Portefeuille & { repris: number } {
+  const repris = Math.min(credits, portefeuille.purchased, portefeuille.balance)
+  return { balance: portefeuille.balance - repris, purchased: portefeuille.purchased - repris, repris }
+}
+
 export async function grantInitialCredits(userId: string): Promise<void> {
   const monthly = DEFAULT_PLANS.find((plan) => plan.id === FREE_PLAN_ID)?.monthlyCredits ?? 0
   const now = new Date()
@@ -223,9 +276,23 @@ export async function grantInitialCredits(userId: string): Promise<void> {
 
 /**
  * Renvoie le portefeuille à jour, en appliquant le renouvellement mensuel si la date est
- * dépassée. Le renouvellement remet le solde à la dotation du plan : les crédits ne se
- * cumulent pas d'un mois sur l'autre, ce qui est indiqué dans l'interface.
+ * dépassée. Le renouvellement remet la dotation du plan à neuf : les crédits mensuels ne
+ * se cumulent pas d'un mois sur l'autre, ce qui est indiqué dans l'interface. Les crédits
+ * achetés, eux, restent.
  */
+/**
+ * Lit le portefeuille en le verrouillant jusqu'à la fin de la transaction.
+ *
+ * Toute écriture sur un solde passe par là. Sans verrou, deux écritures simultanées lisent
+ * le même solde et la seconde écrase la première : une dépense qui tombe pendant qu'une
+ * recharge est versée effacerait des crédits payés. Le verrou fait attendre l'une que
+ * l'autre ait fini, et chacune repart du solde réel.
+ */
+export async function portefeuilleVerrouille(tx: Prisma.TransactionClient, userId: string) {
+  await tx.$queryRaw`SELECT 1 FROM "CreditWallet" WHERE "userId" = ${userId}::uuid FOR UPDATE`
+  return tx.creditWallet.findUniqueOrThrow({ where: { userId } })
+}
+
 export async function getWallet(userId: string) {
   let wallet = await prisma.creditWallet.findUnique({ where: { userId } })
   if (!wallet) {
@@ -234,32 +301,47 @@ export async function getWallet(userId: string) {
   }
 
   const plan = await getEffectivePlan(userId)
-  const now = new Date()
+  const aJour = (w: typeof wallet, now: Date) =>
+    w.resetsAt > now && w.monthlyGrant === plan.monthlyCredits
 
-  const renew = wallet.resetsAt <= now
-  // Un changement d'offre vers le haut donne accès aux crédits immédiatement : faire
-  // attendre le renouvellement mensuel après un paiement serait incompréhensible.
-  const upgrade = !renew && plan.monthlyCredits > wallet.monthlyGrant
+  // Le cas courant : rien à renouveler, aucune écriture, aucun verrou.
+  if (aJour(wallet, new Date())) return wallet
 
-  if (renew || upgrade || wallet.monthlyGrant !== plan.monthlyCredits) {
-    const balance = renew
-      ? plan.monthlyCredits
+  return prisma.$transaction(async (tx) => {
+    // Relu sous verrou : une autre requête a pu renouveler, ou une recharge être versée, entre-temps.
+    const courant = await portefeuilleVerrouille(tx, userId)
+    const now = new Date()
+    if (aJour(courant, now)) return courant
+
+    const renew = courant.resetsAt <= now
+    // Un changement d'offre vers le haut donne accès aux crédits immédiatement : faire
+    // attendre le renouvellement mensuel après un paiement serait incompréhensible.
+    const upgrade = !renew && plan.monthlyCredits > courant.monthlyGrant
+    /*
+     * Le renouvellement remet la dotation à neuf ; la part achetée, elle, reste. Il la
+     * remettait à zéro avec le reste tant que rien ne s'achetait à part — et le jour où
+     * les recharges ont existé, il aurait effacé chaque mois des crédits payés.
+     */
+    const suivant = renew
+      ? renouveler(courant, plan.monthlyCredits)
       : upgrade
-        ? Math.max(wallet.balance, plan.monthlyCredits)
-        : wallet.balance
-    const previousBalance = wallet.balance
+        ? surclasser(courant, plan.monthlyCredits)
+        : { balance: courant.balance, purchased: courant.purchased }
+    const balance = suivant.balance
+    const previousBalance = courant.balance
 
-    wallet = await prisma.creditWallet.update({
+    const misAJour = await tx.creditWallet.update({
       where: { userId },
       data: {
         balance,
+        purchased: suivant.purchased,
         monthlyGrant: plan.monthlyCredits,
-        resetsAt: renew ? nextResetDate(now) : wallet.resetsAt,
+        resetsAt: renew ? nextResetDate(now) : courant.resetsAt,
       },
     })
 
     if (balance !== previousBalance) {
-      await prisma.creditLedger.create({
+      await tx.creditLedger.create({
         data: {
           userId,
           delta: balance - previousBalance,
@@ -269,9 +351,8 @@ export async function getWallet(userId: string) {
         },
       })
     }
-  }
-
-  return wallet
+    return misAJour
+  })
 }
 
 /**
@@ -327,13 +408,17 @@ export async function spendCredits(
   if (amount <= 0) return (await getWallet(userId)).balance
 
   return prisma.$transaction(async (tx) => {
-    const wallet = await tx.creditWallet.findUniqueOrThrow({ where: { userId } })
-    const spent = Math.min(amount, wallet.balance)
+    const wallet = await portefeuilleVerrouille(tx, userId)
+    const apres = debiter(wallet, amount)
+    const spent = apres.debite
     if (spent < amount) {
       logger.warn('débit de crédits plafonné au solde disponible', { userId, amount, spent })
     }
-    const balanceAfter = wallet.balance - spent
-    await tx.creditWallet.update({ where: { userId }, data: { balance: balanceAfter } })
+    const balanceAfter = apres.balance
+    await tx.creditWallet.update({
+      where: { userId },
+      data: { balance: balanceAfter, purchased: apres.purchased },
+    })
     await tx.creditLedger.create({
       data: {
         userId,

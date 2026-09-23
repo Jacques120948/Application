@@ -340,6 +340,10 @@ model CreditWallet {
   id           String   @id @default(uuid()) @db.Uuid
   userId       String   @unique @db.Uuid
   balance      Int      @default(0)
+  /// La part du solde qui vient de recharges achetées. Elle n'expire pas : le
+  /// renouvellement mensuel remet la dotation à neuf, jamais ce qui a été payé à part.
+  /// Toujours inférieure ou égale au solde.
+  purchased    Int      @default(0)
   monthlyGrant Int      @default(0)
   resetsAt     DateTime
   updatedAt    DateTime @updatedAt
